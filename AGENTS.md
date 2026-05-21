@@ -14,6 +14,8 @@ The linked rule files are normative and preserve the detailed policies.
 ## Quick Operating Rules
 
 - Keep commands simple: one command per tool call, no compound shell chains, and no `--no-verify`.
+- For JavaScript and TypeScript projects, invoke package-managed commands through the package manager, such as `pnpm exec`, `pnpm dlx`, or `pnpm run`; never call binaries inside `node_modules` directly.
+- Write agent and Codex hooks in TypeScript unless there is a specific runtime requirement that makes another language a better fit.
 - In troubleshooting mode, diagnose and report before editing or fixing anything.
 - For multi-file implementation requests, delegate to the implementer agent when that harness supports agents. If already running as implementer, execute the approved plan.
 - Use the correct review path: local changes go to `local-review`; GitLab MRs go to `glab-review`.
