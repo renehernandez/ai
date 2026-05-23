@@ -14,11 +14,15 @@ type BlockMatch = {
 
 const HOOK_NAME = 'block-node-modules-bin'
 const HOOK_EVENT = 'PreToolUse'
+const DESCRIPTION =
+  'Blocks Codex shell commands that call node_modules/.bin directly so JavaScript and TypeScript tooling stays package-manager managed.'
 const REPLACEMENT_GUIDANCE =
   'Use pnpm exec, pnpm dlx, or pnpm run so the package manager resolves project binaries.'
 
-const NODE_MODULES_BIN = /(^|[\s;&|(<])((?:\.\/)?node_modules\/\.bin\/([^\s;&|)]+))/u
-const ABSOLUTE_NODE_MODULES_BIN = /((?:[^\s;&|)]*\/)?node_modules\/\.bin\/([^\s;&|)]+))/u
+const NODE_MODULES_BIN =
+  /(^|[\s;&|(<])((?:\.\/)?node_modules\/\.bin\/([^\s;&|)]+))/u
+const ABSOLUTE_NODE_MODULES_BIN =
+  /((?:[^\s;&|)]*\/)?node_modules\/\.bin\/([^\s;&|)]+))/u
 
 function asObject(value: unknown): JsonObject | undefined {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -89,71 +93,102 @@ function replacementExample(executable?: string): string {
   return `pnpm exec ${executable} [args]`
 }
 
-function deny(match: BlockMatch): void {
+function writeJson(value: unknown): void {
+  process.stdout.write(`${JSON.stringify(value)}\n`)
+}
+
+function deny(match: BlockMatch, command: string): void {
   const reason = [
     'Blocked direct execution of a binary inside node_modules.',
-    `Matched path: ${match.display}`,
+    `Matched path: ${match.display}.`,
+    `Blocked command: ${command.trim().replace(/\s+/g, ' ').slice(0, 180) || '<empty command>'}.`,
     REPLACEMENT_GUIDANCE,
-    `Typical replacement: ${replacementExample(match.executable)}`,
-    'If this command is a package script, prefer pnpm run <script> instead.',
+    `Typical replacement: ${replacementExample(match.executable)}.`,
+    'If this command is a package script, use pnpm run <script> instead.',
   ].join(' ')
 
-  process.stdout.write(
-    `${JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: HOOK_EVENT,
-        permissionDecision: 'deny',
-        permissionDecisionReason: reason,
-      },
-    })}\n`,
-  )
+  writeJson({
+    hookSpecificOutput: {
+      hookEventName: HOOK_EVENT,
+      permissionDecision: 'deny',
+      permissionDecisionReason: reason,
+    },
+  })
 }
 
 function writeDiagnostic(message: string): void {
   process.stderr.write(`[${HOOK_NAME}] ${message}\n`)
 }
 
-function help(): void {
-  process.stdout.write(
-    `${JSON.stringify(
-      {
-        name: HOOK_NAME,
-        type: 'codex-hook',
-        event: HOOK_EVENT,
-        runner: 'npx tsx',
-        command: 'npx tsx /Users/renehernandez/.agents/hooks/block-node-modules-bin.ts',
-        description:
-          'Denies shell commands that execute binaries through node_modules/.bin directly.',
-        purpose:
-          'Keep agent shell commands package-manager mediated so pnpm controls binary resolution and dependency policy.',
-        usage: [
-          'npx tsx /Users/renehernandez/.agents/hooks/block-node-modules-bin.ts',
-          'npx tsx /Users/renehernandez/.agents/hooks/block-node-modules-bin.ts --help',
-        ],
-        blocks: [
-          './node_modules/.bin/<binary>',
-          'node_modules/.bin/<binary>',
-          '/absolute/path/to/node_modules/.bin/<binary>',
-        ],
-        allowInstead: ['pnpm exec <binary> [args]', 'pnpm dlx <package> [args]', 'pnpm run <script>'],
-        payloadCommandPaths: [
-          'tool_input.command',
-          'tool_input.cmd',
-          'input.command',
-          'input.cmd',
-          'arguments.command',
-          'arguments.cmd',
-        ],
-      },
-      null,
-      2,
-    )}\n`,
-  )
+function printDiscovery(): void {
+  writeJson({
+    name: HOOK_NAME,
+    type: 'codex-pre-tool-use',
+    event: HOOK_EVENT,
+    matcher: '^Bash$',
+    runner: 'npx tsx',
+    command:
+      'npx tsx /Users/renehernandez/.agents/hooks/block-node-modules-bin.ts',
+    description: DESCRIPTION,
+    purpose:
+      'Keep agent shell commands package-manager mediated so pnpm controls binary resolution and dependency policy.',
+    flags: ['--agent-discovery', '--hook-info', '--help'],
+    blocks: [
+      './node_modules/.bin/<binary>',
+      'node_modules/.bin/<binary>',
+      '/absolute/path/to/node_modules/.bin/<binary>',
+    ],
+    allowInstead: [
+      'pnpm exec <binary> [args]',
+      'pnpm dlx <package> [args]',
+      'pnpm run <script>',
+    ],
+    payloadCommandPaths: [
+      'tool_input.command',
+      'tool_input.cmd',
+      'input.command',
+      'input.cmd',
+      'arguments.command',
+      'arguments.cmd',
+    ],
+    failureBehavior:
+      'Malformed, missing, or unsupported payloads write diagnostics to stderr and do not block the command.',
+  })
+}
+
+function printHelp(): void {
+  process.stdout.write(`${HOOK_NAME}
+
+${DESCRIPTION}
+
+Usage:
+  npx tsx /Users/renehernandez/.agents/hooks/block-node-modules-bin.ts
+  npx tsx /Users/renehernandez/.agents/hooks/block-node-modules-bin.ts --agent-discovery
+  npx tsx /Users/renehernandez/.agents/hooks/block-node-modules-bin.ts --help
+
+Blocks:
+  ./node_modules/.bin/<binary>
+  node_modules/.bin/<binary>
+  /absolute/path/to/node_modules/.bin/<binary>
+
+Use instead:
+  pnpm exec <binary> [args]
+  pnpm dlx <package> [args]
+  pnpm run <script>
+`)
 }
 
 function main(): void {
+  if (
+    process.argv.includes('--agent-discovery') ||
+    process.argv.includes('--hook-info')
+  ) {
+    printDiscovery()
+    return
+  }
+
   if (process.argv.includes('--help') || process.argv.includes('-h')) {
-    help()
+    printHelp()
     return
   }
 
@@ -161,7 +196,9 @@ function main(): void {
   try {
     rawPayload = readFileSync(0, 'utf8')
   } catch (error) {
-    writeDiagnostic(`Could not read Codex hook payload from stdin: ${(error as Error).message}`)
+    writeDiagnostic(
+      `Could not read Codex hook payload from stdin: ${(error as Error).message}`,
+    )
     return
   }
 
@@ -180,13 +217,15 @@ function main(): void {
 
   const lookup = commandFromPayload(payload)
   if (!lookup) {
-    writeDiagnostic('No shell command found in supported payload fields; allowing command.')
+    writeDiagnostic(
+      'No shell command found in supported payload fields; allowing command.',
+    )
     return
   }
 
   const match = findBlockMatch(lookup.command)
   if (match) {
-    deny(match)
+    deny(match, lookup.command)
   }
 }
 
