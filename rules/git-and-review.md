@@ -34,8 +34,9 @@ These rules cover Git, GitHub, GitLab, Linear, review routing, and external comm
 
 - Always use the `/glab-commit` skill when committing and pushing changes.
 - Never use `--no-verify` when committing.
-- If a commit fails due to pre-commit hooks, ask the user how to proceed instead of bypassing the hooks.
+- If a commit fails due to pre-commit hooks, fix branch-caused failures and retry; ask the user how to proceed only when the failure is unrelated, external, or requires a product decision.
 - Always ask before committing or pushing to default branches such as `main` or `master`.
+- For feature work, follow [feature-delivery.md](feature-delivery.md): run the pre-commit quality gate, commit the feature branch, push it, create or update the GitHub PR, monitor CI, and fix branch-caused failures.
 - Never include `Co-Authored-By: Claude` or similar co-author attribution lines in MR or PR descriptions.
 
 ## Local Code Review
