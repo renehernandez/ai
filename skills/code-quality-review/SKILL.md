@@ -6,7 +6,7 @@ allowed-tools: Read, Glob, Grep, Bash(git:*)
 
 # Code Quality Review
 
-Run a strict, findings-only review focused on maintainability, structure, and long-term codebase health. Do not edit files. Do not propose implementation patches unless the user asks in a follow-up.
+Run a strict, findings-only review focused on maintainability, structure, and long-term codebase health. Do not edit files. Do not rubber-stamp working code that makes the codebase messier.
 
 ## When to Use
 
@@ -44,6 +44,18 @@ Ask these questions for every meaningful change:
 - Are related updates atomic enough, or can the new flow leave partial state behind?
 - Is independent orchestration serialized in a way that makes the design harder to reason about?
 
+## Deep Structural Checks
+
+Run these checks before declaring the review clean:
+
+- **Scattered policy**: Is one product, auth, access, billing, permission, or lifecycle invariant enforced across multiple routes, hooks, services, or UI branches instead of one owned policy/model?
+- **Cross-layer leakage**: Did client/UI code import server/domain/database modules, or did shared modules absorb feature-specific behavior?
+- **Day-one large module**: Did a new feature start with a broad service/module that owns persistence, policy, tokens, formatting, delivery, audit, and public read models?
+- **Wrong read model**: Does an admin/write path re-derive data through a public/client-safe lookup instead of returning the fields it already owns?
+- **Global sprawl**: Did feature-specific styling, config, or helpers get added to an already-large global/shared file without a decomposition path?
+- **Partial state**: Can a multi-step flow succeed halfway and leave an accidental state that future code must handle implicitly?
+- **Complexity relocation**: Did the refactor move complexity around without reducing the number of concepts a reader must hold?
+
 ## What to Flag
 
 Prioritize findings in this order:
@@ -51,10 +63,11 @@ Prioritize findings in this order:
 1. Structural regressions that make the codebase harder to change.
 2. Missed simplifications where a plausible redesign deletes meaningful complexity.
 3. Spaghetti growth from new conditionals, flags, modes, or narrow branches.
-4. Ownership, layer, or canonical-helper drift.
-5. Type-boundary problems that force casts, loose objects, or unclear invariants.
-6. File sprawl, especially a PR pushing a file from below 1000 lines to above 1000 lines.
-7. Thin wrappers, pass-through helpers, generic magic, and indirection that does not earn its keep.
+4. Scattered policy or invariant enforcement across layers.
+5. Ownership, layer, or canonical-helper drift.
+6. Type-boundary problems that force casts, loose objects, or unclear invariants.
+7. File sprawl, especially a PR pushing a file from below 1000 lines to above 1000 lines or adding feature code to already-large global files.
+8. Thin wrappers, pass-through helpers, generic magic, and indirection that does not earn its keep.
 
 Avoid low-value nits when larger design issues exist.
 
@@ -62,8 +75,8 @@ Avoid low-value nits when larger design issues exist.
 
 Use these labels:
 
-- **Critical**: Must fix before approval; the change creates clear architectural debt or a major maintainability regression.
-- **Warning**: Should fix before approval; the design likely gets worse, but the remedy is scoped.
+- **Critical**: Must fix before approval; the change creates clear architectural debt, scattered access/security/lifecycle policy, or accidental partial state.
+- **Warning**: Should fix before approval; the design likely gets worse, but the remedy is scoped. Boundary leaks, broad day-one modules, wrong read-model reuse, and global sprawl are usually warnings unless they create a critical invariant problem.
 - **Suggestion**: Worth improving; not approval-blocking unless repeated across the diff.
 
 Every actionable statement needs a confidence score using the repo format: `[confidence: 0.85 - high | reason: <short reason>]`.
@@ -82,6 +95,20 @@ Recommendation: Move the new decision into the existing policy helper so the sha
 
 Keep the output short and rigorous: high-conviction findings, then open questions or assumptions, then a brief note on what context was reviewed.
 
+## Recommendation Style
+
+Push for changes that delete complexity instead of rearranging it:
+
+- Reframe the state model so branches disappear.
+- Move an invariant into the one policy/model/module that owns it.
+- Split broad modules by ownership: policy, persistence, tokens, delivery, formatting, orchestration.
+- Return owned data directly instead of re-parsing through another read path.
+- Move feature-specific code out of global/shared files unless it is genuinely reusable.
+- Replace casts, optionality, and fallback branches with explicit boundaries.
+- Keep orchestration linear and make partial states explicit when they are unavoidable.
+
+Do not settle for rename-level feedback when the issue is structural.
+
 ## Approval Bar
 
 Do not approve just because behavior works. Approval requires:
@@ -89,8 +116,11 @@ Do not approve just because behavior works. Approval requires:
 - no clear structural regression
 - no obvious simplification that would delete meaningful complexity
 - no scattered special-case branching in shared flows
+- no product, auth, access, billing, permission, or lifecycle policy scattered across layers
+- no accidental partial state from non-atomic multi-step workflows
 - no unjustified file-size jump past a healthy boundary
 - no type or boundary churn that hides the real invariant
 - no duplicate helper or wrong-layer ownership when a canonical home is visible
+- no feature-specific sprawl into global/shared files without a clear decomposition path
 
 If the bar is not met, report findings only. Leave implementation for the follow-up.

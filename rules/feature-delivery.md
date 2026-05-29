@@ -21,8 +21,8 @@ The default workflow is:
 2. Implement the requested change on a feature branch, preserving unrelated user
    changes.
 3. Run the narrowest useful verification for the touched code.
-4. Before committing, run the quality gate below until there are no unresolved
-   findings that should be fixed.
+4. Before committing, run and report the quality gate below until there are no
+   unresolved findings that should be fixed.
 5. Commit the feature branch without `--no-verify`.
 6. Push the feature branch.
 7. Create or update the GitHub PR using `gh`.
@@ -45,10 +45,33 @@ Before committing feature work, run these passes over the branch diff:
    wrappers, unnecessary comments, casts, and unrelated formatting churn.
 
 If any pass produces actionable findings that should be resolved before review,
-fix them, rerun the relevant verification, and repeat the three-pass gate. The
-gate is complete only when there are no remaining actionable findings to fix, or
-when the remaining item is an explicit trade-off that must be reported to the
-user.
+fix them, rerun the relevant verification, and repeat the three-pass gate. After
+`code-simplifier` or `deslop` changes, rerun `code-quality-review` before
+considering the gate complete.
+
+Treat `code-quality-review` severity as binding:
+
+- **Critical** findings block commit and push unless fixed or explicitly reported
+  to the user as a trade-off that needs approval.
+- **Warning** findings should be fixed by default when the remedy is scoped. If
+  deferred, report the reason and risk.
+- **Suggestion** findings may be deferred, but do not hide repeated suggestions
+  that point to the same structural issue.
+
+The gate is complete only when there are no remaining actionable findings to
+fix, or when the remaining item is an explicit trade-off that has been reported
+to the user.
+
+Before the commit or final delivery summary, include a short quality-gate
+section with each pass marked:
+
+- `clean`: no actionable findings
+- `fixed`: findings were fixed and verification was rerun
+- `deferred`: finding remains with a stated reason and risk
+- `blocked`: finding requires user input or a product decision
+
+Include the highest-severity `code-quality-review` finding, or state that there
+were no structural findings.
 
 When a harness has subagents or slash skills for these passes, use them. In
 Codex, read each named `SKILL.md` before applying it and perform the closest
