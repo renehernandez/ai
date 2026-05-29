@@ -10,6 +10,7 @@ The linked rule files are normative and preserve the detailed policies.
 - When a project has its own `AGENTS.md`, apply the more specific project rules for that workspace.
 - If a rule names a tool that is unavailable in the current harness, use the closest safe equivalent and say what changed.
 - Do not commit, push, install dependencies, or run destructive commands unless the user explicitly asks.
+- A feature implementation request counts as approval to complete the feature-delivery workflow in [rules/feature-delivery.md](rules/feature-delivery.md) unless the user says to stop before commit, push, or PR.
 
 ## Quick Operating Rules
 
@@ -33,6 +34,7 @@ All harnesses follow these reusable policies:
 
 - [Command and tools](rules/command-and-tools.md)
 - [Git and review](rules/git-and-review.md)
+- [Feature delivery](rules/feature-delivery.md)
 - [Investigation and implementation](rules/investigation-and-implementation.md)
 - [CI, infrastructure, and Cloudflare](rules/ci-infra-and-cloudflare.md)
 - [Documentation and specs](rules/docs-and-specs.md)

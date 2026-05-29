@@ -20,7 +20,8 @@ These rules govern when to diagnose, when to edit, and how to route implementati
 - This applies whether or not a `plan.md` file exists.
 - For trivial single-file edits, inline execution is acceptable.
 - If already running as the implementer agent, execute the approved plan instead of re-delegating.
-- Do not commit or push implementation work unless the user explicitly asks or the approved plan requires it.
+- For feature implementation work, follow [feature-delivery.md](feature-delivery.md) through PR creation and CI follow-through unless the user explicitly asks to stop earlier.
+- Do not commit or push non-feature implementation work unless the user explicitly asks or the approved plan requires it.
 
 ## Local Code Review
 
