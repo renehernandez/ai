@@ -3,6 +3,11 @@
 These rules cover end-to-end feature work in Codex, Claude Code, and other
 harnesses that follow the shared `~/.agents` instructions.
 
+Agents should load this file when the user says "feature delivery workflow",
+"follow feature delivery", "use the feature delivery rule", or similar. If a
+project repo does not define this workflow locally, use this shared rule at
+`~/.agents/rules/feature-delivery.md`.
+
 ## Default Feature Workflow
 
 When the user asks to build, implement, or finish a feature, treat that as

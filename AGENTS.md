@@ -11,6 +11,7 @@ The linked rule files are normative and preserve the detailed policies.
 - If a rule names a tool that is unavailable in the current harness, use the closest safe equivalent and say what changed.
 - Do not commit, push, install dependencies, or run destructive commands unless the user explicitly asks.
 - A feature implementation request counts as approval to complete the feature-delivery workflow in [rules/feature-delivery.md](rules/feature-delivery.md) unless the user says to stop before commit, push, or PR.
+- If the user says "feature delivery workflow", "follow feature delivery", or similar, immediately read and apply [rules/feature-delivery.md](rules/feature-delivery.md); do not search only the project repo and conclude it is missing.
 
 ## Quick Operating Rules
 
