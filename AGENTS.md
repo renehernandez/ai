@@ -23,6 +23,7 @@ The linked rule files are normative and preserve the detailed policies.
 - Use `/doc-smith` for non-trivial documentation work and Mermaid for Markdown diagrams.
 - Always use the `hallmark` skill for frontend design work, including greenfield UI, redesigns, design audits, visual polish, and design extraction from URLs or screenshots.
 - Prefer CLI tools that carry authentication and org conventions: `gh` for GitHub, `glab` for GitLab, and `wrangler` for Cloudflare.
+- Do not use "smoke test" or "smoke tests" wording. Describe the exact verification performed instead, such as browser route checks, console checks, or manual browser verification.
 
 ## Harness Entrypoints
 
