@@ -33,7 +33,7 @@ The linked rule files are normative and preserve the detailed policies.
 
 - Store reusable Codex automation definitions under [automations/](automations/).
 - Runtime folders such as `~/.codex/automations` and `~/.agents/automations` should point here by symlink.
-- Keep automation prompts self-contained and repo-aware; ignore runtime-only state such as jitter salts, logs, and per-run state files.
+- Keep automation prompts self-contained and repo-aware; ignore runtime-only state such as jitter salts, logs, per-run state files, and automation memory/state artifacts such as `memory.md` and `state.json`.
 
 ### Shared Rules
 

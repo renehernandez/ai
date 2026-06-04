@@ -7,6 +7,7 @@ These rules govern when to diagnose, when to edit, and how to route implementati
 - When the user is troubleshooting, investigating, or debugging an issue, do not take action such as committing, pushing, editing files, or running fixes before presenting findings and asking how to proceed.
 - Troubleshooting mode means analyze, diagnose, and report, then wait for the user's decision before acting.
 - This applies even when the fix seems obvious.
+- If the failure may come from Codex runtime, hooks, plugins, or automation state, inspect `~/.codex` runtime configuration such as `config.toml`, cached plugin hook definitions, and runtime automation artifacts before changing repo files. Do not assume the fault is in the current workspace just because the symptom appeared there.
 
 ## Brainstorming and Design Sessions
 

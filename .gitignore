@@ -1,3 +1,4 @@
 automations/.run-jitter-salt
+automations/**/memory.md
 automations/**/state.json
 automations/**/*.log
