@@ -34,8 +34,11 @@ The linked rule files are normative and preserve the detailed policies.
 All harnesses follow these reusable policies:
 
 - [Command and tools](rules/command-and-tools.md)
+- [Agent surface routing](rules/agent-surface-routing.md)
 - [Git and review](rules/git-and-review.md)
 - [Feature delivery](rules/feature-delivery.md)
+- [Session startup](rules/session-startup.md)
+- [Handoff and resume](rules/handoff-and-resume.md)
 - [Investigation and implementation](rules/investigation-and-implementation.md)
 - [CI, infrastructure, and Cloudflare](rules/ci-infra-and-cloudflare.md)
 - [Documentation and specs](rules/docs-and-specs.md)

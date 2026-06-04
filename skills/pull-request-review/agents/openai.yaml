@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pull Request Review"
+  short_description: "Review PRs and branch diffs"
+  default_prompt: "Use $pull-request-review to review this PR or branch diff."

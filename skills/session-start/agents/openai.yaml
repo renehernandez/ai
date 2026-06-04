@@ -1,0 +1,4 @@
+interface:
+  display_name: "Session Start"
+  short_description: "Start or resume repo work cleanly"
+  default_prompt: "Use $session-start to start or resume this repo task from live state."

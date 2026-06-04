@@ -1,0 +1,4 @@
+interface:
+  display_name: "Handoff Brief"
+  short_description: "Create continuation-ready task briefs"
+  default_prompt: "Use $handoff-brief to create a continuation-ready brief from live state."

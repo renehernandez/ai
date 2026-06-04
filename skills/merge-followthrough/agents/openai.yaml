@@ -1,0 +1,4 @@
+interface:
+  display_name: "Merge Followthrough"
+  short_description: "Finish PR merge and sync loops"
+  default_prompt: "Use $merge-followthrough to finish this PR merge workflow."

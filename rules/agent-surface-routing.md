@@ -1,0 +1,34 @@
+# Agent Surface Routing Rules
+
+Use these rules when deciding which instructions and context are available to an agent session across local apps, CLIs, IDEs, browser clients, cloud workers, and CI automation.
+
+## Execution Surfaces
+
+- Treat desktop apps, local CLIs, IDE extensions, and remote control of a local desktop host as local agent surfaces.
+- Treat web apps, delegated cloud tasks, hosted PR review, and hosted security review as cloud agent surfaces.
+- Treat GitHub Actions, GitLab CI, private runners, and scheduled jobs as CI automation, even when they invoke an agent or model.
+
+## Local Agent Surfaces
+
+Local agent surfaces can use the local machine's workspace state, repository checkout, shell, configured plugins, skills, hooks, approvals, and user-level `~/.agents` instructions.
+
+When a remote client is controlling a local desktop host, assume the underlying host remains the source of project files, shell state, terminal output, diffs, test results, approvals, and local context. For Codex, this includes ChatGPT remote control of Codex Desktop. If the host is offline, asleep, disconnected, or remote control is disabled, do not assume this local context is available.
+
+For local VialMate work, start from the actual worktree and GitHub state before acting. Do not substitute a cloud repository view for local state unless the user explicitly asks for cloud-only work.
+
+## Cloud Agent Surfaces
+
+Cloud agent surfaces should not be assumed to see user-level local files such as `~/.agents`, local-only skills, local hooks, uncommitted worktree state, or machine-specific memory.
+
+For work that must run well in hosted agents, cloud PR review, or cloud security review, put durable guidance in repo-visible files such as `AGENTS.md`, `.agents/rules/*`, or `docs/*`.
+
+Use repo-visible instructions for cloud PR review rubrics, security expectations, dependency policies, project taxonomy, and testing terminology.
+
+## Choosing The Source Of Truth
+
+- For local implementation, prefer the local checkout plus `~/.agents` and project `AGENTS.md`.
+- For cloud PR review, prefer repo-visible instructions and the PR diff.
+- For questions about existing local work, prefer desktop/session state and the local worktree.
+- For questions about merged code, PRs, CI, and remote branches, verify with GitHub.
+
+If a conclusion depends on a surface-specific capability, name the surface in the answer. For example, say "Codex Desktop can use the local skill" or "Codex Cloud needs this in the repo".
