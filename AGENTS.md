@@ -29,6 +29,12 @@ The linked rule files are normative and preserve the detailed policies.
 
 ## Harness Entrypoints
 
+### Shared Automations
+
+- Store reusable Codex automation definitions under [automations/](automations/).
+- Runtime folders such as `~/.codex/automations` and `~/.agents/automations` should point here by symlink.
+- Keep automation prompts self-contained and repo-aware; ignore runtime-only state such as jitter salts, logs, and per-run state files.
+
 ### Shared Rules
 
 All harnesses follow these reusable policies:

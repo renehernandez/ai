@@ -1,0 +1,13 @@
+version = 1
+id = "cross-repo-agent-docs-health-brief"
+kind = "cron"
+name = "Cross-repo agent docs health brief"
+prompt = "Produce a concise cross-repo agent docs health brief. Inspect shared agent docs in /Users/renehernandez/personal/projects/ai, active ~/.agents rules/skills/automations, configured Codex automations, recent Codex memory/session summaries, and known active local repos/worktrees. Do not edit agent docs, repo files, branches, PRs, or automations.\n\nUse incremental scope. Before deep auditing, build a cheap activity fingerprint for known repos/worktrees and compare it with /Users/renehernandez/personal/projects/ai/automations/cross-repo-agent-docs-health-brief/state.json when available. Treat activity as: git HEAD changed, branch changed, dirty-state fingerprint changed, PR/check state changed, agent docs changed, automation config changed, or relevant Codex memory/session entries created since the previous successful run. Deep-inspect only repos with activity since the previous run. Always inspect the AI repo, ~/.agents, ~/.codex/automations, and the automation state itself because they are the control-plane docs. If no previous state exists, inspect the AI repo, ~/.agents, automations, and the most recently active repos only.\n\nClassify each candidate as shared, project-local, skill, automation, memory-only, or ignore. Prioritize repeated user corrections, recent workflow failures, renamed skills/commands, source-vs-active drift, invalid skill metadata, and guidance that is either too project-specific for shared rules or too important to remain only local. Use exact evidence: file paths, session or memory references, repo paths, and verification gaps. Validate cheap metadata where useful, such as yq for openai.yaml and source-vs-active diffs.\n\nOutput this shape and omit empty sections: Scope / verified; Top recommended docs update; Repeated corrections; Skill/rule drift; Project-local candidates; Shared-rule candidates; Automation candidates; Stale/conflicting docs; Skipped unchanged repos; Verification gaps; Suggested next action.\n\nAfter producing the brief, update only the ignored state file /Users/renehernandez/personal/projects/ai/automations/cross-repo-agent-docs-health-brief/state.json with the successful run timestamp, repo fingerprints inspected or skipped, memory/session fingerprint, and automation fingerprint. Do not write any other files."
+status = "ACTIVE"
+rrule = "FREQ=WEEKLY;BYDAY=MO,TH;BYHOUR=9;BYMINUTE=30;BYSECOND=0"
+model = "gpt-5.4"
+reasoning_effort = "medium"
+execution_environment = "local"
+cwds = ["/Users/renehernandez/personal/projects/ai"]
+created_at = 1780547066254
+updated_at = 1780547090594

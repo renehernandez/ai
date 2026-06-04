@@ -1,0 +1,3 @@
+automations/.run-jitter-salt
+automations/**/state.json
+automations/**/*.log
