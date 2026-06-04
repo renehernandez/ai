@@ -1,4 +1,4 @@
 interface:
   display_name: "Plan To PR"
   short_description: "Plan, implement, review, and reach green CI"
-  default_prompt: "/goal Use $plan-to-pr for <feature>. Write the plan, run an explicit plan-review loop until the verdict is clean, implement the approved plan or first approved slice, run docs alignment, open or update the PR, iterate on local/background review feedback, watch CI, and finish only when CI is green or blocked with evidence."
+  default_prompt: "/goal Use $plan-to-pr for <feature>. Write the plan, run an explicit plan-review loop until the verdict is clean, implement the approved plan or first approved slice, run docs alignment, open or update the PR, wait for hosted/background review feedback on the latest PR head, iterate until feedback is resolved, watch CI, and finish only when CI is green or blocked with evidence."
