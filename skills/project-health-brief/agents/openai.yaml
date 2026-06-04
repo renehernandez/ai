@@ -1,0 +1,4 @@
+interface:
+  display_name: "Project Health Brief"
+  short_description: "Summarize repo, PR, worktree, and CI health"
+  default_prompt: "Use $project-health-brief to summarize repo, PR, worktree, CI, and next-action health."

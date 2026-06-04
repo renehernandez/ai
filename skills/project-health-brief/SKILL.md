@@ -1,9 +1,9 @@
 ---
-name: work-health-brief
+name: project-health-brief
 description: Use when summarizing active repository work, repo status, work dashboards, open PRs, dirty worktrees, stale branches, checks pending, CI failing, merge queue, deployment status, merge readiness, or next actions.
 ---
 
-# Work Health Brief
+# Project Health Brief
 
 ## Overview
 

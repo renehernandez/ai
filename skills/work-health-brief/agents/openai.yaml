@@ -1,4 +1,0 @@
-interface:
-  display_name: "Work Health Brief"
-  short_description: "Summarize repo, PR, worktree, and CI health"
-  default_prompt: "Use $work-health-brief to summarize repo, PR, worktree, CI, and next-action health."
