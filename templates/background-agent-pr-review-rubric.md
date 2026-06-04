@@ -16,8 +16,9 @@ Assume the background agent may not see local-only files, user-level rules, unco
 4. Performance and scalability: check unnecessary work, query or network fan-out, blocking paths, and resource lifecycle problems.
 5. Usability and accessibility: check user-facing regressions, unclear states, broken navigation, keyboard/screen-reader issues, and mobile layout risks.
 6. Maintainability: check ownership boundaries, unnecessary abstractions, duplication, naming drift, hidden coupling, and testability.
-7. Verification: name missing or weak test coverage by exact layer, such as unit, integration, worker-runtime, database integration, local browser E2E, deployed-preview E2E, or deployment verification.
-8. CI and deployment: inspect required checks when available. Separate branch-caused failures from external, permission, service, or flaky-infrastructure blockers.
+7. Docs and agent-doc alignment: if the PR changes behavior, architecture, commands, workflows, tests, CI, deployment, auth/access boundaries, data contracts, or agent expectations, verify relevant docs, plans, agent docs, automation prompts, review rubrics, and the PR description are updated or explain why no update is needed.
+8. Verification: name missing or weak test coverage by exact layer, such as unit, integration, worker-runtime, database integration, local browser E2E, deployed-preview E2E, or deployment verification.
+9. CI and deployment: inspect required checks when available. Separate branch-caused failures from external, permission, service, or flaky-infrastructure blockers.
 
 ## Ignore
 
@@ -48,5 +49,6 @@ End with:
 ```markdown
 Review scope:
 Verification checked:
+Docs alignment checked:
 Context gaps:
 ```

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Docs Alignment Review"
+  short_description: "Check docs and agent-doc drift from a diff"
+  default_prompt: "Use $docs-alignment-review to check whether this branch needs docs, plan, agent-doc, automation, or PR description updates."

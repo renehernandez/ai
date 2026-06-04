@@ -21,14 +21,18 @@ The default workflow is:
 2. Implement the requested change on a feature branch, preserving unrelated user
    changes.
 3. Run the narrowest useful verification for the touched code.
-4. Before committing, run and report the quality gate below until there are no
+4. Run a docs alignment pass for the branch diff and update affected docs,
+   plans, agent docs, automation prompts, or the PR description when the diff
+   changes behavior, workflows, architecture, commands, tests, CI, deployment,
+   data contracts, auth/access boundaries, or agent expectations.
+5. Before committing, run and report the quality gate below until there are no
    unresolved findings that should be fixed.
-5. Commit the feature branch without `--no-verify`.
-6. Push the feature branch.
-7. Create or update the GitHub PR using `gh`.
-8. Monitor CI checks until they pass, fail for an external reason, or require
+6. Commit the feature branch without `--no-verify`.
+7. Push the feature branch.
+8. Create or update the GitHub PR using `gh`.
+9. Monitor CI checks until they pass, fail for an external reason, or require
    user input.
-9. For CI failures caused by the branch, fix them, rerun local verification,
+10. For CI failures caused by the branch, fix them, rerun local verification,
    update the branch, and continue monitoring.
 
 This applies to normal prompts and goal-style prompts. Do not stop after local
@@ -43,11 +47,14 @@ Before committing feature work, run these passes over the branch diff:
 2. `code-simplifier` for behavior-preserving clarity and simplification.
 3. `deslop` for AI-shaped clutter, over-defensive code, style drift, thin
    wrappers, unnecessary comments, casts, and unrelated formatting churn.
+4. `docs-alignment-review` for stale or missing docs, plans, PR descriptions,
+   agent docs, skills, rules, hooks, automation prompts, or review rubrics.
 
 If any pass produces actionable findings that should be resolved before review,
-fix them, rerun the relevant verification, and repeat the three-pass gate. After
-`code-simplifier` or `deslop` changes, rerun `code-quality-review` before
-considering the gate complete.
+fix them, rerun the relevant verification, and repeat the gate. After
+`code-simplifier` or `deslop` changes, rerun `code-quality-review`; after docs
+or agent docs change, rerun `docs-alignment-review` before considering the gate
+complete.
 
 Treat `code-quality-review` severity as binding:
 
@@ -66,6 +73,7 @@ Before the commit or final delivery summary, include a short quality-gate
 section with each pass marked:
 
 - `clean`: no actionable findings
+- `not applicable`: pass was considered but the diff has no relevant surface
 - `fixed`: findings were fixed and verification was rerun
 - `deferred`: finding remains with a stated reason and risk
 - `blocked`: finding requires user input or a product decision
@@ -88,6 +96,10 @@ For GitHub repositories:
   result is clear.
 - Fix branch-caused CI failures and push updates without asking for another
   confirmation.
+- After review or CI fixes change the diff, rerun relevant verification and
+  `docs-alignment-review` before pushing or declaring the PR finished. The final
+  docs alignment verdict must apply to the final branch diff, not an earlier
+  version of the branch.
 - Stop and report when CI is blocked by missing secrets, unavailable external
   services, permission failures, flaky upstream infrastructure, or a product
   decision.

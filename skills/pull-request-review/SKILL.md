@@ -21,6 +21,7 @@ Use for PR/MR review, local diff review, reviewing another agent's feedback, or 
 | Local changes | Inspect status, diff, and relevant repo rules |
 | Hosted/cloud review | Prefer repo-visible rules and PR diff |
 | Another agent's feedback | Check claims against code and evidence |
+| Docs-impacting PR | Use `docs-alignment-review` before final verdict |
 
 ## Workflow
 
@@ -28,14 +29,16 @@ Use for PR/MR review, local diff review, reviewing another agent's feedback, or 
 2. Establish the diff base with provider tools or `git merge-base`.
 3. If provider tools are unavailable, establish the best local base from remotes/refs, state what could not be verified, and scope findings to the verified diff only.
 4. Read changed files plus enough surrounding code to avoid false positives.
-5. Prioritize findings:
+5. Run a docs alignment pass for behavior, architecture, workflow, test, CI, deployment, auth/access, data contract, or agent-expectation changes. Use `docs-alignment-review` when available; otherwise perform the same check directly and include missing docs or agent-doc updates as review findings.
+6. Prioritize findings:
    - security, data leaks, auth/access, secrets;
    - correctness and behavioral regressions;
    - performance and scalability regressions;
    - usability/accessibility regressions;
-   - maintainability, ownership, testability, and quality gaps.
-6. Ignore formatting nits when automated tooling owns them.
-7. Report blockers and residual risk; do not edit files during a review unless the user asks for fixes.
+   - maintainability, ownership, testability, and quality gaps;
+   - docs, plan, PR-description, and agent-doc drift that would mislead future implementers or reviewers.
+7. Ignore formatting nits when automated tooling owns them.
+8. Report blockers and residual risk; do not edit files during a review unless the user asks for fixes.
 
 ## Findings Format
 
@@ -57,12 +60,14 @@ Use severity names from the repo when available. If no issues are found, say so 
 | Reviewing stale branch state | Verify live PR/base/checks |
 | Trusting another agent's claim | Re-check code/evidence |
 | Mixing test layers | Name unit/component/integration/E2E/deploy verification |
+| Ignoring docs or agent-doc drift | Check docs alignment and report stale, missing, or unnecessary docs changes |
 | Filing style nits owned by tools | Skip them |
 
 ## Validation Scenarios
 
 - Stale PR after base changed: pass only if base/check state is verified.
 - Agent feedback cites nonexistent code: pass only if claim is checked.
+- Behavior change without docs review: pass only if docs alignment is clean, not applicable, or findings are reported.
 - Clean review: pass only if residual risk is still named.
 
 ## Test Evidence
