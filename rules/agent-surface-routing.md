@@ -20,15 +20,15 @@ For local VialMate work, start from the actual worktree and GitHub state before 
 
 Cloud agent surfaces should not be assumed to see user-level local files such as `~/.agents`, local-only skills, local hooks, uncommitted worktree state, or machine-specific memory.
 
-For work that must run well in hosted agents, cloud PR review, or cloud security review, put durable guidance in repo-visible files such as `AGENTS.md`, `.agents/rules/*`, or `docs/*`.
+For work that must run well in hosted agents, cloud PR review, background PR review, or cloud security review, put durable guidance in repo-visible files such as `AGENTS.md`, `.agents/rules/*`, or `docs/*`.
 
-Use repo-visible instructions for cloud PR review rubrics, security expectations, dependency policies, project taxonomy, and testing terminology.
+Use repo-visible instructions for background-agent PR review rubrics, security expectations, dependency policies, project taxonomy, and testing terminology. Start from the shared template at `templates/background-agent-pr-review-rubric.md` in the AI repo when a project does not already define a rubric.
 
 ## Choosing The Source Of Truth
 
 - For local implementation, prefer the local checkout plus `~/.agents` and project `AGENTS.md`.
-- For cloud PR review, prefer repo-visible instructions and the PR diff.
+- For cloud or background PR review, prefer repo-visible instructions and the PR diff.
 - For questions about existing local work, prefer desktop/session state and the local worktree.
 - For questions about merged code, PRs, CI, and remote branches, verify with GitHub.
 
-If a conclusion depends on a surface-specific capability, name the surface in the answer. For example, say "Codex Desktop can use the local skill" or "Codex Cloud needs this in the repo".
+If a conclusion depends on a surface-specific capability, name the surface in the answer. For example, say "the local desktop agent can use the local skill" or "the background reviewer needs this in repo-visible docs".
