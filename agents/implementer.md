@@ -24,6 +24,7 @@ tools:
   - Task
 skills:
   - glab-commit
+  - scrutinize
   - code-quality-review
   - code-simplifier
   - deslop
@@ -95,13 +96,14 @@ After final verification passes, run the pre-commit quality gate from `rules/fea
 
 The required passes are:
 
-1. `code-quality-review` for strict maintainability and structural findings.
-2. `code-simplifier` for behavior-preserving clarity and simplification.
-3. `deslop` for AI-shaped clutter and style drift.
+1. `scrutinize` for adversarial validation of intent, simpler alternatives, real paths, and evidence-backed claims.
+2. `code-quality-review` for strict maintainability and structural findings.
+3. `code-simplifier` for behavior-preserving clarity and simplification.
+4. `deslop` for AI-shaped clutter and style drift.
 
 When the Task tool supports the corresponding subagent or skill, delegate each pass with a prompt that lists the modified files and the branch diff scope. Do **not** attempt to run Claude Code as a subprocess via Bash/npx.
 
-If any pass produces actionable findings that should be resolved before review, apply the fixes, rerun the relevant verification, and repeat all three passes. Stop after two serious fix loops if the same blocker remains, then report the blocker clearly to the user.
+If any pass produces actionable findings that should be resolved before review, apply the fixes, rerun the relevant verification, and repeat the affected passes. Stop after two serious fix loops if the same blocker remains, then report the blocker clearly to the user.
 
 ## Phase 5.7 — Local Review (Quality Gate)
 

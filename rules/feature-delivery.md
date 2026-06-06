@@ -43,18 +43,30 @@ reached.
 
 Before committing feature work, run these passes over the branch diff:
 
-1. `code-quality-review` for strict maintainability and structural findings.
-2. `code-simplifier` for behavior-preserving clarity and simplification.
-3. `deslop` for AI-shaped clutter, over-defensive code, style drift, thin
+1. `scrutinize` for adversarial validation of intent, simpler alternatives,
+   real code paths, and evidence-backed claims.
+2. `code-quality-review` for strict maintainability and structural findings.
+3. `code-simplifier` for behavior-preserving clarity and simplification.
+4. `deslop` for AI-shaped clutter, over-defensive code, style drift, thin
    wrappers, unnecessary comments, casts, and unrelated formatting churn.
-4. `docs-alignment-review` for stale or missing docs, plans, PR descriptions,
+5. `docs-alignment-review` for stale or missing docs, plans, PR descriptions,
    agent docs, skills, rules, hooks, automation prompts, or review rubrics.
 
 If any pass produces actionable findings that should be resolved before review,
 fix them, rerun the relevant verification, and repeat the gate. After
-`code-simplifier` or `deslop` changes, rerun `code-quality-review`; after docs
-or agent docs change, rerun `docs-alignment-review` before considering the gate
-complete.
+`scrutinize` findings are fixed, rerun `scrutinize` on the changed artifact.
+After `code-simplifier` or `deslop` changes, rerun `code-quality-review`; after
+docs or agent docs change, rerun `docs-alignment-review` before considering the
+gate complete.
+
+Treat `scrutinize` verdicts as binding:
+
+- `ship` passes the gate.
+- `fix-then-ship` and `rework` block commit and push until fixed, rerun, or
+  explicitly accepted as a reported trade-off by the user.
+- `reject` blocks commit and push until the goal is changed or abandoned.
+- `MINOR` findings should be fixed automatically when local and low-risk;
+  otherwise report them as non-blocking residual risk.
 
 Treat `code-quality-review` severity as binding:
 
@@ -80,6 +92,8 @@ section with each pass marked:
 
 Include the highest-severity `code-quality-review` finding, or state that there
 were no structural findings.
+Include the `scrutinize` verdict and whether any `MINOR` findings were fixed or
+left as residual risk.
 
 When a harness has subagents or slash skills for these passes, use them. In
 Codex, read each named `SKILL.md` before applying it and perform the closest
