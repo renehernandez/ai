@@ -18,18 +18,33 @@ Use for plan-first feature delivery, "brainstorm then implement", "kickstart imp
 In Codex, prefer starting this workflow as a goal with the skill named in the objective:
 
 ```text
-/goal Use $plan-to-pr for <feature>. Brainstorm and write the plan file, run an explicit plan-review loop with a clean verdict, run $scrutinize on the plan before coding, implement the approved plan or first approved slice, run local review, run $scrutinize on the implementation diff, run docs alignment, open or update a PR, wait for local and hosted/background review feedback on the latest PR head, iterate until feedback is resolved, and finish only when CI is green or blocked with evidence.
+/goal Use $plan-to-pr for <feature>. Brainstorm and write the plan file, announce each helper skill when it starts, run an explicit plan-review loop with a clean verdict, run $scrutinize on the plan before coding, implement the approved plan or first approved slice, run local review, run $scrutinize on the implementation diff, run docs alignment, open or update a PR, wait for local and hosted/background review feedback on the latest PR head, iterate until feedback is resolved, finish only when CI is green or blocked with evidence, and include a final gate ledger showing each helper skill and verdict.
 ```
 
 For non-Codex agents or tools without goal state, use the same objective as a normal prompt:
 
 ```text
-Use the plan-to-pr workflow for <feature>. Brainstorm and write the plan file, run an explicit plan-review loop with a clean verdict, run $scrutinize on the plan before coding, implement the approved plan or first approved slice, run local review, run $scrutinize on the implementation diff, run docs alignment, open or update a PR, wait for local and hosted review feedback on the latest PR head, iterate until feedback is resolved, and finish only when CI is green or blocked with evidence.
+Use the plan-to-pr workflow for <feature>. Brainstorm and write the plan file, announce each helper skill when it starts, run an explicit plan-review loop with a clean verdict, run $scrutinize on the plan before coding, implement the approved plan or first approved slice, run local review, run $scrutinize on the implementation diff, run docs alignment, open or update a PR, wait for local and hosted review feedback on the latest PR head, iterate until feedback is resolved, finish only when CI is green or blocked with evidence, and include a final gate ledger showing each helper skill and verdict.
 ```
 
 If named helper skills are unavailable, perform their plain-English equivalent: inspect live repo, PR, and CI state; clarify scope; review the plan for implementation readiness; adversarially validate intent, simpler alternatives, real paths, and evidence-backed claims; check whether docs or agent docs must change with the diff; review the final diff; wait for hosted review feedback when it was requested; and keep iterating until the same gates pass.
 
 Do not rely on a bare `$plan-to-pr` invocation as the whole objective; the persistent goal or task text must include the deliverable and stop rule.
+
+## Progress Output
+
+Make helper-skill use visible in the transcript. Before running any named helper skill or its plain-English fallback, send a short status line naming the skill, why it is being used, and the artifact or diff it is checking. Examples:
+
+- `Using $session-start to anchor this run in live repo, branch, PR, and CI state.`
+- `Using $brainstorming to settle scope and success criteria before writing the plan.`
+- `Using $scrutinize on the plan before coding; this is the adversarial plan gate.`
+- `Using $pull-request-review on the local implementation diff before hosted review.`
+- `Using $scrutinize on the implementation diff before CI completion.`
+- `Using $docs-alignment-review on the final diff so docs and agent instructions stay aligned.`
+
+When a helper skill is unavailable and a fallback is used, say that explicitly in the same status line: `Using the plain-English $scrutinize fallback on the plan because the skill is unavailable.`
+
+After each gate, report the verdict in one line with the gate name, artifact or head, verdict, and next action. The final response must include a compact gate ledger covering at least: `session-start`, `brainstorming` when used, plan review, plan scrutiny, implementation, local review, implementation scrutiny, docs alignment, hosted/background review, and CI. If a gate did not apply, mark it `not applicable` with the reason; do not omit it. This ledger is required even when the workflow blocks early so a later reader can tell whether `scrutinize` was actually run.
 
 ## Workflow
 
@@ -69,6 +84,8 @@ Do not rely on a bare `$plan-to-pr` invocation as the whole objective; the persi
 | --- | --- |
 | Starting implementation before plan feedback is resolved | Update the plan and rerun plan review first |
 | Starting implementation before plan scrutiny passes | Run `scrutinize`, fix findings, and rerun before coding |
+| Running a helper skill without naming it in the transcript | Announce the skill before it starts and record its verdict in the final gate ledger |
+| Finishing without a gate ledger | Add the ledger with every required gate marked passed, blocked, or not applicable |
 | Treating a read-through as plan review | Produce a verdict with findings or `clean`, then proceed only from the latest verdict |
 | Stopping after a clean plan review | Implement the approved plan or first approved slice in the same goal unless blocked |
 | Treating local review as enough for adversarial validation | Run `scrutinize` on the implementation diff before hosted review or CI completion |
@@ -86,7 +103,9 @@ Do not rely on a bare `$plan-to-pr` invocation as the whole objective; the persi
 ## Test Evidence
 
 - RED: prior goal-style prompts often required the user to restate the plan-review, PR-review, background-review, and CI-green loop.
+- RED: session `019e7b05-b280-7433-bb29-7eefe79ed17d` left it unclear whether `scrutinize` had run, because helper-skill use was not named or summarized in the output.
 - RED: session `019e90cb-eab6-74c2-8685-eb720aea6437` requested Codex review on PR 67, but feedback landed later; the next goal turn had to address feedback that should have been awaited before completion.
 - GREEN: this skill provides a single objective template with explicit deliverables, review gates, and stop rule.
+- GREEN: progress output now requires a status line before every named helper skill or fallback and a final gate ledger that records `scrutinize` verdicts explicitly.
 - REFACTOR: the plan gate now requires a clean verdict, then forces implementation of the approved plan or first approved slice instead of handing off to a second goal; final-diff docs alignment and latest-head hosted review close the late-review and CI-fix skip paths.
 - REFACTOR: plan and implementation scrutiny are mandatory gates so adversarial intent, simpler-path, trace, and evidence checks cannot be skipped by ordinary plan review or local PR review.
