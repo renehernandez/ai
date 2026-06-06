@@ -18,16 +18,16 @@ Use for plan-first feature delivery, "brainstorm then implement", "kickstart imp
 In Codex, prefer starting this workflow as a goal with the skill named in the objective:
 
 ```text
-/goal Use $plan-to-pr for <feature>. Brainstorm and write the plan file, run an explicit plan-review loop with a clean verdict before coding, implement the approved plan or first approved slice, run docs alignment, open or update a PR, wait for local and hosted/background review feedback on the latest PR head, iterate until feedback is resolved, and finish only when CI is green or blocked with evidence.
+/goal Use $plan-to-pr for <feature>. Brainstorm and write the plan file, run an explicit plan-review loop with a clean verdict, run $scrutinize on the plan before coding, implement the approved plan or first approved slice, run local review, run $scrutinize on the implementation diff, run docs alignment, open or update a PR, wait for local and hosted/background review feedback on the latest PR head, iterate until feedback is resolved, and finish only when CI is green or blocked with evidence.
 ```
 
 For non-Codex agents or tools without goal state, use the same objective as a normal prompt:
 
 ```text
-Use the plan-to-pr workflow for <feature>. Brainstorm and write the plan file, run an explicit plan-review loop with a clean verdict before coding, implement the approved plan or first approved slice, run docs alignment, open or update a PR, wait for local and hosted review feedback on the latest PR head, iterate until feedback is resolved, and finish only when CI is green or blocked with evidence.
+Use the plan-to-pr workflow for <feature>. Brainstorm and write the plan file, run an explicit plan-review loop with a clean verdict, run $scrutinize on the plan before coding, implement the approved plan or first approved slice, run local review, run $scrutinize on the implementation diff, run docs alignment, open or update a PR, wait for local and hosted review feedback on the latest PR head, iterate until feedback is resolved, and finish only when CI is green or blocked with evidence.
 ```
 
-If named helper skills are unavailable, perform their plain-English equivalent: inspect live repo, PR, and CI state; clarify scope; review the plan for implementation readiness; check whether docs or agent docs must change with the diff; review the final diff; wait for hosted review feedback when it was requested; and keep iterating until the same gates pass.
+If named helper skills are unavailable, perform their plain-English equivalent: inspect live repo, PR, and CI state; clarify scope; review the plan for implementation readiness; adversarially validate intent, simpler alternatives, real paths, and evidence-backed claims; check whether docs or agent docs must change with the diff; review the final diff; wait for hosted review feedback when it was requested; and keep iterating until the same gates pass.
 
 Do not rely on a bare `$plan-to-pr` invocation as the whole objective; the persistent goal or task text must include the deliverable and stop rule.
 
@@ -37,24 +37,28 @@ Do not rely on a bare `$plan-to-pr` invocation as the whole objective; the persi
 2. If the design is not settled, use `brainstorming` until scope, constraints, and success criteria are clear.
 3. Write the plan in the project's established plan/spec location. Keep the first slice narrow and implementation-ready.
 4. Run the plan review checkpoint before coding. A read-through is not enough: produce a short plan-review verdict covering scope, sequencing, edge cases, simplification, verification, and repo-rule fit.
-5. If plan feedback is actionable, update the plan and repeat the review checkpoint. Do not start implementation until the latest checkpoint verdict is clean, blocked by a product decision, or the user explicitly accepts a documented trade-off.
-6. After a clean plan-review verdict, continue directly into implementation. If the plan defines multiple PRs or slices, implement the first approved implementation slice by default. Do not stop to ask for a second goal or tell the user to restart with a narrower objective unless the plan has no implementation-ready slice or a product decision blocks slice selection.
-7. Implement the approved plan or first approved slice with the repo's feature-delivery rules.
-8. Run local verification and local PR/diff review with `pull-request-review`; fix actionable findings and repeat.
-9. Run `docs-alignment-review` over the implementation diff. If it finds required docs, plan, agent-doc, automation, or PR-description updates, make them before opening or updating the PR unless explicitly deferred with reason and risk.
-10. Push the branch and open or update the PR.
-11. Request hosted, cloud, or background-agent review when available. Ask reviewers to use repo-visible review rubrics when present; if the repo lacks one, recommend adapting `templates/background-agent-pr-review-rubric.md` from the AI repo.
-12. Wait for hosted review feedback to materialize before treating the gate as complete. For Codex GitHub review, poll PR reviews, review comments, timeline comments, and request reactions until the latest pushed head has a `chatgpt-codex-connector` review/comment, a thumbs-up/no-issues reaction on the request, actionable inline findings, or a clear timeout/blocker. Do not stop just because the `@codex review` comment was posted.
-13. Apply actionable hosted feedback and repeat local verification, local review, docs alignment, push, and hosted review on the updated diff. If the branch head changes after feedback or CI fixes, the earlier hosted review is stale unless it clearly reviewed the new head.
-14. Watch CI. Fix branch-caused failures, rerun relevant verification, rerun docs alignment if the diff changed, and push updates. Before finishing, make sure the latest docs alignment verdict and hosted review verdict apply to the final branch diff. Finish only when CI is green or the blocker is external, permission-related, flaky infrastructure, hosted-review timeout, or a product decision with evidence.
+5. Run `scrutinize` on the plan before coding. The verdict must be `ship` before implementation starts unless the user explicitly accepts a documented `fix-then-ship` or `rework` trade-off. A `reject` verdict requires changing or abandoning the goal. Fix `BLOCKER` and `MAJOR` findings first; fix scoped mechanical `MINOR` plan findings automatically before implementation.
+6. If plan review or scrutiny feedback is actionable, update the plan and repeat the relevant checkpoint. Do not start implementation until the latest checkpoint verdicts are clean, blocked by a product decision, or the user explicitly accepts a documented trade-off.
+7. After clean plan review and scrutiny verdicts, continue directly into implementation. If the plan defines multiple PRs or slices, implement the first approved implementation slice by default. Do not stop to ask for a second goal or tell the user to restart with a narrower objective unless the plan has no implementation-ready slice or a product decision blocks slice selection.
+8. Implement the approved plan or first approved slice with the repo's feature-delivery rules.
+9. Run local verification and local PR/diff review with `pull-request-review`; fix actionable findings and repeat.
+10. Run `scrutinize` on the implementation diff after local review and before hosted/background review. The verdict must be `ship` before proceeding unless the user explicitly accepts a documented `fix-then-ship` or `rework` trade-off. A `reject` verdict requires changing or abandoning the goal. Fix `BLOCKER` and `MAJOR` findings first; fix local low-risk `MINOR` implementation findings automatically or report them as residual risk.
+11. Run `docs-alignment-review` over the implementation diff. If it finds required docs, plan, agent-doc, automation, or PR-description updates, make them before opening or updating the PR unless explicitly deferred with reason and risk.
+12. Push the branch and open or update the PR.
+13. Request hosted, cloud, or background-agent review when available. Ask reviewers to use repo-visible review rubrics when present; if the repo lacks one, recommend adapting `templates/background-agent-pr-review-rubric.md` from the AI repo.
+14. Wait for hosted review feedback to materialize before treating the gate as complete. For Codex GitHub review, poll PR reviews, review comments, timeline comments, and request reactions until the latest pushed head has a `chatgpt-codex-connector` review/comment, a thumbs-up/no-issues reaction on the request, actionable inline findings, or a clear timeout/blocker. Do not stop just because the `@codex review` comment was posted.
+15. Apply actionable hosted feedback and repeat local verification, local review, scrutiny, docs alignment, push, and hosted review on the updated diff. If the branch head changes after feedback or CI fixes, the earlier hosted review is stale unless it clearly reviewed the new head.
+16. Watch CI. Fix branch-caused failures, rerun relevant verification, rerun scrutiny and docs alignment if the diff changed, and push updates. Before finishing, make sure the latest scrutiny, docs alignment, and hosted review verdicts apply to the final branch diff. Finish only when CI is green or the blocker is external, permission-related, flaky infrastructure, hosted-review timeout, or a product decision with evidence.
 
 ## Gate Rules
 
 | Gate | Passes when |
 | --- | --- |
 | Plan | At least one explicit plan-review verdict exists, and the latest verdict has no actionable feedback |
+| Plan scrutiny | `scrutinize` verdict is `ship`, or a `fix-then-ship`/`rework` verdict is explicitly accepted as a documented trade-off; `reject` requires changing or abandoning the goal |
 | Implementation | The approved plan or first approved implementation slice is implemented and local verification passes |
 | Local review | No actionable local PR/diff findings remain |
+| Implementation scrutiny | `scrutinize` verdict is `ship`, or a `fix-then-ship`/`rework` verdict is explicitly accepted as a documented trade-off; `reject` requires changing or abandoning the goal |
 | Docs alignment | Docs alignment verdict is `clean` or `not applicable`, or required docs updates are made/deferred with stated reason and risk |
 | Background review | Hosted/cloud/background review has produced a latest-head result with no actionable findings, or a timeout/blocker is evidenced |
 | CI | Required checks are green, or a non-branch blocker is evidenced |
@@ -64,8 +68,10 @@ Do not rely on a bare `$plan-to-pr` invocation as the whole objective; the persi
 | Mistake | Fix |
 | --- | --- |
 | Starting implementation before plan feedback is resolved | Update the plan and rerun plan review first |
+| Starting implementation before plan scrutiny passes | Run `scrutinize`, fix findings, and rerun before coding |
 | Treating a read-through as plan review | Produce a verdict with findings or `clean`, then proceed only from the latest verdict |
 | Stopping after a clean plan review | Implement the approved plan or first approved slice in the same goal unless blocked |
+| Treating local review as enough for adversarial validation | Run `scrutinize` on the implementation diff before hosted review or CI completion |
 | Asking for a second goal after the plan is clean | Continue with the first approved slice; ask only if no implementation-ready slice exists |
 | Shipping behavior, workflow, or architecture changes without a docs alignment verdict | Run `docs-alignment-review` and either update docs/agent docs or state why no update is needed |
 | Treating review feedback as optional noise | Fix actionable feedback or report the trade-off explicitly |
@@ -83,3 +89,4 @@ Do not rely on a bare `$plan-to-pr` invocation as the whole objective; the persi
 - RED: session `019e90cb-eab6-74c2-8685-eb720aea6437` requested Codex review on PR 67, but feedback landed later; the next goal turn had to address feedback that should have been awaited before completion.
 - GREEN: this skill provides a single objective template with explicit deliverables, review gates, and stop rule.
 - REFACTOR: the plan gate now requires a clean verdict, then forces implementation of the approved plan or first approved slice instead of handing off to a second goal; final-diff docs alignment and latest-head hosted review close the late-review and CI-fix skip paths.
+- REFACTOR: plan and implementation scrutiny are mandatory gates so adversarial intent, simpler-path, trace, and evidence checks cannot be skipped by ordinary plan review or local PR review.

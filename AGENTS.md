@@ -23,6 +23,7 @@ The linked rule files are normative and preserve the detailed policies.
 - Use the correct review path: local changes go to `local-review`; GitLab MRs go to `glab-review`.
 - Use confidence scores on actionable statements as defined in [rules/confidence.md](rules/confidence.md).
 - Use `/doc-smith` for non-trivial documentation work and Mermaid for Markdown diagrams.
+- Use `/scrutinize` for adversarial validation of plans, implementation diffs, PRs, hosted review feedback, proposed approaches, sanity checks, and second opinions.
 - Always use the `hallmark` skill for frontend design work, including greenfield UI, redesigns, design audits, visual polish, and design extraction from URLs or screenshots.
 - Prefer CLI tools that carry authentication and org conventions: `gh` for GitHub, `glab` for GitLab, and `wrangler` for Cloudflare.
 - Do not use "smoke test" or "smoke tests" wording. Describe the exact verification performed instead, such as browser route checks, console checks, or manual browser verification.
