@@ -17,7 +17,8 @@ Use for PR/MR review, local diff review, reviewing another agent's feedback, or 
 
 | Review context | First move |
 | --- | --- |
-| GitHub/GitLab PR | Verify branch, base, checks, and comments with provider tools |
+| GitHub PR | Use `github-review` to gather artifact-host context, then apply this rubric |
+| GitLab MR | Use `gitlab-review` to gather artifact-host context, then apply this rubric |
 | Local changes | Inspect status, diff, and relevant repo rules |
 | Hosted/cloud review | Prefer repo-visible rules and PR diff |
 | Another agent's feedback | Check claims against code and evidence |
@@ -26,7 +27,7 @@ Use for PR/MR review, local diff review, reviewing another agent's feedback, or 
 ## Workflow
 
 1. Load project review rules: `AGENTS.md`, relevant `.agents/rules/*.md`, and repo-specific review rubrics.
-2. Establish the diff base with provider tools or `git merge-base`.
+2. Establish the diff base with provider tools or `git merge-base`. For hosted GitHub/GitLab review, let `github-review` or `gitlab-review` provide PR/MR metadata, base/head SHAs, comments, checks, and the verified diff.
 3. If provider tools are unavailable, establish the best local base from remotes/refs, state what could not be verified, and scope findings to the verified diff only.
 4. Read changed files plus enough surrounding code to avoid false positives.
 5. Run a docs alignment pass for behavior, architecture, workflow, test, CI, deployment, auth/access, data contract, or agent-expectation changes. Use `docs-alignment-review` when available; otherwise perform the same check directly and include missing docs or agent-doc updates as review findings.
@@ -51,6 +52,10 @@ Recommendation:
 ```
 
 Use severity names from the repo when available. If no issues are found, say so and name remaining test/deploy risk.
+
+## Adapter Contract
+
+Artifact-host adapters gather live host context and then use this review rubric. They should return: artifact host, artifact id/URL, base/head refs and SHAs, diff source, check state, unresolved feedback, findings, docs alignment verdict, and verification gaps.
 
 ## Mistakes
 

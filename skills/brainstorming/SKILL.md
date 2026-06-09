@@ -1,8 +1,7 @@
 ---
 name: brainstorming
-description: "Collaborative design workflow for turning ideas into fully formed designs. ALWAYS invoke when brainstorming, designing features, thinking through problems, or exploring requirements before implementation."
+description: Use when brainstorming, designing features, exploring requirements, thinking through problems, or turning rough ideas into implementation-ready plans.
 allowed-tools: Read, Glob, Grep, AskUserQuestion
-model: opus
 ---
 
 # Brainstorming Ideas Into Designs

@@ -29,7 +29,7 @@ The default workflow is:
    unresolved findings that should be fixed.
 6. Commit the feature branch without `--no-verify`.
 7. Push the feature branch.
-8. Create or update the GitHub PR using `gh`.
+8. Create or update the artifact-host PR/MR using `gh` for GitHub or `glab` for GitLab.
 9. Monitor CI checks until they pass, fail for an external reason, or require
    user input.
 10. For CI failures caused by the branch, fix them, rerun local verification,
@@ -99,7 +99,7 @@ When a harness has subagents or slash skills for these passes, use them. In
 Codex, read each named `SKILL.md` before applying it and perform the closest
 available local workflow if a dedicated subagent is unavailable.
 
-## PR and CI Follow-Through
+## PR/MR and CI Follow-Through
 
 For GitHub repositories:
 
@@ -118,8 +118,26 @@ For GitHub repositories:
   services, permission failures, flaky upstream infrastructure, or a product
   decision.
 
-Do not merge the PR unless the user explicitly asks to merge, or has already
-given merge-after-green instructions for that PR.
+For GitLab repositories:
+
+- Use `glab mr create`, `glab mr update`, `glab mr view`, and GitLab CI tools
+  such as `glab ci`.
+- If an MR already exists for the branch, update it instead of creating a
+  duplicate.
+- Watch pipeline checks with `glab ci` or the relevant GitLab pipeline commands
+  until the result is clear.
+- Fix branch-caused CI failures and push updates without asking for another
+  confirmation.
+- After review or CI fixes change the diff, rerun relevant verification and
+  `docs-alignment-review` before pushing or declaring the MR finished. The final
+  docs alignment verdict must apply to the final branch diff, not an earlier
+  version of the branch.
+- Stop and report when CI is blocked by missing secrets, unavailable external
+  services, permission failures, flaky upstream infrastructure, or a product
+  decision.
+
+Do not merge the PR/MR unless the user explicitly asks to merge, or has already
+given merge-after-green instructions for that PR/MR.
 
 ## Safety Boundaries
 

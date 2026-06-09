@@ -1,0 +1,112 @@
+type: object
+required:
+  - version
+  - routes
+properties:
+  version:
+    type: integer
+    enum:
+      - 1
+  unmatched:
+    type: string
+    enum:
+      - ask
+      - block
+  routes:
+    type: array
+    minItems: 1
+    items:
+      type: object
+      required:
+        - match
+        - artifact
+        - review_feedback
+      properties:
+        match:
+          type: object
+          properties:
+            remote_host:
+              type: string
+            remote_url_pattern:
+              type: string
+            org:
+              type: string
+            repo:
+              type: string
+          minProperties: 1
+        artifact:
+          type: object
+          required:
+            - host
+            - kind
+            - create_adapter
+            - inspect_adapter
+          properties:
+            host:
+              type: string
+              enum:
+                - github
+                - gitlab
+            kind:
+              type: string
+              enum:
+                - pull_request
+                - merge_request
+            create_adapter:
+              type: string
+            inspect_adapter:
+              type: string
+        review_feedback:
+          type: object
+          required:
+            - primary
+          properties:
+            primary:
+              $ref: "#/$defs/reviewer"
+            experimental:
+              type: array
+              items:
+                $ref: "#/$defs/reviewer"
+$defs:
+  reviewer:
+    type: object
+    required:
+      - reviewer
+      - feedback_adapter
+      - request_mode
+      - wait_mode
+    properties:
+      reviewer:
+        type: string
+      feedback_adapter:
+        type: string
+      request_mode:
+        type: string
+        enum:
+          - automatic
+          - explicit
+          - manual
+          - disabled
+      wait_mode:
+        type: string
+        enum:
+          - poll
+          - webhook
+          - none
+      trigger:
+        type: string
+      required:
+        type: boolean
+      capabilities:
+        type: object
+        properties:
+          request_review:
+            type: boolean
+          poll_feedback:
+            type: boolean
+          inline_comments:
+            type: boolean
+          summary_comments:
+            type: boolean
+          head_sha_tracking:
+            type: boolean

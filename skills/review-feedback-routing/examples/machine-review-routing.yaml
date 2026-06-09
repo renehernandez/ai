@@ -1,0 +1,47 @@
+version: 1
+unmatched: ask
+
+routes:
+  - match:
+      remote_host: git.fullscript.io
+    artifact:
+      host: gitlab
+      kind: merge_request
+      create_adapter: glab-mr-create
+      inspect_adapter: gitlab-review
+    review_feedback:
+      primary:
+        reviewer: nitro
+        feedback_adapter: nitro-review-feedback
+        request_mode: automatic
+        wait_mode: poll
+        trigger: artifact_created
+        required: true
+        capabilities:
+          request_review: false
+          poll_feedback: true
+          inline_comments: true
+          summary_comments: true
+          head_sha_tracking: true
+
+  - match:
+      remote_host: github.com
+    artifact:
+      host: github
+      kind: pull_request
+      create_adapter: github-pr-create
+      inspect_adapter: github-review
+    review_feedback:
+      primary:
+        reviewer: codex
+        feedback_adapter: codex-review-feedback
+        request_mode: explicit
+        wait_mode: poll
+        trigger: review_requested
+        required: true
+        capabilities:
+          request_review: true
+          poll_feedback: true
+          inline_comments: true
+          summary_comments: true
+          head_sha_tracking: true

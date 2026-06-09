@@ -1,9 +1,7 @@
 ---
 name: compound
-description: "Use when a task, feature, bug fix, or investigation is complete and the user wants to capture learnings. Triggers on: compound, capture learnings, what did we learn, retrospective, post-mortem, document solution."
+description: Use when a task, feature, bug fix, or investigation is complete and the user wants to capture learnings, retrospectives, post-mortems, or solution notes.
 allowed-tools: Read, Glob, Grep, Bash(git:*), Write, Edit, AskUserQuestion
-user_invocable: true
-model: opus
 ---
 
 # Compound

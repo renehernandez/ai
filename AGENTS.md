@@ -20,7 +20,7 @@ The linked rule files are normative and preserve the detailed policies.
 - Write agent and Codex hooks in TypeScript unless there is a specific runtime requirement that makes another language a better fit.
 - In troubleshooting mode, diagnose and report before editing or fixing anything.
 - For multi-file implementation requests, delegate to the implementer agent when that harness supports agents. If already running as implementer, execute the approved plan.
-- Use the correct review path: local changes go to `local-review`; GitLab MRs go to `glab-review`.
+- Use the correct review path: local changes go to `local-review`; GitLab MRs go to `gitlab-review`; GitHub PRs go to `github-review`.
 - Use confidence scores on actionable statements as defined in [rules/confidence.md](rules/confidence.md).
 - Use `/doc-smith` for non-trivial documentation work and Mermaid for Markdown diagrams.
 - Use `/scrutinize` for adversarial validation of plans, implementation diffs, PRs, hosted review feedback, proposed approaches, sanity checks, and second opinions.

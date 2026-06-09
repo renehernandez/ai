@@ -36,17 +36,18 @@ These rules cover Git, GitHub, GitLab, Linear, review routing, and external comm
 - Never use `--no-verify` when committing.
 - If a commit fails due to pre-commit hooks, fix branch-caused failures and retry; ask the user how to proceed only when the failure is unrelated, external, or requires a product decision.
 - Always ask before committing or pushing to default branches such as `main` or `master`.
-- For feature work, follow [feature-delivery.md](feature-delivery.md): run the pre-commit quality gate, commit the feature branch, push it, create or update the GitHub PR, monitor CI, and fix branch-caused failures.
+- For feature work, follow [feature-delivery.md](feature-delivery.md): run the pre-commit quality gate, commit the feature branch, push it, create or update the artifact-host PR/MR, monitor CI, and fix branch-caused failures.
 - Never include `Co-Authored-By: Claude` or similar co-author attribution lines in MR or PR descriptions.
 
 ## Local Code Review
 
 - When the user asks to review local changes, review their changes, review the working tree, or self-review, delegate to the `local-review` agent.
-- Local review is distinct from MR review.
+- Local review is distinct from hosted PR/MR review.
 
-## GitLab MR Reviews
+## Hosted Provider Reviews
 
-- When the user asks to review a merge request, such as `review MR !123` or a `git.fullscript.io` merge request URL, delegate to the `glab-review` agent.
+- When the user asks to review a merge request, such as `review MR !123` or a `git.fullscript.io` merge request URL, delegate to the `gitlab-review` agent.
+- When the user asks to review a GitHub pull request, such as `review PR #123` or a `github.com/.../pull/123` URL, delegate to the `github-review` agent.
 - Do not use the `glab-cli` skill for MR reviews.
 - When requesting a review or re-review from a reviewer, use a GitLab slash command comment: `glab mr note <MR_IID> -m "/request_review @<reviewer>"`.
 - Never use `glab mr update --reviewer` for review requests.
