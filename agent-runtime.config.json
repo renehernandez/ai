@@ -1,0 +1,121 @@
+{
+  "version": 1,
+  "runtime": {
+    "canonicalSkillsDir": "~/.agents/skills",
+    "skillSymlinkTargets": [
+      "~/.codex/skills",
+      "~/.claude/skills"
+    ]
+  },
+  "agentModelMappings": {
+    "implementer": {
+      "codex": {
+        "model": "gpt-5.4",
+        "reasoning": "high"
+      },
+      "claude": {
+        "model": "sonnet"
+      },
+      "opencode": {
+        "model": "anthropic/claude-sonnet"
+      }
+    },
+    "local-review": {
+      "codex": {
+        "model": "gpt-5.5",
+        "reasoning": "xhigh"
+      },
+      "claude": {
+        "model": "opus"
+      },
+      "opencode": {
+        "model": "anthropic/claude-opus"
+      }
+    },
+    "github-review": {
+      "codex": {
+        "model": "gpt-5.5",
+        "reasoning": "xhigh"
+      },
+      "claude": {
+        "model": "opus"
+      },
+      "opencode": {
+        "model": "anthropic/claude-opus"
+      }
+    },
+    "gitlab-review": {
+      "codex": {
+        "model": "gpt-5.5",
+        "reasoning": "xhigh"
+      },
+      "claude": {
+        "model": "opus"
+      },
+      "opencode": {
+        "model": "anthropic/claude-opus"
+      }
+    }
+  },
+  "blocks": {
+    "personal-skills": {
+      "skills": [
+        {
+          "localPath": "skills",
+          "names": [
+            "writing-skills"
+          ]
+        }
+      ]
+    },
+    "cloudflare": {
+      "skills": [
+        {
+          "url": "https://github.com/cloudflare/skills.git",
+          "ref": "main",
+          "basePath": "skills",
+          "names": [
+            "agents-sdk",
+            "cloudflare",
+            "durable-objects",
+            "sandbox-sdk",
+            "web-perf",
+            "workers-best-practices",
+            "wrangler"
+          ]
+        }
+      ]
+    },
+    "fullscript": {
+      "skills": [
+        {
+          "url": "https://git.fullscript.io/ai/skills.git",
+          "ref": "main",
+          "basePath": ".",
+          "names": [
+            "glab-cli",
+            "glab-mr-create",
+            "glab-stacked-diffs",
+            "legoland",
+            "terraform"
+          ]
+        }
+      ]
+    }
+  },
+  "skillsets": {
+    "personal": {
+      "include": [
+        "personal-skills",
+        "cloudflare"
+      ]
+    },
+    "work": {
+      "include": [
+        "personal-skills",
+        "cloudflare",
+        "fullscript"
+      ]
+    }
+  }
+}

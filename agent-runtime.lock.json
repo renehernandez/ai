@@ -1,0 +1,200 @@
+{
+  "version": 1,
+  "skillsets": {
+    "personal": {
+      "updatedAt": "2026-06-09T21:37:33.480Z",
+      "skills": {
+        "agents-sdk": {
+          "sourceType": "git",
+          "url": "https://github.com/cloudflare/skills.git",
+          "ref": "main",
+          "resolvedCommit": "c5b7b06b073fa0b4abbd63964630f97d81da69c4",
+          "basePath": "skills",
+          "skillPath": "skills/agents-sdk",
+          "contentHash": "394a348f5b5bb38ee976b3da026449db8d0807e09010512f5c57596501b084ff"
+        },
+        "cloudflare": {
+          "sourceType": "git",
+          "url": "https://github.com/cloudflare/skills.git",
+          "ref": "main",
+          "resolvedCommit": "c5b7b06b073fa0b4abbd63964630f97d81da69c4",
+          "basePath": "skills",
+          "skillPath": "skills/cloudflare",
+          "contentHash": "129288083dee48a5bafd5e60da971c53f2dfc921f9edb1b1dc630eaf47292125"
+        },
+        "durable-objects": {
+          "sourceType": "git",
+          "url": "https://github.com/cloudflare/skills.git",
+          "ref": "main",
+          "resolvedCommit": "c5b7b06b073fa0b4abbd63964630f97d81da69c4",
+          "basePath": "skills",
+          "skillPath": "skills/durable-objects",
+          "contentHash": "3ccddccdde29da749c4d87c13e445473a2394890e016a60c960efa781a4b9e29"
+        },
+        "sandbox-sdk": {
+          "sourceType": "git",
+          "url": "https://github.com/cloudflare/skills.git",
+          "ref": "main",
+          "resolvedCommit": "c5b7b06b073fa0b4abbd63964630f97d81da69c4",
+          "basePath": "skills",
+          "skillPath": "skills/sandbox-sdk",
+          "contentHash": "681292bec775052a2d4ceb2b202cdf9195a070bf13ba6949e564c5cc2a004fa0"
+        },
+        "web-perf": {
+          "sourceType": "git",
+          "url": "https://github.com/cloudflare/skills.git",
+          "ref": "main",
+          "resolvedCommit": "c5b7b06b073fa0b4abbd63964630f97d81da69c4",
+          "basePath": "skills",
+          "skillPath": "skills/web-perf",
+          "contentHash": "7ae53856c320574f7440f50aef7892f96837eec9fd49d329d049d432fb4b299a"
+        },
+        "workers-best-practices": {
+          "sourceType": "git",
+          "url": "https://github.com/cloudflare/skills.git",
+          "ref": "main",
+          "resolvedCommit": "c5b7b06b073fa0b4abbd63964630f97d81da69c4",
+          "basePath": "skills",
+          "skillPath": "skills/workers-best-practices",
+          "contentHash": "ebd71bed0ade41e2d4839b0d280ec6d93dced0d19f568d27b92da00e4aa9943c"
+        },
+        "wrangler": {
+          "sourceType": "git",
+          "url": "https://github.com/cloudflare/skills.git",
+          "ref": "main",
+          "resolvedCommit": "c5b7b06b073fa0b4abbd63964630f97d81da69c4",
+          "basePath": "skills",
+          "skillPath": "skills/wrangler",
+          "contentHash": "11edeb37eedb91deedde694b2bb1cc4ff4e8b5a8f1836c217a8c871fe39abcb5"
+        },
+        "writing-skills": {
+          "sourceType": "local",
+          "localPath": "skills",
+          "resolvedCommit": "7c666085ee04a1b3d349688e6bb89a0a16fb77ca",
+          "skillPath": "skills/writing-skills",
+          "contentHash": "cd5c1239b8f59d451e4990e03af5269cbb373852578a621eaa59f146f49f27a0"
+        }
+      }
+    },
+    "work": {
+      "updatedAt": "2026-06-09T21:37:34.893Z",
+      "skills": {
+        "agents-sdk": {
+          "sourceType": "git",
+          "url": "https://github.com/cloudflare/skills.git",
+          "ref": "main",
+          "resolvedCommit": "c5b7b06b073fa0b4abbd63964630f97d81da69c4",
+          "basePath": "skills",
+          "skillPath": "skills/agents-sdk",
+          "contentHash": "394a348f5b5bb38ee976b3da026449db8d0807e09010512f5c57596501b084ff"
+        },
+        "cloudflare": {
+          "sourceType": "git",
+          "url": "https://github.com/cloudflare/skills.git",
+          "ref": "main",
+          "resolvedCommit": "c5b7b06b073fa0b4abbd63964630f97d81da69c4",
+          "basePath": "skills",
+          "skillPath": "skills/cloudflare",
+          "contentHash": "129288083dee48a5bafd5e60da971c53f2dfc921f9edb1b1dc630eaf47292125"
+        },
+        "durable-objects": {
+          "sourceType": "git",
+          "url": "https://github.com/cloudflare/skills.git",
+          "ref": "main",
+          "resolvedCommit": "c5b7b06b073fa0b4abbd63964630f97d81da69c4",
+          "basePath": "skills",
+          "skillPath": "skills/durable-objects",
+          "contentHash": "3ccddccdde29da749c4d87c13e445473a2394890e016a60c960efa781a4b9e29"
+        },
+        "glab-cli": {
+          "sourceType": "git",
+          "url": "https://git.fullscript.io/ai/skills.git",
+          "ref": "main",
+          "resolvedCommit": "2dcde572adda2458a4aa7adc24cd37fe3a4b0cf7",
+          "basePath": ".",
+          "skillPath": "glab-cli",
+          "contentHash": "9d00b71d26a1c15fc8133819ed477386c64b34623186133600ef142367672310"
+        },
+        "glab-mr-create": {
+          "sourceType": "git",
+          "url": "https://git.fullscript.io/ai/skills.git",
+          "ref": "main",
+          "resolvedCommit": "2dcde572adda2458a4aa7adc24cd37fe3a4b0cf7",
+          "basePath": ".",
+          "skillPath": "glab-mr-create",
+          "contentHash": "ae2b9b259405eeac017cb7bad23d019bcbbc33408fefb30d270f3ffdb4052606"
+        },
+        "glab-stacked-diffs": {
+          "sourceType": "git",
+          "url": "https://git.fullscript.io/ai/skills.git",
+          "ref": "main",
+          "resolvedCommit": "2dcde572adda2458a4aa7adc24cd37fe3a4b0cf7",
+          "basePath": ".",
+          "skillPath": "glab-stacked-diffs",
+          "contentHash": "bb48fa2f03077f5e530d5e682456d1e84f36efdc03a9c62ccc49b4135a68dc1f"
+        },
+        "legoland": {
+          "sourceType": "git",
+          "url": "https://git.fullscript.io/ai/skills.git",
+          "ref": "main",
+          "resolvedCommit": "2dcde572adda2458a4aa7adc24cd37fe3a4b0cf7",
+          "basePath": ".",
+          "skillPath": "legoland",
+          "contentHash": "9361e523c6583ec0e0e5269c3b38a3f7636aa78a237db5032cd319074332e449"
+        },
+        "sandbox-sdk": {
+          "sourceType": "git",
+          "url": "https://github.com/cloudflare/skills.git",
+          "ref": "main",
+          "resolvedCommit": "c5b7b06b073fa0b4abbd63964630f97d81da69c4",
+          "basePath": "skills",
+          "skillPath": "skills/sandbox-sdk",
+          "contentHash": "681292bec775052a2d4ceb2b202cdf9195a070bf13ba6949e564c5cc2a004fa0"
+        },
+        "terraform": {
+          "sourceType": "git",
+          "url": "https://git.fullscript.io/ai/skills.git",
+          "ref": "main",
+          "resolvedCommit": "2dcde572adda2458a4aa7adc24cd37fe3a4b0cf7",
+          "basePath": ".",
+          "skillPath": "terraform",
+          "contentHash": "1867efc00c48bd5c5001d399debe23dc983bce01f632650e9c4c0d0646175815"
+        },
+        "web-perf": {
+          "sourceType": "git",
+          "url": "https://github.com/cloudflare/skills.git",
+          "ref": "main",
+          "resolvedCommit": "c5b7b06b073fa0b4abbd63964630f97d81da69c4",
+          "basePath": "skills",
+          "skillPath": "skills/web-perf",
+          "contentHash": "7ae53856c320574f7440f50aef7892f96837eec9fd49d329d049d432fb4b299a"
+        },
+        "workers-best-practices": {
+          "sourceType": "git",
+          "url": "https://github.com/cloudflare/skills.git",
+          "ref": "main",
+          "resolvedCommit": "c5b7b06b073fa0b4abbd63964630f97d81da69c4",
+          "basePath": "skills",
+          "skillPath": "skills/workers-best-practices",
+          "contentHash": "ebd71bed0ade41e2d4839b0d280ec6d93dced0d19f568d27b92da00e4aa9943c"
+        },
+        "wrangler": {
+          "sourceType": "git",
+          "url": "https://github.com/cloudflare/skills.git",
+          "ref": "main",
+          "resolvedCommit": "c5b7b06b073fa0b4abbd63964630f97d81da69c4",
+          "basePath": "skills",
+          "skillPath": "skills/wrangler",
+          "contentHash": "11edeb37eedb91deedde694b2bb1cc4ff4e8b5a8f1836c217a8c871fe39abcb5"
+        },
+        "writing-skills": {
+          "sourceType": "local",
+          "localPath": "skills",
+          "resolvedCommit": "7c666085ee04a1b3d349688e6bb89a0a16fb77ca",
+          "skillPath": "skills/writing-skills",
+          "contentHash": "cd5c1239b8f59d451e4990e03af5269cbb373852578a621eaa59f146f49f27a0"
+        }
+      }
+    }
+  }
+}

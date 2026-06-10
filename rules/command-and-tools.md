@@ -29,6 +29,9 @@ These rules apply to command execution, network access, and tool installation ac
 
 ## Skill Installation
 
-- Never install skills by manually creating symlinks.
-- Install one skill with `npx skills add /path/to/repo -g --skill <skill-name>`.
-- Install all skills from a repo with `npx skills add /path/to/repo -g`.
+- Use `pnpm agent-runtime skills install` for first-time installs of all managed skillsets from this repo.
+- Use `pnpm agent-runtime skills update` to refresh all managed skillsets from their configured upstream refs.
+- Use `pnpm agent-runtime skills validate` for local, non-network validation of managed skillset configuration.
+- Add `--skillset <name>` to install, update, or validate only one managed skillset.
+- Do not manually create skill symlinks or hand-copy managed skills into runtime folders.
+- Use `npx skills` only for ad hoc external skills that are not managed by this repo, and only when explicitly needed.
