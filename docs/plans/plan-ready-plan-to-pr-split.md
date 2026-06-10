@@ -1,0 +1,291 @@
+# Plan Ready And Plan To PR Split
+
+## Goal
+
+Split the current `plan-to-pr` workflow into two focused skills:
+
+- `plan-ready`: turn an idea, plan file, OpenSpec change, or Linear ticket into an implementation-ready plan with reviewed scope and a validated handoff.
+- `plan-to-pr`: consume a ready handoff and carry the approved slice through implementation, local gates, hosted review feedback, PR/MR, and CI.
+
+The split should make the implementation workflow more deterministic by moving brainstorming and plan hardening out of `plan-to-pr`.
+
+## Motivation
+
+The current `plan-to-pr` skill covers both exploratory planning and delivery. That makes it too easy for an agent to blur phases, skip review gates, keep brainstorming during implementation, or finish early after PR creation or review request.
+
+The first iteration should stay minimal. It should add a clear handoff contract and small helper scripts, without persistent workflow state, committed readiness blocks, or a full state machine.
+
+## Scope
+
+Implement the first slice:
+
+- Add `skills/plan-ready/SKILL.md`.
+- Add `skills/plan-ready/agents/openai.yaml`.
+- Add `skills/plan-ready/scripts/plan-ready.ts`.
+- Refactor `skills/plan-to-pr/SKILL.md` so it requires a `plan_ready_handoff` before implementation.
+- Update `skills/plan-to-pr/agents/openai.yaml` with the new invocation shape.
+- Add `skills/plan-to-pr/scripts/plan-to-pr.ts`.
+- Update shared rules or `AGENTS.md` only if needed for discoverability.
+
+Do not add persistent state under the repo or under `~/.agents/delivery-gates` in the first slice.
+
+Do not embed readiness handoff blocks in committed plan files, OpenSpec files, or Linear comments by default.
+
+## Skill Boundary
+
+### `plan-ready`
+
+Use `plan-ready` when the request starts from an idea, feature request, plan file, OpenSpec change, Linear ticket, or fuzzy implementation goal that needs to become ready for implementation.
+
+Responsibilities:
+
+1. Inspect live repo context and the planning artifact.
+2. Brainstorm or clarify scope when needed.
+3. Write or update the authoritative planning artifact:
+   - plan file under the project plan location;
+   - OpenSpec change through the project OpenSpec workflow;
+   - Linear ticket content or linked plan context.
+4. Run reviewer selection with an LLM-as-judge step.
+5. Dispatch all required plan reviewers as subagents.
+6. Resolve plan-review findings.
+7. Run final `scrutinize` on the plan.
+8. Emit a `plan_ready_handoff` block.
+9. Stop for user verification.
+
+`plan-ready` must not start implementation, invoke `plan-to-pr`, create branches, push, open PRs/MRs, or request hosted review.
+
+### `plan-to-pr`
+
+Use `plan-to-pr` only when a valid `plan_ready_handoff` is available from the current session or the user prompt.
+
+Responsibilities:
+
+1. Validate the handoff.
+2. Inspect live repo, branch, remotes, and artifact-host routing.
+3. Implement the approved slice.
+4. Run local verification.
+5. Run local review.
+6. Run implementation `scrutinize`.
+7. Run code quality, simplification, deslop, security when relevant, and docs alignment.
+8. Create or update the routed GitHub PR or GitLab MR.
+9. Run artifact-host review.
+10. Wait for routed review feedback on the latest head.
+11. Iterate on actionable review or CI failures.
+12. Finish only when CI is green or blocked with evidence.
+
+`plan-to-pr` must not brainstorm or expand scope. If the handoff is missing, invalid, stale enough to require planning review, or has unresolved blockers, it must stop and ask the user to run `plan-ready`.
+
+## Planning Artifact Modes
+
+Support three artifact modes:
+
+| Mode | Artifact reference | First slice behavior |
+| --- | --- | --- |
+| Plan file | `docs/plans/<name>.md` or project-specific plan path | Update the plan file, but keep readiness state out of the committed file |
+| OpenSpec | `openspec/changes/<change-id>` | Use OpenSpec's proposal/spec/design/tasks workflow; do not add a custom readiness artifact in v1 |
+| Linear | Linear issue key or URL | Use the ticket as the planning artifact; do not post the full handoff as a comment by default |
+
+OpenSpec notes:
+
+- OpenSpec's current packaged `spec-driven` schema uses `proposal`, `specs`, `design`, and `tasks`.
+- `openspec status --json` reports `applyRequires: ["tasks"]`.
+- OpenSpec schema customization exists but is experimental, so v1 should not fork or extend the schema.
+- `plan-ready` should validate OpenSpec changes with `openspec validate <change-id> --strict --no-interactive` when applicable.
+
+## Reviewer Selection
+
+`plan-ready` always dispatches three baseline reviewers:
+
+- `implementation-readiness`
+- `edge-cases-and-risks`
+- `simplification-and-scope-control`
+
+Before dispatch, `plan-ready` runs an LLM-as-judge reviewer-selection step. The judge may select optional reviewers only from this fixed catalog:
+
+- `security-and-auth`
+- `data-migration-and-backfill`
+- `ci-and-release-impact`
+- `frontend-ux-accessibility`
+- `infra-and-cloud`
+- `docs-and-agent-alignment`
+- `performance-and-scale`
+- `agent-runtime-and-skill-compatibility`
+
+The judge must return structured output:
+
+```yaml
+reviewer_selection_judge:
+  verdict: baseline_sufficient | add_optional_reviewers
+  selected_optional_reviewers:
+    - <optional-reviewer-name>
+  rationale:
+    <optional-reviewer-name>: <why this reviewer is needed>
+```
+
+The main agent may not remove baseline reviewers or judge-selected optional reviewers. It may add a reviewer from the optional catalog if it records a reason.
+
+Selection rules:
+
+- Select `docs-and-agent-alignment` for changes to reusable workflows, docs, skills, rules, automation prompts, background review expectations, or PR/MR description contracts.
+- Select `agent-runtime-and-skill-compatibility` for changes to skill folder structure, skill metadata, bundled scripts, Codex/Claude adapter files, install/update behavior, or agent runtime behavior.
+- Validate the judge output before dispatch. The selection is not ready if the judge invents reviewer names or chooses `baseline_sufficient` while listing optional reviewers.
+
+## Reviewer Output Contract
+
+Each dispatched reviewer must return:
+
+```yaml
+reviewer: <name>
+verdict: pass | findings | blocked
+blocking_findings:
+  - title: <short title>
+    class: agent_fixable | user_decision | external_blocker
+    evidence: <concrete evidence>
+    required_change: <change required before readiness>
+nonblocking_findings:
+  - title: <short title>
+    evidence: <concrete evidence>
+    suggestion: <optional change>
+summary: <one paragraph>
+```
+
+Finding behavior:
+
+- `agent_fixable`: the agent updates the planning artifact and reruns affected review.
+- `user_decision`: the agent asks one focused question and incorporates the answer.
+- `external_blocker`: the agent records the blocker and cannot mark the plan ready until it is resolved or the user explicitly accepts the risk.
+
+Plan readiness requires all blocking findings to be resolved or explicitly blocked with evidence.
+
+## Handoff Contract
+
+`plan-ready` emits the handoff only in the final session response. It should not write the handoff into committed planning artifacts by default.
+
+Minimal v1 handoff:
+
+```yaml
+plan_ready_handoff:
+  status: ready
+  artifact_type: plan | openspec | linear
+  artifact_ref: <path, change id/path, issue key, or URL>
+  approved_slice: <short implementation slice>
+  required_reviewers:
+    - implementation-readiness
+    - edge-cases-and-risks
+    - simplification-and-scope-control
+  optional_reviewers_selected: []
+  unresolved_blockers: []
+  scrutiny_verdict: ship
+```
+
+`plan-to-pr` accepts only:
+
+- `status: ready`;
+- supported `artifact_type`;
+- non-empty `artifact_ref`;
+- non-empty `approved_slice`;
+- known reviewer names;
+- `unresolved_blockers: []`;
+- `scrutiny_verdict: ship`.
+
+If any required field is missing or invalid, `plan-to-pr` blocks before implementation.
+
+## Helper Scripts
+
+Add two dedicated scripts. They may start similar but should remain separate so the skills can evolve independently.
+
+### `skills/plan-ready/scripts/plan-ready.ts`
+
+Initial commands:
+
+- `detect`: print repo root, branch, head SHA, remotes, likely artifact type, OpenSpec presence, and plan-directory hints.
+- `reviewer-template`: print baseline reviewers, optional reviewer catalog, and the strict LLM-as-judge output shape.
+- `validate-selection`: validate reviewer-selection judge output from stdin or `--file`.
+- `handoff-template`: print the minimal `plan_ready_handoff` YAML skeleton.
+- `validate-handoff`: validate handoff YAML from stdin or `--file`.
+
+The skill should refer to this as the bundled `scripts/plan-ready.ts` script so installed skills do not assume the target project has a `skills/` directory.
+
+The script must not mutate repo files, post Linear comments, create OpenSpec artifacts, or write persistent state in v1.
+
+### `skills/plan-to-pr/scripts/plan-to-pr.ts`
+
+Initial commands:
+
+- `detect`: print repo root, branch, head SHA, remotes, artifact-host clues, and cheap PR/MR clues when available.
+- `validate-handoff`: validate handoff YAML from stdin or `--file`.
+- `gate-template`: print the final delivery gate ledger shape.
+- `validate-ledger`: validate the final delivery ledger before the agent finishes.
+
+The skill should refer to this as the bundled `scripts/plan-to-pr.ts` script so installed skills do not assume the target project has a `skills/` directory.
+
+The script must not create branches, push, open PRs/MRs, request review, or modify files in v1.
+
+## `plan-to-pr` Final Gate Ledger
+
+`plan-to-pr` should keep the existing final ledger requirement, but treat it as implementation-delivery evidence rather than planning evidence.
+
+Required gates:
+
+- handoff validation
+- session-start/live-state inspection
+- implementation
+- local verification
+- local review
+- implementation scrutiny
+- code quality review
+- code simplifier
+- deslop
+- security review when applicable
+- docs alignment
+- review feedback routing
+- artifact creation or update
+- artifact-host review
+- routed review feedback
+- CI
+
+Each gate should be marked `passed`, `blocked`, or `not_applicable` with one line of evidence.
+
+## Testing Plan
+
+Use `writing-skills` validation before shipping.
+
+Pressure scenarios:
+
+1. Missing handoff: invoke `plan-to-pr` with only a fuzzy feature request. It must stop and ask for `plan-ready`.
+2. Optional reviewer needed: plan changes skill/runtime behavior. The reviewer-selection judge should add `agent-runtime-and-skill-compatibility` and `docs-and-agent-alignment`.
+3. Unresolved blocker: a plan reviewer returns `user_decision`. `plan-ready` must ask the user and must not emit `status: ready` until resolved.
+4. Plan-to-implementation boundary: after `plan-ready` emits a valid handoff, it must stop for user verification and must not start coding.
+5. Handoff validation: `plan-to-pr` receives a handoff with `scrutiny_verdict: fix-then-ship`. It must block before implementation.
+
+## Pressure Test Evidence
+
+- GREEN: missing handoff pressure passed. A subagent found that `plan-to-pr` requires exactly one valid `plan_ready_handoff`, rejects fuzzy ideas, and tells the user to run `plan-ready` or paste a handoff before implementation.
+- RED/GREEN: optional reviewer pressure initially failed because `plan-ready` listed the optional catalog but did not make `docs-and-agent-alignment` and `agent-runtime-and-skill-compatibility` likely enough for skill/runtime changes. The skill and script now include selection rules for reusable workflow/docs/skills/rules changes and skill metadata/script/runtime changes.
+- GREEN: reviewer-selection validation now accepts `docs-and-agent-alignment` plus `agent-runtime-and-skill-compatibility`, rejects invented optional reviewer names, and rejects invented baseline reviewer names.
+- GREEN: unresolved blocker pressure passed. `plan-ready` requires `user_decision` blockers to ask the user, and both scripts reject handoffs with non-empty `unresolved_blockers`.
+- GREEN: phase boundary pressure passed. `plan-ready` stops after handoff and does not invoke `plan-to-pr`, start implementation, create branches, push, open PRs/MRs, or request hosted review.
+- GREEN: invalid scrutiny pressure passed. `plan-to-pr` and its script reject handoffs where `scrutiny_verdict` is not `ship`.
+
+## Success Criteria
+
+- `plan-ready` produces a concise, valid handoff and stops for user verification.
+- `plan-to-pr` refuses to implement without a valid handoff.
+- Plan review always uses baseline dispatch reviewers.
+- Optional reviewers are selected by LLM judge from the fixed catalog only.
+- No readiness state is written into committed plan files, OpenSpec files, or Linear comments by default.
+- Helper scripts provide deterministic templates and validation without becoming workflow engines.
+- Local validation and skill pressure scenarios pass or report evidence-backed blockers.
+
+## V1 Detail Decisions
+
+- `validate-handoff` should accept both raw YAML and a Markdown fenced code block containing the handoff. The final response from `plan-ready` will usually include a fenced block, so the receiving skill should handle that shape.
+- Scripts should use plain TypeScript and Node built-ins in the first slice. Avoid adding parser dependencies unless validation becomes too brittle.
+- `plan-to-pr` should accept a handoff from the current session or from the user prompt. If it cannot locate exactly one handoff, it should ask the user to paste the handoff explicitly.
+- Security review should be conditional in v1. Run it when the implementation changes auth, authorization, secrets, token handling, sensitive data, dependency trust, webhooks, or externally reachable surfaces.
+
+## Residual Risks
+
+- Without persistent state, a different session or machine may not have the handoff. The correct fallback is to rerun `plan-ready` or paste the handoff, not to infer readiness from the artifact alone.
+- Without a real YAML parser dependency, script validation may need to stay conservative. If parsing fenced handoffs becomes fragile, add a small dependency in a later slice.
+- Since readiness is not committed, background agents and reviewers will see the plan content but not the local readiness proof. That is intentional for v1 to avoid review noise.
