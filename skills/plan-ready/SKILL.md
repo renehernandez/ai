@@ -7,7 +7,7 @@ description: Use when an idea, feature request, plan file, OpenSpec change, Line
 
 ## Overview
 
-Turn planning input into a reviewed implementation handoff. This skill owns brainstorming, plan hardening, dispatch review, and final plan scrutiny. It stops before implementation so the user can verify the plan.
+Turn planning input into a reviewed implementation handoff. This skill owns brainstorming, plan hardening, same-harness subagent review, and final plan scrutiny. It stops before implementation so the user can verify the plan.
 
 ## When To Use
 
@@ -22,7 +22,7 @@ Announce each helper step before it starts:
 - `Using $session-start to inspect live repo and planning-artifact context.`
 - `Using $brainstorming to settle scope before plan review.`
 - `Using the plan-ready reviewer-selection judge to choose optional reviewer lenses.`
-- `Using dispatch to run required plan reviewers.`
+- `Using internal Codex subagents to run required plan reviewers.`
 - `Using $scrutinize on the final plan before handoff.`
 
 After each gate, report one line with the gate, verdict, artifact, and next action.
@@ -36,8 +36,12 @@ After each gate, report one line with the gate, verdict, artifact, and next acti
    - plan file in the project's established plan location;
    - OpenSpec change through the project's OpenSpec workflow;
    - Linear ticket or linked plan context.
-5. Run the bundled script `scripts/plan-ready.ts reviewer-template` and dispatch a reviewer-selection judge using that exact catalog. Validate the judge output with `scripts/plan-ready.ts validate-selection`.
-6. Dispatch all baseline reviewers plus judge-selected optional reviewers as subagents.
+5. Run the bundled script `scripts/plan-ready.ts reviewer-template`, make the reviewer-selection judge decision from that exact catalog, and validate the judge output with `scripts/plan-ready.ts validate-selection`.
+6. Run all baseline reviewers plus judge-selected optional reviewers as internal subagents in the current harness.
+   - In Codex, use the internal Codex subagent tool exposed by the current harness, such as `multi_agent_v1.spawn_agent` when available; omit model overrides unless the user explicitly asks for one.
+   - If no internal Codex subagent tool is exposed, stop with a blocker instead of routing reviewers to another harness.
+   - Do not invoke the `dispatch` skill, Claude Code `Task`, or any external Claude harness for plan reviewers from Codex.
+   - Give each reviewer one bounded prompt, the reviewer name, the planning artifact, and the Reviewer Output Contract below.
 7. Resolve every blocking finding:
    - `agent_fixable`: update the planning artifact and rerun affected reviewers.
    - `user_decision`: ask one focused question and incorporate the answer.
@@ -63,12 +67,12 @@ The reviewer-selection judge may select optional reviewers only from this catalo
 - `infra-and-cloud`: Terraform, Kubernetes, Cloudflare, AWS, DNS, queues, storage, environment config.
 - `docs-and-agent-alignment`: docs, agent instructions, skill/rule updates, automation prompts, background-review rubrics, PR description expectations.
 - `performance-and-scale`: hot paths, concurrency, caching, queues, rate limits, batch behavior, operational limits.
-- `agent-runtime-and-skill-compatibility`: Codex/Claude skill structure, `SKILL.md` conventions, `agents/openai.yaml`, install/update paths, bundled scripts, runtime compatibility.
+- `agent-runtime-and-skill-compatibility`: Codex skill structure, `SKILL.md` conventions, `agents/openai.yaml`, install/update paths, bundled scripts, same-harness subagent routing, runtime compatibility.
 
 Selection rules:
 
 - Select `docs-and-agent-alignment` for changes to reusable workflows, docs, skills, rules, automation prompts, background review expectations, or PR/MR description contracts.
-- Select `agent-runtime-and-skill-compatibility` for changes to skill folder structure, skill metadata, bundled scripts, Codex/Claude adapter files, install/update behavior, or agent runtime behavior.
+- Select `agent-runtime-and-skill-compatibility` for changes to skill folder structure, skill metadata, bundled scripts, Codex adapter files, same-harness subagent routing, install/update behavior, or agent runtime behavior.
 - Select only from the optional catalog. Do not invent reviewer names.
 - Return `baseline_sufficient` only after explaining why no optional catalog reviewer is needed.
 
@@ -131,7 +135,7 @@ Do not write this handoff into committed plan files, OpenSpec files, or Linear c
 | Artifact intake | Planning artifact is identified or created |
 | Brainstorming | Scope, constraints, and success criteria are clear |
 | Reviewer selection | Judge output validates and uses only the fixed optional reviewer catalog |
-| Dispatch review | Baseline reviewers and selected optional reviewers return verdicts |
+| Internal subagent review | Baseline reviewers and selected optional reviewers return verdicts |
 | Feedback resolution | No blocking reviewer findings remain unresolved |
 | Plan scrutiny | `scrutinize` verdict is `ship` |
 | Handoff validation | `validate-handoff` passes |
@@ -141,7 +145,8 @@ Do not write this handoff into committed plan files, OpenSpec files, or Linear c
 | Mistake | Fix |
 | --- | --- |
 | Starting implementation after a ready verdict | Stop and ask the user to invoke `plan-to-pr` |
-| Treating dispatch review as optional | Always run baseline reviewers |
+| Treating reviewer subagents as optional | Always run baseline reviewers |
+| Routing Codex plan reviewers through `dispatch` or Claude | Use the current harness's internal Codex subagent tool; block if it is unavailable |
 | Inventing optional reviewer names | Select only from the fixed catalog |
 | Skipping `docs-and-agent-alignment` for skill/rule/workflow changes | Add that optional reviewer |
 | Skipping `agent-runtime-and-skill-compatibility` for skill metadata, script, or runtime changes | Add that optional reviewer |
@@ -151,6 +156,9 @@ Do not write this handoff into committed plan files, OpenSpec files, or Linear c
 ## Test Evidence
 
 - RED: prior `plan-to-pr` flow mixed brainstorming, plan review, implementation, hosted review, and CI into one workflow.
-- GREEN: this skill creates a separate plan-readiness phase with required dispatch review, final scrutiny, and a validated handoff.
+- GREEN: this skill creates a separate plan-readiness phase with required internal subagent review, final scrutiny, and a validated handoff.
 - REFACTOR: the skill stops before implementation so the user can verify the ready plan before `plan-to-pr` runs.
 - RED/GREEN: pressure testing found optional reviewer selection was too implicit for skill/runtime changes; selection rules and `validate-selection` now require fixed-catalog reviewer output.
+- RED: baseline subagent `019eb39e-5890-76c0-a967-f287d449de7a` inspected committed pre-edit files and failed as expected. It cited `Using dispatch to run required plan reviewers.`, `Dispatch all baseline reviewers plus judge-selected optional reviewers as subagents.`, and adapter text `run required dispatch plan reviewers`, rationalizing that explicit `dispatch` would route Codex reviewer execution away from internal Codex subagents.
+- GREEN/REFACTOR: subagent `019eb361-1adb-7771-a77a-388b11dc4b8b` passed after the first routing patch. The workflow now requires the current harness's internal Codex subagent tool, blocks when unavailable, and forbids `dispatch`, Claude Code `Task`, and external Claude harnesses.
+- Validation evidence: `bun skills/plan-ready/scripts/plan-ready.ts validate-selection --file /private/tmp/plan-ready-valid-selection.yaml` returned `reviewer_selection_judge valid`; bare rationale and missing optional-reviewer rationale fixtures were rejected; `bun skills/plan-ready/scripts/plan-ready.ts validate-handoff --file /private/tmp/plan-ready-valid-handoff.yaml` returned `plan_ready_handoff valid`; `bun build skills/plan-ready/scripts/plan-ready.ts --outfile /private/tmp/plan-ready-check.js` bundled successfully.

@@ -46,7 +46,7 @@ Responsibilities:
    - OpenSpec change through the project OpenSpec workflow;
    - Linear ticket content or linked plan context.
 4. Run reviewer selection with an LLM-as-judge step.
-5. Dispatch all required plan reviewers as subagents.
+5. Run all required plan reviewers as same-harness subagents.
 6. Resolve plan-review findings.
 7. Run final `scrutinize` on the plan.
 8. Emit a `plan_ready_handoff` block.
@@ -64,9 +64,9 @@ Responsibilities:
 2. Inspect live repo, branch, remotes, and artifact-host routing.
 3. Implement the approved slice.
 4. Run local verification.
-5. Run local review.
-6. Run implementation `scrutinize`.
-7. Run code quality, simplification, deslop, security when relevant, and docs alignment.
+5. Launch implementation reviewers as internal Codex subagents, immediately report launched reviewers and returned subagent IDs in-session, and validate the launch report.
+6. Reconcile reviewer outcomes for local review, implementation scrutiny, code quality, simplification, deslop, security when relevant, and docs alignment.
+7. Validate the final reviewer outcome report.
 8. Create or update the routed GitHub PR or GitLab MR.
 9. Run artifact-host review.
 10. Wait for routed review feedback on the latest head.
@@ -94,13 +94,13 @@ OpenSpec notes:
 
 ## Reviewer Selection
 
-`plan-ready` always dispatches three baseline reviewers:
+`plan-ready` always runs three baseline reviewers as same-harness subagents:
 
 - `implementation-readiness`
 - `edge-cases-and-risks`
 - `simplification-and-scope-control`
 
-Before dispatch, `plan-ready` runs an LLM-as-judge reviewer-selection step. The judge may select optional reviewers only from this fixed catalog:
+Before reviewer fanout, `plan-ready` runs an LLM-as-judge reviewer-selection step. The judge may select optional reviewers only from this fixed catalog:
 
 - `security-and-auth`
 - `data-migration-and-backfill`
@@ -116,6 +116,10 @@ The judge must return structured output:
 ```yaml
 reviewer_selection_judge:
   verdict: baseline_sufficient | add_optional_reviewers
+  baseline_reviewers:
+    - implementation-readiness
+    - edge-cases-and-risks
+    - simplification-and-scope-control
   selected_optional_reviewers:
     - <optional-reviewer-name>
   rationale:
@@ -127,12 +131,13 @@ The main agent may not remove baseline reviewers or judge-selected optional revi
 Selection rules:
 
 - Select `docs-and-agent-alignment` for changes to reusable workflows, docs, skills, rules, automation prompts, background review expectations, or PR/MR description contracts.
-- Select `agent-runtime-and-skill-compatibility` for changes to skill folder structure, skill metadata, bundled scripts, Codex/Claude adapter files, install/update behavior, or agent runtime behavior.
-- Validate the judge output before dispatch. The selection is not ready if the judge invents reviewer names or chooses `baseline_sufficient` while listing optional reviewers.
+- Select `agent-runtime-and-skill-compatibility` for changes to skill folder structure, skill metadata, bundled scripts, Codex adapter files, same-harness subagent routing, install/update behavior, or agent runtime behavior.
+- Validate the judge output before reviewer fanout. The selection is not ready if the judge invents reviewer names or chooses `baseline_sufficient` while listing optional reviewers.
+- In Codex, run reviewer agents with the internal Codex subagent tool exposed by the current harness, such as `multi_agent_v1.spawn_agent` when available; do not use the `dispatch` skill, Claude Code `Task`, or any external Claude harness for `plan-ready` reviewers. If no internal Codex subagent tool is exposed, stop with a blocker instead of routing reviewers to another harness.
 
 ## Reviewer Output Contract
 
-Each dispatched reviewer must return:
+Each reviewer subagent must return:
 
 ```yaml
 reviewer: <name>
@@ -214,6 +219,9 @@ Initial commands:
 
 - `detect`: print repo root, branch, head SHA, remotes, artifact-host clues, and cheap PR/MR clues when available.
 - `validate-handoff`: validate handoff YAML from stdin or `--file`.
+- `reviewer-template`: print the internal Codex reviewer launch report, final reviewer outcome report, and execution rules.
+- `validate-launch-report`: validate that all required implementation reviewers were launched, conditional security review is accounted for, and each launched reviewer has a returned subagent id.
+- `validate-review-report`: validate that the final reviewer outcome report includes all required implementation reviewers, accounts for conditional security review, and has no unresolved `findings` or `blocked` outcomes before PR/MR creation or final delivery.
 - `gate-template`: print the final delivery gate ledger shape.
 - `validate-ledger`: validate the final delivery ledger before the agent finishes.
 
@@ -231,6 +239,7 @@ Required gates:
 - session-start/live-state inspection
 - implementation
 - local verification
+- reviewer subagents
 - local review
 - implementation scrutiny
 - code quality review
@@ -244,7 +253,7 @@ Required gates:
 - routed review feedback
 - CI
 
-Each gate should be marked `passed`, `blocked`, or `not_applicable` with one line of evidence.
+Each gate should be marked `passed` or `blocked` unless the script treats the gate as conditional; `not_applicable` is valid only for conditional gates with one line of evidence.
 
 ## Testing Plan
 
@@ -260,18 +269,34 @@ Pressure scenarios:
 
 ## Pressure Test Evidence
 
+- RED: baseline plan-ready subagent `019eb39e-5890-76c0-a967-f287d449de7a` inspected committed pre-edit files and failed as expected. It cited `Using dispatch to run required plan reviewers.`, `Dispatch all baseline reviewers plus judge-selected optional reviewers as subagents.`, and adapter text `run required dispatch plan reviewers`; its rationalization was that explicit `dispatch` would route Codex reviewer execution away from internal Codex subagents.
+- RED: baseline plan-to-pr subagent `019eb39e-7a2b-7453-81b0-37fb35df9005` inspected committed pre-edit files and failed as expected. It cited `Run local PR/diff review with pull-request-review`, `Run scrutinize on the implementation diff`, `Run the pre-commit quality gate`, and adapter text `run local verification, local review, $scrutinize...`; its rationalization was: `inline helper-skill review satisfies the workflow; nothing says I must launch internal Codex reviewer subagents or report each reviewer's final outcome`.
 - GREEN: missing handoff pressure passed. A subagent found that `plan-to-pr` requires exactly one valid `plan_ready_handoff`, rejects fuzzy ideas, and tells the user to run `plan-ready` or paste a handoff before implementation.
 - RED/GREEN: optional reviewer pressure initially failed because `plan-ready` listed the optional catalog but did not make `docs-and-agent-alignment` and `agent-runtime-and-skill-compatibility` likely enough for skill/runtime changes. The skill and script now include selection rules for reusable workflow/docs/skills/rules changes and skill metadata/script/runtime changes.
 - GREEN: reviewer-selection validation now accepts `docs-and-agent-alignment` plus `agent-runtime-and-skill-compatibility`, rejects invented optional reviewer names, and rejects invented baseline reviewer names.
 - GREEN: unresolved blocker pressure passed. `plan-ready` requires `user_decision` blockers to ask the user, and both scripts reject handoffs with non-empty `unresolved_blockers`.
 - GREEN: phase boundary pressure passed. `plan-ready` stops after handoff and does not invoke `plan-to-pr`, start implementation, create branches, push, open PRs/MRs, or request hosted review.
 - GREEN: invalid scrutiny pressure passed. `plan-to-pr` and its script reject handoffs where `scrutiny_verdict` is not `ship`.
+- GREEN: plan-ready routing subagent `019eb361-1adb-7771-a77a-388b11dc4b8b` passed after the routing patch and found Codex should use internal Codex subagents, not dispatch or Claude.
+- GREEN/REFACTOR: plan-to-pr routing subagent `019eb370-7dce-75d3-97ff-6c80d6406aab` passed the routing intent but found validator loopholes for one-reviewer reports, unresolved `findings`/`blocked`, missing security accounting, one-reviewer examples, and post-feedback inline reruns. The workflow and script now close those gaps.
+- GREEN: final plan-to-pr subagent `019eb391-6f16-7e03-8744-1e73e0daa807` passed after refactor with `Remaining actionable ambiguity: None.`
+
+Validation outputs:
+
+- `bun skills/plan-ready/scripts/plan-ready.ts validate-selection --file /private/tmp/plan-ready-valid-selection.yaml` -> `reviewer_selection_judge valid`
+- `bun skills/plan-ready/scripts/plan-ready.ts validate-handoff --file /private/tmp/plan-ready-valid-handoff.yaml` -> `plan_ready_handoff valid`
+- `bun skills/plan-to-pr/scripts/plan-to-pr.ts validate-launch-report --file /private/tmp/plan-to-pr-valid-launch-report.yaml` -> `reviewer_subagent_launch valid`
+- `bun skills/plan-to-pr/scripts/plan-to-pr.ts validate-review-report --file /private/tmp/plan-to-pr-valid-review-report.yaml` -> `reviewer_subagent_report valid`
+- `bun skills/plan-to-pr/scripts/plan-to-pr.ts validate-ledger --file /private/tmp/plan-to-pr-valid-ledger.yaml` -> `delivery_gate_ledger valid`
+- Negative fixtures were rejected for bare reviewer-selection rationale, missing optional-reviewer rationale, missing launch IDs, under-launched reviewer reports, unresolved findings, `local-review: not_applicable`, and mandatory ledger gates marked `not_applicable`.
+- `bun build skills/plan-ready/scripts/plan-ready.ts --outfile /private/tmp/plan-ready-check.js` and `bun build skills/plan-to-pr/scripts/plan-to-pr.ts --outfile /private/tmp/plan-to-pr-check.js` both bundled successfully.
 
 ## Success Criteria
 
 - `plan-ready` produces a concise, valid handoff and stops for user verification.
 - `plan-to-pr` refuses to implement without a valid handoff.
-- Plan review always uses baseline dispatch reviewers.
+- Plan review always uses baseline same-harness subagent reviewers.
+- Implementation review in Codex uses internal Codex subagents, reports launched reviewers and returned subagent IDs in-session, validates the launch report, and includes validated reviewer outcomes.
 - Optional reviewers are selected by LLM judge from the fixed catalog only.
 - No readiness state is written into committed plan files, OpenSpec files, or Linear comments by default.
 - Helper scripts provide deterministic templates and validation without becoming workflow engines.

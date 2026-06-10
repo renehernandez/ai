@@ -17,7 +17,7 @@ const OPTIONAL_REVIEWER_DESCRIPTIONS = {
   "infra-and-cloud": "Terraform, Kubernetes, Cloudflare, AWS, DNS, queues, storage, environment config",
   "docs-and-agent-alignment": "docs, agent instructions, skill/rule updates, automation prompts, background-review rubrics, PR description expectations",
   "performance-and-scale": "hot paths, concurrency, caching, queues, rate limits, batch behavior, operational limits",
-  "agent-runtime-and-skill-compatibility": "Codex/Claude skill structure, SKILL.md conventions, agents/openai.yaml, install/update paths, bundled scripts, runtime compatibility",
+  "agent-runtime-and-skill-compatibility": "Codex skill structure, SKILL.md conventions, agents/openai.yaml, install/update paths, bundled scripts, same-harness subagent routing, runtime compatibility",
 } as const;
 
 const OPTIONAL_REVIEWERS = Object.keys(OPTIONAL_REVIEWER_DESCRIPTIONS) as Array<
@@ -108,9 +108,15 @@ ${OPTIONAL_REVIEWERS.map((reviewer) => `    - ${reviewer}: ${OPTIONAL_REVIEWER_D
 
 selection_rules:
   - Select docs-and-agent-alignment for reusable workflow, docs, skills, rules, automation prompt, background review, or PR/MR description contract changes.
-  - Select agent-runtime-and-skill-compatibility for skill folder structure, skill metadata, bundled script, Codex/Claude adapter, install/update, or agent runtime changes.
+  - Select agent-runtime-and-skill-compatibility for skill folder structure, skill metadata, bundled script, Codex adapter, same-harness subagent routing, install/update, or agent runtime changes.
   - Select only from optional_reviewer_catalog; do not invent reviewer names.
   - Use baseline_sufficient only after explaining why no optional catalog reviewer is needed.
+
+review_execution_rules:
+  - In Codex, run reviewer agents with the internal Codex subagent tool exposed by the current harness, such as multi_agent_v1.spawn_agent when available.
+  - If no internal Codex subagent tool is exposed, stop with a blocker instead of routing reviewers to another harness.
+  - Do not use the dispatch skill, Claude Code Task, or external Claude harness for Codex plan-ready reviewers.
+  - Omit model overrides unless the user explicitly asks for one.
 `);
 }
 
@@ -224,6 +230,16 @@ function validateSelection(input: string): void {
     errors.push("rationale is required");
   }
 
+  if (selection.verdict === "baseline_sufficient" && !selection.rationale.default) {
+    errors.push("baseline_sufficient requires a rationale.default explanation");
+  }
+
+  for (const reviewer of selection.selected_optional_reviewers) {
+    if (!selection.rationale[reviewer]) {
+      errors.push(`selected optional reviewer requires rationale: ${reviewer}`);
+    }
+  }
+
   if (errors.length > 0) {
     console.error(`Invalid reviewer_selection_judge:\n${errors.map((error) => `- ${error}`).join("\n")}`);
     process.exit(1);
@@ -253,6 +269,7 @@ function parseSelection(input: string): {
   baseline_reviewers: string[];
   selected_optional_reviewers: string[];
   rationalePresent: boolean;
+  rationale: Record<string, string>;
 } {
   const body = extractYaml(input);
   const section = extractSection(body, "reviewer_selection_judge");
@@ -261,7 +278,8 @@ function parseSelection(input: string): {
     verdict: scalar(section, "verdict"),
     baseline_reviewers: list(section, "baseline_reviewers"),
     selected_optional_reviewers: list(section, "selected_optional_reviewers"),
-    rationalePresent: /^rationale:\s*$/m.test(section) || /^rationale:\s*.+$/m.test(section),
+    rationalePresent: hasRationale(section),
+    rationale: map(section, "rationale"),
   };
 }
 
@@ -319,6 +337,32 @@ function list(input: string, key: string): string[] {
   }
 
   return values.filter(Boolean);
+}
+
+function map(input: string, key: string): Record<string, string> {
+  const lines = input.split(/\r?\n/);
+  const keyIndex = lines.findIndex((line) => line.match(new RegExp(`^${escapeRegExp(key)}:\\s*$`)));
+  if (keyIndex === -1) {
+    return {};
+  }
+
+  const values: Record<string, string> = {};
+  for (const line of lines.slice(keyIndex + 1)) {
+    if (!line.startsWith("  ")) {
+      break;
+    }
+
+    const item = line.trim().match(/^([^:]+):\s*(.+)$/);
+    if (item) {
+      values[cleanScalar(item[1])] = cleanScalar(item[2]);
+    }
+  }
+
+  return values;
+}
+
+function hasRationale(input: string): boolean {
+  return Object.keys(map(input, "rationale")).length > 0;
 }
 
 function readInput(args: string[]): string {
