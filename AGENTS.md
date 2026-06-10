@@ -27,6 +27,7 @@ The linked rule files are normative and preserve the detailed policies.
 - Always use the `hallmark` skill for frontend design work, including greenfield UI, redesigns, design audits, visual polish, and design extraction from URLs or screenshots.
 - Prefer CLI tools that carry authentication and org conventions: `gh` for GitHub, `glab` for GitLab, and `wrangler` for Cloudflare.
 - Do not use "smoke test" or "smoke tests" wording. Describe the exact verification performed instead, such as browser route checks, console checks, or manual browser verification.
+- Avoid slop-like contrast phrasing and generic AI filler. Do not lean on formulas like "X, not just Y", "more than just", "isn't just", or "the future of"; state the concrete claim directly.
 
 ## Harness Entrypoints
 
@@ -36,20 +37,9 @@ The linked rule files are normative and preserve the detailed policies.
 - Runtime folders such as `~/.codex/automations` and `~/.agents/automations` should point here by symlink.
 - Keep automation prompts self-contained and repo-aware; ignore runtime-only state such as jitter salts, logs, per-run state files, and automation memory/state artifacts such as `memory.md` and `state.json`.
 
-### Shared Rules
+### Installed Rules
 
-All harnesses follow these reusable policies:
-
-- [Command and tools](rules/command-and-tools.md)
-- [Agent surface routing](rules/agent-surface-routing.md)
-- [Git and review](rules/git-and-review.md)
-- [Feature delivery](rules/feature-delivery.md)
-- [Session startup](rules/session-startup.md)
-- [Handoff and resume](rules/handoff-and-resume.md)
-- [Investigation and implementation](rules/investigation-and-implementation.md)
-- [CI, infrastructure, and Cloudflare](rules/ci-infra-and-cloudflare.md)
-- [Documentation and specs](rules/docs-and-specs.md)
-- [Confidence framework](rules/confidence.md)
+Load the rule files installed under [rules/](rules/). Runtime profiles may install only the rule files relevant to this machine.
 
 ### Claude Code
 

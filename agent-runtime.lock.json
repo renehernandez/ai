@@ -2,7 +2,7 @@
   "version": 1,
   "skillsets": {
     "personal": {
-      "updatedAt": "2026-06-09T21:37:33.480Z",
+      "updatedAt": "2026-06-10T19:05:46.594Z",
       "skills": {
         "agents-sdk": {
           "sourceType": "git",
@@ -70,7 +70,7 @@
         "writing-skills": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "7c666085ee04a1b3d349688e6bb89a0a16fb77ca",
+          "resolvedCommit": "bccf0f7bc22c7dca714b5d3cc1f647cc54a9eedd",
           "skillPath": "skills/writing-skills",
           "contentHash": "cd5c1239b8f59d451e4990e03af5269cbb373852578a621eaa59f146f49f27a0"
         }

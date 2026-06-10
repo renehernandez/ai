@@ -7,9 +7,9 @@ import { createProgram } from "../../scripts/agent-runtime.ts";
 type ParsedCommand = {
   scope?: string;
   command: string;
-  skillsetName?: string;
   agentName?: string;
-  harnessName?: string;
+  profileNames?: string[];
+  allProfiles?: boolean;
   configPath: string;
 };
 
@@ -48,31 +48,36 @@ function configureProgramForTest(command: Command): void {
 }
 
 test("Commander dispatches scoped skills commands", () => {
-  const [parsed] = parseCommand(["skills", "validate", "--skillset", "work", "--config", "custom.json"]);
+  const [parsed] = parseCommand(["skills", "validate", "--profile", "work", "--config", "custom.json"]);
 
   assert.equal(parsed.scope, "skills");
   assert.equal(parsed.command, "validate");
-  assert.equal(parsed.skillsetName, "work");
+  assert.deepEqual(parsed.profileNames, ["work"]);
   assert.equal(parsed.configPath, "custom.json");
 });
 
 test("Commander dispatches scoped agent filters", () => {
-  const [parsed] = parseCommand(["agents", "status", "--agent", "local-review", "--harness", "claude"]);
+  const [parsed] = parseCommand(["agents", "status", "--agent", "local-review"]);
 
   assert.equal(parsed.scope, "agents");
   assert.equal(parsed.command, "status");
   assert.equal(parsed.agentName, "local-review");
-  assert.equal(parsed.harnessName, "claude");
 });
 
 test("Commander dispatches top-level wrapper commands", () => {
-  const [parsed] = parseCommand(["status", "--agent", "github-review", "--harness", "codex", "--skillset", "work"]);
+  const [parsed] = parseCommand(["status", "--agent", "github-review", "--profile", "personal"]);
 
   assert.equal(parsed.scope, undefined);
   assert.equal(parsed.command, "status");
   assert.equal(parsed.agentName, "github-review");
-  assert.equal(parsed.harnessName, "codex");
-  assert.equal(parsed.skillsetName, "work");
+  assert.deepEqual(parsed.profileNames, ["personal"]);
+});
+
+test("Commander dispatches all selection flags", () => {
+  const [parsed] = parseCommand(["install", "--all-profiles"]);
+
+  assert.equal(parsed.command, "install");
+  assert.equal(parsed.allProfiles, true);
 });
 
 test("Commander rejects agent flags on skills commands", () => {
@@ -81,14 +86,14 @@ test("Commander rejects agent flags on skills commands", () => {
   assert.match(error.message, /unknown option '--agent'/);
 });
 
-test("Commander rejects skillset flags on agent commands", () => {
-  const error = parseInvalidCommand(["agents", "status", "--skillset", "work"]);
+test("Commander rejects removed skillset flags", () => {
+  const error = parseInvalidCommand(["status", "--skillset", "work"]);
 
   assert.match(error.message, /unknown option '--skillset'/);
 });
 
-test("Commander rejects skillset flags on instruction commands", () => {
-  const error = parseInvalidCommand(["instructions", "validate", "--skillset", "work"]);
+test("Commander rejects removed harness flags", () => {
+  const error = parseInvalidCommand(["agents", "status", "--harness", "claude"]);
 
-  assert.match(error.message, /unknown option '--skillset'/);
+  assert.match(error.message, /unknown option '--harness'/);
 });

@@ -39,6 +39,20 @@ These rules cover Git, GitHub, GitLab, Linear, review routing, and external comm
 - For feature work, follow [feature-delivery.md](feature-delivery.md): run the pre-commit quality gate, commit the feature branch, push it, create or update the artifact-host PR/MR, monitor CI, and fix branch-caused failures.
 - Never include `Co-Authored-By: Claude` or similar co-author attribution lines in MR or PR descriptions.
 
+## MR and PR Description Maintenance
+
+- After any commit that changes an MR or PR's scope, behavior, approach, deployment requirements, or reviewer-facing content, update the description proactively. Do not wait for the user to ask.
+- Reviewers only see the final diff. Keep the description aligned to the current branch, not intermediate approaches or reverted work.
+- Do not narrate intermediate decisions, reverted approaches, or scoped-out work in the description unless there is a lasting consequence a reviewer needs to know, such as a follow-up issue or deliberate coverage gap.
+- The `Summary`, `Testing`, `Deployment Notes`, and `Review Notes` sections must describe the MR or PR as it currently stands.
+- Use `glab mr update <IID> --description "..."` for GitLab and `gh pr edit <number> --body "..."` for GitHub.
+
+## Creating Hosted Reviews from a Dirty Working Tree
+
+- When a hosted-review creation skill such as `/glab-mr-create` is invoked on a non-default branch with uncommitted changes, commit and push the relevant changes before creating the MR or PR. Do not ask first unless the diff includes unrelated user changes, secrets, generated noise, or a failed verification decision.
+- Use `/glab-commit` or the equivalent commit workflow to author the commit. Standard rules still apply: no `--no-verify`, no default-branch push without confirmation, and no co-author attribution in commits.
+- After committing and pushing, continue the hosted review creation workflow.
+
 ## Local Code Review
 
 - When the user asks to review local changes, review their changes, review the working tree, or self-review, delegate to the `local-review` agent.

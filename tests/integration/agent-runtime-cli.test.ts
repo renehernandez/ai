@@ -9,26 +9,32 @@ type Fixture = {
   configPath: string;
   runtimeDir: string;
 };
+type FixtureConfig = Record<string, unknown>;
 
 const repoRoot = process.cwd();
 
-function withFixture(callback: (fixture: Fixture) => void): void {
+function withFixture(
+  callback: (fixture: Fixture) => void,
+  configureConfig: (config: FixtureConfig, runtimeDir: string) => void = () => undefined,
+): void {
   const runtimeDir = mkdtempSync(join(tmpdir(), "agent-runtime-cli-"));
   const configPath = join(runtimeDir, "config.json");
-  const config = JSON.parse(readFileSync(join(repoRoot, "agent-runtime.config.json"), "utf-8"));
-  config.runtime.canonicalSkillsDir = join(runtimeDir, "skills");
-  config.runtime.skillSymlinkTargets = [join(runtimeDir, "codex", "skills"), join(runtimeDir, "claude", "skills")];
-  config.runtime.canonicalAgentsDir = join(runtimeDir, "agents");
-  config.runtime.agentSymlinkTargets = {
+  const config = JSON.parse(readFileSync(join(repoRoot, "agent-runtime.config.json"), "utf-8")) as FixtureConfig;
+  const runtime = config.runtime as Record<string, unknown>;
+  runtime.canonicalSkillsDir = join(runtimeDir, "skills");
+  runtime.skillSymlinkTargets = [join(runtimeDir, "claude", "skills")];
+  runtime.canonicalAgentsDir = join(runtimeDir, "agents");
+  runtime.lockFile = join(runtimeDir, "lock.json");
+  runtime.agentSymlinkTargets = {
     codex: join(runtimeDir, "codex", "agents"),
     claude: join(runtimeDir, "claude", "agents"),
     opencode: join(runtimeDir, "opencode", "agents"),
   };
-  config.runtime.instructionSymlinkTargets = {
+  runtime.instructionSymlinkTargets = {
     agents: join(runtimeDir, "root"),
-    codex: join(runtimeDir, "codex"),
     claude: join(runtimeDir, "claude"),
   };
+  configureConfig(config, runtimeDir);
   writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf-8");
 
   try {
@@ -50,12 +56,16 @@ function runAgentRuntime(args: string[]): { stdout: string; stderr: string; stat
   };
 }
 
+function matchCount(input: string, pattern: RegExp): number {
+  return [...input.matchAll(pattern)].length;
+}
+
 test("CLI validates all runtime scopes", () => {
   withFixture(({ configPath }) => {
-    const result = runAgentRuntime(["validate", "--config", configPath]);
+    const result = runAgentRuntime(["validate", "--profile", "work", "--config", configPath]);
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
-    assert.match(result.stdout, /Validated 2 skillsets/);
+    assert.match(result.stdout, /Validated 1 profile/);
     assert.match(result.stdout, /Validated agent configuration/);
     assert.match(result.stdout, /Validated instruction configuration/);
   });
@@ -63,10 +73,10 @@ test("CLI validates all runtime scopes", () => {
 
 test("CLI accepts global config before the command", () => {
   withFixture(({ configPath }) => {
-    const result = runAgentRuntime(["--config", configPath, "validate"]);
+    const result = runAgentRuntime(["--config", configPath, "validate", "--profile", "work"]);
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
-    assert.match(result.stdout, /Validated 2 skillsets/);
+    assert.match(result.stdout, /Validated 1 profile/);
   });
 });
 
@@ -82,13 +92,15 @@ test("CLI shows global help", () => {
 });
 
 test("CLI shows command-specific help", () => {
-  const result = runAgentRuntime(["agents", "status", "--help"]);
+  const result = runAgentRuntime(["status", "--help"]);
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /Usage: agent-runtime agents status/);
+  assert.match(result.stdout, /Usage: agent-runtime status/);
   assert.match(result.stdout, /--agent <name>/);
-  assert.match(result.stdout, /--harness <name>/);
-  assert.doesNotMatch(result.stdout, /--skillset <name>/);
+  assert.match(result.stdout, /--all-profiles/);
+  assert.match(result.stdout, /--profile <name>/);
+  assert.doesNotMatch(result.stdout, /--all-skillsets/);
+  assert.doesNotMatch(result.stdout, /--harness <name>/);
 });
 
 test("CLI rejects flags outside their command scope", () => {
@@ -100,39 +112,110 @@ test("CLI rejects flags outside their command scope", () => {
 
 test("CLI installs and reports agent generation", () => {
   withFixture(({ configPath, runtimeDir }) => {
-    const install = runAgentRuntime(["agents", "install", "--agent", "implementer", "--harness", "codex", "--config", configPath]);
+    const install = runAgentRuntime(["agents", "install", "--agent", "implementer", "--config", configPath]);
     assert.equal(install.status, 0, install.stderr || install.stdout);
 
-    const generatedPath = join(runtimeDir, "agents", "codex", "implementer.md");
-    const linkPath = join(runtimeDir, "codex", "agents", "implementer.md");
+    const generatedPath = join(runtimeDir, "agents", "claude", "implementer.md");
+    const linkPath = join(runtimeDir, "claude", "agents", "implementer.md");
+    const codexGeneratedPath = join(runtimeDir, "agents", "codex", "implementer.md");
+    const codexLinkPath = join(runtimeDir, "codex", "agents", "implementer.md");
+    const opencodeGeneratedPath = join(runtimeDir, "agents", "opencode", "implementer.md");
+    const opencodeLinkPath = join(runtimeDir, "opencode", "agents", "implementer.md");
     const generated = readFileSync(generatedPath, "utf-8");
+    const codexGenerated = readFileSync(codexGeneratedPath, "utf-8");
+    const opencodeGenerated = readFileSync(opencodeGeneratedPath, "utf-8");
 
-    assert.match(generated, /^model: gpt-5\.4$/m);
-    assert.match(generated, /^reasoning: high$/m);
+    assert.match(generated, /^model: sonnet$/m);
+    assert.doesNotMatch(generated, /^reasoning:/m);
+    assert.match(codexGenerated, /^model: gpt-5\.4$/m);
+    assert.match(codexGenerated, /^reasoning: high$/m);
+    assert.match(opencodeGenerated, /^model: anthropic\/claude-sonnet$/m);
+    assert.doesNotMatch(opencodeGenerated, /^reasoning:/m);
     assert.equal(lstatSync(linkPath).isSymbolicLink(), true);
+    assert.equal(lstatSync(codexLinkPath).isSymbolicLink(), true);
+    assert.equal(lstatSync(opencodeLinkPath).isSymbolicLink(), true);
 
-    const status = runAgentRuntime(["agents", "status", "--agent", "implementer", "--harness", "codex", "--config", configPath]);
+    const status = runAgentRuntime(["agents", "status", "--agent", "implementer", "--config", configPath]);
     assert.equal(status.status, 0, status.stderr || status.stdout);
     assert.match(status.stdout, /\[ok\].*generated/);
     assert.match(status.stdout, /\[ok\].*implementer\.md/);
   });
 });
 
+test("CLI installs overlapping profile skills once", () => {
+  withFixture(
+    ({ configPath, runtimeDir }) => {
+      const install = runAgentRuntime(["skills", "install", "--all-profiles", "--config", configPath]);
+      assert.equal(install.status, 0, install.stderr || install.stdout);
+
+      assert.equal(matchCount(install.stdout, /^Installed shared$/gm), 1);
+      assert.equal(matchCount(install.stdout, /^Installed work-only$/gm), 1);
+      assert.equal(lstatSync(join(runtimeDir, "skills", "shared")).isDirectory(), true);
+      assert.equal(lstatSync(join(runtimeDir, "claude", "skills", "shared")).isSymbolicLink(), true);
+    },
+    (config, runtimeDir) => {
+      const localSkillsDir = join(runtimeDir, "local-skills");
+      mkdirSync(join(localSkillsDir, "shared"), { recursive: true });
+      mkdirSync(join(localSkillsDir, "work-only"), { recursive: true });
+      writeFileSync(join(localSkillsDir, "shared", "SKILL.md"), "---\nname: shared\n---\n", "utf-8");
+      writeFileSync(join(localSkillsDir, "work-only", "SKILL.md"), "---\nname: work-only\n---\n", "utf-8");
+
+      config.blocks = {
+        common: {
+          skills: [{ localPath: localSkillsDir, names: ["shared"] }],
+        },
+        work: {
+          skills: [{ localPath: localSkillsDir, names: ["work-only"] }],
+        },
+      };
+      config.profiles = {
+        personal: { include: ["common"], paths: ["AGENTS.md"] },
+        work: { include: ["common", "work"], paths: ["AGENTS.md"] },
+      };
+    },
+  );
+});
+
 test("CLI installs and reports instruction symlinks", () => {
   withFixture(({ configPath, runtimeDir }) => {
-    const install = runAgentRuntime(["instructions", "install", "--harness", "agents", "--config", configPath]);
+    const install = runAgentRuntime(["instructions", "install", "--profile", "work", "--config", configPath]);
     assert.equal(install.status, 0, install.stderr || install.stdout);
 
     const agentsLink = join(runtimeDir, "root", "AGENTS.md");
-    const rulesLink = join(runtimeDir, "root", "rules");
+    const rulesDir = join(runtimeDir, "root", "rules");
+    const ruleLink = join(rulesDir, "command-and-tools.md");
+    const claudeAgentsLink = join(runtimeDir, "claude", "AGENTS.md");
+    const claudeRuleLink = join(runtimeDir, "claude", "rules", "command-and-tools.md");
     assert.equal(lstatSync(agentsLink).isSymbolicLink(), true);
-    assert.equal(lstatSync(rulesLink).isSymbolicLink(), true);
+    assert.equal(lstatSync(rulesDir).isDirectory(), true);
+    assert.equal(lstatSync(ruleLink).isSymbolicLink(), true);
+    assert.equal(lstatSync(claudeAgentsLink).isSymbolicLink(), true);
+    assert.equal(lstatSync(claudeRuleLink).isSymbolicLink(), true);
 
-    const status = runAgentRuntime(["instructions", "status", "--harness", "agents", "--config", configPath]);
+    const status = runAgentRuntime(["instructions", "status", "--profile", "work", "--config", configPath]);
     assert.equal(status.status, 0, status.stderr || status.stdout);
     assert.match(status.stdout, /Instruction AGENTS\.md/);
     assert.match(status.stdout, /\[ok\].*AGENTS\.md/);
-    assert.match(status.stdout, /\[ok\].*rules/);
+    assert.match(status.stdout, /Instruction rules\/command-and-tools\.md/);
+    assert.match(status.stdout, /\[ok\].*rules\/command-and-tools\.md/);
+  });
+});
+
+test("CLI prunes instruction symlinks outside the selected profile", () => {
+  withFixture(({ configPath, runtimeDir }) => {
+    const workInstall = runAgentRuntime(["instructions", "install", "--profile", "work", "--config", configPath]);
+    assert.equal(workInstall.status, 0, workInstall.stderr || workInstall.stdout);
+
+    const workOnlyRule = join(runtimeDir, "root", "rules", "fullscript", "nitro-review.md");
+    const sharedRule = join(runtimeDir, "root", "rules", "git-and-review.md");
+    assert.equal(lstatSync(workOnlyRule).isSymbolicLink(), true);
+    assert.equal(lstatSync(sharedRule).isSymbolicLink(), true);
+
+    const personalInstall = runAgentRuntime(["instructions", "install", "--profile", "personal", "--config", configPath]);
+    assert.equal(personalInstall.status, 0, personalInstall.stderr || personalInstall.stdout);
+
+    assert.equal(existsSync(workOnlyRule), false);
+    assert.equal(lstatSync(sharedRule).isSymbolicLink(), true);
   });
 });
 
@@ -142,11 +225,29 @@ test("CLI refuses to replace real instruction target files", () => {
     mkdirSync(join(runtimeDir, "root"), { recursive: true });
     writeFileSync(agentsPath, "local instructions\n", "utf-8");
 
-    const install = runAgentRuntime(["instructions", "install", "--harness", "agents", "--config", configPath]);
+    const install = runAgentRuntime(["instructions", "install", "--profile", "work", "--config", configPath]);
 
     assert.notEqual(install.status, 0);
     assert.match(install.stderr, /Refusing to replace non-symlink target/);
     assert.equal(existsSync(agentsPath), true);
     assert.equal(lstatSync(agentsPath).isSymbolicLink(), false);
+  });
+});
+
+test("CLI requires explicit profile selection for skills without a TTY", () => {
+  withFixture(({ configPath }) => {
+    const result = runAgentRuntime(["skills", "status", "--config", configPath]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Choose profiles with --all-profiles or --profile <name>/);
+  });
+});
+
+test("CLI requires explicit profile selection for instructions without a TTY", () => {
+  withFixture(({ configPath }) => {
+    const result = runAgentRuntime(["instructions", "status", "--config", configPath]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Choose profiles with --all-profiles or --profile <name>/);
   });
 });

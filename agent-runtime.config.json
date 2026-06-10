@@ -3,7 +3,6 @@
   "runtime": {
     "canonicalSkillsDir": "~/.agents/skills",
     "skillSymlinkTargets": [
-      "~/.codex/skills",
       "~/.claude/skills"
     ],
     "canonicalAgentsDir": "~/.agents/agents",
@@ -14,15 +13,51 @@
     },
     "instructionSymlinkTargets": {
       "agents": "~/.agents",
-      "codex": "~/.codex",
       "claude": "~/.claude"
     }
   },
-  "instructions": {
-    "paths": [
-      "AGENTS.md",
-      "rules"
-    ]
+  "profiles": {
+    "personal": {
+      "include": [
+        "personal-skills",
+        "cloudflare"
+      ],
+      "paths": [
+        "AGENTS.md",
+        "rules/agent-surface-routing.md",
+        "rules/command-and-tools.md",
+        "rules/confidence.md",
+        "rules/dependency-security.md",
+        "rules/docs-and-specs.md",
+        "rules/feature-delivery.md",
+        "rules/git-and-review.md",
+        "rules/handoff-and-resume.md",
+        "rules/investigation-and-implementation.md",
+        "rules/session-startup.md"
+      ]
+    },
+    "work": {
+      "include": [
+        "personal-skills",
+        "cloudflare",
+        "fullscript"
+      ],
+      "paths": [
+        "AGENTS.md",
+        "rules/agent-surface-routing.md",
+        "rules/ci-infra-and-cloudflare.md",
+        "rules/command-and-tools.md",
+        "rules/confidence.md",
+        "rules/dependency-security.md",
+        "rules/docs-and-specs.md",
+        "rules/feature-delivery.md",
+        "rules/fullscript/nitro-review.md",
+        "rules/git-and-review.md",
+        "rules/handoff-and-resume.md",
+        "rules/investigation-and-implementation.md",
+        "rules/session-startup.md"
+      ]
+    }
   },
   "agentModelMappings": {
     "implementer": {
@@ -117,21 +152,6 @@
             "terraform"
           ]
         }
-      ]
-    }
-  },
-  "skillsets": {
-    "personal": {
-      "include": [
-        "personal-skills",
-        "cloudflare"
-      ]
-    },
-    "work": {
-      "include": [
-        "personal-skills",
-        "cloudflare",
-        "fullscript"
       ]
     }
   }

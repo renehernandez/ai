@@ -7,11 +7,13 @@ import {
   lstatSync,
   mkdirSync,
   readFileSync,
+  readSync,
   readdirSync,
   realpathSync,
   renameSync,
   rmSync,
   symlinkSync,
+  writeSync,
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
@@ -45,6 +47,11 @@ type SkillsetConfig = {
   include: string[];
 };
 
+type ProfileConfig = {
+  include: string[];
+  paths: string[];
+};
+
 type Config = {
   version: 1;
   runtime: {
@@ -53,16 +60,23 @@ type Config = {
     canonicalAgentsDir?: string;
     agentSymlinkTargets?: Record<string, string>;
     instructionSymlinkTargets?: Record<string, string>;
+    lockFile?: string;
   };
   instructions?: {
     paths: string[];
   };
-  agentModelMappings?: Record<string, Record<string, AgentHarnessConfig>>;
+  instructionProfiles?: Record<string, InstructionProfileConfig>;
+  profiles?: Record<string, ProfileConfig>;
+  agentModelMappings?: Record<string, Record<string, AgentTargetConfig>>;
   blocks: Record<string, BlockConfig>;
-  skillsets: Record<string, SkillsetConfig>;
+  skillsets?: Record<string, SkillsetConfig>;
 };
 
-type AgentHarnessConfig = {
+type InstructionProfileConfig = {
+  paths: string[];
+};
+
+type AgentTargetConfig = {
   model: string;
   reasoning?: string;
 };
@@ -70,9 +84,9 @@ type AgentHarnessConfig = {
 type ParsedArgs = {
   scope?: Scope;
   command: RuntimeCommand;
-  skillsetName?: string;
   agentName?: string;
-  harnessName?: string;
+  profileNames?: string[];
+  allProfiles?: boolean;
   configPath: string;
 };
 
@@ -85,6 +99,16 @@ type LockedSkill = {
   basePath?: string;
   skillPath: string;
   contentHash: string;
+};
+
+type SkillInstallPlan = {
+  source: SkillSource;
+  skillNames: string[];
+};
+
+type ProfileSelection = {
+  profileNames: string[];
+  interactive: boolean;
 };
 
 type LockFile = {
@@ -112,23 +136,30 @@ export function main(): void {
 }
 
 export function executeParsedCommand(input: ParsedArgs): void {
-  const { scope, command, skillsetName, agentName, harnessName, configPath } = input;
+  const { scope, command, agentName, profileNames, allProfiles, configPath } = input;
   const config = readJson<Config>(configPath);
 
   if (!scope) {
-    preflightWrapperCommand(command, config, agentName, harnessName);
-    runSkills(command, config, skillsetName);
-    runAgents(command, config, agentName, harnessName);
-    runInstructions(command, config, harnessName);
+    const profileSelection = resolveProfileSelection(config, {
+      profileNames,
+      allProfiles,
+    });
+    preflightWrapperCommand(command, config, agentName, profileSelection);
+    runSkills(command, config, profileSelection);
+    runAgents(command, config, agentName);
+    runInstructions(command, config, profileSelection);
     return;
   }
 
+  const profileSelection = resolveProfileSelectionForScope(scope, config, {
+    profileNames,
+    allProfiles,
+  });
   runScope(scope, {
     command,
     config,
-    skillsetName,
     agentName,
-    harnessName,
+    profileSelection,
   });
 }
 
@@ -157,18 +188,18 @@ export function createProgram(execute: CommandExecutor = executeParsedCommand): 
 function addWrapperCommand(program: Command, command: RuntimeCommand, execute: CommandExecutor): void {
   program
     .command(command)
-    .description(`${labelForCommand(command)} all runtime surfaces`)
-    .option("--skillset <name>", "Only apply skills work to one skillset")
+    .description(`${labelForCommand(command)} all runtime assets`)
     .option("--agent <name>", "Only apply agent work to one agent")
-    .option("--harness <name>", "Only apply agent and instruction work to one harness")
+    .option("--profile <name>", "Apply work to one profile; repeat for multiple", collectOption)
+    .option("--all-profiles", "Apply work to all profiles")
     .option("--config <path>", "Path to agent runtime config", CONFIG_FILE)
     .action((first: CommandOptions | Command, second?: Command) => {
       const { options, commandObject } = actionContext(first, second);
       execute({
         command,
-        skillsetName: options.skillset,
         agentName: options.agent,
-        harnessName: options.harness,
+        profileNames: options.profile,
+        allProfiles: options.allProfiles,
         configPath: configPathFor(commandObject, options),
       });
     });
@@ -180,14 +211,16 @@ function addSkillsCommands(program: Command, execute: CommandExecutor): void {
     skills
       .command(command)
       .description(`${labelForCommand(command)} managed skills`)
-      .option("--skillset <name>", "Only apply the command to one skillset")
+      .option("--profile <name>", "Apply the command to one profile; repeat for multiple", collectOption)
+      .option("--all-profiles", "Apply the command to all profiles")
       .option("--config <path>", "Path to agent runtime config", CONFIG_FILE)
       .action((first: CommandOptions | Command, second?: Command) => {
         const { options, commandObject } = actionContext(first, second);
         execute({
           scope: "skills",
           command,
-          skillsetName: options.skillset,
+          profileNames: options.profile,
+          allProfiles: options.allProfiles,
           configPath: configPathFor(commandObject, options),
         });
       });
@@ -201,7 +234,6 @@ function addAgentsCommands(program: Command, execute: CommandExecutor): void {
       .command(command)
       .description(`${labelForCommand(command)} generated sub-agents`)
       .option("--agent <name>", "Only apply the command to one agent")
-      .option("--harness <name>", "Only apply the command to one harness")
       .option("--config <path>", "Path to agent runtime config", CONFIG_FILE)
       .action((first: CommandOptions | Command, second?: Command) => {
         const { options, commandObject } = actionContext(first, second);
@@ -209,7 +241,6 @@ function addAgentsCommands(program: Command, execute: CommandExecutor): void {
           scope: "agents",
           command,
           agentName: options.agent,
-          harnessName: options.harness,
           configPath: configPathFor(commandObject, options),
         });
       });
@@ -222,14 +253,16 @@ function addInstructionsCommands(program: Command, execute: CommandExecutor): vo
     instructions
       .command(command)
       .description(`${labelForCommand(command)} managed instructions`)
-      .option("--harness <name>", "Only apply the command to one harness")
+      .option("--profile <name>", "Apply the command to one profile; repeat for multiple", collectOption)
+      .option("--all-profiles", "Apply the command to all profiles")
       .option("--config <path>", "Path to agent runtime config", CONFIG_FILE)
       .action((first: CommandOptions | Command, second?: Command) => {
         const { options, commandObject } = actionContext(first, second);
         execute({
           scope: "instructions",
           command,
-          harnessName: options.harness,
+          profileNames: options.profile,
+          allProfiles: options.allProfiles,
           configPath: configPathFor(commandObject, options),
         });
       });
@@ -238,10 +271,14 @@ function addInstructionsCommands(program: Command, execute: CommandExecutor): vo
 
 type CommandOptions = {
   config?: string;
-  skillset?: string;
   agent?: string;
-  harness?: string;
+  profile?: string[];
+  allProfiles?: boolean;
 };
+
+function collectOption(value: string, previous: string[] = []): string[] {
+  return [...previous, value];
+}
 
 function configPathFor(commandObject: Command, options: CommandOptions): string {
   if (commandObject.getOptionValueSource("config") && commandObject.getOptionValueSource("config") !== "default") {
@@ -274,50 +311,223 @@ function labelForCommand(command: RuntimeCommand): string {
   return command[0].toUpperCase() + command.slice(1);
 }
 
+function resolveProfileSelectionForScope(
+  scope: Scope,
+  config: Config,
+  input: { profileNames?: string[]; allProfiles?: boolean },
+): ProfileSelection {
+  if (scope === "agents") {
+    if ((input.profileNames?.length ?? 0) > 0 || input.allProfiles) {
+      return {
+        profileNames: uniqueNames(input.profileNames ?? []),
+        interactive: false,
+      };
+    }
+    return { profileNames: [], interactive: false };
+  }
+  return resolveProfileSelection(config, input);
+}
+
+function resolveProfileSelection(
+  config: Config,
+  input: { profileNames?: string[]; allProfiles?: boolean },
+): ProfileSelection {
+  const profileNames = configuredProfileNames(config);
+  if (profileNames.length === 0) {
+    if ((input.profileNames?.length ?? 0) > 0 || input.allProfiles) {
+      throw new Error("Profiles are not configured");
+    }
+    return { profileNames: [], interactive: false };
+  }
+
+  const selectedProfileNames = uniqueNames(input.profileNames ?? []);
+  if (input.allProfiles && selectedProfileNames.length > 0) {
+    throw new Error("Use either --all-profiles or --profile <name>, not both");
+  }
+  if (input.allProfiles) {
+    return { profileNames, interactive: false };
+  }
+  if (selectedProfileNames.length > 0) {
+    return { profileNames: selectedProfileNames, interactive: false };
+  }
+  if (canPrompt()) {
+    return {
+      profileNames: promptSelection("profile", profileNames),
+      interactive: true,
+    };
+  }
+  throw new Error("Choose profiles with --all-profiles or --profile <name>");
+}
+
+function selectedInstructionPaths(config: Config, selection: ProfileSelection): string[] {
+  if (config.profiles && Object.keys(config.profiles).length > 0) {
+    validateProfileNames(config, selection.profileNames);
+    return uniqueNames(selection.profileNames.flatMap((profileName) => config.profiles?.[profileName]?.paths ?? []));
+  }
+
+  if (!config.instructionProfiles || Object.keys(config.instructionProfiles).length === 0) {
+    return config.instructions?.paths ?? [];
+  }
+
+  validateInstructionProfileNames(config, selection.profileNames);
+  return uniqueNames(selection.profileNames.flatMap((profileName) => config.instructionProfiles?.[profileName]?.paths ?? []));
+}
+
+function selectedSkillProfileNames(config: Config, selection: ProfileSelection): string[] {
+  if (config.profiles && Object.keys(config.profiles).length > 0) {
+    validateProfileNames(config, selection.profileNames);
+    return selection.profileNames;
+  }
+  if (config.skillsets && Object.keys(config.skillsets).length > 0) {
+    for (const profileName of selection.profileNames) {
+      if (!config.skillsets[profileName]) {
+        throw new Error(`Unknown profile '${profileName}'`);
+      }
+    }
+    return selection.profileNames;
+  }
+  return [];
+}
+
+function configuredProfileNames(config: Config): string[] {
+  if (config.profiles && Object.keys(config.profiles).length > 0) {
+    return Object.keys(config.profiles).sort();
+  }
+  const legacyProfileNames = new Set<string>();
+  for (const profileName of Object.keys(config.skillsets ?? {})) {
+    legacyProfileNames.add(profileName);
+  }
+  for (const profileName of Object.keys(config.instructionProfiles ?? {})) {
+    legacyProfileNames.add(profileName);
+  }
+  return [...legacyProfileNames].sort();
+}
+
+function validateProfileNames(config: Config, profileNames: string[]): void {
+  for (const profileName of profileNames) {
+    if (!config.profiles?.[profileName]) {
+      throw new Error(`Unknown profile '${profileName}'`);
+    }
+  }
+}
+
+function validateInstructionProfileNames(config: Config, profileNames: string[]): void {
+  for (const profileName of profileNames) {
+    if (!config.instructionProfiles?.[profileName]) {
+      throw new Error(`Unknown profile '${profileName}'`);
+    }
+  }
+}
+
+function uniqueNames(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
+function canPrompt(): boolean {
+  return Boolean(process.stdin.isTTY && process.stdout.isTTY);
+}
+
+function promptSelection(label: string, options: string[]): string[] {
+  if (options.length === 0) {
+    throw new Error(`No ${label}s are configured`);
+  }
+
+  writeSync(1, `Select ${label}s to use:\n`);
+  writeSync(1, "  all) All\n");
+  options.forEach((option, index) => {
+    writeSync(1, `  ${index + 1}) ${option}\n`);
+  });
+  writeSync(1, `Enter all, numbers, or names separated by commas: `);
+
+  const answer = promptLine();
+  if (answer.toLowerCase() === "all") {
+    return options;
+  }
+
+  const selected = answer
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => {
+      const index = Number(item);
+      if (Number.isInteger(index) && index >= 1 && index <= options.length) {
+        return options[index - 1];
+      }
+      return item;
+    });
+
+  if (selected.length === 0) {
+    throw new Error(`No ${label}s selected`);
+  }
+  for (const value of selected) {
+    if (!options.includes(value)) {
+      throw new Error(`Unknown ${label} '${value}'`);
+    }
+  }
+  return uniqueNames(selected);
+}
+
+function promptLine(): string {
+  const buffer = Buffer.alloc(1);
+  let input = "";
+  while (true) {
+    const bytesRead = readSync(0, buffer, 0, 1, null);
+    if (bytesRead === 0) {
+      break;
+    }
+    const char = buffer.toString("utf-8", 0, bytesRead);
+    if (char === "\n" || char === "\r") {
+      break;
+    }
+    input += char;
+  }
+  return input.trim();
+}
+
 function runScope(
   scope: Scope,
   input: {
     command: RuntimeCommand;
     config: Config;
-    skillsetName?: string;
     agentName?: string;
-    harnessName?: string;
+    profileSelection: ProfileSelection;
   },
 ): void {
   if (scope === "skills") {
     if (input.agentName) {
       throw new Error("--agent can only be used with the agents scope");
     }
-    runSkills(input.command, input.config, input.skillsetName);
+    runSkills(input.command, input.config, input.profileSelection);
     return;
   }
-  if (input.skillsetName) {
-    throw new Error("--skillset can only be used with the skills scope");
-  }
   if (scope === "agents") {
-    runAgents(input.command, input.config, input.agentName, input.harnessName);
+    if (input.profileSelection.interactive || (input.profileSelection.profileNames?.length ?? 0) > 0) {
+      throw new Error("--profile can only be used with skills, instructions, or wrapper commands");
+    }
+    runAgents(input.command, input.config, input.agentName);
     return;
   }
   if (input.agentName) {
     throw new Error("--agent can only be used with the agents scope");
   }
-  runInstructions(input.command, input.config, input.harnessName);
+  runInstructions(input.command, input.config, input.profileSelection);
 }
 
-function runSkills(command: RuntimeCommand, config: Config, skillsetName?: string): void {
-  const skillsetNames = skillsetName ? [skillsetName] : Object.keys(config.skillsets).sort();
+function runSkills(command: RuntimeCommand, config: Config, selection: ProfileSelection): void {
+  const profileNames = selectedSkillProfileNames(config, selection);
 
   if (command === "validate") {
-    validateSkillConfig(config, skillsetNames);
-    validateLockIfPresent();
+    validateSkillConfig(config, profileNames);
+    validateLockIfPresent(lockFileFor(config));
     return;
   }
   if (command === "status") {
-    statusSkills(config, skillsetNames);
+    statusSkills(config, profileNames);
     return;
   }
 
-  const lock = readLock();
+  const lockFile = lockFileFor(config);
+  const lock = readLock(lockFile);
   const canonicalSkillsDir = expandHome(config.runtime.canonicalSkillsDir);
   const symlinkTargets = resolveSkillSymlinkTargets(
     canonicalSkillsDir,
@@ -330,83 +540,97 @@ function runSkills(command: RuntimeCommand, config: Config, skillsetName?: strin
   }
   mkdirSync(CACHE_DIR, { recursive: true });
 
-  for (const name of skillsetNames) {
-    installSkillset({
-      command,
-      config,
-      lock,
-      skillsetName: name,
-      canonicalSkillsDir,
-      symlinkTargets,
-    });
-  }
+  installSkillUnion({
+    command,
+    config,
+    lock,
+    profileNames,
+    canonicalSkillsDir,
+    symlinkTargets,
+  });
 
-  writeJson(LOCK_FILE, lock);
+  writeJson(lockFile, lock);
 }
 
-function installSkillset(input: {
+function installSkillUnion(input: {
   command: SkillCommand;
   config: Config;
   lock: LockFile;
-  skillsetName: string;
+  profileNames: string[];
   canonicalSkillsDir: string;
   symlinkTargets: string[];
 }): void {
-  const sources = expandSkillSources(input.config, input.skillsetName);
-  const lockedSkillset = input.lock.skillsets[input.skillsetName];
-  const installedSkills: Record<string, LockedSkill> = {};
+  const profileSources = new Map<string, SkillSource[]>();
+  const installPlans = buildSkillInstallPlans(input.config, input.profileNames, profileSources);
+  const installedByKey = new Map<string, LockedSkill>();
+  const verb = input.command === "install" ? "Installing" : "Updating";
+  const resolvedWorkspaceCommit = workspaceCommit();
 
-  ensureUniqueSkillNames(sources);
-  console.log(`${input.command === "install" ? "Installing" : "Updating"} skillset ${input.skillsetName}`);
+  console.log(
+    `${verb} ${skillPlanCount(installPlans)} unique skill${skillPlanCount(installPlans) === 1 ? "" : "s"} ` +
+      `from ${input.profileNames.length} profile${input.profileNames.length === 1 ? "" : "s"}`,
+  );
 
-  for (const source of sources) {
-    validateSource(source);
-    if (isLocalSource(source)) {
-      const resolvedCommit = workspaceCommit();
-      for (const skillName of source.names) {
+  for (const plan of installPlans) {
+    validateSource(plan.source);
+    if (isLocalSource(plan.source)) {
+      for (const skillName of plan.skillNames) {
         const lockedSkill = installLocalSkill({
-          source,
+          source: plan.source,
           skillName,
-          resolvedCommit,
+          resolvedCommit: resolvedWorkspaceCommit,
           canonicalSkillsDir: input.canonicalSkillsDir,
           symlinkTargets: input.symlinkTargets,
         });
 
-        installedSkills[skillName] = lockedSkill;
+        installedByKey.set(skillInstallKey(plan.source, skillName), lockedSkill);
         console.log(`${input.command === "install" ? "Installed" : "Updated"} ${skillName}`);
       }
       continue;
     }
 
-    const repoDir = cachePathForSource(source.url);
-    const lockedCommit = lockedCommitForSource(lockedSkillset?.skills, source);
-    ensureRepo(source.url, repoDir, input.command === "update" || !lockedCommit);
+    const repoDir = cachePathForSource(plan.source.url);
+    const lockedCommit = lockedCommitForSourceAcross(input.lock, input.profileNames, plan.source);
+    ensureRepo(plan.source.url, repoDir, input.command === "update" || !lockedCommit);
 
     const resolvedCommit =
       input.command === "install"
-        ? lockedCommit ?? resolveCommit(repoDir, source.ref)
-        : resolveCommit(repoDir, source.ref);
+        ? lockedCommit ?? resolveCommit(repoDir, plan.source.ref)
+        : resolveCommit(repoDir, plan.source.ref);
 
     checkout(repoDir, resolvedCommit);
 
-    for (const skillName of source.names) {
+    for (const skillName of plan.skillNames) {
       const lockedSkill = installSkill({
-        source,
+        source: plan.source,
         skillName,
         resolvedCommit,
         canonicalSkillsDir: input.canonicalSkillsDir,
         symlinkTargets: input.symlinkTargets,
       });
 
-      installedSkills[skillName] = lockedSkill;
+      installedByKey.set(skillInstallKey(plan.source, skillName), lockedSkill);
       console.log(`${input.command === "install" ? "Installed" : "Updated"} ${skillName}`);
     }
   }
 
-  input.lock.skillsets[input.skillsetName] = {
-    updatedAt: new Date().toISOString(),
-    skills: sortRecord(installedSkills),
-  };
+  const updatedAt = new Date().toISOString();
+  for (const profileName of input.profileNames) {
+    const installedSkills: Record<string, LockedSkill> = {};
+    for (const source of profileSources.get(profileName) ?? []) {
+      for (const skillName of source.names) {
+        const lockedSkill = installedByKey.get(skillInstallKey(source, skillName));
+        if (!lockedSkill) {
+          throw new Error(`Internal error: missing installed skill '${skillName}' for profile '${profileName}'`);
+        }
+        installedSkills[skillName] = lockedSkill;
+      }
+    }
+    input.lock.skillsets[profileName] = {
+      updatedAt,
+      skills: sortRecord(installedSkills),
+    };
+  }
 }
 
 function installSkill(input: {
@@ -467,7 +691,84 @@ function installLocalSkill(input: {
   };
 }
 
-function validateSkillConfig(config: Config, skillsetNames: string[]): void {
+function buildSkillInstallPlans(
+  config: Config,
+  profileNames: string[],
+  profileSources: Map<string, SkillSource[]>,
+): SkillInstallPlan[] {
+  const sourcePlans = new Map<string, SkillInstallPlan>();
+  const skillSources = new Map<string, { key: string; label: string }>();
+
+  for (const profileName of profileNames) {
+    const sources = expandSkillSources(config, profileName);
+    ensureUniqueSkillNames(sources);
+    profileSources.set(profileName, sources);
+
+    for (const source of sources) {
+      validateSource(source);
+      const sourceKey = skillSourceKey(source);
+      let plan = sourcePlans.get(sourceKey);
+      if (!plan) {
+        plan = { source, skillNames: [] };
+        sourcePlans.set(sourceKey, plan);
+      }
+
+      for (const skillName of source.names) {
+        const key = skillInstallKey(source, skillName);
+        const existing = skillSources.get(skillName);
+        if (existing && existing.key !== key) {
+          throw new Error(
+            `Skill '${skillName}' is configured from multiple sources across selected profiles: ` +
+              `${existing.label}, ${skillInstallLabel(source, skillName)}`,
+          );
+        }
+        if (!existing) {
+          skillSources.set(skillName, {
+            key,
+            label: skillInstallLabel(source, skillName),
+          });
+          plan.skillNames.push(skillName);
+        }
+      }
+    }
+  }
+
+  return [...sourcePlans.values()].filter((plan) => plan.skillNames.length > 0);
+}
+
+function skillPlanCount(plans: SkillInstallPlan[]): number {
+  return plans.reduce((count, plan) => count + plan.skillNames.length, 0);
+}
+
+function lockedCommitForSourceAcross(lock: LockFile, profileNames: string[], source: RemoteSkillSource): string | undefined {
+  for (const profileName of profileNames) {
+    const lockedCommit = lockedCommitForSource(lock.skillsets[profileName]?.skills, source);
+    if (lockedCommit) {
+      return lockedCommit;
+    }
+  }
+  return undefined;
+}
+
+function skillSourceKey(source: SkillSource): string {
+  if (isLocalSource(source)) {
+    return `local:${source.localPath}`;
+  }
+  return `git:${source.url}:${source.ref}:${source.basePath}`;
+}
+
+function skillInstallKey(source: SkillSource, skillName: string): string {
+  return `${skillSourceKey(source)}:${skillName}`;
+}
+
+function skillInstallLabel(source: SkillSource, skillName: string): string {
+  if (isLocalSource(source)) {
+    return `${source.localPath}/${skillName}`;
+  }
+  return `${source.url}:${source.ref}:${join(source.basePath, skillName)}`;
+}
+
+function validateSkillConfig(config: Config, profileNames: string[]): void {
   if (config.version !== 1) {
     throw new Error(`Unsupported config version: ${config.version}`);
   }
@@ -483,43 +784,47 @@ function validateSkillConfig(config: Config, skillsetNames: string[]): void {
 
   let skillCount = 0;
   const blockNames = new Set<string>();
-  for (const name of skillsetNames) {
+  for (const name of profileNames) {
     const sources = expandSkillSources(config, name);
     ensureUniqueSkillNames(sources);
     for (const source of sources) {
       validateSource(source);
       skillCount += source.names.length;
     }
-    for (const blockName of config.skillsets[name].include) {
+    for (const blockName of profileInclude(config, name)) {
       blockNames.add(blockName);
     }
   }
 
   console.log(
-    `Validated ${skillsetNames.length} skillset${skillsetNames.length === 1 ? "" : "s"}, ` +
+    `Validated ${profileNames.length} profile${profileNames.length === 1 ? "" : "s"}, ` +
       `${blockNames.size} block${blockNames.size === 1 ? "" : "s"}, ` +
       `${skillCount} skill${skillCount === 1 ? "" : "s"}.`,
   );
 }
 
-function validateLockIfPresent(): void {
-  if (!existsSync(LOCK_FILE)) {
+function validateLockIfPresent(lockFile: string): void {
+  if (!existsSync(lockFile)) {
     return;
   }
-  readLock();
+  readLock(lockFile);
 }
 
-function statusSkills(config: Config, skillsetNames: string[]): void {
-  validateSkillConfig(config, skillsetNames);
+function lockFileFor(config: Config): string {
+  return config.runtime.lockFile ?? LOCK_FILE;
+}
+
+function statusSkills(config: Config, profileNames: string[]): void {
+  validateSkillConfig(config, profileNames);
   const canonicalSkillsDir = expandHome(config.runtime.canonicalSkillsDir);
   const symlinkTargets = resolveSkillSymlinkTargets(
     canonicalSkillsDir,
     config.runtime.skillSymlinkTargets.map(expandHome),
   );
 
-  for (const skillsetName of skillsetNames) {
-    const sources = expandSkillSources(config, skillsetName);
-    console.log(`Skillset ${skillsetName}`);
+  for (const profileName of profileNames) {
+    const sources = expandSkillSources(config, profileName);
+    console.log(`Profile ${profileName}`);
     for (const source of sources) {
       for (const skillName of source.names) {
         const canonicalPath = join(canonicalSkillsDir, skillName);
@@ -532,18 +837,18 @@ function statusSkills(config: Config, skillsetNames: string[]): void {
   }
 }
 
-function runAgents(command: RuntimeCommand, config: Config, agentName?: string, harnessName?: string): void {
-  validateAgentConfig(config, agentName, harnessName);
+function runAgents(command: RuntimeCommand, config: Config, agentName?: string): void {
+  validateAgentConfig(config, agentName);
   if (command === "validate") {
     console.log("Validated agent configuration.");
     return;
   }
 
-  const operations = agentOperations(config, agentName, harnessName);
+  const operations = agentOperations(config, agentName);
   if (command === "status") {
     for (const operation of operations) {
       const rendered = renderAgent(operation.sourcePath, operation.mapping);
-      console.log(`Agent ${operation.agentName} (${operation.harnessName})`);
+      console.log(`Agent ${operation.agentName} (${operation.targetName})`);
       printGeneratedStatus(`  generated`, operation.generatedPath, rendered);
       printSymlinkStatus(`  ${operation.linkPath}`, operation.linkPath, operation.generatedPath);
     }
@@ -556,21 +861,21 @@ function runAgents(command: RuntimeCommand, config: Config, agentName?: string, 
     mkdirSync(dirname(operation.generatedPath), { recursive: true });
     writeFileSync(operation.generatedPath, rendered, "utf-8");
     replaceSafeSymlink(operation.generatedPath, operation.linkPath);
-    console.log(`${command === "install" ? "Installed" : "Updated"} ${operation.agentName} for ${operation.harnessName}`);
+    console.log(`${command === "install" ? "Installed" : "Updated"} ${operation.agentName} for ${operation.targetName}`);
   }
 }
 
-function runInstructions(command: RuntimeCommand, config: Config, harnessName?: string): void {
-  validateInstructionConfig(config, harnessName);
+function runInstructions(command: RuntimeCommand, config: Config, selection: ProfileSelection): void {
+  validateInstructionConfig(config, selection);
   if (command === "validate") {
     console.log("Validated instruction configuration.");
     return;
   }
 
-  const operations = instructionOperations(config, harnessName);
+  const operations = instructionOperations(config, selection);
   if (command === "status") {
     for (const operation of operations) {
-      console.log(`Instruction ${operation.relativePath} (${operation.harnessName})`);
+      console.log(`Instruction ${operation.relativePath} (${operation.targetName})`);
       printPathStatus(`  source`, operation.sourcePath);
       printSymlinkStatus(`  ${operation.linkPath}`, operation.linkPath, operation.sourcePath);
     }
@@ -578,9 +883,10 @@ function runInstructions(command: RuntimeCommand, config: Config, harnessName?: 
   }
 
   validateSafeSymlinkTargets(operations.map((operation) => operation.linkPath));
+  pruneUnselectedInstructionSymlinks(config, selection);
   for (const operation of operations) {
     replaceSafeSymlink(operation.sourcePath, operation.linkPath);
-    console.log(`${command === "install" ? "Installed" : "Updated"} ${operation.relativePath} for ${operation.harnessName}`);
+    console.log(`${command === "install" ? "Installed" : "Updated"} ${operation.relativePath} for ${operation.targetName}`);
   }
 }
 
@@ -588,18 +894,22 @@ function preflightWrapperCommand(
   command: RuntimeCommand,
   config: Config,
   agentName?: string,
-  harnessName?: string,
+  profileSelection?: ProfileSelection,
 ): void {
   if (command !== "install" && command !== "update") {
     return;
   }
-  validateAgentConfig(config, agentName, harnessName);
-  validateInstructionConfig(config, harnessName);
-  validateSafeSymlinkTargets(agentOperations(config, agentName, harnessName).map((operation) => operation.linkPath));
-  validateSafeSymlinkTargets(instructionOperations(config, harnessName).map((operation) => operation.linkPath));
+  validateAgentConfig(config, agentName);
+  validateInstructionConfig(config, profileSelection ?? { profileNames: [], interactive: false });
+  validateSafeSymlinkTargets(agentOperations(config, agentName).map((operation) => operation.linkPath));
+  validateSafeSymlinkTargets(
+    instructionOperations(config, profileSelection ?? { profileNames: [], interactive: false }).map(
+      (operation) => operation.linkPath,
+    ),
+  );
 }
 
-function validateAgentConfig(config: Config, agentName?: string, harnessName?: string): void {
+function validateAgentConfig(config: Config, agentName?: string): void {
   const mappings = config.agentModelMappings;
   if (!mappings || Object.keys(mappings).length === 0) {
     throw new Error("agentModelMappings must configure at least one agent");
@@ -608,7 +918,7 @@ function validateAgentConfig(config: Config, agentName?: string, harnessName?: s
     throw new Error("runtime.canonicalAgentsDir must be configured for agents");
   }
   if (!config.runtime.agentSymlinkTargets || Object.keys(config.runtime.agentSymlinkTargets).length === 0) {
-    throw new Error("runtime.agentSymlinkTargets must configure at least one harness");
+    throw new Error("runtime.agentSymlinkTargets must configure at least one target");
   }
 
   const agentNames = selectedAgentNames(mappings, agentName);
@@ -617,31 +927,29 @@ function validateAgentConfig(config: Config, agentName?: string, harnessName?: s
     if (!existsSync(sourcePath)) {
       throw new Error(`Missing agent source for '${selectedAgentName}' at ${sourcePath}`);
     }
-    const harnesses = selectedHarnessNames(mappings[selectedAgentName], config.runtime.agentSymlinkTargets, harnessName);
-    for (const selectedHarnessName of harnesses) {
-      const mapping = mappings[selectedAgentName][selectedHarnessName];
+    const targets = selectedTargetNames(mappings[selectedAgentName], config.runtime.agentSymlinkTargets);
+    for (const selectedTargetName of targets) {
+      const mapping = mappings[selectedAgentName][selectedTargetName];
       if (!mapping?.model) {
-        throw new Error(`Agent '${selectedAgentName}' is missing a model mapping for harness '${selectedHarnessName}'`);
+        throw new Error(`Agent '${selectedAgentName}' is missing a model mapping for target '${selectedTargetName}'`);
       }
     }
   }
 }
 
-function validateInstructionConfig(config: Config, harnessName?: string): void {
-  if (!config.instructions?.paths || config.instructions.paths.length === 0) {
-    throw new Error("instructions.paths must configure at least one path");
+function validateInstructionConfig(config: Config, selection: ProfileSelection): void {
+  const instructionPaths = selectedInstructionPaths(config, selection);
+  if (instructionPaths.length === 0) {
+    throw new Error("instructions.paths or instructionProfiles must configure at least one path");
   }
   if (
     !config.runtime.instructionSymlinkTargets ||
     Object.keys(config.runtime.instructionSymlinkTargets).length === 0
   ) {
-    throw new Error("runtime.instructionSymlinkTargets must configure at least one harness");
+    throw new Error("runtime.instructionSymlinkTargets must configure at least one target");
   }
 
-  if (harnessName && !config.runtime.instructionSymlinkTargets[harnessName]) {
-    throw new Error(`Unknown instruction harness '${harnessName}'`);
-  }
-  for (const instructionPath of config.instructions.paths) {
+  for (const instructionPath of instructionPaths) {
     if (!existsSync(instructionPath)) {
       throw new Error(`Missing instruction path: ${instructionPath}`);
     }
@@ -651,11 +959,10 @@ function validateInstructionConfig(config: Config, harnessName?: string): void {
 function agentOperations(
   config: Config,
   agentName?: string,
-  harnessName?: string,
 ): Array<{
   agentName: string;
-  harnessName: string;
-  mapping: AgentHarnessConfig;
+  targetName: string;
+  mapping: AgentTargetConfig;
   sourcePath: string;
   generatedPath: string;
   linkPath: string;
@@ -665,22 +972,22 @@ function agentOperations(
   const canonicalAgentsDir = expandHome(config.runtime.canonicalAgentsDir ?? "");
   const operations: Array<{
     agentName: string;
-    harnessName: string;
-    mapping: AgentHarnessConfig;
+    targetName: string;
+    mapping: AgentTargetConfig;
     sourcePath: string;
     generatedPath: string;
     linkPath: string;
   }> = [];
 
   for (const selectedAgentName of selectedAgentNames(mappings, agentName)) {
-    for (const selectedHarnessName of selectedHarnessNames(mappings[selectedAgentName], targets, harnessName)) {
+    for (const selectedTargetName of selectedTargetNames(mappings[selectedAgentName], targets)) {
       operations.push({
         agentName: selectedAgentName,
-        harnessName: selectedHarnessName,
-        mapping: mappings[selectedAgentName][selectedHarnessName],
+        targetName: selectedTargetName,
+        mapping: mappings[selectedAgentName][selectedTargetName],
         sourcePath: join("agents", `${selectedAgentName}.md`),
-        generatedPath: join(canonicalAgentsDir, selectedHarnessName, `${selectedAgentName}.md`),
-        linkPath: join(expandHome(targets[selectedHarnessName]), `${selectedAgentName}.md`),
+        generatedPath: join(canonicalAgentsDir, selectedTargetName, `${selectedAgentName}.md`),
+        linkPath: join(expandHome(targets[selectedTargetName]), `${selectedAgentName}.md`),
       });
     }
   }
@@ -689,27 +996,58 @@ function agentOperations(
 
 function instructionOperations(
   config: Config,
-  harnessName?: string,
-): Array<{ harnessName: string; relativePath: string; sourcePath: string; linkPath: string }> {
+  selection: ProfileSelection,
+): Array<{ targetName: string; relativePath: string; sourcePath: string; linkPath: string }> {
   const targets = config.runtime.instructionSymlinkTargets ?? {};
-  const harnessNames = harnessName ? [harnessName] : Object.keys(targets).sort();
-  const operations: Array<{ harnessName: string; relativePath: string; sourcePath: string; linkPath: string }> = [];
+  const targetNames = Object.keys(targets).sort();
+  const operations: Array<{ targetName: string; relativePath: string; sourcePath: string; linkPath: string }> = [];
 
-  for (const selectedHarnessName of harnessNames) {
-    for (const instructionPath of config.instructions?.paths ?? []) {
+  for (const selectedTargetName of targetNames) {
+    for (const instructionPath of selectedInstructionPaths(config, selection)) {
       operations.push({
-        harnessName: selectedHarnessName,
+        targetName: selectedTargetName,
         relativePath: instructionPath,
         sourcePath: resolve(instructionPath),
-        linkPath: join(expandHome(targets[selectedHarnessName]), instructionPath),
+        linkPath: join(expandHome(targets[selectedTargetName]), instructionPath),
       });
     }
   }
   return operations;
 }
 
+function pruneUnselectedInstructionSymlinks(config: Config, selection: ProfileSelection): void {
+  const selectedPaths = new Set(selectedInstructionPaths(config, selection));
+  const configuredPaths = allConfiguredInstructionPaths(config);
+  const targets = config.runtime.instructionSymlinkTargets ?? {};
+
+  for (const instructionPath of configuredPaths) {
+    if (selectedPaths.has(instructionPath)) {
+      continue;
+    }
+    for (const target of Object.values(targets)) {
+      const linkPath = join(expandHome(target), instructionPath);
+      const stats = lstatIfExists(linkPath);
+      if (!stats?.isSymbolicLink()) {
+        continue;
+      }
+      rmSync(linkPath, { force: true });
+      console.log(`Pruned ${instructionPath} from ${expandHome(target)}`);
+    }
+  }
+}
+
+function allConfiguredInstructionPaths(config: Config): string[] {
+  if (config.profiles && Object.keys(config.profiles).length > 0) {
+    return uniqueNames(Object.values(config.profiles).flatMap((profile) => profile.paths));
+  }
+  if (config.instructionProfiles && Object.keys(config.instructionProfiles).length > 0) {
+    return uniqueNames(Object.values(config.instructionProfiles).flatMap((profile) => profile.paths));
+  }
+  return config.instructions?.paths ?? [];
+}
+
 function selectedAgentNames(
-  mappings: Record<string, Record<string, AgentHarnessConfig>>,
+  mappings: Record<string, Record<string, AgentTargetConfig>>,
   agentName?: string,
 ): string[] {
   if (agentName) {
@@ -721,26 +1059,16 @@ function selectedAgentNames(
   return Object.keys(mappings).sort();
 }
 
-function selectedHarnessNames(
-  mappings: Record<string, AgentHarnessConfig>,
+function selectedTargetNames(
+  mappings: Record<string, AgentTargetConfig>,
   targets: Record<string, string>,
-  harnessName?: string,
 ): string[] {
-  if (harnessName) {
-    if (!targets[harnessName]) {
-      throw new Error(`Unknown agent harness '${harnessName}'`);
-    }
-    if (!mappings[harnessName]) {
-      throw new Error(`Selected agent does not define a model mapping for harness '${harnessName}'`);
-    }
-    return [harnessName];
-  }
   return Object.keys(targets)
     .filter((targetName) => mappings[targetName])
     .sort();
 }
 
-export function renderAgent(sourcePath: string, mapping: AgentHarnessConfig): string {
+export function renderAgent(sourcePath: string, mapping: AgentTargetConfig): string {
   const source = readFileSync(sourcePath, "utf-8");
   const frontmatter = parseFrontmatter(sourcePath, source);
   let header = setFrontmatterValue(frontmatter.header, "model", mapping.model);
@@ -785,30 +1113,43 @@ function removeFrontmatterValue(header: string, key: string): string {
     .trimEnd()}\n`;
 }
 
-function expandSkillSources(config: Config, skillsetName: string): SkillSource[] {
+function expandSkillSources(config: Config, profileName: string): SkillSource[] {
   if (config.version !== 1) {
     throw new Error(`Unsupported config version: ${config.version}`);
   }
 
-  const skillset = config.skillsets[skillsetName];
-  if (!skillset) {
-    throw new Error(`Unknown skillset '${skillsetName}'`);
-  }
+  const include = profileInclude(config, profileName);
 
   const sources: SkillSource[] = [];
-  for (const blockName of skillset.include) {
+  for (const blockName of include) {
     const block = config.blocks[blockName];
     if (!block) {
-      throw new Error(`Skillset '${skillsetName}' includes unknown block '${blockName}'`);
+      throw new Error(`Profile '${profileName}' includes unknown block '${blockName}'`);
     }
     sources.push(...(block.skills ?? []));
   }
 
   if (sources.length === 0) {
-    throw new Error(`Skillset '${skillsetName}' has no skill sources`);
+    throw new Error(`Profile '${profileName}' has no skill sources`);
   }
 
   return sources;
+}
+
+function profileInclude(config: Config, profileName: string): string[] {
+  if (config.profiles && Object.keys(config.profiles).length > 0) {
+    const profile = config.profiles[profileName];
+    if (!profile) {
+      throw new Error(`Unknown profile '${profileName}'`);
+    }
+    return profile.include;
+  }
+
+  const skillset = config.skillsets?.[profileName];
+  if (!skillset) {
+    throw new Error(`Unknown profile '${profileName}'`);
+  }
+  return skillset.include;
 }
 
 function validateSource(source: SkillSource): void {
@@ -1050,11 +1391,11 @@ function collectFiles(directory: string, root = directory): string[] {
   return files;
 }
 
-function readLock(): LockFile {
-  if (!existsSync(LOCK_FILE)) {
+function readLock(lockFile: string): LockFile {
+  if (!existsSync(lockFile)) {
     return { version: 1, skillsets: {} };
   }
-  const lock = readJson<LockFile>(LOCK_FILE);
+  const lock = readJson<LockFile>(lockFile);
   if (lock.version !== 1) {
     throw new Error(`Unsupported lock version: ${lock.version}`);
   }

@@ -29,33 +29,35 @@ These rules apply to command execution, network access, and tool installation ac
 
 ## Skill Installation
 
-- Use `pnpm agent-runtime skills install` for first-time installs of all managed skillsets from this repo.
-- Use `pnpm agent-runtime skills update` to refresh all managed skillsets from their configured upstream refs.
-- Use `pnpm agent-runtime skills validate` for local, non-network validation of managed skillset configuration.
-- Use `pnpm agent-runtime skills status` to inspect installed skill copies and symlinks.
-- Add `--skillset <name>` to install, update, or validate only one managed skillset.
+- Use `pnpm agent-runtime skills install --profile <name>` for first-time installs of managed skills for a machine profile.
+- Use `pnpm agent-runtime skills update --profile <name>` to refresh managed skills from their configured upstream refs.
+- Use `pnpm agent-runtime skills validate --profile <name>` for local, non-network validation of managed skill configuration.
+- Use `pnpm agent-runtime skills status --profile <name>` to inspect installed skill copies and symlinks.
+- Add `--profile <name>` to scope skills work to one machine profile; repeat it to select multiple profiles.
+- Use either `--all-profiles` or one or more `--profile <name>` flags for non-interactive skills commands.
 - Do not manually create skill symlinks or hand-copy managed skills into runtime folders.
 - Use `npx skills` only for ad hoc external skills that are not managed by this repo, and only when explicitly needed.
 
 ## Agent Runtime Sync
 
-- Use `pnpm agent-runtime agents install` for first-time sub-agent generation and harness symlink setup.
-- Use `pnpm agent-runtime agents update` after changing agent source files or harness model mappings.
-- Use `pnpm agent-runtime agents validate` for local validation of configured agents, harnesses, and model mappings.
-- Use `pnpm agent-runtime agents status` to inspect generated agent files and harness symlinks.
-- Add `--agent <name>` or `--harness <name>` to scope agent commands.
+- Use `pnpm agent-runtime agents install` for first-time sub-agent generation and runtime symlink setup.
+- Use `pnpm agent-runtime agents update` after changing agent source files or target model mappings.
+- Use `pnpm agent-runtime agents validate` for local validation of configured agents, runtime targets, and model mappings.
+- Use `pnpm agent-runtime agents status` to inspect generated agent files and runtime symlinks.
+- Add `--agent <name>` to scope agent commands.
 - Do not manually create managed agent symlinks or hand-copy generated agent files into runtime folders.
 
 ## Instruction Runtime Sync
 
-- Use `pnpm agent-runtime instructions install` for first-time `AGENTS.md` and `rules/` symlink setup.
-- Use `pnpm agent-runtime instructions update` after changing managed instruction paths.
-- Use `pnpm agent-runtime instructions validate` for local validation of configured instruction sources and targets.
-- Use `pnpm agent-runtime instructions status` to inspect instruction symlinks.
-- Add `--harness <name>` to scope instruction commands.
+- Use `pnpm agent-runtime instructions install --profile <name>` for first-time `AGENTS.md` and managed rule-file symlink setup.
+- Use `pnpm agent-runtime instructions update --profile <name>` after changing managed instruction paths.
+- Use `pnpm agent-runtime instructions validate --profile <name>` for local validation of configured instruction sources and targets.
+- Use `pnpm agent-runtime instructions status --profile <name>` to inspect instruction symlinks.
+- Use `--profile personal` on personal machines and `--profile work` on Fullscript work machines.
+- Use `--all-profiles` only when intentionally validating or installing the union of all machine profiles.
 - Do not manually create managed instruction symlinks or hand-copy managed instruction files into runtime folders.
 
 ## Runtime Wrapper Commands
 
-- Use `pnpm agent-runtime install`, `pnpm agent-runtime update`, `pnpm agent-runtime validate`, or `pnpm agent-runtime status` to run the corresponding command across skills, agents, and instructions.
+- Use `pnpm agent-runtime install --profile <name>`, `pnpm agent-runtime update --profile <name>`, `pnpm agent-runtime validate --profile <name>`, or `pnpm agent-runtime status --profile <name>` to run the corresponding command across skills, agents, and instructions.
 - Add `--help` to the root command, wrapper commands, scoped commands, or scoped subcommands to inspect available options before running a command.
