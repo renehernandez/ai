@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import {
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   readdirSync,
@@ -14,9 +15,13 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, extname, join, relative, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { Command } from "commander";
 
-type SkillCommand = "install" | "update" | "validate";
+type Scope = "skills" | "agents" | "instructions";
+type RuntimeCommand = "install" | "update" | "validate" | "status";
+type SkillCommand = Extract<RuntimeCommand, "install" | "update" | "validate">;
 
 type RemoteSkillSource = {
   url: string;
@@ -45,9 +50,30 @@ type Config = {
   runtime: {
     canonicalSkillsDir: string;
     skillSymlinkTargets: string[];
+    canonicalAgentsDir?: string;
+    agentSymlinkTargets?: Record<string, string>;
+    instructionSymlinkTargets?: Record<string, string>;
   };
+  instructions?: {
+    paths: string[];
+  };
+  agentModelMappings?: Record<string, Record<string, AgentHarnessConfig>>;
   blocks: Record<string, BlockConfig>;
   skillsets: Record<string, SkillsetConfig>;
+};
+
+type AgentHarnessConfig = {
+  model: string;
+  reasoning?: string;
+};
+
+type ParsedArgs = {
+  scope?: Scope;
+  command: RuntimeCommand;
+  skillsetName?: string;
+  agentName?: string;
+  harnessName?: string;
+  configPath: string;
 };
 
 type LockedSkill = {
@@ -76,14 +102,218 @@ const CONFIG_FILE = "agent-runtime.config.json";
 const LOCK_FILE = "agent-runtime.lock.json";
 const CACHE_DIR = ".agent-runtime/cache";
 
-function main(): void {
-  const { command, skillsetName, configPath } = parseArgs(process.argv.slice(2));
+export function main(): void {
+  const program = createProgram();
+  if (process.argv.length <= 2) {
+    program.outputHelp();
+    return;
+  }
+  program.parse(process.argv);
+}
+
+export function executeParsedCommand(input: ParsedArgs): void {
+  const { scope, command, skillsetName, agentName, harnessName, configPath } = input;
   const config = readJson<Config>(configPath);
+
+  if (!scope) {
+    preflightWrapperCommand(command, config, agentName, harnessName);
+    runSkills(command, config, skillsetName);
+    runAgents(command, config, agentName, harnessName);
+    runInstructions(command, config, harnessName);
+    return;
+  }
+
+  runScope(scope, {
+    command,
+    config,
+    skillsetName,
+    agentName,
+    harnessName,
+  });
+}
+
+type CommandExecutor = (input: ParsedArgs) => void;
+
+export function createProgram(execute: CommandExecutor = executeParsedCommand): Command {
+  const program = new Command();
+  program
+    .name("agent-runtime")
+    .description("Manage reusable local agent runtime assets")
+    .showHelpAfterError("(add --help for additional information)")
+    .configureHelp({ sortSubcommands: true })
+    .option("--config <path>", "Path to agent runtime config", CONFIG_FILE);
+
+  for (const command of runtimeCommands()) {
+    addWrapperCommand(program, command, execute);
+  }
+
+  addSkillsCommands(program, execute);
+  addAgentsCommands(program, execute);
+  addInstructionsCommands(program, execute);
+
+  return program;
+}
+
+function addWrapperCommand(program: Command, command: RuntimeCommand, execute: CommandExecutor): void {
+  program
+    .command(command)
+    .description(`${labelForCommand(command)} all runtime surfaces`)
+    .option("--skillset <name>", "Only apply skills work to one skillset")
+    .option("--agent <name>", "Only apply agent work to one agent")
+    .option("--harness <name>", "Only apply agent and instruction work to one harness")
+    .option("--config <path>", "Path to agent runtime config", CONFIG_FILE)
+    .action((first: CommandOptions | Command, second?: Command) => {
+      const { options, commandObject } = actionContext(first, second);
+      execute({
+        command,
+        skillsetName: options.skillset,
+        agentName: options.agent,
+        harnessName: options.harness,
+        configPath: configPathFor(commandObject, options),
+      });
+    });
+}
+
+function addSkillsCommands(program: Command, execute: CommandExecutor): void {
+  const skills = program.command("skills").description("Manage skill installation and symlinks");
+  for (const command of runtimeCommands()) {
+    skills
+      .command(command)
+      .description(`${labelForCommand(command)} managed skills`)
+      .option("--skillset <name>", "Only apply the command to one skillset")
+      .option("--config <path>", "Path to agent runtime config", CONFIG_FILE)
+      .action((first: CommandOptions | Command, second?: Command) => {
+        const { options, commandObject } = actionContext(first, second);
+        execute({
+          scope: "skills",
+          command,
+          skillsetName: options.skillset,
+          configPath: configPathFor(commandObject, options),
+        });
+      });
+  }
+}
+
+function addAgentsCommands(program: Command, execute: CommandExecutor): void {
+  const agents = program.command("agents").description("Manage sub-agent generation and symlinks");
+  for (const command of runtimeCommands()) {
+    agents
+      .command(command)
+      .description(`${labelForCommand(command)} generated sub-agents`)
+      .option("--agent <name>", "Only apply the command to one agent")
+      .option("--harness <name>", "Only apply the command to one harness")
+      .option("--config <path>", "Path to agent runtime config", CONFIG_FILE)
+      .action((first: CommandOptions | Command, second?: Command) => {
+        const { options, commandObject } = actionContext(first, second);
+        execute({
+          scope: "agents",
+          command,
+          agentName: options.agent,
+          harnessName: options.harness,
+          configPath: configPathFor(commandObject, options),
+        });
+      });
+  }
+}
+
+function addInstructionsCommands(program: Command, execute: CommandExecutor): void {
+  const instructions = program.command("instructions").description("Manage AGENTS.md and rules symlinks");
+  for (const command of runtimeCommands()) {
+    instructions
+      .command(command)
+      .description(`${labelForCommand(command)} managed instructions`)
+      .option("--harness <name>", "Only apply the command to one harness")
+      .option("--config <path>", "Path to agent runtime config", CONFIG_FILE)
+      .action((first: CommandOptions | Command, second?: Command) => {
+        const { options, commandObject } = actionContext(first, second);
+        execute({
+          scope: "instructions",
+          command,
+          harnessName: options.harness,
+          configPath: configPathFor(commandObject, options),
+        });
+      });
+  }
+}
+
+type CommandOptions = {
+  config?: string;
+  skillset?: string;
+  agent?: string;
+  harness?: string;
+};
+
+function configPathFor(commandObject: Command, options: CommandOptions): string {
+  if (commandObject.getOptionValueSource("config") && commandObject.getOptionValueSource("config") !== "default") {
+    return options.config ?? CONFIG_FILE;
+  }
+  return commandObject.optsWithGlobals<CommandOptions>().config ?? options.config ?? CONFIG_FILE;
+}
+
+function actionContext(first: CommandOptions | Command, second?: Command): { options: CommandOptions; commandObject: Command } {
+  if (first instanceof Command) {
+    return {
+      options: first.opts<CommandOptions>(),
+      commandObject: first,
+    };
+  }
+  if (!second) {
+    throw new Error("Missing Commander command context");
+  }
+  return {
+    options: first,
+    commandObject: second,
+  };
+}
+
+function runtimeCommands(): RuntimeCommand[] {
+  return ["install", "update", "validate", "status"];
+}
+
+function labelForCommand(command: RuntimeCommand): string {
+  return command[0].toUpperCase() + command.slice(1);
+}
+
+function runScope(
+  scope: Scope,
+  input: {
+    command: RuntimeCommand;
+    config: Config;
+    skillsetName?: string;
+    agentName?: string;
+    harnessName?: string;
+  },
+): void {
+  if (scope === "skills") {
+    if (input.agentName) {
+      throw new Error("--agent can only be used with the agents scope");
+    }
+    runSkills(input.command, input.config, input.skillsetName);
+    return;
+  }
+  if (input.skillsetName) {
+    throw new Error("--skillset can only be used with the skills scope");
+  }
+  if (scope === "agents") {
+    runAgents(input.command, input.config, input.agentName, input.harnessName);
+    return;
+  }
+  if (input.agentName) {
+    throw new Error("--agent can only be used with the agents scope");
+  }
+  runInstructions(input.command, input.config, input.harnessName);
+}
+
+function runSkills(command: RuntimeCommand, config: Config, skillsetName?: string): void {
   const skillsetNames = skillsetName ? [skillsetName] : Object.keys(config.skillsets).sort();
 
   if (command === "validate") {
-    validateConfig(config, skillsetNames);
+    validateSkillConfig(config, skillsetNames);
     validateLockIfPresent();
+    return;
+  }
+  if (command === "status") {
+    statusSkills(config, skillsetNames);
     return;
   }
 
@@ -237,54 +467,7 @@ function installLocalSkill(input: {
   };
 }
 
-function parseArgs(args: string[]): {
-  command: SkillCommand;
-  skillsetName?: string;
-  configPath: string;
-} {
-  const [scope, command] = args;
-  let skillsetName: string | undefined;
-  let configPath = CONFIG_FILE;
-
-  if (
-    scope !== "skills" ||
-    (command !== "install" && command !== "update" && command !== "validate")
-  ) {
-    throw new Error(
-      "Usage: pnpm agent-runtime skills <install|update|validate> [--skillset name] [--config path]",
-    );
-  }
-
-  for (let index = 2; index < args.length; index += 1) {
-    const arg = args[index];
-    if (arg === "--skillset") {
-      const value = args[index + 1];
-      if (!value) {
-        throw new Error("--skillset requires a name");
-      }
-      if (skillsetName) {
-        throw new Error("--skillset can only be provided once");
-      }
-      skillsetName = value;
-      index += 1;
-      continue;
-    }
-    if (arg === "--config") {
-      const value = args[index + 1];
-      if (!value) {
-        throw new Error("--config requires a path");
-      }
-      configPath = value;
-      index += 1;
-      continue;
-    }
-    throw new Error(`Unknown argument: ${arg}`);
-  }
-
-  return { command, skillsetName, configPath };
-}
-
-function validateConfig(config: Config, skillsetNames: string[]): void {
+function validateSkillConfig(config: Config, skillsetNames: string[]): void {
   if (config.version !== 1) {
     throw new Error(`Unsupported config version: ${config.version}`);
   }
@@ -324,6 +507,282 @@ function validateLockIfPresent(): void {
     return;
   }
   readLock();
+}
+
+function statusSkills(config: Config, skillsetNames: string[]): void {
+  validateSkillConfig(config, skillsetNames);
+  const canonicalSkillsDir = expandHome(config.runtime.canonicalSkillsDir);
+  const symlinkTargets = resolveSkillSymlinkTargets(
+    canonicalSkillsDir,
+    config.runtime.skillSymlinkTargets.map(expandHome),
+  );
+
+  for (const skillsetName of skillsetNames) {
+    const sources = expandSkillSources(config, skillsetName);
+    console.log(`Skillset ${skillsetName}`);
+    for (const source of sources) {
+      for (const skillName of source.names) {
+        const canonicalPath = join(canonicalSkillsDir, skillName);
+        printPathStatus(`  ${skillName}`, canonicalPath);
+        for (const target of symlinkTargets) {
+          printSymlinkStatus(`    ${join(target, skillName)}`, join(target, skillName), canonicalPath);
+        }
+      }
+    }
+  }
+}
+
+function runAgents(command: RuntimeCommand, config: Config, agentName?: string, harnessName?: string): void {
+  validateAgentConfig(config, agentName, harnessName);
+  if (command === "validate") {
+    console.log("Validated agent configuration.");
+    return;
+  }
+
+  const operations = agentOperations(config, agentName, harnessName);
+  if (command === "status") {
+    for (const operation of operations) {
+      const rendered = renderAgent(operation.sourcePath, operation.mapping);
+      console.log(`Agent ${operation.agentName} (${operation.harnessName})`);
+      printGeneratedStatus(`  generated`, operation.generatedPath, rendered);
+      printSymlinkStatus(`  ${operation.linkPath}`, operation.linkPath, operation.generatedPath);
+    }
+    return;
+  }
+
+  validateSafeSymlinkTargets(operations.map((operation) => operation.linkPath));
+  for (const operation of operations) {
+    const rendered = renderAgent(operation.sourcePath, operation.mapping);
+    mkdirSync(dirname(operation.generatedPath), { recursive: true });
+    writeFileSync(operation.generatedPath, rendered, "utf-8");
+    replaceSafeSymlink(operation.generatedPath, operation.linkPath);
+    console.log(`${command === "install" ? "Installed" : "Updated"} ${operation.agentName} for ${operation.harnessName}`);
+  }
+}
+
+function runInstructions(command: RuntimeCommand, config: Config, harnessName?: string): void {
+  validateInstructionConfig(config, harnessName);
+  if (command === "validate") {
+    console.log("Validated instruction configuration.");
+    return;
+  }
+
+  const operations = instructionOperations(config, harnessName);
+  if (command === "status") {
+    for (const operation of operations) {
+      console.log(`Instruction ${operation.relativePath} (${operation.harnessName})`);
+      printPathStatus(`  source`, operation.sourcePath);
+      printSymlinkStatus(`  ${operation.linkPath}`, operation.linkPath, operation.sourcePath);
+    }
+    return;
+  }
+
+  validateSafeSymlinkTargets(operations.map((operation) => operation.linkPath));
+  for (const operation of operations) {
+    replaceSafeSymlink(operation.sourcePath, operation.linkPath);
+    console.log(`${command === "install" ? "Installed" : "Updated"} ${operation.relativePath} for ${operation.harnessName}`);
+  }
+}
+
+function preflightWrapperCommand(
+  command: RuntimeCommand,
+  config: Config,
+  agentName?: string,
+  harnessName?: string,
+): void {
+  if (command !== "install" && command !== "update") {
+    return;
+  }
+  validateAgentConfig(config, agentName, harnessName);
+  validateInstructionConfig(config, harnessName);
+  validateSafeSymlinkTargets(agentOperations(config, agentName, harnessName).map((operation) => operation.linkPath));
+  validateSafeSymlinkTargets(instructionOperations(config, harnessName).map((operation) => operation.linkPath));
+}
+
+function validateAgentConfig(config: Config, agentName?: string, harnessName?: string): void {
+  const mappings = config.agentModelMappings;
+  if (!mappings || Object.keys(mappings).length === 0) {
+    throw new Error("agentModelMappings must configure at least one agent");
+  }
+  if (!config.runtime.canonicalAgentsDir) {
+    throw new Error("runtime.canonicalAgentsDir must be configured for agents");
+  }
+  if (!config.runtime.agentSymlinkTargets || Object.keys(config.runtime.agentSymlinkTargets).length === 0) {
+    throw new Error("runtime.agentSymlinkTargets must configure at least one harness");
+  }
+
+  const agentNames = selectedAgentNames(mappings, agentName);
+  for (const selectedAgentName of agentNames) {
+    const sourcePath = join("agents", `${selectedAgentName}.md`);
+    if (!existsSync(sourcePath)) {
+      throw new Error(`Missing agent source for '${selectedAgentName}' at ${sourcePath}`);
+    }
+    const harnesses = selectedHarnessNames(mappings[selectedAgentName], config.runtime.agentSymlinkTargets, harnessName);
+    for (const selectedHarnessName of harnesses) {
+      const mapping = mappings[selectedAgentName][selectedHarnessName];
+      if (!mapping?.model) {
+        throw new Error(`Agent '${selectedAgentName}' is missing a model mapping for harness '${selectedHarnessName}'`);
+      }
+    }
+  }
+}
+
+function validateInstructionConfig(config: Config, harnessName?: string): void {
+  if (!config.instructions?.paths || config.instructions.paths.length === 0) {
+    throw new Error("instructions.paths must configure at least one path");
+  }
+  if (
+    !config.runtime.instructionSymlinkTargets ||
+    Object.keys(config.runtime.instructionSymlinkTargets).length === 0
+  ) {
+    throw new Error("runtime.instructionSymlinkTargets must configure at least one harness");
+  }
+
+  if (harnessName && !config.runtime.instructionSymlinkTargets[harnessName]) {
+    throw new Error(`Unknown instruction harness '${harnessName}'`);
+  }
+  for (const instructionPath of config.instructions.paths) {
+    if (!existsSync(instructionPath)) {
+      throw new Error(`Missing instruction path: ${instructionPath}`);
+    }
+  }
+}
+
+function agentOperations(
+  config: Config,
+  agentName?: string,
+  harnessName?: string,
+): Array<{
+  agentName: string;
+  harnessName: string;
+  mapping: AgentHarnessConfig;
+  sourcePath: string;
+  generatedPath: string;
+  linkPath: string;
+}> {
+  const mappings = config.agentModelMappings ?? {};
+  const targets = config.runtime.agentSymlinkTargets ?? {};
+  const canonicalAgentsDir = expandHome(config.runtime.canonicalAgentsDir ?? "");
+  const operations: Array<{
+    agentName: string;
+    harnessName: string;
+    mapping: AgentHarnessConfig;
+    sourcePath: string;
+    generatedPath: string;
+    linkPath: string;
+  }> = [];
+
+  for (const selectedAgentName of selectedAgentNames(mappings, agentName)) {
+    for (const selectedHarnessName of selectedHarnessNames(mappings[selectedAgentName], targets, harnessName)) {
+      operations.push({
+        agentName: selectedAgentName,
+        harnessName: selectedHarnessName,
+        mapping: mappings[selectedAgentName][selectedHarnessName],
+        sourcePath: join("agents", `${selectedAgentName}.md`),
+        generatedPath: join(canonicalAgentsDir, selectedHarnessName, `${selectedAgentName}.md`),
+        linkPath: join(expandHome(targets[selectedHarnessName]), `${selectedAgentName}.md`),
+      });
+    }
+  }
+  return operations;
+}
+
+function instructionOperations(
+  config: Config,
+  harnessName?: string,
+): Array<{ harnessName: string; relativePath: string; sourcePath: string; linkPath: string }> {
+  const targets = config.runtime.instructionSymlinkTargets ?? {};
+  const harnessNames = harnessName ? [harnessName] : Object.keys(targets).sort();
+  const operations: Array<{ harnessName: string; relativePath: string; sourcePath: string; linkPath: string }> = [];
+
+  for (const selectedHarnessName of harnessNames) {
+    for (const instructionPath of config.instructions?.paths ?? []) {
+      operations.push({
+        harnessName: selectedHarnessName,
+        relativePath: instructionPath,
+        sourcePath: resolve(instructionPath),
+        linkPath: join(expandHome(targets[selectedHarnessName]), instructionPath),
+      });
+    }
+  }
+  return operations;
+}
+
+function selectedAgentNames(
+  mappings: Record<string, Record<string, AgentHarnessConfig>>,
+  agentName?: string,
+): string[] {
+  if (agentName) {
+    if (!mappings[agentName]) {
+      throw new Error(`Unknown agent '${agentName}'`);
+    }
+    return [agentName];
+  }
+  return Object.keys(mappings).sort();
+}
+
+function selectedHarnessNames(
+  mappings: Record<string, AgentHarnessConfig>,
+  targets: Record<string, string>,
+  harnessName?: string,
+): string[] {
+  if (harnessName) {
+    if (!targets[harnessName]) {
+      throw new Error(`Unknown agent harness '${harnessName}'`);
+    }
+    if (!mappings[harnessName]) {
+      throw new Error(`Selected agent does not define a model mapping for harness '${harnessName}'`);
+    }
+    return [harnessName];
+  }
+  return Object.keys(targets)
+    .filter((targetName) => mappings[targetName])
+    .sort();
+}
+
+export function renderAgent(sourcePath: string, mapping: AgentHarnessConfig): string {
+  const source = readFileSync(sourcePath, "utf-8");
+  const frontmatter = parseFrontmatter(sourcePath, source);
+  let header = setFrontmatterValue(frontmatter.header, "model", mapping.model);
+  if (mapping.reasoning) {
+    header = setFrontmatterValue(header, "reasoning", mapping.reasoning);
+  } else {
+    header = removeFrontmatterValue(header, "reasoning");
+  }
+  return `---\n${header.trimEnd()}\n---\n${frontmatter.body}`;
+}
+
+function parseFrontmatter(path: string, content: string): { header: string; body: string } {
+  if (!content.startsWith("---\n")) {
+    throw new Error(`Agent source is missing frontmatter: ${path}`);
+  }
+  const endIndex = content.indexOf("\n---\n", 4);
+  if (endIndex === -1) {
+    throw new Error(`Agent source has unterminated frontmatter: ${path}`);
+  }
+  return {
+    header: content.slice(4, endIndex),
+    body: content.slice(endIndex + "\n---\n".length),
+  };
+}
+
+function setFrontmatterValue(header: string, key: string, value: string): string {
+  const lines = header.split("\n");
+  const index = lines.findIndex((line) => line.startsWith(`${key}:`));
+  const newLine = `${key}: ${value}`;
+  if (index === -1) {
+    return `${header.trimEnd()}\n${newLine}\n`;
+  }
+  lines[index] = newLine;
+  return `${lines.join("\n").trimEnd()}\n`;
+}
+
+function removeFrontmatterValue(header: string, key: string): string {
+  return `${header
+    .split("\n")
+    .filter((line) => !line.startsWith(`${key}:`))
+    .join("\n")
+    .trimEnd()}\n`;
 }
 
 function expandSkillSources(config: Config, skillsetName: string): SkillSource[] {
@@ -469,6 +928,77 @@ function replaceSymlink(target: string, linkPath: string): void {
   symlinkSync(target, linkPath, "dir");
 }
 
+export function replaceSafeSymlink(target: string, linkPath: string): void {
+  const stats = lstatIfExists(linkPath);
+  if (stats) {
+    if (!stats.isSymbolicLink()) {
+      throw new Error(`Refusing to replace non-symlink target: ${linkPath}`);
+    }
+    rmSync(linkPath, { force: true });
+  }
+  mkdirSync(dirname(linkPath), { recursive: true });
+  symlinkSync(target, linkPath, symlinkType(target));
+}
+
+function symlinkType(target: string): "dir" | "file" {
+  if (existsSync(target) && lstatSync(target).isDirectory()) {
+    return "dir";
+  }
+  return extname(target) ? "file" : "dir";
+}
+
+function printPathStatus(label: string, path: string): void {
+  console.log(`${pathExists(path) ? "[ok]" : "[missing]"} ${label}: ${path}`);
+}
+
+function printGeneratedStatus(label: string, path: string, expectedContent: string): void {
+  if (!existsSync(path)) {
+    console.log(`[missing] ${label}: ${path}`);
+    return;
+  }
+  const actualContent = readFileSync(path, "utf-8");
+  console.log(`${actualContent === expectedContent ? "[ok]" : "[stale]"} ${label}: ${path}`);
+}
+
+function printSymlinkStatus(label: string, linkPath: string, expectedTarget: string): void {
+  const stats = lstatIfExists(linkPath);
+  if (!stats) {
+    console.log(`[missing] ${label}`);
+    return;
+  }
+  if (!stats.isSymbolicLink()) {
+    console.log(`[not-symlink] ${label}`);
+    return;
+  }
+  const linkRealPath = realPathIfExists(linkPath);
+  const expectedRealPath = realPathIfExists(expectedTarget);
+  console.log(`${linkRealPath === expectedRealPath ? "[ok]" : "[wrong-target]"} ${label}`);
+}
+
+function pathExists(path: string): boolean {
+  return existsSync(path);
+}
+
+export function validateSafeSymlinkTargets(linkPaths: string[]): void {
+  for (const linkPath of linkPaths) {
+    const stats = lstatIfExists(linkPath);
+    if (stats && !stats.isSymbolicLink()) {
+      throw new Error(`Refusing to replace non-symlink target: ${linkPath}`);
+    }
+  }
+}
+
+export function lstatIfExists(path: string): ReturnType<typeof lstatSync> | undefined {
+  try {
+    return lstatSync(path);
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
 function resolveSkillSymlinkTargets(canonicalSkillsDir: string, targets: string[]): string[] {
   const canonicalRealPath = realPathIfExists(canonicalSkillsDir);
   const usableTargets: string[] = [];
@@ -568,9 +1098,11 @@ function run(command: string, args: string[]): string {
   return result.stdout;
 }
 
-try {
-  main();
-} catch (error) {
-  console.error(error instanceof Error ? error.message : error);
-  process.exit(1);
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  try {
+    main();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+  }
 }

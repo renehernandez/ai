@@ -5,6 +5,23 @@
     "skillSymlinkTargets": [
       "~/.codex/skills",
       "~/.claude/skills"
+    ],
+    "canonicalAgentsDir": "~/.agents/agents",
+    "agentSymlinkTargets": {
+      "codex": "~/.codex/agents",
+      "claude": "~/.claude/agents",
+      "opencode": "~/.config/opencode/agents"
+    },
+    "instructionSymlinkTargets": {
+      "agents": "~/.agents",
+      "codex": "~/.codex",
+      "claude": "~/.claude"
+    }
+  },
+  "instructions": {
+    "paths": [
+      "AGENTS.md",
+      "rules"
     ]
   },
   "agentModelMappings": {
