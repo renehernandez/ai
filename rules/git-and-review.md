@@ -36,7 +36,8 @@ These rules cover Git, GitHub, GitLab, Linear, review routing, and external comm
 - Never use `--no-verify` when committing.
 - If a commit fails due to pre-commit hooks, fix branch-caused failures and retry; ask the user how to proceed only when the failure is unrelated, external, or requires a product decision.
 - Always ask before committing or pushing to default branches such as `main` or `master`.
-- In this `ai` agent-runtime repo, user requests to commit and push completed work are approval to commit on `main` and push `main` directly. Do not create feature branches, hosted review branches, PRs, or MRs for this repo unless the user explicitly asks.
+- In this `ai` agent-runtime repo, user requests to commit and push completed work are approval to commit on `main` and push `main` to the `github` remote. Do not create feature branches, hosted review branches, PRs, or MRs for this repo unless the user explicitly asks.
+- For this repo, GitHub is the primary `main` publishing remote and GitLab mirrors from GitHub. Do not push `main` directly to the GitLab `origin` remote unless the user explicitly asks or the mirror is broken.
 - For feature work, follow [feature-delivery.md](feature-delivery.md): run the pre-commit quality gate, commit the feature branch, push it, create or update the artifact-host PR/MR, monitor CI, and fix branch-caused failures.
 - Never include `Co-Authored-By: Claude` or similar co-author attribution lines in MR or PR descriptions.
 
