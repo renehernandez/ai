@@ -9,6 +9,8 @@ Split the current `plan-to-pr` workflow into two focused skills:
 
 The split should make the implementation workflow more deterministic by moving brainstorming and plan hardening out of `plan-to-pr`.
 
+Follow-up lane: `plan-to-review` now covers publishing a reviewed plan or OpenSpec change as a planning-only PR/MR for Nitro, Codex, and developer feedback before implementation. It consumes a `plan_review_request` or `plan_ready_handoff`, requires a planning-only diff, waits for routed automated feedback, and stops before coding.
+
 ## Motivation
 
 The current `plan-to-pr` skill covers both exploratory planning and delivery. That makes it too easy for an agent to blur phases, skip review gates, keep brainstorming during implementation, or finish early after PR creation or review request.

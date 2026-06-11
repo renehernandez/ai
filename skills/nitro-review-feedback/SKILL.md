@@ -12,7 +12,7 @@ Collect Nitro feedback from Fullscript GitLab MRs and normalize it for `pull-req
 
 - `review-feedback-routing` selects reviewer `nitro`.
 - A Fullscript GitLab MR expects automatic Nitro feedback.
-- `plan-to-pr` needs to wait for Nitro before treating review feedback as complete.
+- `plan-to-pr` or `plan-to-review` needs to wait for Nitro before treating review feedback as complete.
 
 ## Workflow
 

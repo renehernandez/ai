@@ -12,7 +12,7 @@ Use GitHub as the artifact-host adapter, then apply `pull-request-review` to the
 
 - The user asks to review a GitHub pull request or PR URL.
 - The current branch has an open GitHub PR.
-- `plan-to-pr` detects a GitHub remote and needs the hosted review gate.
+- `plan-to-pr` or `plan-to-review` detects a GitHub remote and needs the hosted review gate.
 - The user asks to inspect GitHub reviews, comments, or Actions checks for a PR.
 
 Use `pull-request-review` directly for local-only diffs. Use GitLab review for GitLab MRs.
@@ -93,7 +93,7 @@ Use `pull-request-review` directly for local-only diffs. Use GitLab review for G
 
 ## Output Contract
 
-Return this shape so `plan-to-pr` can consume the gate consistently:
+Return this shape so `plan-to-pr` or `plan-to-review` can consume the gate consistently:
 
 ```markdown
 Artifact host: GitHub

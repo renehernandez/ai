@@ -1,0 +1,4 @@
+interface:
+  display_name: "Plan To Review"
+  short_description: "Publish a plan for hosted review before implementation"
+  default_prompt: "Use $plan-to-review with this plan or OpenSpec artifact: <artifact>. Validate the plan review request, inspect live repo and routing state, ensure the diff is planning-only, run artifact validation, run $review-feedback-routing, open or update the routed draft PR/MR for Nitro/Codex and developer feedback, wait for routed latest-head automated feedback, apply only plan/documentation feedback, do not start implementation, and include the validated final plan review gate ledger."

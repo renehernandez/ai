@@ -12,7 +12,7 @@ Request and collect Codex review feedback from GitHub PRs, then normalize it for
 
 - `review-feedback-routing` selects reviewer `codex`.
 - A GitHub PR needs explicit Codex review feedback.
-- `plan-to-pr` must wait for Codex feedback on the latest PR head.
+- `plan-to-pr` or `plan-to-review` must wait for Codex feedback on the latest PR head.
 
 ## Workflow
 

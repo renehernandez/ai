@@ -12,7 +12,7 @@ Use GitLab as the artifact-host adapter, then apply `pull-request-review` to the
 
 - The user asks to review a GitLab merge request or MR URL.
 - The current branch has an open GitLab MR.
-- `plan-to-pr` detects a GitLab remote and needs the hosted review gate.
+- `plan-to-pr` or `plan-to-review` detects a GitLab remote and needs the hosted review gate.
 - The user says `glab-review`; treat that as the legacy name for this skill.
 
 Use `pull-request-review` directly for local-only diffs. Use GitHub review for GitHub PRs.
@@ -92,7 +92,7 @@ Use `pull-request-review` directly for local-only diffs. Use GitHub review for G
 
 ## Output Contract
 
-Return this shape so `plan-to-pr` can consume the gate consistently:
+Return this shape so `plan-to-pr` or `plan-to-review` can consume the gate consistently:
 
 ```markdown
 artifact_host: GitLab
