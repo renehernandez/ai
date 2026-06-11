@@ -106,9 +106,9 @@ Foundation work may appear in the first issue only when directly needed for that
 
 Use outcome-centered titles:
 
-- Good: `Prove self-repo operational verification through initial CI`
-- Good: `Make self-repo operational verification a required gate`
-- Avoid: `Add operational verification package`
+- Good: `Prove refund status sync through the real webhook path`
+- Good: `Make failed import retries visible to operators`
+- Avoid: `Add webhook adapter package`
 - Avoid: `Create adapter registry`
 
 Issue template:
@@ -131,7 +131,49 @@ Issue template:
 ## References
 ```
 
-For hardening tickets, `Outcome Slice` should still name the operational value, such as "Failures are bounded and diagnosable under real GitLab API behavior."
+For hardening tickets, `Outcome Slice` should still name the operational value, such as "Failures are bounded and diagnosable under real provider API behavior."
+
+## Evidence Contracts
+
+For any issue that claims hosted, CI, deploy, integration, webhook, agent, automation, migration, data-sync, or external-system behavior, include the evidence that proves the claimed behavior happened.
+
+A green generic pipeline, passing local test suite, merged config file, or implemented code path is not proof of a claimed external behavior unless that is the actual outcome slice.
+
+Add this section when the issue needs proof beyond code existence:
+
+```markdown
+## Proof Required Before MR Ready
+
+The implementation MR is not ready until it includes direct evidence that this issue's claimed behavior ran in the target environment or system.
+
+Required proof:
+
+- Parent MR, deploy, pipeline, workflow, job, or run link.
+- Specific job, child pipeline, environment, external-system event, webhook delivery, automation run, data change, or generated artifact that proves the new path executed.
+- Evidence artifact, summary note, log excerpt, dashboard/query link, external-system link, or before/after state showing the expected result.
+- Explicit pass/fail result for the outcome slice.
+- If the path is absent, skipped, disabled by rules/config/env, or only present in code/config, the issue is incomplete.
+```
+
+Keep the proof contract proportional. A narrow UI copy issue does not need a hosted evidence bundle. A ticket that says "runs in CI," "posts to another system," "syncs data," "blocks release," "migrates records," or "verifies an integration" needs concrete proof.
+
+## Activation And Identity Contracts
+
+When a slice depends on runtime activation, name the activation condition explicitly:
+
+- feature flag, environment variable, CI rule, cron, queue, webhook, deploy target, migration gate, or third-party config
+- whether the path may be advisory/non-blocking
+- what counts as incomplete if the path is disabled, skipped, or absent
+
+When a slice crosses systems, name identifier representations that must match across producer, transport, consumer, tests, and proof evidence:
+
+- path vs numeric ID
+- public key vs internal database ID
+- MR/PR number vs database ID
+- tenant/account/user identifier
+- run ID, nonce, scenario ID, batch ID, migration version, or deployed SHA
+
+If the breakdown cannot name the activation condition or cross-boundary identity contract, either add a discovery ticket before the implementation slice or narrow the first issue until the contract is knowable.
 
 ## Milestones
 
@@ -171,6 +213,9 @@ Before showing the final preview, check:
 - Are hardening and expansion separated from the first proof?
 - Are milestones suggested only when useful?
 - Does every issue include acceptance criteria and verification?
+- Does every issue claiming hosted/system behavior include direct proof required before MR ready?
+- Are activation conditions named, including what happens if the path is disabled or skipped?
+- Are cross-boundary identifiers represented consistently across producer, consumer, tests, and evidence?
 - Are future integrations shaping names without bloating v1?
 
 If the first 1-2 issues do not produce a real outcome, rewrite the breakdown.
@@ -208,6 +253,9 @@ Start with the real outcome ticket, then place only the minimum foundation insid
 | Packing all security hardening into the first ticket | Keep minimum meaningful trust in the first proof; harden later |
 | Creating tickets for future Slack/Linear/etc. integrations too early | Capture deferred work or a tracking note unless the milestone includes them |
 | Treating milestones as mandatory | Suggest only when the work forms a coherent arc |
+| Treating generic green CI as proof for hosted/system behavior | Require evidence that the specific claimed path ran and produced the expected result |
+| Letting disabled flags, rules, or env hide the path | State whether disabled/skipped/absent means incomplete or blocked |
+| Leaving cross-system identifiers implicit | Name the canonical identifier representation in the ticket |
 
 ## Test Evidence
 
