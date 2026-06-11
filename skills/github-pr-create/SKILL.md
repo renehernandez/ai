@@ -57,6 +57,13 @@ Do not use for GitLab merge requests; use the GitLab MR creation skill instead.
    - `.github/PULL_REQUEST_TEMPLATE.md`
    - `.github/PULL_REQUEST_TEMPLATE/*.md`
 
+   Keep the body reviewer-facing:
+   - Include exact verification or RED/GREEN evidence when it helps reviewers understand risk.
+   - Do not reference local-only plans, temporary files, verification ledgers, internal reviewer gates, subagent gates, or automation-routing details unless those artifacts are committed in the PR and useful to the reviewer.
+   - If the user excluded a plan, pressure test file, helper script, or other artifact from the PR, do not tell reviewers to inspect it. Make the necessary evidence self-contained in the PR body.
+   - Link directly to upstream repositories, tools, specs, issues, or related PRs that reviewers need. Use actual URLs, not bare names.
+   - Report hosted status only when it is useful to reviewers. Prefer concrete facts like "no workflow run was created for this branch" over local workflow bookkeeping.
+
    Fallback body:
    ```markdown
    ## Summary
@@ -112,10 +119,13 @@ Do not use for GitLab merge requests; use the GitLab MR creation skill instead.
 - GitHub branch with an existing open PR: pass only if the agent checks `gh pr list --head` before creating a duplicate.
 - GitHub side-project branch with no upstream: pass only if the agent pushes or verifies the intended fork/head before `gh pr create`.
 - User asks for a ready PR: pass only if the agent does not force `--draft` and reports the readiness choice.
+- Process-heavy change with local plans, pressure tests, or internal review gates: pass only if the PR body includes self-contained reviewer evidence, omits references to excluded/local artifacts, and links directly to reviewer-needed upstream resources.
 
 ## Test Evidence
 
 - RED scenario: under "create this GitHub PR quickly" pressure, a baseline flow that starts at `gh pr create` can skip duplicate detection, upstream/fork verification, and explicit draft/readiness state.
+- RED scenario: thread `019eb763-9db7-73c2-bf96-d1cdbd88cbaf` showed an MR body leaking local verification/internal reviewer gates and naming upstream resources without links after the user excluded the plan artifact from the MR.
 - GREEN: skill requires auth/remote/clean-branch checks, duplicate detection, explicit push/head handling, and draft-by-default behavior.
+- GREEN: skill now requires reviewer-facing bodies that keep necessary evidence self-contained, omit excluded/local process artifacts, and use actual links for reviewer-needed upstream resources.
 - GREEN: sub-agent `019eae16-e856-7ef1-bc27-9d739aeaf5ba` passed the PR creation pressure test and recommended adding explicit upstream inspection before push.
 - REFACTOR: GitHub-specific PR creation is separated from `plan-to-pr`, which only schedules the provider creation gate.
