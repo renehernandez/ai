@@ -2,7 +2,7 @@
   "version": 1,
   "skillsets": {
     "personal": {
-      "updatedAt": "2026-06-11T11:37:29.936Z",
+      "updatedAt": "2026-06-11T15:43:21.036Z",
       "skills": {
         "agents-sdk": {
           "sourceType": "git",
@@ -16,7 +16,7 @@
         "brainstorming": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/brainstorming",
           "contentHash": "45c1229e2447b1c4e5565dfa5c4f212605a94fdf02485547069bef32a6f5adec"
         },
@@ -32,49 +32,49 @@
         "code-quality-review": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/code-quality-review",
           "contentHash": "e0c0d88a9c50a3567cfae05488a98685cc68c5fdf97059520cc7ff0e07a67e06"
         },
         "code-simplifier": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/code-simplifier",
           "contentHash": "4e250b4460f6cd0e2a3b6f7ae79e6dddc39b5eb5b194d7b18fa15c7d98140014"
         },
         "codex-review-feedback": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/codex-review-feedback",
           "contentHash": "520103cc086654a67a87c7b0631895e5d7e0786572e3b4d2cf2a4a21cac7e710"
         },
         "compound": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/compound",
           "contentHash": "5d0396addbdc432e40bacae859e2c840271615aa2ea0a8f0b8a330cd024e8d70"
         },
         "deslop": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/deslop",
           "contentHash": "2eee3ba284c1f31f0cf5160c535afabc41d0f60c56cd01c7d62a9e57d32feebd"
         },
         "doc-smith": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/doc-smith",
           "contentHash": "5e030dc056fb645b3a616ce41989303eee1ad7158acb71005f71304972ac2fc5"
         },
         "docs-alignment-review": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/docs-alignment-review",
           "contentHash": "ff77ebb482744b9aea35c76d8fbf3e469e286a8dbfe1d7fe1df6fe7e0728899b"
         },
@@ -90,91 +90,91 @@
         "github-pr-create": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/github-pr-create",
           "contentHash": "e94066800278b9f4ba90a97efb6f874fa7f1ce29b367466ebfcb73c42047ad56"
         },
         "github-review": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/github-review",
           "contentHash": "85727a13feb98720addd822c8b3f70bab0e5317a2341e5e1874639d8594db6fd"
         },
         "gitlab-review": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/gitlab-review",
           "contentHash": "975d2904f34369dfd82c3187a352f4f0cc15bbb63698b52d0fb9d349aebb1d93"
         },
         "handoff-brief": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/handoff-brief",
           "contentHash": "a4450c721c039e6588bfb3d37ad73758da707b15a2e0ea59da4d09883e981b01"
         },
         "linear-breakdown": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/linear-breakdown",
-          "contentHash": "f092c6eee5b42e54e53198e05ed360ac80b9fc5446f4a46013693a1de1ad09f2"
+          "contentHash": "f88e0520643f46419ea3e2940c530c27eff84c3900eb32b5549eb780ee406004"
         },
         "merge-followthrough": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/merge-followthrough",
           "contentHash": "c9f659b89630426b8355cb71d237e95d1e7ff364677a6dcb08e0d3059c94a2b9"
         },
         "nitro-review-feedback": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/nitro-review-feedback",
           "contentHash": "ac31da1534400607d64ed49267eafae02930100817f0574bcdf40926efedf824"
         },
         "plan-ready": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/plan-ready",
           "contentHash": "b5c10039cdbd780b805b0bba64fdcc61c70f8715819fd12d65e98569f683a065"
         },
         "plan-to-pr": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/plan-to-pr",
           "contentHash": "e8a105c30246997d34f9c7353701e8cf18c094601ff7ab1b29201dc9f429ea9e"
         },
         "plan-to-review": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/plan-to-review",
           "contentHash": "27fac31a20f8ec49411f3de2b2344e79fbba78a96c636c0aae5ae5c544a7be2a"
         },
         "project-health-brief": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/project-health-brief",
           "contentHash": "52e35bde8ca658fac35ebd3791916ecd46e042f74b32da929663700401c06881"
         },
         "pull-request-review": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/pull-request-review",
           "contentHash": "855b56a65f477cf5a933d738116a63e8c4f686e44d1a12fb6e8b84084bfe3306"
         },
         "review-feedback-routing": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/review-feedback-routing",
           "contentHash": "e60ae108c04f8f862c78015bf315f5dd7b81141e3f6702583f43494a0e91690c"
         },
@@ -190,14 +190,14 @@
         "scrutinize": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/scrutinize",
           "contentHash": "3b6ae7ae47cc074eadb7e7ba4ac1b9c8c4cc42f807618cecad32a6438f76a49a"
         },
         "session-start": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/session-start",
           "contentHash": "4f4df0fad899b4e2d1ff625adc924ee164c8043e39a2c326825a074485412aff"
         },
@@ -231,14 +231,14 @@
         "writing-skills": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/writing-skills",
           "contentHash": "cd5c1239b8f59d451e4990e03af5269cbb373852578a621eaa59f146f49f27a0"
         }
       }
     },
     "work": {
-      "updatedAt": "2026-06-11T11:37:29.936Z",
+      "updatedAt": "2026-06-11T15:43:21.036Z",
       "skills": {
         "agents-sdk": {
           "sourceType": "git",
@@ -252,7 +252,7 @@
         "brainstorming": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/brainstorming",
           "contentHash": "45c1229e2447b1c4e5565dfa5c4f212605a94fdf02485547069bef32a6f5adec"
         },
@@ -268,49 +268,49 @@
         "code-quality-review": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/code-quality-review",
           "contentHash": "e0c0d88a9c50a3567cfae05488a98685cc68c5fdf97059520cc7ff0e07a67e06"
         },
         "code-simplifier": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/code-simplifier",
           "contentHash": "4e250b4460f6cd0e2a3b6f7ae79e6dddc39b5eb5b194d7b18fa15c7d98140014"
         },
         "codex-review-feedback": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/codex-review-feedback",
           "contentHash": "520103cc086654a67a87c7b0631895e5d7e0786572e3b4d2cf2a4a21cac7e710"
         },
         "compound": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/compound",
           "contentHash": "5d0396addbdc432e40bacae859e2c840271615aa2ea0a8f0b8a330cd024e8d70"
         },
         "deslop": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/deslop",
           "contentHash": "2eee3ba284c1f31f0cf5160c535afabc41d0f60c56cd01c7d62a9e57d32feebd"
         },
         "doc-smith": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/doc-smith",
           "contentHash": "5e030dc056fb645b3a616ce41989303eee1ad7158acb71005f71304972ac2fc5"
         },
         "docs-alignment-review": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/docs-alignment-review",
           "contentHash": "ff77ebb482744b9aea35c76d8fbf3e469e286a8dbfe1d7fe1df6fe7e0728899b"
         },
@@ -326,21 +326,21 @@
         "github-pr-create": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/github-pr-create",
           "contentHash": "e94066800278b9f4ba90a97efb6f874fa7f1ce29b367466ebfcb73c42047ad56"
         },
         "github-review": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/github-review",
           "contentHash": "85727a13feb98720addd822c8b3f70bab0e5317a2341e5e1874639d8594db6fd"
         },
         "gitlab-review": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/gitlab-review",
           "contentHash": "975d2904f34369dfd82c3187a352f4f0cc15bbb63698b52d0fb9d349aebb1d93"
         },
@@ -348,7 +348,7 @@
           "sourceType": "git",
           "url": "https://git.fullscript.io/ai/skills.git",
           "ref": "main",
-          "resolvedCommit": "2dcde572adda2458a4aa7adc24cd37fe3a4b0cf7",
+          "resolvedCommit": "d846bddabeefbadd85b0a00641747f9c940b2d2f",
           "basePath": ".",
           "skillPath": "glab-cli",
           "contentHash": "9d00b71d26a1c15fc8133819ed477386c64b34623186133600ef142367672310"
@@ -357,7 +357,7 @@
           "sourceType": "git",
           "url": "https://git.fullscript.io/ai/skills.git",
           "ref": "main",
-          "resolvedCommit": "2dcde572adda2458a4aa7adc24cd37fe3a4b0cf7",
+          "resolvedCommit": "d846bddabeefbadd85b0a00641747f9c940b2d2f",
           "basePath": ".",
           "skillPath": "glab-mr-create",
           "contentHash": "ae2b9b259405eeac017cb7bad23d019bcbbc33408fefb30d270f3ffdb4052606"
@@ -366,7 +366,7 @@
           "sourceType": "git",
           "url": "https://git.fullscript.io/ai/skills.git",
           "ref": "main",
-          "resolvedCommit": "2dcde572adda2458a4aa7adc24cd37fe3a4b0cf7",
+          "resolvedCommit": "d846bddabeefbadd85b0a00641747f9c940b2d2f",
           "basePath": ".",
           "skillPath": "glab-stacked-diffs",
           "contentHash": "bb48fa2f03077f5e530d5e682456d1e84f36efdc03a9c62ccc49b4135a68dc1f"
@@ -374,7 +374,7 @@
         "handoff-brief": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/handoff-brief",
           "contentHash": "a4450c721c039e6588bfb3d37ad73758da707b15a2e0ea59da4d09883e981b01"
         },
@@ -382,7 +382,7 @@
           "sourceType": "git",
           "url": "https://git.fullscript.io/ai/skills.git",
           "ref": "main",
-          "resolvedCommit": "2dcde572adda2458a4aa7adc24cd37fe3a4b0cf7",
+          "resolvedCommit": "d846bddabeefbadd85b0a00641747f9c940b2d2f",
           "basePath": ".",
           "skillPath": "legoland",
           "contentHash": "9361e523c6583ec0e0e5269c3b38a3f7636aa78a237db5032cd319074332e449"
@@ -390,63 +390,63 @@
         "linear-breakdown": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/linear-breakdown",
-          "contentHash": "f092c6eee5b42e54e53198e05ed360ac80b9fc5446f4a46013693a1de1ad09f2"
+          "contentHash": "f88e0520643f46419ea3e2940c530c27eff84c3900eb32b5549eb780ee406004"
         },
         "merge-followthrough": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/merge-followthrough",
           "contentHash": "c9f659b89630426b8355cb71d237e95d1e7ff364677a6dcb08e0d3059c94a2b9"
         },
         "nitro-review-feedback": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/nitro-review-feedback",
           "contentHash": "ac31da1534400607d64ed49267eafae02930100817f0574bcdf40926efedf824"
         },
         "plan-ready": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/plan-ready",
           "contentHash": "b5c10039cdbd780b805b0bba64fdcc61c70f8715819fd12d65e98569f683a065"
         },
         "plan-to-pr": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/plan-to-pr",
           "contentHash": "e8a105c30246997d34f9c7353701e8cf18c094601ff7ab1b29201dc9f429ea9e"
         },
         "plan-to-review": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/plan-to-review",
           "contentHash": "27fac31a20f8ec49411f3de2b2344e79fbba78a96c636c0aae5ae5c544a7be2a"
         },
         "project-health-brief": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/project-health-brief",
           "contentHash": "52e35bde8ca658fac35ebd3791916ecd46e042f74b32da929663700401c06881"
         },
         "pull-request-review": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/pull-request-review",
           "contentHash": "855b56a65f477cf5a933d738116a63e8c4f686e44d1a12fb6e8b84084bfe3306"
         },
         "review-feedback-routing": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/review-feedback-routing",
           "contentHash": "e60ae108c04f8f862c78015bf315f5dd7b81141e3f6702583f43494a0e91690c"
         },
@@ -462,14 +462,14 @@
         "scrutinize": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/scrutinize",
           "contentHash": "3b6ae7ae47cc074eadb7e7ba4ac1b9c8c4cc42f807618cecad32a6438f76a49a"
         },
         "session-start": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/session-start",
           "contentHash": "4f4df0fad899b4e2d1ff625adc924ee164c8043e39a2c326825a074485412aff"
         },
@@ -477,7 +477,7 @@
           "sourceType": "git",
           "url": "https://git.fullscript.io/ai/skills.git",
           "ref": "main",
-          "resolvedCommit": "2dcde572adda2458a4aa7adc24cd37fe3a4b0cf7",
+          "resolvedCommit": "d846bddabeefbadd85b0a00641747f9c940b2d2f",
           "basePath": ".",
           "skillPath": "terraform",
           "contentHash": "1867efc00c48bd5c5001d399debe23dc983bce01f632650e9c4c0d0646175815"
@@ -512,7 +512,7 @@
         "writing-skills": {
           "sourceType": "local",
           "localPath": "skills",
-          "resolvedCommit": "b16c477ca53803aacebdd89a7f263ed409521607",
+          "resolvedCommit": "172ac9d8b9bdc5c36db1cf156dd9f0391e2aaed4",
           "skillPath": "skills/writing-skills",
           "contentHash": "cd5c1239b8f59d451e4990e03af5269cbb373852578a621eaa59f146f49f27a0"
         }
