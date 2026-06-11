@@ -115,7 +115,7 @@
         {
           "localPath": "skills",
           "names": [
-            "writing-skills"
+            "*"
           ]
         }
       ]

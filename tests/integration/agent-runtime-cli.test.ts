@@ -176,6 +176,67 @@ test("CLI installs overlapping profile skills once", () => {
   );
 });
 
+test("CLI installs discovered local skills from wildcard sources", () => {
+  withFixture(
+    ({ configPath, runtimeDir }) => {
+      const install = runAgentRuntime(["skills", "install", "--profile", "personal", "--config", configPath]);
+      assert.equal(install.status, 0, install.stderr || install.stdout);
+
+      assert.match(install.stdout, /^Installed first-local$/m);
+      assert.match(install.stdout, /^Installed second-local$/m);
+      assert.equal(lstatSync(join(runtimeDir, "skills", "first-local")).isDirectory(), true);
+      assert.equal(lstatSync(join(runtimeDir, "skills", "second-local")).isDirectory(), true);
+      assert.equal(lstatSync(join(runtimeDir, "claude", "skills", "first-local")).isSymbolicLink(), true);
+      assert.equal(lstatSync(join(runtimeDir, "claude", "skills", "second-local")).isSymbolicLink(), true);
+    },
+    (config, runtimeDir) => {
+      const localSkillsDir = join(runtimeDir, "local-skills");
+      mkdirSync(join(localSkillsDir, "first-local"), { recursive: true });
+      mkdirSync(join(localSkillsDir, "ignored-no-skill"), { recursive: true });
+      mkdirSync(join(localSkillsDir, "second-local"), { recursive: true });
+      writeFileSync(join(localSkillsDir, "first-local", "SKILL.md"), "---\nname: first-local\n---\n", "utf-8");
+      writeFileSync(join(localSkillsDir, "second-local", "SKILL.md"), "---\nname: second-local\n---\n", "utf-8");
+
+      config.blocks = {
+        local: {
+          skills: [{ localPath: localSkillsDir, names: ["*"] }],
+        },
+      };
+      config.profiles = {
+        personal: { include: ["local"], paths: ["AGENTS.md"] },
+      };
+    },
+  );
+});
+
+test("CLI rejects wildcard names for remote skill sources", () => {
+  withFixture(
+    ({ configPath }) => {
+      const result = runAgentRuntime(["skills", "validate", "--profile", "personal", "--config", configPath]);
+
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /Wildcard skill names are only supported for local skill sources/);
+    },
+    (config) => {
+      config.blocks = {
+        remote: {
+          skills: [
+            {
+              url: "https://example.com/skills.git",
+              ref: "main",
+              basePath: "skills",
+              names: ["*"],
+            },
+          ],
+        },
+      };
+      config.profiles = {
+        personal: { include: ["remote"], paths: ["AGENTS.md"] },
+      };
+    },
+  );
+});
+
 test("CLI installs and reports instruction symlinks", () => {
   withFixture(({ configPath, runtimeDir }) => {
     const install = runAgentRuntime(["instructions", "install", "--profile", "work", "--config", configPath]);

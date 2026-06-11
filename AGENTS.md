@@ -26,6 +26,8 @@ The linked rule files are normative and preserve the detailed policies.
 - Use `/scrutinize` for adversarial validation of plans, implementation diffs, PRs, hosted review feedback, proposed approaches, sanity checks, and second opinions.
 - Always use the `hallmark` skill for frontend design work, including greenfield UI, redesigns, design audits, visual polish, and design extraction from URLs or screenshots.
 - Prefer CLI tools that carry authentication and org conventions: `gh` for GitHub, `glab` for GitLab, and `wrangler` for Cloudflare.
+- For this repo, treat GitHub as the default publishing remote. Push `main` updates to `github/main`; GitLab mirrors from GitHub automatically, so do not push `main` directly to GitLab unless the user explicitly asks or the mirror is broken.
+- If another repository should receive automatic pushes in the future, document that remote and branch here before changing push behavior. Make the intended primary remote, mirror remotes, and any manual fallback commands explicit.
 - Do not use "smoke test" or "smoke tests" wording. Describe the exact verification performed instead, such as browser route checks, console checks, or manual browser verification.
 - Avoid slop-like contrast phrasing and generic AI filler. Do not lean on formulas like "X, not just Y", "more than just", "isn't just", or "the future of"; state the concrete claim directly.
 

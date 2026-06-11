@@ -471,7 +471,16 @@ function promptLine(): string {
   const buffer = Buffer.alloc(1);
   let input = "";
   while (true) {
-    const bytesRead = readSync(0, buffer, 0, 1, null);
+    let bytesRead: number;
+    try {
+      bytesRead = readSync(0, buffer, 0, 1, null);
+    } catch (error) {
+      if (isRetryableReadError(error)) {
+        sleep(25);
+        continue;
+      }
+      throw error;
+    }
     if (bytesRead === 0) {
       break;
     }
@@ -482,6 +491,19 @@ function promptLine(): string {
     input += char;
   }
   return input.trim();
+}
+
+function isRetryableReadError(error: unknown): boolean {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error.code === "EAGAIN" || error.code === "EWOULDBLOCK" || error.code === "EINTR"),
+  );
+}
+
+function sleep(milliseconds: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
 }
 
 function runScope(
@@ -1126,7 +1148,7 @@ function expandSkillSources(config: Config, profileName: string): SkillSource[] 
     if (!block) {
       throw new Error(`Profile '${profileName}' includes unknown block '${blockName}'`);
     }
-    sources.push(...(block.skills ?? []));
+    sources.push(...(block.skills ?? []).map(expandSkillSourceNames));
   }
 
   if (sources.length === 0) {
@@ -1134,6 +1156,37 @@ function expandSkillSources(config: Config, profileName: string): SkillSource[] 
   }
 
   return sources;
+}
+
+function expandSkillSourceNames(source: SkillSource): SkillSource {
+  if (!source.names.includes("*")) {
+    return source;
+  }
+  if (!isLocalSource(source)) {
+    throw new Error(`Wildcard skill names are only supported for local skill sources: ${sourceLabel(source)}`);
+  }
+  return {
+    ...source,
+    names: discoverLocalSkillNames(source.localPath),
+  };
+}
+
+function discoverLocalSkillNames(localPath: string): string[] {
+  const sourceDir = resolve(localPath);
+  if (!existsSync(sourceDir)) {
+    throw new Error(`Local skill source does not exist: ${localPath}`);
+  }
+
+  const skillNames = readdirSync(sourceDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .filter((name) => existsSync(join(sourceDir, name, "SKILL.md")))
+    .sort();
+
+  if (skillNames.length === 0) {
+    throw new Error(`Local skill source has no skills: ${localPath}`);
+  }
+  return skillNames;
 }
 
 function profileInclude(config: Config, profileName: string): string[] {
