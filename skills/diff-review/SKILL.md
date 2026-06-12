@@ -30,16 +30,18 @@ Use for local implementation diffs and for the reviewed diff supplied by GitHub/
 2. Establish the diff base with provider tools or `git merge-base`. For hosted GitHub/GitLab review, let `github-adapter-review` or `gitlab-adapter-review` provide PR/MR metadata, base/head SHAs, comments, checks, and the verified diff.
 3. If provider tools are unavailable, establish the best local base from remotes/refs, state what could not be verified, and scope findings to the verified diff only.
 4. Read changed files plus enough surrounding code to avoid false positives.
-5. Run a docs alignment pass for behavior, architecture, workflow, test, CI, deployment, auth/access, data contract, or agent-expectation changes. Use `docs-alignment-review` when available; otherwise perform the same check directly and include missing docs or agent-doc updates as review findings.
-6. Prioritize findings:
+5. Run an AI readiness upkeep pass when the diff changes verification scripts, task commands, hooks, CI/release/deploy config, generated artifacts, schemas or API contracts, infrastructure config, agent instructions, rules, skills, prompts, review rubrics, or review feedback that future agents should repeat or avoid. Use `ai-readiness-upkeep` when available; otherwise report missing cheap enforceable verification as a review finding.
+6. Run a docs alignment pass for behavior, architecture, workflow, test, CI, deployment, auth/access, data contract, or agent-expectation changes. Use `docs-alignment-review` when available; otherwise perform the same check directly and include missing docs or agent-doc updates as review findings.
+7. Prioritize findings:
    - security, data leaks, auth/access, secrets;
    - correctness and behavioral regressions;
    - performance and scalability regressions;
    - usability/accessibility regressions;
    - maintainability, ownership, testability, and quality gaps;
+   - missing enforceable verification for newly exposed contracts;
    - docs, plan, PR-description, and agent-doc drift that would mislead future implementers or reviewers.
-7. Ignore formatting nits when automated tooling owns them.
-8. Report blockers and residual risk; do not edit files during a review unless the user asks for fixes.
+8. Ignore formatting nits when automated tooling owns them.
+9. Report blockers and residual risk; do not edit files during a review unless the user asks for fixes.
 
 ## Findings Format
 
@@ -66,6 +68,7 @@ Artifact-host adapters gather live host context and then use this review rubric.
 | Trusting another agent's claim | Re-check code/evidence |
 | Mixing test layers | Name unit/component/integration/E2E/deploy verification |
 | Ignoring docs or agent-doc drift | Check docs alignment and report stale, missing, or unnecessary docs changes |
+| Accepting prose-only rules for enforceable contracts | Use `ai-readiness-upkeep` and require an implementer action for cheap verification |
 | Filing style nits owned by tools | Skip them |
 
 ## Validation Scenarios

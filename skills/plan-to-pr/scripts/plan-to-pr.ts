@@ -26,6 +26,7 @@ const REVIEW_SUBAGENTS = [
   "code-quality-review-agent",
   "code-simplifier-agent",
   "deslop-agent",
+  "ai-readiness-upkeep-agent",
   "docs-alignment-review-agent",
   "security-review-agent",
 ] as const;
@@ -59,6 +60,7 @@ const LEDGER_GATES = [
   "code_simplifier",
   "deslop",
   "security_review",
+  "ai_readiness_upkeep",
   "docs_alignment",
   "review_feedback_routing",
   "artifact_creation_update",
@@ -71,6 +73,7 @@ const LEDGER_NOT_APPLICABLE_GATES = [
   "code_simplifier",
   "deslop",
   "security_review",
+  "ai_readiness_upkeep",
   "docs_alignment",
 ] as const;
 
@@ -184,6 +187,7 @@ function printReviewerTemplate(): void {
     - deslop-agent
     - docs-alignment-review-agent
   skipped_reviewers:
+    - ai-readiness-upkeep-agent: not_applicable - no AI readiness verification or agent-surface contract changed
     - security-review-agent: not_applicable - no security-sensitive surface changed
   subagent_ids:
     - implementation-review-agent: <returned subagent id>
@@ -203,6 +207,7 @@ reviewer_subagent_report:
     - deslop-agent
     - docs-alignment-review-agent
   skipped_reviewers:
+    - ai-readiness-upkeep-agent: not_applicable - no AI readiness verification or agent-surface contract changed
     - security-review-agent: not_applicable - no security-sensitive surface changed
   outcomes:
     - implementation-review-agent: passed - no actionable correctness or regression findings
@@ -326,7 +331,8 @@ function validateLaunchReport(input: string): void {
 
   requireRequiredReviewers(launchedReviewers, errors);
   requireKnownReviewers(launchedReviewers, "launched", errors);
-  requireSecurityAccounting(launchedReviewers, skippedReviewerNames, errors);
+  requireConditionalReviewerAccounting("security-review-agent", launchedReviewers, skippedReviewerNames, errors);
+  requireConditionalReviewerAccounting("ai-readiness-upkeep-agent", launchedReviewers, skippedReviewerNames, errors);
 
   for (const subagentId of subagentIds) {
     const parsed = subagentId.match(/^([^:]+):\s*(.+)$/);
@@ -380,7 +386,8 @@ function validateReviewReport(input: string): void {
 
   requireRequiredReviewers(launchedReviewers, errors);
   requireKnownReviewers(launchedReviewers, "launched", errors);
-  requireSecurityAccounting(launchedReviewers, skippedReviewerNames, errors);
+  requireConditionalReviewerAccounting("security-review-agent", launchedReviewers, skippedReviewerNames, errors);
+  requireConditionalReviewerAccounting("ai-readiness-upkeep-agent", launchedReviewers, skippedReviewerNames, errors);
 
   if (outcomes.length === 0) {
     errors.push("outcomes must include each launched reviewer");
@@ -417,6 +424,12 @@ function validateReviewReport(input: string): void {
       errors.push(`${reviewer} outcome evidence is required`);
     }
 
+    if (reviewer === "ai-readiness-upkeep-agent" && !evidence.match(/validate-report|validated ai_readiness_upkeep_report|ai_readiness_upkeep_report valid/i)) {
+      errors.push(
+        "ai-readiness-upkeep-agent outcome evidence must mention validate-report or a validated ai_readiness_upkeep_report",
+      );
+    }
+
     outcomeReviewers.add(reviewer);
   }
 
@@ -450,13 +463,14 @@ function requireKnownReviewers(reviewers: string[], label: string, errors: strin
   }
 }
 
-function requireSecurityAccounting(
+function requireConditionalReviewerAccounting(
+  reviewer: (typeof REVIEW_SUBAGENTS)[number],
   launchedReviewers: string[],
   skippedReviewerNames: Set<string>,
   errors: string[],
 ): void {
-  if (!launchedReviewers.includes("security-review-agent") && !skippedReviewerNames.has("security-review-agent")) {
-    errors.push("security-review-agent must be launched or listed under skipped_reviewers with not_applicable evidence");
+  if (!launchedReviewers.includes(reviewer) && !skippedReviewerNames.has(reviewer)) {
+    errors.push(`${reviewer} must be launched or listed under skipped_reviewers with not_applicable evidence`);
   }
 }
 

@@ -76,6 +76,7 @@ reviewer_subagent_launch:
     - deslop-agent
     - docs-alignment-review-agent
   skipped_reviewers:
+    - ai-readiness-upkeep-agent: not_applicable - no AI readiness verification or agent-surface contract changed
     - security-review-agent: not_applicable - no security-sensitive surface changed
   subagent_ids:
     - implementation-review-agent: 019...
@@ -99,6 +100,7 @@ reviewer_subagent_report:
     - deslop-agent
     - docs-alignment-review-agent
   skipped_reviewers:
+    - ai-readiness-upkeep-agent: not_applicable - no AI readiness verification or agent-surface contract changed
     - security-review-agent: not_applicable - no security-sensitive surface changed
   outcomes:
     - implementation-review-agent: passed - no actionable correctness or regression findings
@@ -125,6 +127,8 @@ reviewer_subagent_report:
    - In Codex, use the internal Codex subagent tool exposed by the current harness and omit model overrides unless the user explicitly asks for one.
    - Do not invoke the `dispatch` skill, Claude Code `Task`, or any external Claude harness for `plan-to-pr` implementation reviewers from Codex.
    - Launch these reviewers after implementation and local verification: `implementation-review-agent`, `implementation-scrutiny-agent`, `code-quality-review-agent`, `code-simplifier-agent`, `deslop-agent`, and `docs-alignment-review-agent`.
+   - Launch `ai-readiness-upkeep-agent` when the diff touches verification scripts, task commands, hooks, CI/release/deploy config, generated artifacts, schemas/contracts, infra config, agent instructions, rules, skills, prompts, review rubrics, or review feedback that future agents should repeat or avoid; otherwise list it under `skipped_reviewers` with a not-applicable reason.
+   - When launched, require `ai-readiness-upkeep-agent` to emit a validated `ai_readiness_upkeep_report`. `passed` maps to reviewer outcome `passed`; `findings` maps to `passed` only after nonblocking findings are recorded as residual risk or future work; `blocked`, invalid YAML, unknown lanes, or missing required fields map to `blocked` until fixed or explicitly accepted.
    - Launch `security-review-agent` only when the diff touches auth, authorization, secrets, token handling, sensitive data, dependency trust, webhooks, or externally reachable surfaces; otherwise list it under `skipped_reviewers` with a not-applicable reason.
    - Record each returned subagent id in `reviewer_subagent_launch.subagent_ids`.
    - Give each reviewer one bounded prompt, the diff or artifact it owns, and the expected output: `passed`, `findings`, `blocked`, or `not_applicable` with evidence.
@@ -162,6 +166,7 @@ reviewer_subagent_report:
 | Code simplifier | `code-simplifier-agent` subagent applied behavior-preserving simplification or marked not applicable |
 | Deslop | `deslop-agent` subagent removed AI-shaped clutter/style drift or marked not applicable |
 | Security review | `security-review-agent` subagent reviewed relevant security surface, or skipped with reason |
+| AI readiness upkeep | `ai-readiness-upkeep-agent` returns a validated passing report, has only accepted nonblocking findings, or is skipped with not-applicable evidence |
 | Docs alignment | `docs-alignment-review-agent` subagent is clean/not applicable, or updates are made/deferred with reason |
 | Review feedback routing | Artifact and feedback adapters are selected, or ambiguity is blocked with evidence |
 | Artifact creation/update | Routed PR/MR exists for the latest branch |
@@ -208,6 +213,9 @@ delivery_gate_ledger:
   security_review:
     status: not_applicable
     evidence: "no relevant security surface changed"
+  ai_readiness_upkeep:
+    status: not_applicable
+    evidence: "no AI readiness verification or agent-surface contract changed"
   docs_alignment:
     status: passed
     evidence: "docs alignment clean or updated"
@@ -238,6 +246,7 @@ delivery_gate_ledger:
 | Running reviewers locally in the main agent only | Launch internal Codex reviewer subagents and report launch/outcomes |
 | Routing Codex implementation reviewers through `dispatch` or Claude | Use the current harness's internal Codex subagent tool |
 | Reporting only one reviewer | Launch and report all required reviewers: `implementation-review-agent`, `implementation-scrutiny-agent`, `code-quality-review-agent`, `code-simplifier-agent`, `deslop-agent`, and `docs-alignment-review-agent` |
+| Omitting AI readiness accounting | Launch `ai-readiness-upkeep-agent` when verification or agent-surface contracts changed, otherwise list it under `skipped_reviewers` with not-applicable evidence |
 | Omitting conditional security review | Launch `security-review-agent` when applicable, otherwise list it under `skipped_reviewers` with not-applicable evidence |
 | Leaving `findings` or `blocked` in the final reviewer report | Fix findings, resolve blockers, and validate only the reconciled final report |
 | Treating implementation review as enough | Run all implementation reviewer subagents and reconcile outcomes |
@@ -256,7 +265,7 @@ delivery_gate_ledger:
 - GREEN: pressure testing confirmed missing handoffs and non-`ship` scrutiny handoffs block before implementation.
 - RED: baseline subagent `019eb39e-7a2b-7453-81b0-37fb35df9005` inspected committed pre-edit files and failed as expected. It cited `Run implementation diff review with diff-review`, `Run scrutinize on the implementation diff`, `Run the pre-commit quality gate`, and adapter text `run local verification, implementation review, $scrutinize...`, rationalizing: `inline helper-skill review satisfies the workflow; nothing says I must launch internal Codex reviewer subagents or report each reviewer's final outcome`.
 - GREEN: subagent `019eb370-7dce-75d3-97ff-6c80d6406aab` confirmed the first patch forced internal Codex reviewer subagents and blocked dispatch/Claude, then found validator loopholes for under-launched reports, unresolved `findings`, missing security accounting, one-reviewer examples, and post-feedback inline reruns.
-- REFACTOR: the script now requires six implementation reviewer agents, requires `security-review-agent` to be launched or skipped with not-applicable evidence, rejects unresolved `findings` or `blocked`, validates `reviewer_subagent_launch` with returned subagent IDs, and requires `implementation-review-agent`, `implementation-scrutiny-agent`, and `code-quality-review-agent` to be `passed`.
+- REFACTOR: the script now requires six implementation reviewer agents, requires `security-review-agent` and `ai-readiness-upkeep-agent` to be launched or skipped with not-applicable evidence, rejects unresolved `findings` or `blocked`, validates `reviewer_subagent_launch` with returned subagent IDs, requires launched AI readiness outcomes to cite `validate-report` or a validated `ai_readiness_upkeep_report`, and requires `implementation-review-agent`, `implementation-scrutiny-agent`, and `code-quality-review-agent` to be `passed`.
 - GREEN: subagent `019eb391-6f16-7e03-8744-1e73e0daa807` passed after refactor with `Remaining actionable ambiguity: None.`
 - RED: thread `019eb821-3bda-7db2-b40d-12c90f93b4cb` blocked on Fullscript Nitro feedback because the workflow waited for automatic feedback even though no Nitro review was requested.
 - GREEN: Fullscript Nitro now follows explicit routing: request `/request_review @nitro` for MR creation or material follow-up pushes, then poll latest-head feedback.

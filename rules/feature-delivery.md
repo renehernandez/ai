@@ -49,15 +49,21 @@ Before committing feature work, run these passes over the branch diff:
 3. `code-simplifier` for behavior-preserving clarity and simplification.
 4. `deslop` for AI-shaped clutter, over-defensive code, style drift, thin
    wrappers, unnecessary comments, casts, and unrelated formatting churn.
-5. `docs-alignment-review` for stale or missing docs, plans, PR descriptions,
+5. `ai-readiness-upkeep` when the diff changes verification scripts, task
+   commands, hooks, CI/release/deploy config, generated artifacts, schemas or
+   API contracts, infrastructure config, agent instructions, rules, skills,
+   prompts, review rubrics, or review feedback that future agents should repeat
+   or avoid.
+6. `docs-alignment-review` for stale or missing docs, plans, PR descriptions,
    agent docs, skills, rules, hooks, automation prompts, or review rubrics.
 
 If any pass produces actionable findings that should be resolved before review,
 fix them, rerun the relevant verification, and repeat the gate. After
 `scrutinize` findings are fixed, rerun `scrutinize` on the changed artifact.
-After `code-simplifier` or `deslop` changes, rerun `code-quality-review`; after
-docs or agent docs change, rerun `docs-alignment-review` before considering the
-gate complete.
+After `code-simplifier` or `deslop` changes, rerun `code-quality-review`. After
+AI readiness findings create verification, docs, or agent-doc changes, rerun
+`ai-readiness-upkeep` as needed and then rerun `docs-alignment-review` before
+considering the gate complete.
 
 Treat `scrutinize` verdicts as binding:
 
