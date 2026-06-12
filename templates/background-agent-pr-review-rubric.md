@@ -17,8 +17,9 @@ Assume the background agent may not see local-only files, user-level rules, unco
 5. Usability and accessibility: check user-facing regressions, unclear states, broken navigation, keyboard/screen-reader issues, and mobile layout risks.
 6. Maintainability: check ownership boundaries, unnecessary abstractions, duplication, naming drift, hidden coupling, and testability.
 7. Docs and agent-doc alignment: if the PR changes behavior, architecture, commands, workflows, tests, CI, deployment, auth/access boundaries, data contracts, or agent expectations, verify relevant docs, plans, agent docs, automation prompts, review rubrics, and the PR description are updated or explain why no update is needed.
-8. Verification: name missing or weak test coverage by exact layer, such as unit, integration, worker-runtime, database integration, local browser E2E, deployed-preview E2E, or deployment verification.
-9. CI and deployment: inspect required checks when available. Separate branch-caused failures from external, permission, service, or flaky-infrastructure blockers.
+8. AI readiness and enforceable verification: when the PR adds or changes a project contract, prefer an executable check over prose-only AGENTS/rules/docs guidance. Report missing cheap verification for generated artifacts, schemas, task commands, hooks, CI, deploy config, or agent workflow constraints.
+9. Verification: name missing or weak test coverage by exact layer, such as unit, integration, worker-runtime, database integration, local browser E2E, deployed-preview E2E, or deployment verification.
+10. CI and deployment: inspect required checks when available. Separate branch-caused failures from external, permission, service, or flaky-infrastructure blockers.
 
 ## Ignore
 

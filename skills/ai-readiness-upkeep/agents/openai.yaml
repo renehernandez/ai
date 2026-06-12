@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI Readiness Upkeep"
+  short_description: "Find missing enforceable verification and agent-readiness drift"
+  default_prompt: "Use $ai-readiness-upkeep as a findings-only gate. Inspect the diff, plan, review feedback, or CI failure for newly exposed project contracts; prefer executable verification and automation lanes over prose; emit an ai_readiness_upkeep_report; validate it with the bundled validate-report script; and leave all project edits for the implementer workflow."
