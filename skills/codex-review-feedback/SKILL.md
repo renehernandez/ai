@@ -6,7 +6,7 @@ allowed-tools: Bash(gh pr:*), Bash(gh api:*), Bash(git:*), Bash(jq:*), Read, Glo
 
 # Codex Review Feedback
 
-Request and collect Codex review feedback from GitHub PRs, then normalize it for `pull-request-review`. Codex is a reviewer, not the GitHub artifact host.
+Request and collect Codex review feedback from GitHub PRs, then normalize it for `diff-review`. Codex is a reviewer, not the GitHub artifact host.
 
 ## When to Use
 
@@ -42,7 +42,7 @@ artifact: <PR URL>
 head_sha: <sha-or-unknown>
 feedback_kind: <inline | summary | discussion | review>
 status: <pending | no issues | findings | unavailable | stale>
-findings: <normalized pull-request-review findings or none>
+findings: <normalized diff-review findings or none>
 stale_against_head: <yes | no | unknown>
 verification_gaps: <none | list>
 ```
@@ -52,7 +52,7 @@ verification_gaps: <none | list>
 | Mistake | Fix |
 | --- | --- |
 | Treating `@codex review` as completion | Poll until actual feedback, no-issues signal, or timeout |
-| Mixing GitHub host checks with Codex feedback | Use `github-review` for host context, this skill for reviewer feedback |
+| Mixing GitHub host checks with Codex feedback | Use `github-adapter-review` for host context, this skill for reviewer feedback |
 | Passing stale Codex feedback | Compare with latest PR head SHA or mark staleness unknown |
 | Inventing an unconfigured reviewer fallback | Use only configured reviewers |
 

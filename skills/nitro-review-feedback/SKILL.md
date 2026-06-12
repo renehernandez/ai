@@ -6,7 +6,7 @@ allowed-tools: Bash(glab:*), Bash(git:*), Bash(jq:*), Read, Glob, Grep
 
 # Nitro Review Feedback
 
-Collect Nitro feedback from Fullscript GitLab MRs and normalize it for `pull-request-review`. Nitro is a reviewer, not the GitLab artifact host.
+Collect Nitro feedback from Fullscript GitLab MRs and normalize it for `diff-review`. Nitro is a reviewer, not the GitLab artifact host.
 
 ## When to Use
 
@@ -41,7 +41,7 @@ artifact: <MR URL>
 head_sha: <sha-or-unknown>
 feedback_kind: <inline | summary | discussion | review>
 status: <pending | no issues | findings | unavailable | stale>
-findings: <normalized pull-request-review findings or none>
+findings: <normalized diff-review findings or none>
 stale_against_head: <yes | no | unknown>
 verification_gaps: <none | list>
 ```

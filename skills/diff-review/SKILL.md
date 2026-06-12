@@ -1,33 +1,33 @@
 ---
-name: pull-request-review
-description: Use when reviewing pull requests, merge requests, branch diffs, review comments, local changes, hosted code review output, security review output, or PR feedback for correctness, security, performance, usability, maintainability, or quality.
+name: diff-review
+description: Use when reviewing a verified implementation diff for correctness, regression risk, security, performance, usability, tests, docs impact, or residual delivery risk.
 ---
 
-# Pull Request Review
+# Diff Review
 
 ## Overview
 
-Review only issues introduced or materially worsened by the diff. Lead with actionable findings, not summaries.
+Review only issues introduced or materially worsened by a verified diff. Lead with actionable findings, not summaries.
 
 ## When To Use
 
-Use for PR/MR review, local diff review, reviewing another agent's feedback, or preparing a review rubric. Skip when the user asks for implementation without review.
+Use for local implementation diffs and for the reviewed diff supplied by GitHub/GitLab adapter skills. Skip when the task is only artifact-host inspection, feedback collection, code-quality review, or implementation without review.
 
 ## Quick Reference
 
 | Review context | First move |
 | --- | --- |
-| GitHub PR | Use `github-review` to gather artifact-host context, then apply this rubric |
-| GitLab MR | Use `gitlab-review` to gather artifact-host context, then apply this rubric |
+| GitHub PR | Use `github-adapter-review` to gather artifact-host context, then apply this rubric |
+| GitLab MR | Use `gitlab-adapter-review` to gather artifact-host context, then apply this rubric |
 | Local changes | Inspect status, diff, and relevant repo rules |
-| Hosted/cloud review | Prefer repo-visible rules and PR diff |
-| Another agent's feedback | Check claims against code and evidence |
+| Hosted/cloud review | Use the adapter output and verified diff |
+| Reviewer feedback follow-through | Use the feedback-specific skill first, then check claims against the verified diff |
 | Docs-impacting PR | Use `docs-alignment-review` before final verdict |
 
 ## Workflow
 
 1. Load project review rules: `AGENTS.md`, relevant `.agents/rules/*.md`, and repo-specific review rubrics.
-2. Establish the diff base with provider tools or `git merge-base`. For hosted GitHub/GitLab review, let `github-review` or `gitlab-review` provide PR/MR metadata, base/head SHAs, comments, checks, and the verified diff.
+2. Establish the diff base with provider tools or `git merge-base`. For hosted GitHub/GitLab review, let `github-adapter-review` or `gitlab-adapter-review` provide PR/MR metadata, base/head SHAs, comments, checks, and the verified diff.
 3. If provider tools are unavailable, establish the best local base from remotes/refs, state what could not be verified, and scope findings to the verified diff only.
 4. Read changed files plus enough surrounding code to avoid false positives.
 5. Run a docs alignment pass for behavior, architecture, workflow, test, CI, deployment, auth/access, data contract, or agent-expectation changes. Use `docs-alignment-review` when available; otherwise perform the same check directly and include missing docs or agent-doc updates as review findings.

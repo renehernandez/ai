@@ -1,0 +1,4 @@
+interface:
+  display_name: "Diff Review"
+  short_description: "Review verified implementation diffs"
+  default_prompt: "Use $diff-review to review this verified implementation diff, including docs and agent-doc alignment."

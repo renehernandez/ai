@@ -8,7 +8,7 @@ routes:
       host: gitlab
       kind: merge_request
       create_adapter: glab-mr-create
-      inspect_adapter: gitlab-review
+      inspect_adapter: gitlab-adapter-review
     review_feedback:
       primary:
         reviewer: nitro
@@ -30,7 +30,7 @@ routes:
       host: github
       kind: pull_request
       create_adapter: github-pr-create
-      inspect_adapter: github-review
+      inspect_adapter: github-adapter-review
     review_feedback:
       primary:
         reviewer: codex

@@ -33,7 +33,7 @@ Do not put review routing in CLI runtime config JSON. That config is for CLI mec
 | `artifact.host` | Where the PR/MR lives | `github`, `gitlab` |
 | `artifact.kind` | Review artifact type | `pull_request`, `merge_request` |
 | `create_adapter` | Skill for opening/updating the artifact | `github-pr-create`, `glab-mr-create` |
-| `inspect_adapter` | Skill for gathering host metadata/diff/checks | `github-review`, `gitlab-review` |
+| `inspect_adapter` | Skill for gathering host metadata/diff/checks | `github-adapter-review`, `gitlab-adapter-review` |
 | `reviewer` | Actor that provides review feedback | `nitro`, `codex`, `human` |
 | `feedback_adapter` | Skill for requesting/polling/parsing feedback | `nitro-review-feedback`, `codex-review-feedback` |
 
@@ -44,7 +44,7 @@ Do not put review routing in CLI runtime config JSON. That config is for CLI mec
 3. Use the selected artifact adapters for PR/MR creation and inspection.
 4. Use `review_feedback.primary` to request or wait for hosted feedback.
 5. Treat `review_feedback.experimental` as opt-in only.
-6. Normalize reviewer output before feeding it into `pull-request-review`.
+6. Normalize reviewer output before feeding it into `diff-review`.
 
 If `origin`, `upstream`, or a supplied PR/MR URL point to different artifact hosts, prefer the host for the artifact being created or reviewed. If that is still ambiguous, ask one blocking question. Never fail open to the first route.
 
@@ -71,7 +71,7 @@ artifact: <PR/MR URL>
 head_sha: <sha-or-unknown>
 feedback_kind: <inline | summary | check | discussion | review>
 status: <pending | no issues | findings | unavailable | stale>
-findings: <normalized pull-request-review findings or none>
+findings: <normalized diff-review findings or none>
 stale_against_head: <yes | no | unknown>
 verification_gaps: <none | list>
 ```

@@ -67,7 +67,7 @@ After each gate, report one line with the gate, artifact or head SHA, verdict, a
    - name the requested feedback, such as Nitro and developer review;
    - include exact planning validation performed.
    For Fullscript GitLab MRs, request Nitro review when the MR is created or updated. Use `glab mr note <MR_IID> -m "/request_review @nitro"`; do not use `glab mr update --reviewer`. If pushing changes to an existing MR changes the branch head, do not assume the previous Nitro state still applies.
-9. Run the artifact-host inspection adapter (`gitlab-review` or `github-review`) only for host metadata, discussions, and CI/review state. Do not run implementation code review against a planning-only diff unless the plan changes agent/runtime behavior that requires it.
+9. Run the artifact-host inspection adapter (`gitlab-adapter-review` or `github-adapter-review`) only for host metadata, discussions, and CI/review state. Do not run implementation code review against a planning-only diff unless the plan changes agent/runtime behavior that requires it.
 10. Wait for routed automated feedback on the latest head:
     - Fullscript GitLab/Nitro: use `nitro-review-feedback` first. If the MR was created or the branch was pushed against an existing MR and latest-head Nitro feedback is missing or stale, post the standard Nitro review request for the current head, then wait again. Routing metadata alone is not enough evidence after a new push until Nitro is requested for the latest head or the host shows a fresh pending Nitro review state.
     - GitHub/Codex: use `codex-review-feedback` when routing selects Codex.

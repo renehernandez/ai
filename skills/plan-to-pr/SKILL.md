@@ -56,8 +56,8 @@ Make workflow helper use visible in the transcript. Before running any named hos
 - `Using $review-feedback-routing to select artifact host, create/inspect adapters, and review feedback route.`
 - `Launching internal Codex reviewer subagents for implementation review, implementation scrutiny, code quality, simplification, deslop, docs alignment, and conditional security review.`
 - `Using $github-pr-create to open the GitHub draft PR for the reviewed branch.`
-- `Using $gitlab-review to inspect the hosted GitLab MR at the latest head.`
-- `Using $github-review to inspect the hosted GitHub PR at the latest head.`
+- `Using $gitlab-adapter-review to inspect the hosted GitLab MR at the latest head.`
+- `Using $github-adapter-review to inspect the hosted GitHub PR at the latest head.`
 
 When a named hosted adapter or routing helper is unavailable and a fallback is used, say that explicitly in the same status line.
 
@@ -138,8 +138,8 @@ reviewer_subagent_report:
     - GitHub: use `github-pr-create`.
     - Unknown artifact host: ask for the target host or stop with exact ambiguity.
 11. Run the artifact-host inspection adapter on the created or existing artifact:
-    - GitLab: use `gitlab-review`.
-    - GitHub: use `github-review`.
+    - GitLab: use `gitlab-adapter-review`.
+    - GitHub: use `github-adapter-review`.
 12. Request or wait for review feedback using the routed `review_feedback.primary` entry.
 13. Request or wait for routed feedback before treating the gate as complete. For Codex GitHub review, poll PR reviews, review comments, timeline comments, and request reactions until the latest pushed head has a `chatgpt-codex-connector` review/comment, a thumbs-up/no-issues reaction on the request, actionable inline findings, or a clear timeout/blocker. For Nitro on Fullscript GitLab, follow `review-feedback-routing`: when it selects explicit Nitro feedback, post `glab mr note <MR_IID> -m "/request_review @nitro"` after MR creation or material follow-up pushes, then poll for latest-head Nitro feedback.
 14. Apply actionable hosted feedback and repeat local verification plus affected internal Codex reviewer subagents on the updated diff, then push and rerun hosted review. If the branch head changes after feedback or CI fixes, earlier hosted review is stale unless it clearly reviewed the new head.
@@ -165,7 +165,7 @@ reviewer_subagent_report:
 | Docs alignment | `docs-alignment-review-agent` subagent is clean/not applicable, or updates are made/deferred with reason |
 | Review feedback routing | Artifact and feedback adapters are selected, or ambiguity is blocked with evidence |
 | Artifact creation/update | Routed PR/MR exists for the latest branch |
-| Artifact-host review | `gitlab-review` or `github-review` reviewed the latest hosted artifact head |
+| Artifact-host review | `gitlab-adapter-review` or `github-adapter-review` reviewed the latest hosted artifact head |
 | Review feedback | Routed feedback produced a latest-head result with no actionable findings, or blocker is evidenced |
 | CI | Required checks are green, or non-branch blocker is evidenced |
 
@@ -254,7 +254,7 @@ delivery_gate_ledger:
 - GREEN: this skill requires a validated `plan_ready_handoff` before editing files.
 - REFACTOR: implementation delivery gates remain explicit, but planning gates move to `plan-ready`.
 - GREEN: pressure testing confirmed missing handoffs and non-`ship` scrutiny handoffs block before implementation.
-- RED: baseline subagent `019eb39e-7a2b-7453-81b0-37fb35df9005` inspected committed pre-edit files and failed as expected. It cited `Run implementation diff review with pull-request-review`, `Run scrutinize on the implementation diff`, `Run the pre-commit quality gate`, and adapter text `run local verification, implementation review, $scrutinize...`, rationalizing: `inline helper-skill review satisfies the workflow; nothing says I must launch internal Codex reviewer subagents or report each reviewer's final outcome`.
+- RED: baseline subagent `019eb39e-7a2b-7453-81b0-37fb35df9005` inspected committed pre-edit files and failed as expected. It cited `Run implementation diff review with diff-review`, `Run scrutinize on the implementation diff`, `Run the pre-commit quality gate`, and adapter text `run local verification, implementation review, $scrutinize...`, rationalizing: `inline helper-skill review satisfies the workflow; nothing says I must launch internal Codex reviewer subagents or report each reviewer's final outcome`.
 - GREEN: subagent `019eb370-7dce-75d3-97ff-6c80d6406aab` confirmed the first patch forced internal Codex reviewer subagents and blocked dispatch/Claude, then found validator loopholes for under-launched reports, unresolved `findings`, missing security accounting, one-reviewer examples, and post-feedback inline reruns.
 - REFACTOR: the script now requires six implementation reviewer agents, requires `security-review-agent` to be launched or skipped with not-applicable evidence, rejects unresolved `findings` or `blocked`, validates `reviewer_subagent_launch` with returned subagent IDs, and requires `implementation-review-agent`, `implementation-scrutiny-agent`, and `code-quality-review-agent` to be `passed`.
 - GREEN: subagent `019eb391-6f16-7e03-8744-1e73e0daa807` passed after refactor with `Remaining actionable ambiguity: None.`

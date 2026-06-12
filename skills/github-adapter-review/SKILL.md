@@ -1,12 +1,12 @@
 ---
-name: github-review
+name: github-adapter-review
 description: Use when reviewing GitHub pull requests, PR diffs, GitHub reviews or comments, GitHub Actions checks, or GitHub-hosted review feedback.
 allowed-tools: Bash(gh pr:*), Bash(gh api:*), Bash(gh auth:*), Bash(git:*), Bash(jq:*), Read, Glob, Grep, AskUserQuestion
 ---
 
-# GitHub Review
+# GitHub Adapter Review
 
-Use GitHub as the artifact-host adapter, then apply `pull-request-review` to the verified PR diff. Keep review output in the conversation unless the user explicitly asks to post, approve, request changes, merge, or resolve conversations.
+Use GitHub as the artifact-host adapter, then apply `diff-review` to the verified PR diff. Keep review output in the conversation unless the user explicitly asks to post, approve, request changes, merge, or resolve conversations.
 
 ## When to Use
 
@@ -15,7 +15,7 @@ Use GitHub as the artifact-host adapter, then apply `pull-request-review` to the
 - `plan-to-pr` or `plan-to-review` detects a GitHub remote and needs the hosted review gate.
 - The user asks to inspect GitHub reviews, comments, or Actions checks for a PR.
 
-Use `pull-request-review` directly for local-only diffs. Use GitLab review for GitLab MRs.
+Use `diff-review` directly for local-only diffs. Use `gitlab-adapter-review` for GitLab MRs.
 
 ## Adapter Workflow
 
@@ -85,7 +85,7 @@ Use `pull-request-review` directly for local-only diffs. Use GitLab review for G
    }
    ```
 
-6. Apply `pull-request-review`:
+6. Apply `diff-review`:
    - review only issues introduced or materially worsened by the PR diff;
    - read full changed files and relevant usages/tests;
    - include GitHub reviews, comments, review threads, and checks as artifact-host context;
@@ -102,7 +102,7 @@ Base/Head: <base>@<sha-or-unknown>...<head>@<sha-or-unknown>
 Diff source: gh pr diff <number-or-url> --patch --color never
 Checks: <green | failing | pending | unknown> — <evidence>
 Unresolved feedback: <none | count and summary>
-Findings: <pull-request-review findings or no issues>
+Findings: <diff-review findings or no issues>
 Docs alignment: <clean | updates needed | not applicable | not run>
 Verification gaps: <none | list>
 ```
@@ -125,7 +125,7 @@ Verification gaps: <none | list>
 
 | Mistake | Fix |
 | --- | --- |
-| Treating GitHub mechanics as review judgment | Use GitHub only to gather host context; apply `pull-request-review` for findings |
+| Treating GitHub mechanics as review judgment | Use GitHub only to gather host context; apply `diff-review` for findings |
 | Ignoring stale review state | Compare base/head SHAs and say when comments or reviews predate the latest head |
 | Claiming unresolved threads were checked without GraphQL | Use `gh api graphql` for review threads or report the gap |
 | Treating pending checks as pass/fail | `gh pr checks` exit code 8 means pending; report that state |
@@ -143,4 +143,4 @@ Verification gaps: <none | list>
 - RED: sub-agent `019eae14-2d96-7831-b165-48b04425c034` listed standard `gh pr view`, `gh pr diff`, `gh pr checks`, REST comments, and a GraphQL review-thread query under pressure, but still named stale comments, hidden comments, external checks, and local reproduction as residual unknowns.
 - GREEN: this skill makes REST comments, GraphQL review threads, pending checks, and verification gaps mandatory parts of the adapter workflow and output contract.
 - GREEN: sub-agent `019eae16-5bfa-75b2-8e9d-cfa8468b855f` passed the GitHub PR pressure test with REST comments, GraphQL review threads, pending-check handling, stale-review awareness, docs alignment, and verification gaps.
-- REFACTOR: adapter output contract keeps artifact-host context separate from `pull-request-review` findings so `plan-to-pr` can consume the gate.
+- REFACTOR: adapter output contract keeps artifact-host context separate from `diff-review` findings so `plan-to-pr` can consume the gate.

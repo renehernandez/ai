@@ -1,12 +1,12 @@
 ---
-name: gitlab-review
+name: gitlab-adapter-review
 description: Use when reviewing GitLab merge requests, MR diffs, GitLab discussions, GitLab CI state, or when the user asks for glab-review or GitLab review feedback.
 allowed-tools: Bash(glab:*), Bash(git:*), Bash(jq:*), Read, Glob, Grep, AskUserQuestion
 ---
 
-# GitLab Review
+# GitLab Adapter Review
 
-Use GitLab as the artifact-host adapter, then apply `pull-request-review` to the verified MR diff. Keep review output in the conversation unless the user explicitly asks to post, approve, merge, or resolve anything.
+Use GitLab as the artifact-host adapter, then apply `diff-review` to the verified MR diff. Keep review output in the conversation unless the user explicitly asks to post, approve, merge, or resolve anything.
 
 ## When to Use
 
@@ -15,7 +15,7 @@ Use GitLab as the artifact-host adapter, then apply `pull-request-review` to the
 - `plan-to-pr` or `plan-to-review` detects a GitLab remote and needs the hosted review gate.
 - The user says `glab-review`; treat that as the legacy name for this skill.
 
-Use `pull-request-review` directly for local-only diffs. Use GitHub review for GitHub PRs.
+Use `diff-review` directly for local-only diffs. Use `github-adapter-review` for GitHub PRs.
 
 ## Adapter Workflow
 
@@ -83,7 +83,7 @@ Use `pull-request-review` directly for local-only diffs. Use GitHub review for G
    ```
    For failing or blocked pipelines, list failing/blocked jobs and fetch traces when access allows. Check bridge/downstream pipeline state when the project uses child or multi-project pipelines; if bridge details are unavailable, report downstream state as `unknown` or `uncertain` with evidence. If neither CLI nor API access can identify the MR pipeline, report checks as `unknown` with the command output or host-context gap. Do not rely on `pipeline-failure-analyzer` as a separate later step unless it is explicitly invoked and its result is included in this adapter output.
 
-7. Apply `pull-request-review`:
+7. Apply `diff-review`:
    - review only issues introduced or materially worsened by the MR diff;
    - read full changed files and relevant usages/tests;
    - include unresolved GitLab discussions as artifact-host context;
@@ -111,7 +111,7 @@ docs_alignment_state: <aligned | missing | stale | not applicable | not run>
 test_coverage_state: <covered | partially covered | missing | not applicable | not assessed>
 verification_performed: <exact commands/API checks/read checks performed>
 verification_gaps: <none | list, including child/downstream uncertainty>
-findings: <pull-request-review findings or no issues>
+findings: <diff-review findings or no issues>
 merge_readiness: <ready | blocked | not ready | unknown, with reasons>
 ```
 
@@ -138,7 +138,7 @@ merge_readiness: <ready | blocked | not ready | unknown, with reasons>
 
 | Mistake | Fix |
 | --- | --- |
-| Treating GitLab mechanics as review judgment | Use GitLab only to gather host context; apply `pull-request-review` for findings |
+| Treating GitLab mechanics as review judgment | Use GitLab only to gather host context; apply `diff-review` for findings |
 | Reviewing stale local code | Verify source branch and host diff before reading files |
 | Ignoring unresolved discussions | Include them in the output contract and never call the MR ready while they remain |
 | Leaving check state implicit | Fetch GitLab CI state or mark checks `unknown` with evidence |
@@ -161,5 +161,5 @@ merge_readiness: <ready | blocked | not ready | unknown, with reasons>
 - GREEN retest: sub-agent `019eae18-1a4f-7dc0-bc51-3e2ca42f9495` found the same loophole persisted because the output contract did not force dirty-worktree guard, MR pipeline id, failed traces, downstream uncertainty, docs/test state, verification performed, and merge readiness fields.
 - GREEN retest: sub-agent `019eae19-9333-7aa0-bf8f-cc39785c2ee1` still found the contract too easy to satisfy without hard keyed fields for worktree guard, MR metadata, diff scope, CI state, child/downstream state, docs/test state, verification, and merge readiness.
 - GREEN: sub-agent `019eae1a-f361-7ef1-a740-02be95f46a43` passed after the keyed output contract forced worktree guard, MR/head pipeline metadata, failed traces, child/downstream state, docs/test state, verification gaps, findings, and merge readiness.
-- REFACTOR: adapter output contract keeps artifact-host context separate from `pull-request-review` findings so `plan-to-pr` can consume the gate.
+- REFACTOR: adapter output contract keeps artifact-host context separate from `diff-review` findings so `plan-to-pr` can consume the gate.
 - REFACTOR: the output contract now uses explicit keyed fields for worktree guard, MR metadata, diff scope, unresolved discussions, stale resolved threads, CI state, failed jobs, failing traces, child/downstream pipelines, docs alignment, test coverage, verification performed, verification gaps, findings, and merge readiness.
