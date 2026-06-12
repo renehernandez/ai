@@ -52,7 +52,7 @@ If `origin`, `upstream`, or a supplied PR/MR URL point to different artifact hos
 
 | Mode | Meaning |
 | --- | --- |
-| `automatic` | Feedback is expected to start from host automation, such as MR creation, branch rules, labels, or CI integration |
+| `automatic` | Feedback is expected to start from host automation, such as branch rules, labels, or CI integration |
 | `explicit` | The agent must request feedback, such as a PR comment, slash command, or connector action |
 | `manual` | Tell the user the exact manual request needed |
 | `disabled` | Do not request that feedback route |
@@ -91,7 +91,7 @@ verification_gaps: <none | list>
 
 ## Validation Scenarios
 
-- Fullscript GitLab MR: pass only if `git.fullscript.io` selects GitLab artifact adapters and Nitro automatic feedback.
+- Fullscript GitLab MR: pass only if `git.fullscript.io` selects GitLab artifact adapters and explicit Nitro feedback requested through `/request_review @nitro`.
 - GitHub open-source PR: pass only if `github.com` selects GitHub artifact adapters and Codex explicit feedback.
 - Mixed `origin`/`upstream` remotes: pass only if the artifact URL or target remote controls routing, or the agent asks.
 - Unmatched typo host: pass only if routing asks or blocks instead of picking the nearest route.
@@ -102,3 +102,5 @@ verification_gaps: <none | list>
 - RED: sub-agent `019eae29-0cdb-76c2-bbb9-7a5be0501e9a` mixed some artifact-host and reviewer terms, suggested a non-runtime config location, and identified over-broad GitHub routing, origin/upstream ambiguity, vague automatic semantics, skip/override gaps, and typo fail-open risk.
 - GREEN: this skill separates artifact host, review feedback, and adapters; uses machine policy before repo overrides; excludes unconfigured future reviewers; and requires unmatched routes to ask or block.
 - GREEN: sub-agent `019eae2b-728b-79a0-afa9-87231b5a896e` passed the mixed GitHub/Fullscript GitLab routing test by selecting GitHub + Codex for a GitHub PR, leaving Nitro on the Fullscript GitLab route, and asking on unmatched hosts.
+- RED: thread `019eb821-3bda-7db2-b40d-12c90f93b4cb` blocked after repeated polls because routing marked Fullscript Nitro as automatic with `request_review: false`, so no Nitro review was requested.
+- GREEN: Fullscript Nitro routing now uses explicit `review_requested` semantics with `request_review: true`, matching the Fullscript Nitro rule that posts `/request_review @nitro` after MR creation or material follow-up pushes.

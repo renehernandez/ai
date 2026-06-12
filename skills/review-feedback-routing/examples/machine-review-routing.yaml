@@ -13,12 +13,12 @@ routes:
       primary:
         reviewer: nitro
         feedback_adapter: nitro-review-feedback
-        request_mode: automatic
+        request_mode: explicit
         wait_mode: poll
-        trigger: artifact_created
+        trigger: review_requested
         required: true
         capabilities:
-          request_review: false
+          request_review: true
           poll_feedback: true
           inline_comments: true
           summary_comments: true

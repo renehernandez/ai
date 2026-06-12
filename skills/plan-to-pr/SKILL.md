@@ -142,7 +142,7 @@ reviewer_subagent_report:
     - GitLab: use `gitlab-review`.
     - GitHub: use `github-review`.
 12. Request or wait for review feedback using the routed `review_feedback.primary` entry.
-13. Wait for routed feedback to materialize before treating the gate as complete. For Codex GitHub review, poll PR reviews, review comments, timeline comments, and request reactions until the latest pushed head has a `chatgpt-codex-connector` review/comment, a thumbs-up/no-issues reaction on the request, actionable inline findings, or a clear timeout/blocker. For Nitro on Fullscript GitLab, wait for the automatic feedback route configured by `review-feedback-routing`.
+13. Request or wait for routed feedback before treating the gate as complete. For Codex GitHub review, poll PR reviews, review comments, timeline comments, and request reactions until the latest pushed head has a `chatgpt-codex-connector` review/comment, a thumbs-up/no-issues reaction on the request, actionable inline findings, or a clear timeout/blocker. For Nitro on Fullscript GitLab, follow `review-feedback-routing`: when it selects explicit Nitro feedback, post `glab mr note <MR_IID> -m "/request_review @nitro"` after MR creation or material follow-up pushes, then poll for latest-head Nitro feedback.
 14. Apply actionable hosted feedback and repeat local verification plus affected internal Codex reviewer subagents on the updated diff, then push and rerun hosted review. If the branch head changes after feedback or CI fixes, earlier hosted review is stale unless it clearly reviewed the new head.
 15. Watch CI through the artifact-host tool: `glab ci`/GitLab pipeline tools for GitLab, and `gh pr checks` or GitHub Actions checks for GitHub. Fix branch-caused failures, rerun relevant verification, rerun scrutiny and docs alignment if the diff changed, and push updates.
 16. Before finishing, generate the gate ledger shape with `scripts/plan-to-pr.ts gate-template`, fill it, and validate it with `validate-ledger`.
@@ -244,6 +244,7 @@ delivery_gate_ledger:
 | Treating local review as enough | Run all implementation reviewer subagents and reconcile outcomes |
 | Treating review request as feedback | Wait for latest-head routed feedback |
 | Reusing hosted review from an older head | Re-request hosted review after pushing fixes |
+| Waiting for automatic Nitro feedback when routing requires an explicit request | Post `/request_review @nitro`, then poll the latest head |
 | Omitting the reviewer outcome report | Generate it, validate it, and include it before the delivery ledger |
 | Finishing without a final ledger | Generate, fill, and validate the ledger |
 | Saying "done" with pending or unknown CI | Watch checks or state the exact blocker |
@@ -258,4 +259,6 @@ delivery_gate_ledger:
 - GREEN: subagent `019eb370-7dce-75d3-97ff-6c80d6406aab` confirmed the first patch forced internal Codex reviewer subagents and blocked dispatch/Claude, then found validator loopholes for under-launched reports, unresolved `findings`, missing security accounting, one-reviewer examples, and post-feedback inline reruns.
 - REFACTOR: the script now requires six implementation reviewers, requires `security-review` to be launched or skipped with not-applicable evidence, rejects unresolved `findings` or `blocked`, validates `reviewer_subagent_launch` with returned subagent IDs, and requires `local-review`, `implementation-scrutiny`, and `code-quality-review` to be `passed`.
 - GREEN: subagent `019eb391-6f16-7e03-8744-1e73e0daa807` passed after refactor with `Remaining actionable ambiguity: None.`
+- RED: thread `019eb821-3bda-7db2-b40d-12c90f93b4cb` blocked on Fullscript Nitro feedback because the workflow waited for automatic feedback even though no Nitro review was requested.
+- GREEN: Fullscript Nitro now follows explicit routing: request `/request_review @nitro` for MR creation or material follow-up pushes, then poll latest-head feedback.
 - Validation evidence: `validate-launch-report`, `validate-review-report`, and `validate-ledger` passed on valid fixtures; invalid missing reviewer IDs, under-launched reports, unresolved findings, `local-review: not_applicable`, and mandatory ledger gate `not_applicable` fixtures were rejected; `bun build skills/plan-to-pr/scripts/plan-to-pr.ts --outfile /private/tmp/plan-to-pr-check.js` bundled successfully.

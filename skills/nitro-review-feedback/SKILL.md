@@ -11,7 +11,7 @@ Collect Nitro feedback from Fullscript GitLab MRs and normalize it for `pull-req
 ## When to Use
 
 - `review-feedback-routing` selects reviewer `nitro`.
-- A Fullscript GitLab MR expects automatic Nitro feedback.
+- A Fullscript GitLab MR needs Nitro feedback requested through the configured routing policy.
 - `plan-to-pr` or `plan-to-review` needs to wait for Nitro before treating review feedback as complete.
 
 ## Workflow
@@ -31,7 +31,7 @@ Collect Nitro feedback from Fullscript GitLab MRs and normalize it for `pull-req
 5. Classify feedback as pending, no issues, findings, unavailable, or stale.
 6. Normalize actionable findings to the shared contract.
 
-Do not request Nitro by default. Fullscript routing treats Nitro as automatic; only post `/request_review @nitro` when the user explicitly asks or routing says an explicit request is required.
+Request Nitro only when routing says `request_mode: explicit` with `capabilities.request_review: true`, or when the user explicitly asks. For Fullscript GitLab, the configured route requires posting `glab mr note <MR_IID> -m "/request_review @nitro"` after MR creation and after material follow-up pushes unless a latest-head Nitro review is already in flight.
 
 ## Output Contract
 
@@ -51,13 +51,14 @@ verification_gaps: <none | list>
 | Mistake | Fix |
 | --- | --- |
 | Treating all GitLab feedback as Nitro | Identify Nitro-authored feedback explicitly |
-| Requesting Nitro when routing says automatic | Wait and poll unless explicit request is configured |
+| Waiting forever when routing requires an explicit Nitro request | Post `/request_review @nitro`, then poll for latest-head Nitro feedback |
+| Requesting Nitro repeatedly when a latest-head review is already in flight | Record the pending state, head SHA, and request evidence |
 | Passing old Nitro comments as clean | Compare feedback to the latest MR head SHA |
 | Hiding missing Nitro access | Return `unavailable` with evidence |
 
 ## Validation Scenarios
 
-- Automatic Nitro MR: pass only if the agent waits for Nitro-authored discussions/notes and ties them to the latest head.
+- Explicit Nitro MR: pass only if the agent requests Nitro, waits for Nitro-authored discussions/notes, and ties them to the latest head.
 - Missing Nitro feedback: pass only if status is `pending` or `unavailable`, not clean.
 - Stale Nitro feedback: pass only if stale feedback does not satisfy the review gate.
 
@@ -65,3 +66,5 @@ verification_gaps: <none | list>
 
 - RED scenario: baseline GitLab review can conflate MR discussions with Nitro feedback or assume automatic feedback has completed.
 - GREEN: this skill requires Nitro identity, latest-head staleness checks, and normalized feedback status.
+- RED scenario: thread `019eb821-3bda-7db2-b40d-12c90f93b4cb` treated `request_review: false` as authoritative and blocked after no automatic Nitro feedback appeared.
+- GREEN: the skill now directs agents to request Nitro when routing is explicit and to treat the request/pending state as evidence without re-requesting repeatedly.
