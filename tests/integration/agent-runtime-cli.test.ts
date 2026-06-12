@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
+import { pathToFileURL } from "node:url";
 
 type Fixture = {
   configPath: string;
@@ -12,6 +14,13 @@ type Fixture = {
 type FixtureConfig = Record<string, unknown>;
 
 const repoRoot = process.cwd();
+const runtimeScript = join(repoRoot, "scripts/agent-runtime.ts");
+const tsxLoader = pathToFileURL(join(repoRoot, "node_modules", "tsx", "dist", "loader.mjs")).href;
+
+type RunOptions = {
+  cwd?: string;
+  env?: Record<string, string>;
+};
 
 function withFixture(
   callback: (fixture: Fixture) => void,
@@ -44,10 +53,14 @@ function withFixture(
   }
 }
 
-function runAgentRuntime(args: string[]): { stdout: string; stderr: string; status: number | null } {
-  const result = spawnSync(process.execPath, ["--import", "tsx", "scripts/agent-runtime.ts", ...args], {
-    cwd: repoRoot,
+function runAgentRuntime(
+  args: string[],
+  options: RunOptions = {},
+): { stdout: string; stderr: string; status: number | null } {
+  const result = spawnSync(process.execPath, ["--import", tsxLoader, runtimeScript, ...args], {
+    cwd: options.cwd ?? repoRoot,
     encoding: "utf-8",
+    env: { ...process.env, ...options.env },
   });
   return {
     stdout: result.stdout,
@@ -56,8 +69,24 @@ function runAgentRuntime(args: string[]): { stdout: string; stderr: string; stat
   };
 }
 
+function runGit(args: string[], options: RunOptions = {}): string {
+  const result = spawnSync("git", args, {
+    cwd: options.cwd ?? repoRoot,
+    encoding: "utf-8",
+    env: { ...process.env, ...options.env },
+  });
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  return result.stdout.trim();
+}
+
 function matchCount(input: string, pattern: RegExp): number {
   return [...input.matchAll(pattern)].length;
+}
+
+function cachePathForUrl(directory: string, url: string): string {
+  const hash = createHash("sha256").update(url).digest("hex").slice(0, 16);
+  return join(directory, ".agent-runtime", "cache", `skills-${hash}`);
 }
 
 test("CLI validates all runtime scopes", () => {
@@ -226,6 +255,101 @@ test("CLI rejects wildcard names for remote skill sources", () => {
               ref: "main",
               basePath: "skills",
               names: ["*"],
+            },
+          ],
+        },
+      };
+      config.profiles = {
+        personal: { include: ["remote"], paths: ["AGENTS.md"] },
+      };
+    },
+  );
+});
+
+test("CLI install fetches a locked remote commit missing from a stale cache", () => {
+  withFixture(
+    ({ configPath, runtimeDir }) => {
+      const remoteUrl = "https://example.test/skills.git";
+      const remoteDir = join(runtimeDir, "remote-skills.git");
+      const sourceDir = join(runtimeDir, "source-skills");
+      const gitConfigPath = join(runtimeDir, "gitconfig");
+      const gitEnv = { GIT_CONFIG_GLOBAL: gitConfigPath, GIT_CONFIG_NOSYSTEM: "1" };
+
+      runGit(["init", "--bare", remoteDir]);
+      runGit(["init", sourceDir]);
+      runGit(["config", "user.email", "agent-runtime@example.test"], { cwd: sourceDir });
+      runGit(["config", "user.name", "Agent Runtime Test"], { cwd: sourceDir });
+      runGit(["remote", "add", "origin", remoteUrl], { cwd: sourceDir });
+
+      writeFileSync(
+        gitConfigPath,
+        `[url "${pathToFileURL(remoteDir).href}"]\n\tinsteadOf = ${remoteUrl}\n[protocol "file"]\n\tallow = always\n`,
+        "utf-8",
+      );
+
+      mkdirSync(join(sourceDir, "skills", "remote-skill"), { recursive: true });
+      writeFileSync(join(sourceDir, "skills", "remote-skill", "SKILL.md"), "---\nname: remote-skill\n---\nfirst\n", "utf-8");
+      runGit(["add", "skills/remote-skill/SKILL.md"], { cwd: sourceDir });
+      runGit(["commit", "-m", "add remote skill"], { cwd: sourceDir });
+      runGit(["branch", "-M", "main"], { cwd: sourceDir });
+      runGit(["push", "origin", "main"], { cwd: sourceDir, env: gitEnv });
+
+      const cacheDir = cachePathForUrl(runtimeDir, remoteUrl);
+      mkdirSync(join(runtimeDir, ".agent-runtime", "cache"), { recursive: true });
+      runGit(["clone", "--quiet", remoteUrl, cacheDir], { env: gitEnv });
+
+      writeFileSync(join(sourceDir, "skills", "remote-skill", "SKILL.md"), "---\nname: remote-skill\n---\nsecond\n", "utf-8");
+      runGit(["add", "skills/remote-skill/SKILL.md"], { cwd: sourceDir });
+      runGit(["commit", "-m", "update remote skill"], { cwd: sourceDir });
+      runGit(["push", "origin", "main"], { cwd: sourceDir, env: gitEnv });
+      const lockedCommit = runGit(["rev-parse", "HEAD"], { cwd: sourceDir });
+
+      writeFileSync(
+        join(runtimeDir, "lock.json"),
+        `${JSON.stringify(
+          {
+            version: 1,
+            skillsets: {
+              personal: {
+                updatedAt: "2026-06-12T00:00:00.000Z",
+                skills: {
+                  "remote-skill": {
+                    sourceType: "git",
+                    url: remoteUrl,
+                    ref: "main",
+                    resolvedCommit: lockedCommit,
+                    basePath: "skills",
+                    skillPath: "skills/remote-skill",
+                    contentHash: "stale",
+                  },
+                },
+              },
+            },
+          },
+          null,
+          2,
+        )}\n`,
+        "utf-8",
+      );
+
+      const install = runAgentRuntime(["skills", "install", "--profile", "personal", "--config", configPath], {
+        cwd: runtimeDir,
+        env: gitEnv,
+      });
+
+      assert.equal(install.status, 0, install.stderr || install.stdout);
+      assert.match(install.stdout, /^Installed remote-skill$/m);
+      assert.match(readFileSync(join(runtimeDir, "skills", "remote-skill", "SKILL.md"), "utf-8"), /second/);
+    },
+    (config) => {
+      config.blocks = {
+        remote: {
+          skills: [
+            {
+              url: "https://example.test/skills.git",
+              ref: "main",
+              basePath: "skills",
+              names: ["remote-skill"],
             },
           ],
         },

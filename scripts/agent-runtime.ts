@@ -586,7 +586,7 @@ function installSkillUnion(input: {
   const installPlans = buildSkillInstallPlans(input.config, input.profileNames, profileSources);
   const installedByKey = new Map<string, LockedSkill>();
   const verb = input.command === "install" ? "Installing" : "Updating";
-  const resolvedWorkspaceCommit = workspaceCommit();
+  let resolvedWorkspaceCommit: string | undefined;
 
   console.log(
     `${verb} ${skillPlanCount(installPlans)} unique skill${skillPlanCount(installPlans) === 1 ? "" : "s"} ` +
@@ -596,6 +596,7 @@ function installSkillUnion(input: {
   for (const plan of installPlans) {
     validateSource(plan.source);
     if (isLocalSource(plan.source)) {
+      resolvedWorkspaceCommit ??= workspaceCommit();
       for (const skillName of plan.skillNames) {
         const lockedSkill = installLocalSkill({
           source: plan.source,
@@ -620,6 +621,7 @@ function installSkillUnion(input: {
         ? lockedCommit ?? resolveCommit(repoDir, plan.source.ref)
         : resolveCommit(repoDir, plan.source.ref);
 
+    ensureCommitAvailable(repoDir, resolvedCommit);
     checkout(repoDir, resolvedCommit);
 
     for (const skillName of plan.skillNames) {
@@ -1264,6 +1266,25 @@ function ensureRepo(url: string, repoDir: string, shouldFetch: boolean): void {
   if (shouldFetch) {
     run("git", ["-C", repoDir, "fetch", "--quiet", "--prune", "origin"]);
   }
+}
+
+function ensureCommitAvailable(repoDir: string, commit: string): void {
+  if (commitExists(repoDir, commit)) {
+    return;
+  }
+
+  run("git", ["-C", repoDir, "fetch", "--quiet", "--prune", "origin"]);
+  if (!commitExists(repoDir, commit)) {
+    throw new Error(`Commit ${commit} is unavailable in ${repoDir} after fetching origin`);
+  }
+}
+
+function commitExists(repoDir: string, commit: string): boolean {
+  const result = spawnSync("git", ["-C", repoDir, "cat-file", "-e", `${commit}^{commit}`], {
+    encoding: "utf-8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  return result.status === 0;
 }
 
 function resolveCommit(repoDir: string, ref: string): string {
