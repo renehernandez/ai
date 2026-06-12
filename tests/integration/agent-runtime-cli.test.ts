@@ -181,6 +181,12 @@ test("CLI installs overlapping profile skills once", () => {
       assert.equal(matchCount(install.stdout, /^Installed work-only$/gm), 1);
       assert.equal(lstatSync(join(runtimeDir, "skills", "shared")).isDirectory(), true);
       assert.equal(lstatSync(join(runtimeDir, "claude", "skills", "shared")).isSymbolicLink(), true);
+
+      const lock = JSON.parse(readFileSync(join(runtimeDir, "lock.json"), "utf-8")) as {
+        skillsets: Record<string, Record<string, unknown>>;
+      };
+      assert.equal("updatedAt" in lock.skillsets.personal, false);
+      assert.equal("updatedAt" in lock.skillsets.work, false);
     },
     (config, runtimeDir) => {
       const localSkillsDir = join(runtimeDir, "local-skills");
@@ -311,7 +317,6 @@ test("CLI install fetches a locked remote commit missing from a stale cache", ()
             version: 1,
             skillsets: {
               personal: {
-                updatedAt: "2026-06-12T00:00:00.000Z",
                 skills: {
                   "remote-skill": {
                     sourceType: "git",

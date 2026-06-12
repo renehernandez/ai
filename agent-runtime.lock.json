@@ -2,7 +2,6 @@
   "version": 1,
   "skillsets": {
     "personal": {
-      "updatedAt": "2026-06-12T04:00:18.225Z",
       "skills": {
         "agents-sdk": {
           "sourceType": "git",
@@ -245,7 +244,6 @@
       }
     },
     "work": {
-      "updatedAt": "2026-06-12T04:00:18.225Z",
       "skills": {
         "agents-sdk": {
           "sourceType": "git",

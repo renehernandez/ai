@@ -116,7 +116,6 @@ type LockFile = {
   skillsets: Record<
     string,
     {
-      updatedAt: string;
       skills: Record<string, LockedSkill>;
     }
   >;
@@ -638,7 +637,6 @@ function installSkillUnion(input: {
     }
   }
 
-  const updatedAt = new Date().toISOString();
   for (const profileName of input.profileNames) {
     const installedSkills: Record<string, LockedSkill> = {};
     for (const source of profileSources.get(profileName) ?? []) {
@@ -651,7 +649,6 @@ function installSkillUnion(input: {
       }
     }
     input.lock.skillsets[profileName] = {
-      updatedAt,
       skills: sortRecord(installedSkills),
     };
   }
