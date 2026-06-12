@@ -57,13 +57,13 @@ These rules cover Git, GitHub, GitLab, Linear, review routing, and external comm
 
 ## Local Code Review
 
-- When the user asks to review local changes, review their changes, review the working tree, or self-review, delegate to the `local-review` agent.
-- Local review is distinct from hosted PR/MR review.
+- When the user asks to review local changes, review their changes, review the working tree, or self-review, delegate to the `implementation-review-agent`.
+- Implementation review of local changes is distinct from hosted PR/MR review.
 
 ## Hosted Provider Reviews
 
-- When the user asks to review a merge request, such as `review MR !123` or a `git.fullscript.io` merge request URL, delegate to the `gitlab-review` agent.
-- When the user asks to review a GitHub pull request, such as `review PR #123` or a `github.com/.../pull/123` URL, delegate to the `github-review` agent.
+- When the user asks to review a merge request, such as `review MR !123` or a `git.fullscript.io` merge request URL, delegate to the `gitlab-review-agent`.
+- When the user asks to review a GitHub pull request, such as `review PR #123` or a `github.com/.../pull/123` URL, delegate to the `github-review-agent`.
 - Do not use the `glab-cli` skill for MR reviews.
 - When requesting a review or re-review from a reviewer, use a GitLab slash command comment: `glab mr note <MR_IID> -m "/request_review @<reviewer>"`.
 - Never use `glab mr update --reviewer` for review requests.

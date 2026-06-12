@@ -17,17 +17,17 @@ These rules govern when to diagnose, when to edit, and how to route implementati
 
 ## Code Implementation
 
-- When the user asks to implement, fix, build, or apply changes across multiple files, delegate to the `implementer` agent when that harness supports agent delegation.
+- When the user asks to implement, fix, build, or apply changes across multiple files, delegate to the `implementer-agent`.
 - This applies whether or not a `plan.md` file exists.
 - For trivial single-file edits, inline execution is acceptable.
-- If already running as the implementer agent, execute the approved plan instead of re-delegating.
+- If already running as the `implementer-agent`, execute the approved plan instead of re-delegating.
 - For feature implementation work, follow [feature-delivery.md](feature-delivery.md) through PR creation and CI follow-through unless the user explicitly asks to stop earlier.
 - Do not commit or push non-feature implementation work unless the user explicitly asks or the approved plan requires it.
 
 ## Local Code Review
 
-- When the user asks to review local changes, review their changes, review the working tree, or self-review, delegate to the `local-review` agent.
-- If local-review tooling is unavailable, report that limitation and perform the best available local review without pretending an agent ran.
+- When the user asks to review local changes, review their changes, review the working tree, or self-review, delegate to the `implementation-review-agent`.
+- Do not substitute an inline review for required implementation-review-agent delegation.
 
 ## Compound Step
 

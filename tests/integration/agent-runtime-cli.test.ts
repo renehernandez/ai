@@ -104,7 +104,7 @@ test("CLI shows command-specific help", () => {
 });
 
 test("CLI rejects flags outside their command scope", () => {
-  const result = runAgentRuntime(["skills", "status", "--agent", "local-review"]);
+  const result = runAgentRuntime(["skills", "status", "--agent", "implementation-review-agent"]);
 
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /unknown option '--agent'/);
@@ -112,15 +112,15 @@ test("CLI rejects flags outside their command scope", () => {
 
 test("CLI installs and reports agent generation", () => {
   withFixture(({ configPath, runtimeDir }) => {
-    const install = runAgentRuntime(["agents", "install", "--agent", "implementer", "--config", configPath]);
+    const install = runAgentRuntime(["agents", "install", "--agent", "implementer-agent", "--config", configPath]);
     assert.equal(install.status, 0, install.stderr || install.stdout);
 
-    const generatedPath = join(runtimeDir, "agents", "claude", "implementer.md");
-    const linkPath = join(runtimeDir, "claude", "agents", "implementer.md");
-    const codexGeneratedPath = join(runtimeDir, "agents", "codex", "implementer.md");
-    const codexLinkPath = join(runtimeDir, "codex", "agents", "implementer.md");
-    const opencodeGeneratedPath = join(runtimeDir, "agents", "opencode", "implementer.md");
-    const opencodeLinkPath = join(runtimeDir, "opencode", "agents", "implementer.md");
+    const generatedPath = join(runtimeDir, "agents", "claude", "implementer-agent.md");
+    const linkPath = join(runtimeDir, "claude", "agents", "implementer-agent.md");
+    const codexGeneratedPath = join(runtimeDir, "agents", "codex", "implementer-agent.md");
+    const codexLinkPath = join(runtimeDir, "codex", "agents", "implementer-agent.md");
+    const opencodeGeneratedPath = join(runtimeDir, "agents", "opencode", "implementer-agent.md");
+    const opencodeLinkPath = join(runtimeDir, "opencode", "agents", "implementer-agent.md");
     const generated = readFileSync(generatedPath, "utf-8");
     const codexGenerated = readFileSync(codexGeneratedPath, "utf-8");
     const opencodeGenerated = readFileSync(opencodeGeneratedPath, "utf-8");
@@ -135,10 +135,10 @@ test("CLI installs and reports agent generation", () => {
     assert.equal(lstatSync(codexLinkPath).isSymbolicLink(), true);
     assert.equal(lstatSync(opencodeLinkPath).isSymbolicLink(), true);
 
-    const status = runAgentRuntime(["agents", "status", "--agent", "implementer", "--config", configPath]);
+    const status = runAgentRuntime(["agents", "status", "--agent", "implementer-agent", "--config", configPath]);
     assert.equal(status.status, 0, status.stderr || status.stdout);
     assert.match(status.stdout, /\[ok\].*generated/);
-    assert.match(status.stdout, /\[ok\].*implementer\.md/);
+    assert.match(status.stdout, /\[ok\].*implementer-agent\.md/);
   });
 });
 

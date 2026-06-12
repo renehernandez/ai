@@ -21,28 +21,28 @@ const OPTIONAL_REVIEWERS = [
 ] as const;
 
 const REVIEW_SUBAGENTS = [
-  "local-review",
-  "implementation-scrutiny",
-  "code-quality-review",
-  "code-simplifier",
-  "deslop",
-  "docs-alignment-review",
-  "security-review",
+  "implementation-review-agent",
+  "implementation-scrutiny-agent",
+  "code-quality-review-agent",
+  "code-simplifier-agent",
+  "deslop-agent",
+  "docs-alignment-review-agent",
+  "security-review-agent",
 ] as const;
 
 const REQUIRED_REVIEW_SUBAGENTS = [
-  "local-review",
-  "implementation-scrutiny",
-  "code-quality-review",
-  "code-simplifier",
-  "deslop",
-  "docs-alignment-review",
+  "implementation-review-agent",
+  "implementation-scrutiny-agent",
+  "code-quality-review-agent",
+  "code-simplifier-agent",
+  "deslop-agent",
+  "docs-alignment-review-agent",
 ] as const;
 
 const MUST_PASS_REVIEW_SUBAGENTS = [
-  "local-review",
-  "implementation-scrutiny",
-  "code-quality-review",
+  "implementation-review-agent",
+  "implementation-scrutiny-agent",
+  "code-quality-review-agent",
 ] as const;
 
 const ARTIFACT_TYPES = ["plan", "openspec", "linear"] as const;
@@ -53,7 +53,7 @@ const LEDGER_GATES = [
   "implementation",
   "local_verification",
   "reviewer_subagents",
-  "local_review",
+  "implementation_review",
   "implementation_scrutiny",
   "code_quality_review",
   "code_simplifier",
@@ -177,44 +177,43 @@ function printReviewerTemplate(): void {
   console.log(`reviewer_subagent_launch:
   status: launched
   launched_reviewers:
-    - local-review
-    - implementation-scrutiny
-    - code-quality-review
-    - code-simplifier
-    - deslop
-    - docs-alignment-review
+    - implementation-review-agent
+    - implementation-scrutiny-agent
+    - code-quality-review-agent
+    - code-simplifier-agent
+    - deslop-agent
+    - docs-alignment-review-agent
   skipped_reviewers:
-    - security-review: not_applicable - no security-sensitive surface changed
+    - security-review-agent: not_applicable - no security-sensitive surface changed
   subagent_ids:
-    - local-review: <returned subagent id>
-    - implementation-scrutiny: <returned subagent id>
-    - code-quality-review: <returned subagent id>
-    - code-simplifier: <returned subagent id>
-    - deslop: <returned subagent id>
-    - docs-alignment-review: <returned subagent id>
+    - implementation-review-agent: <returned subagent id>
+    - implementation-scrutiny-agent: <returned subagent id>
+    - code-quality-review-agent: <returned subagent id>
+    - code-simplifier-agent: <returned subagent id>
+    - deslop-agent: <returned subagent id>
+    - docs-alignment-review-agent: <returned subagent id>
 
 reviewer_subagent_report:
   status: complete
   launched_reviewers:
-    - local-review
-    - implementation-scrutiny
-    - code-quality-review
-    - code-simplifier
-    - deslop
-    - docs-alignment-review
+    - implementation-review-agent
+    - implementation-scrutiny-agent
+    - code-quality-review-agent
+    - code-simplifier-agent
+    - deslop-agent
+    - docs-alignment-review-agent
   skipped_reviewers:
-    - security-review: not_applicable - no security-sensitive surface changed
+    - security-review-agent: not_applicable - no security-sensitive surface changed
   outcomes:
-    - local-review: passed - no actionable findings
-    - implementation-scrutiny: passed - scrutiny verdict ship
-    - code-quality-review: passed - no critical or warning maintainability findings
-    - code-simplifier: passed - simplification applied or not needed
-    - deslop: passed - AI-shaped clutter removed or not present
-    - docs-alignment-review: passed - docs alignment clean or updated
+    - implementation-review-agent: passed - no actionable correctness or regression findings
+    - implementation-scrutiny-agent: passed - scrutiny verdict ship
+    - code-quality-review-agent: passed - no critical or warning maintainability findings
+    - code-simplifier-agent: passed - simplification applied or not needed
+    - deslop-agent: passed - AI-shaped clutter removed or not present
+    - docs-alignment-review-agent: passed - docs alignment clean or updated
 
 review_execution_rules:
-  - In Codex, run reviewer agents with the internal Codex subagent tool exposed by the current harness, such as multi_agent_v1.spawn_agent when available.
-  - If no internal Codex subagent tool is exposed, stop with a blocker instead of routing reviewers to another harness.
+  - In Codex, run reviewer agents with the internal Codex subagent tool exposed by the current harness.
   - Do not use the dispatch skill, Claude Code Task, or external Claude harness for Codex plan-to-pr reviewers.
   - Omit model overrides unless the user explicitly asks for one.
   - Print and validate reviewer_subagent_launch immediately after spawning reviewers and before waiting for outcomes.
@@ -456,8 +455,8 @@ function requireSecurityAccounting(
   skippedReviewerNames: Set<string>,
   errors: string[],
 ): void {
-  if (!launchedReviewers.includes("security-review") && !skippedReviewerNames.has("security-review")) {
-    errors.push("security-review must be launched or listed under skipped_reviewers with not_applicable evidence");
+  if (!launchedReviewers.includes("security-review-agent") && !skippedReviewerNames.has("security-review-agent")) {
+    errors.push("security-review-agent must be launched or listed under skipped_reviewers with not_applicable evidence");
   }
 }
 

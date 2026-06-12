@@ -67,7 +67,7 @@ Responsibilities:
 3. Implement the approved slice.
 4. Run local verification.
 5. Launch implementation reviewers as internal Codex subagents, immediately report launched reviewers and returned subagent IDs in-session, and validate the launch report.
-6. Reconcile reviewer outcomes for local review, implementation scrutiny, code quality, simplification, deslop, security when relevant, and docs alignment.
+6. Reconcile reviewer outcomes for implementation review, implementation scrutiny, code quality, simplification, deslop, security when relevant, and docs alignment.
 7. Validate the final reviewer outcome report.
 8. Create or update the routed GitHub PR or GitLab MR.
 9. Run artifact-host review.
@@ -135,7 +135,7 @@ Selection rules:
 - Select `docs-and-agent-alignment` for changes to reusable workflows, docs, skills, rules, automation prompts, background review expectations, or PR/MR description contracts.
 - Select `agent-runtime-and-skill-compatibility` for changes to skill folder structure, skill metadata, bundled scripts, Codex adapter files, same-harness subagent routing, install/update behavior, or agent runtime behavior.
 - Validate the judge output before reviewer fanout. The selection is not ready if the judge invents reviewer names or chooses `baseline_sufficient` while listing optional reviewers.
-- In Codex, run reviewer agents with the internal Codex subagent tool exposed by the current harness, such as `multi_agent_v1.spawn_agent` when available; do not use the `dispatch` skill, Claude Code `Task`, or any external Claude harness for `plan-ready` reviewers. If no internal Codex subagent tool is exposed, stop with a blocker instead of routing reviewers to another harness.
+- In Codex, run reviewer agents with the internal Codex subagent tool exposed by the current harness; do not use the `dispatch` skill, Claude Code `Task`, or any external Claude harness for `plan-ready` reviewers.
 
 ## Reviewer Output Contract
 
@@ -242,7 +242,7 @@ Required gates:
 - implementation
 - local verification
 - reviewer subagents
-- local review
+- implementation review
 - implementation scrutiny
 - code quality review
 - code simplifier
@@ -272,7 +272,7 @@ Pressure scenarios:
 ## Pressure Test Evidence
 
 - RED: baseline plan-ready subagent `019eb39e-5890-76c0-a967-f287d449de7a` inspected committed pre-edit files and failed as expected. It cited `Using dispatch to run required plan reviewers.`, `Dispatch all baseline reviewers plus judge-selected optional reviewers as subagents.`, and adapter text `run required dispatch plan reviewers`; its rationalization was that explicit `dispatch` would route Codex reviewer execution away from internal Codex subagents.
-- RED: baseline plan-to-pr subagent `019eb39e-7a2b-7453-81b0-37fb35df9005` inspected committed pre-edit files and failed as expected. It cited `Run local PR/diff review with pull-request-review`, `Run scrutinize on the implementation diff`, `Run the pre-commit quality gate`, and adapter text `run local verification, local review, $scrutinize...`; its rationalization was: `inline helper-skill review satisfies the workflow; nothing says I must launch internal Codex reviewer subagents or report each reviewer's final outcome`.
+- RED: baseline plan-to-pr subagent `019eb39e-7a2b-7453-81b0-37fb35df9005` inspected committed pre-edit files and failed as expected. It cited `Run local PR/diff review with pull-request-review`, `Run scrutinize on the implementation diff`, `Run the pre-commit quality gate`, and adapter text `run local verification, implementation review, $scrutinize...`; its rationalization was: `inline helper-skill review satisfies the workflow; nothing says I must launch internal Codex reviewer subagents or report each reviewer's final outcome`.
 - GREEN: missing handoff pressure passed. A subagent found that `plan-to-pr` requires exactly one valid `plan_ready_handoff`, rejects fuzzy ideas, and tells the user to run `plan-ready` or paste a handoff before implementation.
 - RED/GREEN: optional reviewer pressure initially failed because `plan-ready` listed the optional catalog but did not make `docs-and-agent-alignment` and `agent-runtime-and-skill-compatibility` likely enough for skill/runtime changes. The skill and script now include selection rules for reusable workflow/docs/skills/rules changes and skill metadata/script/runtime changes.
 - GREEN: reviewer-selection validation now accepts `docs-and-agent-alignment` plus `agent-runtime-and-skill-compatibility`, rejects invented optional reviewer names, and rejects invented baseline reviewer names.
@@ -290,7 +290,7 @@ Validation outputs:
 - `bun skills/plan-to-pr/scripts/plan-to-pr.ts validate-launch-report --file /private/tmp/plan-to-pr-valid-launch-report.yaml` -> `reviewer_subagent_launch valid`
 - `bun skills/plan-to-pr/scripts/plan-to-pr.ts validate-review-report --file /private/tmp/plan-to-pr-valid-review-report.yaml` -> `reviewer_subagent_report valid`
 - `bun skills/plan-to-pr/scripts/plan-to-pr.ts validate-ledger --file /private/tmp/plan-to-pr-valid-ledger.yaml` -> `delivery_gate_ledger valid`
-- Negative fixtures were rejected for bare reviewer-selection rationale, missing optional-reviewer rationale, missing launch IDs, under-launched reviewer reports, unresolved findings, `local-review: not_applicable`, and mandatory ledger gates marked `not_applicable`.
+- Negative fixtures were rejected for bare reviewer-selection rationale, missing optional-reviewer rationale, missing launch IDs, under-launched reviewer reports, unresolved findings, `implementation-review-agent: not_applicable`, and mandatory ledger gates marked `not_applicable`.
 - `bun build skills/plan-ready/scripts/plan-ready.ts --outfile /private/tmp/plan-ready-check.js` and `bun build skills/plan-to-pr/scripts/plan-to-pr.ts --outfile /private/tmp/plan-to-pr-check.js` both bundled successfully.
 
 ## Success Criteria

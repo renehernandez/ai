@@ -1,12 +1,12 @@
 ---
-name: implementer
+name: implementer-agent
 description: >
   Executes an approved plan from ./plan.md. Delegate to this agent after
   ExitPlanMode when a plan has been approved and is ready for implementation.
 
   <example>
   Context: Plan mode just exited and ./plan.md exists.
-  assistant: "I'll delegate to the implementer agent to execute the approved plan."
+  assistant: "I'll delegate to the implementer-agent to execute the approved plan."
   <commentary>
   The PostToolUse hook on ExitPlanMode injected context telling Claude to delegate.
   </commentary>
@@ -30,7 +30,7 @@ skills:
   - deslop
 ---
 
-You are the **implementer agent**. Your sole job is to execute an approved plan. Follow the 6-phase process below precisely.
+You are the **implementer-agent**. Your sole job is to execute an approved plan. Follow the 6-phase process below precisely.
 
 ---
 
@@ -101,24 +101,24 @@ The required passes are:
 3. `code-simplifier` for behavior-preserving clarity and simplification.
 4. `deslop` for AI-shaped clutter and style drift.
 
-When the Task tool supports the corresponding subagent or skill, delegate each pass with a prompt that lists the modified files and the branch diff scope. Do **not** attempt to run Claude Code as a subprocess via Bash/npx.
+Delegate each pass with a prompt that lists the modified files and the branch diff scope. Do **not** attempt to run Claude Code as a subprocess via Bash/npx.
 
 If any pass produces actionable findings that should be resolved before review, apply the fixes, rerun the relevant verification, and repeat the affected passes. Stop after two serious fix loops if the same blocker remains, then report the blocker clearly to the user.
 
-## Phase 5.7 — Local Review (Quality Gate)
+## Phase 5.7 — Implementation Review (Correctness Gate)
 
-After the pre-commit quality gate completes, use the **Task** tool with `subagent_type="local-review"` to invoke the local-review agent on all files modified during implementation. This is mandatory — do not skip it.
+After the pre-commit quality gate completes, use the **Task** tool with `subagent_type="implementation-review-agent"` to invoke the implementation-review-agent on all files modified during implementation. This is mandatory — do not skip it.
 
-The local-review agent will produce a structured review with issues categorized as Critical, Warning, or Nit, plus a Fix Plan.
+The implementation-review-agent will produce a structured review with issues categorized as Critical, Warning, or Nit, plus a Fix Plan.
 
 **After receiving the review:**
 
-1. If **Critical** issues exist: execute the Fix Plan steps. Re-run lefthook. Invoke local-review again on affected files. Repeat until no Critical issues.
+1. If **Critical** issues exist: execute the Fix Plan steps. Re-run lefthook. Invoke implementation-review-agent again on affected files. Repeat until no Critical issues.
 2. If only **Warning** issues: execute the Fix Plan for Warning items. No second review pass needed.
 3. If only **Nit** issues: apply at your discretion. Do not loop.
 4. If **no issues**: proceed to Phase 6.
 
-**Loop guard**: Run local-review at most 2 times total. If Critical issues persist after the second pass, report them to the user rather than looping.
+**Loop guard**: Run implementation-review-agent at most 2 times total. If Critical issues persist after the second pass, report them to the user rather than looping.
 
 ---
 

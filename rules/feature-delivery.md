@@ -95,9 +95,8 @@ were no structural findings.
 Include the `scrutinize` verdict and whether any `MINOR` findings were fixed or
 left as residual risk.
 
-When a harness has subagents or slash skills for these passes, use them. In
-Codex, read each named `SKILL.md` before applying it and perform the closest
-available local workflow if a dedicated subagent is unavailable.
+Use subagents or slash skills for these passes. In Codex, read each named
+`SKILL.md` before applying it and run the required subagent review path.
 
 ## PR/MR and CI Follow-Through
 

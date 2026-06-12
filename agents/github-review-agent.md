@@ -1,5 +1,5 @@
 ---
-name: github-review
+name: github-review-agent
 description: >
   Use this agent to review a GitHub pull request. Delegate to this agent when
   the user asks to review a PR, perform code review on GitHub PR changes,
@@ -10,16 +10,16 @@ description: >
   <example>
   Context: The user wants to review a specific GitHub PR by number.
   user: "Review PR #456"
-  assistant: "I'll delegate to the github-review agent to perform a thorough code review of PR #456."
+  assistant: "I'll delegate to the github-review-agent to perform a thorough code review of PR #456."
   <commentary>
-  The user explicitly asked to review a GitHub PR, so delegate to github-review with the PR number as input.
+  The user explicitly asked to review a GitHub PR, so delegate to github-review-agent with the PR number as input.
   </commentary>
   </example>
 
   <example>
   Context: The user is on a feature branch and wants feedback on their GitHub PR.
   user: "Can you review my PR?"
-  assistant: "I'll use the github-review agent to review the PR for your current branch."
+  assistant: "I'll use the github-review-agent to review the PR for your current branch."
   <commentary>
   The user is asking for PR review without specifying a number. The agent will auto-discover the PR from the current branch.
   </commentary>
@@ -28,7 +28,7 @@ description: >
   <example>
   Context: The user shares a GitHub PR URL.
   user: "Please review https://github.com/org/project/pull/789"
-  assistant: "I'll delegate to the github-review agent to review that pull request."
+  assistant: "I'll delegate to the github-review-agent to review that pull request."
   <commentary>
   The user provided a PR URL. The agent will pass the URL to the github-review skill.
   </commentary>

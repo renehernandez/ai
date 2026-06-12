@@ -60,7 +60,7 @@
     }
   },
   "agentModelMappings": {
-    "implementer": {
+    "implementer-agent": {
       "codex": {
         "model": "gpt-5.4",
         "reasoning": "high"
@@ -72,7 +72,7 @@
         "model": "anthropic/claude-sonnet"
       }
     },
-    "local-review": {
+    "implementation-review-agent": {
       "codex": {
         "model": "gpt-5.5",
         "reasoning": "xhigh"
@@ -84,7 +84,7 @@
         "model": "anthropic/claude-opus"
       }
     },
-    "github-review": {
+    "github-review-agent": {
       "codex": {
         "model": "gpt-5.5",
         "reasoning": "xhigh"
@@ -96,7 +96,7 @@
         "model": "anthropic/claude-opus"
       }
     },
-    "gitlab-review": {
+    "gitlab-review-agent": {
       "codex": {
         "model": "gpt-5.5",
         "reasoning": "xhigh"

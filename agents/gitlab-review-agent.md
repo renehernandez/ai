@@ -1,5 +1,5 @@
 ---
-name: gitlab-review
+name: gitlab-review-agent
 description: >
   Use this agent to review a GitLab merge request. Delegate to this agent when
   the user asks to review an MR, perform code review on MR changes, or analyze
@@ -10,16 +10,16 @@ description: >
   <example>
   Context: The user wants to review a specific MR by number.
   user: "Review MR !456"
-  assistant: "I'll delegate to the gitlab-review agent to perform a thorough code review of MR !456."
+  assistant: "I'll delegate to the gitlab-review-agent to perform a thorough code review of MR !456."
   <commentary>
-  The user explicitly asked to review an MR, so delegate to gitlab-review with the MR number as input.
+  The user explicitly asked to review an MR, so delegate to gitlab-review-agent with the MR number as input.
   </commentary>
   </example>
 
   <example>
   Context: The user is on a feature branch and wants feedback on their changes.
   user: "Can you review my MR?"
-  assistant: "I'll use the gitlab-review agent to review the MR for your current branch."
+  assistant: "I'll use the gitlab-review-agent to review the MR for your current branch."
   <commentary>
   The user is asking for MR review without specifying a number. The agent will auto-discover the MR from the current branch.
   </commentary>
@@ -28,7 +28,7 @@ description: >
   <example>
   Context: The user shares a GitLab MR URL.
   user: "Please review https://git.fullscript.io/team/project/-/merge_requests/789"
-  assistant: "I'll delegate to the gitlab-review agent to review that merge request."
+  assistant: "I'll delegate to the gitlab-review-agent to review that merge request."
   <commentary>
   The user provided an MR URL. The agent will extract the IID and repository from the URL.
   </commentary>

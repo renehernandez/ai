@@ -50,11 +50,11 @@ For non-Codex agents or tools without goal state, use the same objective as a no
 
 ## Progress Output
 
-Make workflow helper use visible in the transcript. Before running any named hosted adapter, routing helper, or plain-English fallback, send a short status line naming what is being used, why it is being used, and the artifact or diff it is checking. Reviewer checks such as `local-review` are Codex subagent roles, not standalone skills. Examples:
+Make workflow helper use visible in the transcript. Before running any named hosted adapter, routing helper, or plain-English fallback, send a short status line naming what is being used, why it is being used, and the artifact or diff it is checking. Reviewer checks such as `implementation-review-agent` are Codex subagent roles, not standalone skills. Examples:
 
 - `Using $session-start to anchor this delivery run in live repo, branch, PR, and CI state.`
 - `Using $review-feedback-routing to select artifact host, create/inspect adapters, and review feedback route.`
-- `Launching internal Codex reviewer subagents for local review, implementation scrutiny, code quality, simplification, deslop, docs alignment, and conditional security review.`
+- `Launching internal Codex reviewer subagents for implementation review, implementation scrutiny, code quality, simplification, deslop, docs alignment, and conditional security review.`
 - `Using $github-pr-create to open the GitHub draft PR for the reviewed branch.`
 - `Using $gitlab-review to inspect the hosted GitLab MR at the latest head.`
 - `Using $github-review to inspect the hosted GitHub PR at the latest head.`
@@ -69,21 +69,21 @@ When reviewer subagents are launched, immediately print a session report using `
 reviewer_subagent_launch:
   status: launched
   launched_reviewers:
-    - local-review
-    - implementation-scrutiny
-    - code-quality-review
-    - code-simplifier
-    - deslop
-    - docs-alignment-review
+    - implementation-review-agent
+    - implementation-scrutiny-agent
+    - code-quality-review-agent
+    - code-simplifier-agent
+    - deslop-agent
+    - docs-alignment-review-agent
   skipped_reviewers:
-    - security-review: not_applicable - no security-sensitive surface changed
+    - security-review-agent: not_applicable - no security-sensitive surface changed
   subagent_ids:
-    - local-review: 019...
-    - implementation-scrutiny: 019...
-    - code-quality-review: 019...
-    - code-simplifier: 019...
-    - deslop: 019...
-    - docs-alignment-review: 019...
+    - implementation-review-agent: 019...
+    - implementation-scrutiny-agent: 019...
+    - code-quality-review-agent: 019...
+    - code-simplifier-agent: 019...
+    - deslop-agent: 019...
+    - docs-alignment-review-agent: 019...
 ```
 
 When reviewer subagents finish, include a final reviewer outcome report in the session and validate it with `scripts/plan-to-pr.ts validate-review-report`:
@@ -92,21 +92,21 @@ When reviewer subagents finish, include a final reviewer outcome report in the s
 reviewer_subagent_report:
   status: complete
   launched_reviewers:
-    - local-review
-    - implementation-scrutiny
-    - code-quality-review
-    - code-simplifier
-    - deslop
-    - docs-alignment-review
+    - implementation-review-agent
+    - implementation-scrutiny-agent
+    - code-quality-review-agent
+    - code-simplifier-agent
+    - deslop-agent
+    - docs-alignment-review-agent
   skipped_reviewers:
-    - security-review: not_applicable - no security-sensitive surface changed
+    - security-review-agent: not_applicable - no security-sensitive surface changed
   outcomes:
-    - local-review: passed - no actionable findings
-    - implementation-scrutiny: passed - scrutiny verdict ship
-    - code-quality-review: passed - no critical or warning maintainability findings
-    - code-simplifier: passed - simplification applied or not needed
-    - deslop: passed - AI-shaped clutter removed or not present
-    - docs-alignment-review: passed - docs alignment clean or updated
+    - implementation-review-agent: passed - no actionable correctness or regression findings
+    - implementation-scrutiny-agent: passed - scrutiny verdict ship
+    - code-quality-review-agent: passed - no critical or warning maintainability findings
+    - code-simplifier-agent: passed - simplification applied or not needed
+    - deslop-agent: passed - AI-shaped clutter removed or not present
+    - docs-alignment-review-agent: passed - docs alignment clean or updated
 ```
 
 ## Workflow
@@ -122,11 +122,10 @@ reviewer_subagent_report:
 5. Implement only `plan_ready_handoff.approved_slice`.
 6. Run the narrowest useful local verification for touched code.
 7. Launch implementation reviewers as internal Codex subagents in the current harness, then immediately print and validate the reviewer launch report in the session.
-   - In Codex, use the internal Codex subagent tool exposed by the current harness, such as `multi_agent_v1.spawn_agent` when available; omit model overrides unless the user explicitly asks for one.
-   - If no internal Codex subagent tool is exposed, stop with a blocker instead of routing reviewers to another harness.
+   - In Codex, use the internal Codex subagent tool exposed by the current harness and omit model overrides unless the user explicitly asks for one.
    - Do not invoke the `dispatch` skill, Claude Code `Task`, or any external Claude harness for `plan-to-pr` implementation reviewers from Codex.
-   - Launch these reviewers after implementation and local verification: `local-review`, `implementation-scrutiny`, `code-quality-review`, `code-simplifier`, `deslop`, and `docs-alignment-review`.
-   - Launch `security-review` only when the diff touches auth, authorization, secrets, token handling, sensitive data, dependency trust, webhooks, or externally reachable surfaces; otherwise list it under `skipped_reviewers` with a not-applicable reason.
+   - Launch these reviewers after implementation and local verification: `implementation-review-agent`, `implementation-scrutiny-agent`, `code-quality-review-agent`, `code-simplifier-agent`, `deslop-agent`, and `docs-alignment-review-agent`.
+   - Launch `security-review-agent` only when the diff touches auth, authorization, secrets, token handling, sensitive data, dependency trust, webhooks, or externally reachable surfaces; otherwise list it under `skipped_reviewers` with a not-applicable reason.
    - Record each returned subagent id in `reviewer_subagent_launch.subagent_ids`.
    - Give each reviewer one bounded prompt, the diff or artifact it owns, and the expected output: `passed`, `findings`, `blocked`, or `not_applicable` with evidence.
 8. Reconcile implementation reviewer outcomes:
@@ -157,13 +156,13 @@ reviewer_subagent_report:
 | Implementation | The approved slice is implemented and no unrelated scope is added |
 | Local verification | Narrow verification for touched code passes or blocker is evidenced |
 | Reviewer subagents | Internal Codex reviewer subagents are launched, reported, and complete |
-| Local review | `local-review` subagent has no actionable local PR/diff findings remaining |
-| Implementation scrutiny | `implementation-scrutiny` subagent returns `passed`, or a trade-off is explicitly accepted |
-| Code quality review | `code-quality-review` subagent has no critical or warning maintainability findings unresolved |
-| Code simplifier | `code-simplifier` subagent applied behavior-preserving simplification or marked not applicable |
-| Deslop | `deslop` subagent removed AI-shaped clutter/style drift or marked not applicable |
-| Security review | `security-review` subagent reviewed relevant security surface, or skipped with reason |
-| Docs alignment | `docs-alignment-review` subagent is clean/not applicable, or updates are made/deferred with reason |
+| Implementation review | `implementation-review-agent` subagent has no actionable correctness or regression findings remaining |
+| Implementation scrutiny | `implementation-scrutiny-agent` subagent returns `passed`, or a trade-off is explicitly accepted |
+| Code quality review | `code-quality-review-agent` subagent has no critical or warning maintainability findings unresolved |
+| Code simplifier | `code-simplifier-agent` subagent applied behavior-preserving simplification or marked not applicable |
+| Deslop | `deslop-agent` subagent removed AI-shaped clutter/style drift or marked not applicable |
+| Security review | `security-review-agent` subagent reviewed relevant security surface, or skipped with reason |
+| Docs alignment | `docs-alignment-review-agent` subagent is clean/not applicable, or updates are made/deferred with reason |
 | Review feedback routing | Artifact and feedback adapters are selected, or ambiguity is blocked with evidence |
 | Artifact creation/update | Routed PR/MR exists for the latest branch |
 | Artifact-host review | `gitlab-review` or `github-review` reviewed the latest hosted artifact head |
@@ -191,9 +190,9 @@ delivery_gate_ledger:
   reviewer_subagents:
     status: passed
     evidence: "reviewer_subagent_launch and reviewer_subagent_report validated"
-  local_review:
+  implementation_review:
     status: passed
-    evidence: "no actionable findings"
+    evidence: "no actionable correctness or regression findings"
   implementation_scrutiny:
     status: passed
     evidence: "Scrutinize verdict: ship"
@@ -237,11 +236,11 @@ delivery_gate_ledger:
 | Implementing without a handoff | Ask for a valid `plan_ready_handoff` |
 | Expanding beyond `approved_slice` | Update the plan through `plan-ready` first |
 | Running reviewers locally in the main agent only | Launch internal Codex reviewer subagents and report launch/outcomes |
-| Routing Codex implementation reviewers through `dispatch` or Claude | Use the current harness's internal Codex subagent tool; block if it is unavailable |
-| Reporting only one reviewer | Launch and report all required reviewers: `local-review`, `implementation-scrutiny`, `code-quality-review`, `code-simplifier`, `deslop`, and `docs-alignment-review` |
-| Omitting conditional security review | Launch `security-review` when applicable, otherwise list it under `skipped_reviewers` with not-applicable evidence |
+| Routing Codex implementation reviewers through `dispatch` or Claude | Use the current harness's internal Codex subagent tool |
+| Reporting only one reviewer | Launch and report all required reviewers: `implementation-review-agent`, `implementation-scrutiny-agent`, `code-quality-review-agent`, `code-simplifier-agent`, `deslop-agent`, and `docs-alignment-review-agent` |
+| Omitting conditional security review | Launch `security-review-agent` when applicable, otherwise list it under `skipped_reviewers` with not-applicable evidence |
 | Leaving `findings` or `blocked` in the final reviewer report | Fix findings, resolve blockers, and validate only the reconciled final report |
-| Treating local review as enough | Run all implementation reviewer subagents and reconcile outcomes |
+| Treating implementation review as enough | Run all implementation reviewer subagents and reconcile outcomes |
 | Treating review request as feedback | Wait for latest-head routed feedback |
 | Reusing hosted review from an older head | Re-request hosted review after pushing fixes |
 | Waiting for automatic Nitro feedback when routing requires an explicit request | Post `/request_review @nitro`, then poll the latest head |
@@ -255,10 +254,10 @@ delivery_gate_ledger:
 - GREEN: this skill requires a validated `plan_ready_handoff` before editing files.
 - REFACTOR: implementation delivery gates remain explicit, but planning gates move to `plan-ready`.
 - GREEN: pressure testing confirmed missing handoffs and non-`ship` scrutiny handoffs block before implementation.
-- RED: baseline subagent `019eb39e-7a2b-7453-81b0-37fb35df9005` inspected committed pre-edit files and failed as expected. It cited `Run local PR/diff review with pull-request-review`, `Run scrutinize on the implementation diff`, `Run the pre-commit quality gate`, and adapter text `run local verification, local review, $scrutinize...`, rationalizing: `inline helper-skill review satisfies the workflow; nothing says I must launch internal Codex reviewer subagents or report each reviewer's final outcome`.
+- RED: baseline subagent `019eb39e-7a2b-7453-81b0-37fb35df9005` inspected committed pre-edit files and failed as expected. It cited `Run implementation diff review with pull-request-review`, `Run scrutinize on the implementation diff`, `Run the pre-commit quality gate`, and adapter text `run local verification, implementation review, $scrutinize...`, rationalizing: `inline helper-skill review satisfies the workflow; nothing says I must launch internal Codex reviewer subagents or report each reviewer's final outcome`.
 - GREEN: subagent `019eb370-7dce-75d3-97ff-6c80d6406aab` confirmed the first patch forced internal Codex reviewer subagents and blocked dispatch/Claude, then found validator loopholes for under-launched reports, unresolved `findings`, missing security accounting, one-reviewer examples, and post-feedback inline reruns.
-- REFACTOR: the script now requires six implementation reviewers, requires `security-review` to be launched or skipped with not-applicable evidence, rejects unresolved `findings` or `blocked`, validates `reviewer_subagent_launch` with returned subagent IDs, and requires `local-review`, `implementation-scrutiny`, and `code-quality-review` to be `passed`.
+- REFACTOR: the script now requires six implementation reviewer agents, requires `security-review-agent` to be launched or skipped with not-applicable evidence, rejects unresolved `findings` or `blocked`, validates `reviewer_subagent_launch` with returned subagent IDs, and requires `implementation-review-agent`, `implementation-scrutiny-agent`, and `code-quality-review-agent` to be `passed`.
 - GREEN: subagent `019eb391-6f16-7e03-8744-1e73e0daa807` passed after refactor with `Remaining actionable ambiguity: None.`
 - RED: thread `019eb821-3bda-7db2-b40d-12c90f93b4cb` blocked on Fullscript Nitro feedback because the workflow waited for automatic feedback even though no Nitro review was requested.
 - GREEN: Fullscript Nitro now follows explicit routing: request `/request_review @nitro` for MR creation or material follow-up pushes, then poll latest-head feedback.
-- Validation evidence: `validate-launch-report`, `validate-review-report`, and `validate-ledger` passed on valid fixtures; invalid missing reviewer IDs, under-launched reports, unresolved findings, `local-review: not_applicable`, and mandatory ledger gate `not_applicable` fixtures were rejected; `bun build skills/plan-to-pr/scripts/plan-to-pr.ts --outfile /private/tmp/plan-to-pr-check.js` bundled successfully.
+- Validation evidence: `validate-launch-report`, `validate-review-report`, and `validate-ledger` passed on valid fixtures; invalid missing reviewer IDs, under-launched reports, unresolved findings, `implementation-review-agent: not_applicable`, and mandatory ledger gate `not_applicable` fixtures were rejected; `bun build skills/plan-to-pr/scripts/plan-to-pr.ts --outfile /private/tmp/plan-to-pr-check.js` bundled successfully.

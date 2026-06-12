@@ -21,7 +21,7 @@ test("renderAgent replaces model and adds reasoning", () => {
     writeFileSync(
       sourcePath,
       `---
-name: implementer
+name: implementer-agent
 model: sonnet
 color: green
 ---
@@ -45,7 +45,7 @@ test("renderAgent removes stale reasoning when mapping omits it", () => {
     writeFileSync(
       sourcePath,
       `---
-name: local-review
+name: implementation-review-agent
 model: gpt-5.5
 reasoning: xhigh
 ---

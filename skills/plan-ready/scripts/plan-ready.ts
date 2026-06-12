@@ -113,8 +113,7 @@ selection_rules:
   - Use baseline_sufficient only after explaining why no optional catalog reviewer is needed.
 
 review_execution_rules:
-  - In Codex, run reviewer agents with the internal Codex subagent tool exposed by the current harness, such as multi_agent_v1.spawn_agent when available.
-  - If no internal Codex subagent tool is exposed, stop with a blocker instead of routing reviewers to another harness.
+  - In Codex, run reviewer agents with the internal Codex subagent tool exposed by the current harness.
   - Do not use the dispatch skill, Claude Code Task, or external Claude harness for Codex plan-ready reviewers.
   - Omit model overrides unless the user explicitly asks for one.
 `);

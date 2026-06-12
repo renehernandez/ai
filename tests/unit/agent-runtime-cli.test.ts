@@ -57,19 +57,19 @@ test("Commander dispatches scoped skills commands", () => {
 });
 
 test("Commander dispatches scoped agent filters", () => {
-  const [parsed] = parseCommand(["agents", "status", "--agent", "local-review"]);
+  const [parsed] = parseCommand(["agents", "status", "--agent", "implementation-review-agent"]);
 
   assert.equal(parsed.scope, "agents");
   assert.equal(parsed.command, "status");
-  assert.equal(parsed.agentName, "local-review");
+  assert.equal(parsed.agentName, "implementation-review-agent");
 });
 
 test("Commander dispatches top-level wrapper commands", () => {
-  const [parsed] = parseCommand(["status", "--agent", "github-review", "--profile", "personal"]);
+  const [parsed] = parseCommand(["status", "--agent", "github-review-agent", "--profile", "personal"]);
 
   assert.equal(parsed.scope, undefined);
   assert.equal(parsed.command, "status");
-  assert.equal(parsed.agentName, "github-review");
+  assert.equal(parsed.agentName, "github-review-agent");
   assert.deepEqual(parsed.profileNames, ["personal"]);
 });
 
@@ -81,7 +81,7 @@ test("Commander dispatches all selection flags", () => {
 });
 
 test("Commander rejects agent flags on skills commands", () => {
-  const error = parseInvalidCommand(["skills", "status", "--agent", "local-review"]);
+  const error = parseInvalidCommand(["skills", "status", "--agent", "implementation-review-agent"]);
 
   assert.match(error.message, /unknown option '--agent'/);
 });
