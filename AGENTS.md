@@ -29,9 +29,8 @@ The linked rule files are normative and preserve the detailed policies.
 - Use `/scrutinize` for adversarial validation of plans, implementation diffs, PRs, hosted review feedback, proposed approaches, sanity checks, and second opinions.
 - Always use the `hallmark` skill for frontend design work, including greenfield UI, redesigns, design audits, visual polish, and design extraction from URLs or screenshots.
 - Prefer CLI tools that carry authentication and org conventions: `gh` for GitHub, `glab` for GitLab, and `wrangler` for Cloudflare.
-- For this repo, commit directly on `main` when the user asks to commit completed work. Do not create a feature branch, hosted review branch, PR, or MR unless the user explicitly asks for one.
-- Treat the `github` remote as the primary publishing remote for `main`. Push completed `main` work with the `github` remote; it is configured with GitHub first and GitLab as an additional push URL. Do not push `main` directly to the GitLab `origin` remote unless the user explicitly asks or the mirror is broken.
-- If publishing behavior changes in the future, document the primary remote, target branch, mirror remotes, push URLs, and any manual fallback commands here before changing push behavior.
+- For this repo, commit directly on `main` after completing any file change, then push `main` to `origin/main` unless the user explicitly asks not to commit or push. Do not create a feature branch, hosted review branch, PR, or MR unless the user explicitly asks for one.
+- Treat the GitHub `origin` remote as the primary publishing remote for `main`. If publishing behavior changes in the future, document the primary remote, target branch, mirror remotes, push URLs, and any manual fallback commands here before changing push behavior.
 - Do not use "smoke test" or "smoke tests" wording. Describe the exact verification performed instead, such as browser route checks, console checks, or manual browser verification.
 - Avoid slop-like contrast phrasing and generic AI filler. Do not lean on formulas like "X, not just Y", "more than just", "isn't just", or "the future of"; state the concrete claim directly.
 - Describe the exact verification performed instead of using vague shortcut
