@@ -1,0 +1,28 @@
+version = 1
+id = "example-daily-agent-inbox"
+kind = "cron"
+name = "Example daily agent inbox"
+prompt = """
+Paste the contents of prompt.md here for runtime automation instances.
+"""
+status = "PAUSED"
+rrule = "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=8;BYMINUTE=45;BYSECOND=0"
+model = "gpt-5.4"
+reasoning_effort = "medium"
+execution_environment = "local"
+
+# Machine-local runtime instances should set these paths for the current
+# machine. Keep checked-in examples generic.
+cwds = ["/path/to/agent-docs-repo"]
+
+[[repos]]
+name = "example"
+path = "/path/to/repo"
+provider = "github"
+repository = "owner/repo"
+main_checkout = "/path/to/repo"
+worktree_roots = ["/path/to/worktrees"]
+
+[agent_docs]
+path = "/path/to/agent-docs-repo"
+runtime_automation_dirs = ["/path/to/runtime/automations"]

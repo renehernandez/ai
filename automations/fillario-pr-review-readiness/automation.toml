@@ -1,0 +1,84 @@
+version = 1
+id = "fillario-pr-review-readiness"
+kind = "cron"
+name = "Fillario PR review readiness"
+prompt = """
+Determine whether open pull requests in the Fillario app repo are ready for
+human, hosted-agent, background-agent, or CI-based review. This automation is
+not a code review. It checks whether review has enough context and whether each
+review surface is current.
+
+Inputs for this runtime instance:
+
+- Repository root path: /Users/renehernandez/work/vialmate/projects/app
+- Provider: GitHub
+- Provider repository identifier: vialmate/app
+- Pull requests: inspect open PRs for vialmate/app and prioritize PRs connected
+  to the current local branch or active local worktrees when that relationship is
+  visible.
+- Plan and spec paths: docs/plans/
+- Review rules and checklists: AGENTS.md, .agents/rules/pull-request-review.md,
+  and .agents/rules/background-agent-pr-review.md
+
+If no open PRs exist, say so and stop after reporting the verified scope.
+
+Read-only contract:
+
+Do not edit PR descriptions, post comments, request reviews, push commits,
+rerun checks, merge, rebase, or modify local files. This automation only reports
+readiness gaps and next actions.
+
+Inspection checklist:
+
+1. Identify each open PR and latest head SHA.
+2. Read PR titles and descriptions.
+3. Check whether a plan, spec, issue, or task link exists when the change is
+   non-trivial.
+4. Check whether the description names risk areas, verification performed, and
+   remaining gaps.
+5. Inspect changed file categories: source, tests, docs, agent docs, workflow,
+   infrastructure, migrations, dependency manifests, or generated files.
+6. Inspect check, CI, deployment, preview cleanup, and preview state.
+7. Inspect existing human or hosted-agent review comments and whether they
+   apply to the latest head SHA.
+8. Check whether docs, rules, skills, automation prompts, or PR descriptions
+   likely need alignment.
+
+Use project-local review rules when they exist. If GitHub or check access is
+unavailable, report the verification gap rather than guessing.
+
+Use this shape and omit empty sections:
+
+```markdown
+Scope / verified:
+Readiness verdict:
+Top next action:
+Context gaps:
+Verification gaps:
+Review freshness:
+Docs / agent-doc alignment:
+Blocking checks:
+Ready for review:
+```
+
+Use one of these verdicts for each PR:
+
+- `ready`: review can proceed with the current context;
+- `needs-context`: description, plan, risk, or verification context is missing;
+- `needs-fixes`: checks, build, deployment, or known review blockers should be
+  fixed before review;
+- `stale-review`: previous review feedback does not apply to the latest head;
+- `blocked`: provider access, auth, missing branch, or missing PR prevents a
+  reliable readiness call.
+
+Do not say "ready" unless the verdict applies to the latest head SHA.
+Lead with the one highest-priority next action across all inspected PRs.
+"""
+status = "ACTIVE"
+rrule = "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=9;BYMINUTE=15;BYSECOND=0"
+model = "gpt-5.4"
+reasoning_effort = "medium"
+execution_environment = "local"
+cwds = ["/Users/renehernandez/work/vialmate/projects/app"]
+created_at = 1780938503000
+updated_at = 1780938503000

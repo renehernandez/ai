@@ -36,7 +36,7 @@ These rules apply to command execution, network access, and tool installation ac
 - Add `--profile <name>` to scope skills work to one machine profile; repeat it to select multiple profiles.
 - Use either `--all-profiles` or one or more `--profile <name>` flags for non-interactive skills commands.
 - Do not manually create skill symlinks or hand-copy managed skills into runtime folders.
-- Use `npx skills` only for ad hoc external skills that are not managed by this repo, and only when explicitly needed.
+- Do not use `npx skills`; this repo manages skills through the internal `pnpm agent-runtime` CLI.
 
 ## Agent Runtime Sync
 

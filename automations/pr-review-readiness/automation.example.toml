@@ -1,0 +1,23 @@
+version = 1
+id = "example-pr-review-readiness"
+kind = "cron"
+name = "Example PR review readiness"
+prompt = """
+Paste the contents of prompt.md here for runtime automation instances.
+"""
+status = "PAUSED"
+rrule = "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=9;BYMINUTE=15;BYSECOND=0"
+model = "gpt-5.4"
+reasoning_effort = "medium"
+execution_environment = "local"
+
+# Machine-local runtime instances should set these paths for the current
+# machine. Keep checked-in examples generic.
+cwds = ["/path/to/repo"]
+
+[inputs]
+provider = "github"
+repository = "owner/repo"
+pull_request = "infer-from-current-branch"
+plan_paths = ["docs/plans"]
+review_rules = ["AGENTS.md"]

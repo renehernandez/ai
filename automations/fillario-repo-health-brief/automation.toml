@@ -1,0 +1,13 @@
+version = 1
+id = "fillario-repo-health-brief"
+kind = "cron"
+name = "Fillario repo health brief"
+prompt = "Produce a concise operational brief for one repository or a closely related\nworktree family. Inspect live local and provider state without mutating work.\n\nInputs for this runtime instance:\n\n- Repository root path: /Users/renehernandez/work/vialmate/projects/app\n- Provider: GitHub\n- Provider repository identifier: vialmate/app\n- Long-lived main checkout path: /Users/renehernandez/work/vialmate/projects/app\n- Related worktree root: /Users/renehernandez/.codex/worktrees\n- Project rules and plans to inspect only when they affect status:\n  AGENTS.md, .agents/rules/, and docs/plans/\n\nIf an input is missing, continue with the available state and report the\nverification gap.\n\nRead-only contract:\n\nDo not clean, stash, pull, sync, prune, delete branches, edit files, merge,\nrebase, install dependencies, rerun checks, or run destructive commands. This\nautomation is for inspection and recommendation only.\n\nInspection checklist:\n\n1. Inspect the current branch, dirty state, and upstream tracking status.\n2. Inspect related worktrees and classify clean, dirty, detached, stale, or\n   missing-upstream checkouts.\n3. Inspect open pull requests in vialmate/app when GitHub tooling is\n   authenticated.\n4. Inspect check, CI, review, merge queue, preview cleanup, and deployment state\n   for active review surfaces.\n5. Inspect the long-lived main checkout state.\n6. Inspect project rules only when they affect status interpretation.\n\nPrefer provider tools for live remote state. If provider access is missing or\nstale, name that explicitly rather than guessing.\n\nUse this shape and omit empty sections:\n\n```markdown\nScope / verified:\nTop next action:\nReady:\nBlocked:\nWatching:\nStale / cleanup:\nVerification gaps:\n```\n\nEach non-empty section should name its source, such as local status, provider\nstate, check state, deployment state, or verification gap.\n\nKeep the brief short and actionable. Lead with one concrete next action."
+status = "ACTIVE"
+rrule = "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=9;BYMINUTE=0;BYSECOND=0"
+model = "gpt-5.4"
+reasoning_effort = "low"
+execution_environment = "local"
+cwds = ["/Users/renehernandez/work/vialmate/projects/app"]
+created_at = 1780543790237
+updated_at = 1780931023057

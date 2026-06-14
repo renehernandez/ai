@@ -1,0 +1,23 @@
+version = 1
+id = "example-repo-health-brief"
+kind = "cron"
+name = "Example repo health brief"
+prompt = """
+Paste the contents of prompt.md here for runtime automation instances.
+"""
+status = "PAUSED"
+rrule = "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=9;BYMINUTE=0;BYSECOND=0"
+model = "gpt-5.4"
+reasoning_effort = "low"
+execution_environment = "local"
+
+# Machine-local runtime instances should set these paths for the current
+# machine. Keep checked-in examples generic.
+cwds = ["/path/to/repo"]
+
+[inputs]
+provider = "github"
+repository = "owner/repo"
+main_checkout = "/path/to/repo"
+related_worktrees = ["/path/to/worktrees"]
+project_rules = ["AGENTS.md"]

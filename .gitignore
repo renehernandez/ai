@@ -3,4 +3,7 @@ automations/**/memory.md
 automations/**/state.json
 automations/**/*.log
 .agent-runtime/cache/
+agents/claude/
+agents/codex/
+agents/opencode/
 node_modules/

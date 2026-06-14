@@ -1,10 +1,23 @@
 import assert from "node:assert/strict";
-import { existsSync, lstatSync, mkdtempSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readlinkSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { lstatIfExists, replaceSafeSymlink, validateSafeSymlinkTargets } from "../../scripts/agent-runtime.ts";
+import {
+  lstatIfExists,
+  replaceSafeSymlink,
+  validateSafeSymlinkTargets,
+} from "../../scripts/agent-runtime.ts";
 
 function withTempDir(callback: (directory: string) => void): void {
   const directory = mkdtempSync(join(tmpdir(), "agent-runtime-symlink-"));
@@ -35,7 +48,28 @@ test("replaceSafeSymlink refuses to replace non-symlink files", () => {
     writeFileSync(target, "target\n", "utf-8");
     writeFileSync(linkPath, "existing\n", "utf-8");
 
-    assert.throws(() => replaceSafeSymlink(target, linkPath), /Refusing to replace non-symlink target/);
+    assert.throws(
+      () => replaceSafeSymlink(target, linkPath),
+      /Refusing to replace non-symlink target/,
+    );
+  });
+});
+
+test("replaceSafeSymlink accepts paths already managed by a parent symlink", () => {
+  withTempDir((directory) => {
+    const sourceRoot = join(directory, "source");
+    const runtimeRoot = join(directory, "runtime");
+    mkdirSync(sourceRoot);
+    writeFileSync(join(sourceRoot, "rule.md"), "content\n", "utf-8");
+    symlinkSync(sourceRoot, runtimeRoot, "dir");
+
+    replaceSafeSymlink(
+      join(sourceRoot, "rule.md"),
+      join(runtimeRoot, "rule.md"),
+    );
+
+    assert.equal(lstatSync(runtimeRoot).isSymbolicLink(), true);
+    assert.equal(readlinkSync(runtimeRoot), sourceRoot);
   });
 });
 
@@ -62,6 +96,26 @@ test("validateSafeSymlinkTargets rejects non-symlink files", () => {
     const linkPath = join(directory, "existing.md");
     writeFileSync(linkPath, "existing\n", "utf-8");
 
-    assert.throws(() => validateSafeSymlinkTargets([linkPath]), /Refusing to replace non-symlink target/);
+    assert.throws(
+      () => validateSafeSymlinkTargets([linkPath]),
+      /Refusing to replace non-symlink target/,
+    );
+  });
+});
+
+test("validateSafeSymlinkTargets accepts paths already managed by a parent symlink", () => {
+  withTempDir((directory) => {
+    const sourceRoot = join(directory, "source");
+    const runtimeRoot = join(directory, "runtime");
+    mkdirSync(sourceRoot);
+    writeFileSync(join(sourceRoot, "rule.md"), "content\n", "utf-8");
+    symlinkSync(sourceRoot, runtimeRoot, "dir");
+
+    validateSafeSymlinkTargets([
+      {
+        linkPath: join(runtimeRoot, "rule.md"),
+        target: join(sourceRoot, "rule.md"),
+      },
+    ]);
   });
 });

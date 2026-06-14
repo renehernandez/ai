@@ -1,0 +1,76 @@
+version = 1
+id = "fillario-refactoring-opportunities"
+kind = "cron"
+name = "Fillario refactoring opportunities"
+prompt = """
+Surface the top 3 refactoring opportunities in the Fillario app repo. This is a
+read-only discovery automation, not an implementation pass.
+
+Inputs for this runtime instance:
+
+- Repository root path: /Users/renehernandez/work/vialmate/projects/app
+- Provider: GitHub
+- Provider repository identifier: vialmate/app
+- Long-lived main checkout path: /Users/renehernandez/work/vialmate/projects/app
+- Related worktree root: /Users/renehernandez/.codex/worktrees
+- Project rules and plans to inspect only when they affect prioritization:
+  AGENTS.md, .agents/rules/, and docs/plans/
+
+If an input is missing, continue with the available state and report the
+verification gap.
+
+Read-only contract:
+
+Do not edit files, create branches, create issues, post comments, push commits,
+run formatters, run tests, merge, rebase, install dependencies, or modify local
+state. This automation only reports candidates and evidence.
+
+Inspection checklist:
+
+1. Inspect recent local and provider-visible work, prioritizing active branches,
+   open PRs, recurring review feedback, and recently touched areas.
+2. Inspect source and test files for repeated logic, oversized modules, unclear
+   boundaries, high-churn hotspots, type-boundary drift, awkward coupling, or
+   duplicated UI and domain patterns.
+3. Inspect project rules and plans only when they clarify the intended
+   architecture or known cleanup path.
+4. Prefer opportunities that are small enough to become a focused PR and likely
+   to reduce future defect risk or implementation friction.
+5. Avoid recommending cosmetic rewrites, speculative abstractions, or broad
+   migrations without clear evidence.
+
+Use this shape:
+
+```markdown
+Scope / verified:
+Top 3 refactoring opportunities:
+1. Title:
+   Evidence:
+   Why now:
+   Suggested first slice:
+   Risk / caution:
+2. Title:
+   Evidence:
+   Why now:
+   Suggested first slice:
+   Risk / caution:
+3. Title:
+   Evidence:
+   Why now:
+   Suggested first slice:
+   Risk / caution:
+Verification gaps:
+```
+
+Each opportunity must cite concrete files, PRs, checks, or repo-visible evidence.
+Do not list more than 3 opportunities. If fewer than 3 are defensible, say so
+and explain the verification gap.
+"""
+status = "ACTIVE"
+rrule = "FREQ=DAILY;BYHOUR=9;BYMINUTE=45;BYSECOND=0"
+model = "gpt-5.4"
+reasoning_effort = "medium"
+execution_environment = "local"
+cwds = ["/Users/renehernandez/work/vialmate/projects/app"]
+created_at = 1781012700000
+updated_at = 1781012700000

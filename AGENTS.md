@@ -18,6 +18,7 @@ The linked rule files are normative and preserve the detailed policies.
 - Keep commands simple: one command per tool call, no compound shell chains, and no `--no-verify`.
 - When a safe recurring command needs approval, request a reusable scoped prefix rule instead of a one-off approval. Prefer narrow prefixes such as `["pnpm", "test"]`, `["pnpm", "run", "test"]`, `["git", "status"]`, `["git", "diff"]`, `["git", "show"]`, and `["glab", "mr", "view"]`; avoid reusable approvals for destructive commands, dependency installs, pushes, credential access, or broad interpreters like `python`, `node`, or `bash`.
 - Keep approval-seeking commands prefix-matchable: avoid shell redirection, command substitution, heredocs, glob-heavy arguments, and broad `bash -lc` wrappers when a direct command works. If repeated prompts persist in a long-running Codex thread after sandbox or writable-root config changes, tell the user the thread may need to be restarted, forked, or handed off so the new config is loaded.
+- In brainstorming or planning threads, treat agreement as design confirmation only. Do not edit files, generate migrations, or start implementation from scope agreement alone; wait for an explicit implementation trigger such as "implement this", "make the changes", "start the PR", "go ahead and code it", or "apply the plan".
 - For JavaScript and TypeScript projects, invoke package-managed commands through the package manager, such as `pnpm exec`, `pnpm dlx`, or `pnpm run`; never call binaries inside `node_modules` directly.
 - Write agent and Codex hooks in TypeScript unless there is a specific runtime requirement that makes another language a better fit.
 - In troubleshooting mode, diagnose and report before editing or fixing anything.
@@ -33,6 +34,10 @@ The linked rule files are normative and preserve the detailed policies.
 - If publishing behavior changes in the future, document the primary remote, target branch, mirror remotes, push URLs, and any manual fallback commands here before changing push behavior.
 - Do not use "smoke test" or "smoke tests" wording. Describe the exact verification performed instead, such as browser route checks, console checks, or manual browser verification.
 - Avoid slop-like contrast phrasing and generic AI filler. Do not lean on formulas like "X, not just Y", "more than just", "isn't just", or "the future of"; state the concrete claim directly.
+- Describe the exact verification performed instead of using vague shortcut
+  labels. Prefer precise phrases such as browser route checks, responsive
+  viewport checks, console checks, local browser E2E tests, deployed-preview E2E
+  tests, or manual browser verification.
 
 ## Harness Entrypoints
 

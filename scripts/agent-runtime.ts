@@ -1,20 +1,20 @@
 #!/usr/bin/env tsx
-import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   cpSync,
   existsSync,
   lstatSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   readSync,
-  readdirSync,
   realpathSync,
   renameSync,
   rmSync,
   symlinkSync,
-  writeSync,
   writeFileSync,
+  writeSync,
 } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
@@ -135,7 +135,8 @@ export function main(): void {
 }
 
 export function executeParsedCommand(input: ParsedArgs): void {
-  const { scope, command, agentName, profileNames, allProfiles, configPath } = input;
+  const { scope, command, agentName, profileNames, allProfiles, configPath } =
+    input;
   const config = readJson<Config>(configPath);
 
   if (!scope) {
@@ -164,7 +165,9 @@ export function executeParsedCommand(input: ParsedArgs): void {
 
 type CommandExecutor = (input: ParsedArgs) => void;
 
-export function createProgram(execute: CommandExecutor = executeParsedCommand): Command {
+export function createProgram(
+  execute: CommandExecutor = executeParsedCommand,
+): Command {
   const program = new Command();
   program
     .name("agent-runtime")
@@ -184,12 +187,20 @@ export function createProgram(execute: CommandExecutor = executeParsedCommand): 
   return program;
 }
 
-function addWrapperCommand(program: Command, command: RuntimeCommand, execute: CommandExecutor): void {
+function addWrapperCommand(
+  program: Command,
+  command: RuntimeCommand,
+  execute: CommandExecutor,
+): void {
   program
     .command(command)
     .description(`${labelForCommand(command)} all runtime assets`)
     .option("--agent <name>", "Only apply agent work to one agent")
-    .option("--profile <name>", "Apply work to one profile; repeat for multiple", collectOption)
+    .option(
+      "--profile <name>",
+      "Apply work to one profile; repeat for multiple",
+      collectOption,
+    )
     .option("--all-profiles", "Apply work to all profiles")
     .option("--config <path>", "Path to agent runtime config", CONFIG_FILE)
     .action((first: CommandOptions | Command, second?: Command) => {
@@ -205,12 +216,18 @@ function addWrapperCommand(program: Command, command: RuntimeCommand, execute: C
 }
 
 function addSkillsCommands(program: Command, execute: CommandExecutor): void {
-  const skills = program.command("skills").description("Manage skill installation and symlinks");
+  const skills = program
+    .command("skills")
+    .description("Manage skill installation and symlinks");
   for (const command of runtimeCommands()) {
     skills
       .command(command)
       .description(`${labelForCommand(command)} managed skills`)
-      .option("--profile <name>", "Apply the command to one profile; repeat for multiple", collectOption)
+      .option(
+        "--profile <name>",
+        "Apply the command to one profile; repeat for multiple",
+        collectOption,
+      )
       .option("--all-profiles", "Apply the command to all profiles")
       .option("--config <path>", "Path to agent runtime config", CONFIG_FILE)
       .action((first: CommandOptions | Command, second?: Command) => {
@@ -227,7 +244,9 @@ function addSkillsCommands(program: Command, execute: CommandExecutor): void {
 }
 
 function addAgentsCommands(program: Command, execute: CommandExecutor): void {
-  const agents = program.command("agents").description("Manage sub-agent generation and symlinks");
+  const agents = program
+    .command("agents")
+    .description("Manage sub-agent generation and symlinks");
   for (const command of runtimeCommands()) {
     agents
       .command(command)
@@ -246,13 +265,22 @@ function addAgentsCommands(program: Command, execute: CommandExecutor): void {
   }
 }
 
-function addInstructionsCommands(program: Command, execute: CommandExecutor): void {
-  const instructions = program.command("instructions").description("Manage AGENTS.md and rules symlinks");
+function addInstructionsCommands(
+  program: Command,
+  execute: CommandExecutor,
+): void {
+  const instructions = program
+    .command("instructions")
+    .description("Manage AGENTS.md and rules symlinks");
   for (const command of runtimeCommands()) {
     instructions
       .command(command)
       .description(`${labelForCommand(command)} managed instructions`)
-      .option("--profile <name>", "Apply the command to one profile; repeat for multiple", collectOption)
+      .option(
+        "--profile <name>",
+        "Apply the command to one profile; repeat for multiple",
+        collectOption,
+      )
       .option("--all-profiles", "Apply the command to all profiles")
       .option("--config <path>", "Path to agent runtime config", CONFIG_FILE)
       .action((first: CommandOptions | Command, second?: Command) => {
@@ -279,14 +307,27 @@ function collectOption(value: string, previous: string[] = []): string[] {
   return [...previous, value];
 }
 
-function configPathFor(commandObject: Command, options: CommandOptions): string {
-  if (commandObject.getOptionValueSource("config") && commandObject.getOptionValueSource("config") !== "default") {
+function configPathFor(
+  commandObject: Command,
+  options: CommandOptions,
+): string {
+  if (
+    commandObject.getOptionValueSource("config") &&
+    commandObject.getOptionValueSource("config") !== "default"
+  ) {
     return options.config ?? CONFIG_FILE;
   }
-  return commandObject.optsWithGlobals<CommandOptions>().config ?? options.config ?? CONFIG_FILE;
+  return (
+    commandObject.optsWithGlobals<CommandOptions>().config ??
+    options.config ??
+    CONFIG_FILE
+  );
 }
 
-function actionContext(first: CommandOptions | Command, second?: Command): { options: CommandOptions; commandObject: Command } {
+function actionContext(
+  first: CommandOptions | Command,
+  second?: Command,
+): { options: CommandOptions; commandObject: Command } {
   if (first instanceof Command) {
     return {
       options: first.opts<CommandOptions>(),
@@ -358,21 +399,38 @@ function resolveProfileSelection(
   throw new Error("Choose profiles with --all-profiles or --profile <name>");
 }
 
-function selectedInstructionPaths(config: Config, selection: ProfileSelection): string[] {
+function selectedInstructionPaths(
+  config: Config,
+  selection: ProfileSelection,
+): string[] {
   if (config.profiles && Object.keys(config.profiles).length > 0) {
     validateProfileNames(config, selection.profileNames);
-    return uniqueNames(selection.profileNames.flatMap((profileName) => config.profiles?.[profileName]?.paths ?? []));
+    return uniqueNames(
+      selection.profileNames.flatMap(
+        (profileName) => config.profiles?.[profileName]?.paths ?? [],
+      ),
+    );
   }
 
-  if (!config.instructionProfiles || Object.keys(config.instructionProfiles).length === 0) {
+  if (
+    !config.instructionProfiles ||
+    Object.keys(config.instructionProfiles).length === 0
+  ) {
     return config.instructions?.paths ?? [];
   }
 
   validateInstructionProfileNames(config, selection.profileNames);
-  return uniqueNames(selection.profileNames.flatMap((profileName) => config.instructionProfiles?.[profileName]?.paths ?? []));
+  return uniqueNames(
+    selection.profileNames.flatMap(
+      (profileName) => config.instructionProfiles?.[profileName]?.paths ?? [],
+    ),
+  );
 }
 
-function selectedSkillProfileNames(config: Config, selection: ProfileSelection): string[] {
+function selectedSkillProfileNames(
+  config: Config,
+  selection: ProfileSelection,
+): string[] {
   if (config.profiles && Object.keys(config.profiles).length > 0) {
     validateProfileNames(config, selection.profileNames);
     return selection.profileNames;
@@ -410,7 +468,10 @@ function validateProfileNames(config: Config, profileNames: string[]): void {
   }
 }
 
-function validateInstructionProfileNames(config: Config, profileNames: string[]): void {
+function validateInstructionProfileNames(
+  config: Config,
+  profileNames: string[],
+): void {
   for (const profileName of profileNames) {
     if (!config.instructionProfiles?.[profileName]) {
       throw new Error(`Unknown profile '${profileName}'`);
@@ -497,7 +558,9 @@ function isRetryableReadError(error: unknown): boolean {
     error &&
       typeof error === "object" &&
       "code" in error &&
-      (error.code === "EAGAIN" || error.code === "EWOULDBLOCK" || error.code === "EINTR"),
+      (error.code === "EAGAIN" ||
+        error.code === "EWOULDBLOCK" ||
+        error.code === "EINTR"),
   );
 }
 
@@ -522,8 +585,13 @@ function runScope(
     return;
   }
   if (scope === "agents") {
-    if (input.profileSelection.interactive || (input.profileSelection.profileNames?.length ?? 0) > 0) {
-      throw new Error("--profile can only be used with skills, instructions, or wrapper commands");
+    if (
+      input.profileSelection.interactive ||
+      (input.profileSelection.profileNames?.length ?? 0) > 0
+    ) {
+      throw new Error(
+        "--profile can only be used with skills, instructions, or wrapper commands",
+      );
     }
     runAgents(input.command, input.config, input.agentName);
     return;
@@ -534,7 +602,11 @@ function runScope(
   runInstructions(input.command, input.config, input.profileSelection);
 }
 
-function runSkills(command: RuntimeCommand, config: Config, selection: ProfileSelection): void {
+function runSkills(
+  command: RuntimeCommand,
+  config: Config,
+  selection: ProfileSelection,
+): void {
   const profileNames = selectedSkillProfileNames(config, selection);
 
   if (command === "validate") {
@@ -582,7 +654,11 @@ function installSkillUnion(input: {
   symlinkTargets: string[];
 }): void {
   const profileSources = new Map<string, SkillSource[]>();
-  const installPlans = buildSkillInstallPlans(input.config, input.profileNames, profileSources);
+  const installPlans = buildSkillInstallPlans(
+    input.config,
+    input.profileNames,
+    profileSources,
+  );
   const installedByKey = new Map<string, LockedSkill>();
   const verb = input.command === "install" ? "Installing" : "Updating";
   let resolvedWorkspaceCommit: string | undefined;
@@ -605,19 +681,32 @@ function installSkillUnion(input: {
           symlinkTargets: input.symlinkTargets,
         });
 
-        installedByKey.set(skillInstallKey(plan.source, skillName), lockedSkill);
-        console.log(`${input.command === "install" ? "Installed" : "Updated"} ${skillName}`);
+        installedByKey.set(
+          skillInstallKey(plan.source, skillName),
+          lockedSkill,
+        );
+        console.log(
+          `${input.command === "install" ? "Installed" : "Updated"} ${skillName}`,
+        );
       }
       continue;
     }
 
     const repoDir = cachePathForSource(plan.source.url);
-    const lockedCommit = lockedCommitForSourceAcross(input.lock, input.profileNames, plan.source);
-    ensureRepo(plan.source.url, repoDir, input.command === "update" || !lockedCommit);
+    const lockedCommit = lockedCommitForSourceAcross(
+      input.lock,
+      input.profileNames,
+      plan.source,
+    );
+    ensureRepo(
+      plan.source.url,
+      repoDir,
+      input.command === "update" || !lockedCommit,
+    );
 
     const resolvedCommit =
       input.command === "install"
-        ? lockedCommit ?? resolveCommit(repoDir, plan.source.ref)
+        ? (lockedCommit ?? resolveCommit(repoDir, plan.source.ref))
         : resolveCommit(repoDir, plan.source.ref);
 
     ensureCommitAvailable(repoDir, resolvedCommit);
@@ -633,7 +722,9 @@ function installSkillUnion(input: {
       });
 
       installedByKey.set(skillInstallKey(plan.source, skillName), lockedSkill);
-      console.log(`${input.command === "install" ? "Installed" : "Updated"} ${skillName}`);
+      console.log(
+        `${input.command === "install" ? "Installed" : "Updated"} ${skillName}`,
+      );
     }
   }
 
@@ -641,9 +732,13 @@ function installSkillUnion(input: {
     const installedSkills: Record<string, LockedSkill> = {};
     for (const source of profileSources.get(profileName) ?? []) {
       for (const skillName of source.names) {
-        const lockedSkill = installedByKey.get(skillInstallKey(source, skillName));
+        const lockedSkill = installedByKey.get(
+          skillInstallKey(source, skillName),
+        );
         if (!lockedSkill) {
-          throw new Error(`Internal error: missing installed skill '${skillName}' for profile '${profileName}'`);
+          throw new Error(
+            `Internal error: missing installed skill '${skillName}' for profile '${profileName}'`,
+          );
         }
         installedSkills[skillName] = lockedSkill;
       }
@@ -664,7 +759,9 @@ function installSkill(input: {
   const skillPath = join(input.source.basePath, input.skillName);
   const sourceSkillDir = join(cachePathForSource(input.source.url), skillPath);
   if (!existsSync(join(sourceSkillDir, "SKILL.md"))) {
-    throw new Error(`Missing SKILL.md for '${input.skillName}' at ${input.source.url}:${skillPath}`);
+    throw new Error(
+      `Missing SKILL.md for '${input.skillName}' at ${input.source.url}:${skillPath}`,
+    );
   }
 
   const destination = join(input.canonicalSkillsDir, input.skillName);
@@ -694,7 +791,9 @@ function installLocalSkill(input: {
   const skillPath = join(input.source.localPath, input.skillName);
   const sourceSkillDir = resolve(skillPath);
   if (!existsSync(join(sourceSkillDir, "SKILL.md"))) {
-    throw new Error(`Missing SKILL.md for local skill '${input.skillName}' at ${skillPath}`);
+    throw new Error(
+      `Missing SKILL.md for local skill '${input.skillName}' at ${skillPath}`,
+    );
   }
 
   const destination = join(input.canonicalSkillsDir, input.skillName);
@@ -761,9 +860,16 @@ function skillPlanCount(plans: SkillInstallPlan[]): number {
   return plans.reduce((count, plan) => count + plan.skillNames.length, 0);
 }
 
-function lockedCommitForSourceAcross(lock: LockFile, profileNames: string[], source: RemoteSkillSource): string | undefined {
+function lockedCommitForSourceAcross(
+  lock: LockFile,
+  profileNames: string[],
+  source: RemoteSkillSource,
+): string | undefined {
   for (const profileName of profileNames) {
-    const lockedCommit = lockedCommitForSource(lock.skillsets[profileName]?.skills, source);
+    const lockedCommit = lockedCommitForSource(
+      lock.skillsets[profileName]?.skills,
+      source,
+    );
     if (lockedCommit) {
       return lockedCommit;
     }
@@ -793,14 +899,21 @@ function validateSkillConfig(config: Config, profileNames: string[]): void {
   if (config.version !== 1) {
     throw new Error(`Unsupported config version: ${config.version}`);
   }
-  if (!config.runtime || typeof config.runtime.canonicalSkillsDir !== "string") {
+  if (
+    !config.runtime ||
+    typeof config.runtime.canonicalSkillsDir !== "string"
+  ) {
     throw new Error("runtime.canonicalSkillsDir must be configured");
   }
   if (
     !Array.isArray(config.runtime.skillSymlinkTargets) ||
-    config.runtime.skillSymlinkTargets.some((target) => typeof target !== "string" || target.length === 0)
+    config.runtime.skillSymlinkTargets.some(
+      (target) => typeof target !== "string" || target.length === 0,
+    )
   ) {
-    throw new Error("runtime.skillSymlinkTargets must be a non-empty string array");
+    throw new Error(
+      "runtime.skillSymlinkTargets must be a non-empty string array",
+    );
   }
 
   let skillCount = 0;
@@ -851,14 +964,22 @@ function statusSkills(config: Config, profileNames: string[]): void {
         const canonicalPath = join(canonicalSkillsDir, skillName);
         printPathStatus(`  ${skillName}`, canonicalPath);
         for (const target of symlinkTargets) {
-          printSymlinkStatus(`    ${join(target, skillName)}`, join(target, skillName), canonicalPath);
+          printSymlinkStatus(
+            `    ${join(target, skillName)}`,
+            join(target, skillName),
+            canonicalPath,
+          );
         }
       }
     }
   }
 }
 
-function runAgents(command: RuntimeCommand, config: Config, agentName?: string): void {
+function runAgents(
+  command: RuntimeCommand,
+  config: Config,
+  agentName?: string,
+): void {
   validateAgentConfig(config, agentName);
   if (command === "validate") {
     console.log("Validated agent configuration.");
@@ -871,22 +992,37 @@ function runAgents(command: RuntimeCommand, config: Config, agentName?: string):
       const rendered = renderAgent(operation.sourcePath, operation.mapping);
       console.log(`Agent ${operation.agentName} (${operation.targetName})`);
       printGeneratedStatus(`  generated`, operation.generatedPath, rendered);
-      printSymlinkStatus(`  ${operation.linkPath}`, operation.linkPath, operation.generatedPath);
+      printSymlinkStatus(
+        `  ${operation.linkPath}`,
+        operation.linkPath,
+        operation.generatedPath,
+      );
     }
     return;
   }
 
-  validateSafeSymlinkTargets(operations.map((operation) => operation.linkPath));
+  validateSafeSymlinkTargets(
+    operations.map((operation) => ({
+      linkPath: operation.linkPath,
+      target: operation.generatedPath,
+    })),
+  );
   for (const operation of operations) {
     const rendered = renderAgent(operation.sourcePath, operation.mapping);
     mkdirSync(dirname(operation.generatedPath), { recursive: true });
     writeFileSync(operation.generatedPath, rendered, "utf-8");
     replaceSafeSymlink(operation.generatedPath, operation.linkPath);
-    console.log(`${command === "install" ? "Installed" : "Updated"} ${operation.agentName} for ${operation.targetName}`);
+    console.log(
+      `${command === "install" ? "Installed" : "Updated"} ${operation.agentName} for ${operation.targetName}`,
+    );
   }
 }
 
-function runInstructions(command: RuntimeCommand, config: Config, selection: ProfileSelection): void {
+function runInstructions(
+  command: RuntimeCommand,
+  config: Config,
+  selection: ProfileSelection,
+): void {
   validateInstructionConfig(config, selection);
   if (command === "validate") {
     console.log("Validated instruction configuration.");
@@ -896,18 +1032,31 @@ function runInstructions(command: RuntimeCommand, config: Config, selection: Pro
   const operations = instructionOperations(config, selection);
   if (command === "status") {
     for (const operation of operations) {
-      console.log(`Instruction ${operation.relativePath} (${operation.targetName})`);
+      console.log(
+        `Instruction ${operation.relativePath} (${operation.targetName})`,
+      );
       printPathStatus(`  source`, operation.sourcePath);
-      printSymlinkStatus(`  ${operation.linkPath}`, operation.linkPath, operation.sourcePath);
+      printSymlinkStatus(
+        `  ${operation.linkPath}`,
+        operation.linkPath,
+        operation.sourcePath,
+      );
     }
     return;
   }
 
-  validateSafeSymlinkTargets(operations.map((operation) => operation.linkPath));
+  validateSafeSymlinkTargets(
+    operations.map((operation) => ({
+      linkPath: operation.linkPath,
+      target: operation.sourcePath,
+    })),
+  );
   pruneUnselectedInstructionSymlinks(config, selection);
   for (const operation of operations) {
     replaceSafeSymlink(operation.sourcePath, operation.linkPath);
-    console.log(`${command === "install" ? "Installed" : "Updated"} ${operation.relativePath} for ${operation.targetName}`);
+    console.log(
+      `${command === "install" ? "Installed" : "Updated"} ${operation.relativePath} for ${operation.targetName}`,
+    );
   }
 }
 
@@ -921,12 +1070,24 @@ function preflightWrapperCommand(
     return;
   }
   validateAgentConfig(config, agentName);
-  validateInstructionConfig(config, profileSelection ?? { profileNames: [], interactive: false });
-  validateSafeSymlinkTargets(agentOperations(config, agentName).map((operation) => operation.linkPath));
+  validateInstructionConfig(
+    config,
+    profileSelection ?? { profileNames: [], interactive: false },
+  );
   validateSafeSymlinkTargets(
-    instructionOperations(config, profileSelection ?? { profileNames: [], interactive: false }).map(
-      (operation) => operation.linkPath,
-    ),
+    agentOperations(config, agentName).map((operation) => ({
+      linkPath: operation.linkPath,
+      target: operation.generatedPath,
+    })),
+  );
+  validateSafeSymlinkTargets(
+    instructionOperations(
+      config,
+      profileSelection ?? { profileNames: [], interactive: false },
+    ).map((operation) => ({
+      linkPath: operation.linkPath,
+      target: operation.sourcePath,
+    })),
   );
 }
 
@@ -938,36 +1099,55 @@ function validateAgentConfig(config: Config, agentName?: string): void {
   if (!config.runtime.canonicalAgentsDir) {
     throw new Error("runtime.canonicalAgentsDir must be configured for agents");
   }
-  if (!config.runtime.agentSymlinkTargets || Object.keys(config.runtime.agentSymlinkTargets).length === 0) {
-    throw new Error("runtime.agentSymlinkTargets must configure at least one target");
+  if (
+    !config.runtime.agentSymlinkTargets ||
+    Object.keys(config.runtime.agentSymlinkTargets).length === 0
+  ) {
+    throw new Error(
+      "runtime.agentSymlinkTargets must configure at least one target",
+    );
   }
 
   const agentNames = selectedAgentNames(mappings, agentName);
   for (const selectedAgentName of agentNames) {
     const sourcePath = join("agents", `${selectedAgentName}.md`);
     if (!existsSync(sourcePath)) {
-      throw new Error(`Missing agent source for '${selectedAgentName}' at ${sourcePath}`);
+      throw new Error(
+        `Missing agent source for '${selectedAgentName}' at ${sourcePath}`,
+      );
     }
-    const targets = selectedTargetNames(mappings[selectedAgentName], config.runtime.agentSymlinkTargets);
+    const targets = selectedTargetNames(
+      mappings[selectedAgentName],
+      config.runtime.agentSymlinkTargets,
+    );
     for (const selectedTargetName of targets) {
       const mapping = mappings[selectedAgentName][selectedTargetName];
       if (!mapping?.model) {
-        throw new Error(`Agent '${selectedAgentName}' is missing a model mapping for target '${selectedTargetName}'`);
+        throw new Error(
+          `Agent '${selectedAgentName}' is missing a model mapping for target '${selectedTargetName}'`,
+        );
       }
     }
   }
 }
 
-function validateInstructionConfig(config: Config, selection: ProfileSelection): void {
+function validateInstructionConfig(
+  config: Config,
+  selection: ProfileSelection,
+): void {
   const instructionPaths = selectedInstructionPaths(config, selection);
   if (instructionPaths.length === 0) {
-    throw new Error("instructions.paths or instructionProfiles must configure at least one path");
+    throw new Error(
+      "instructions.paths or instructionProfiles must configure at least one path",
+    );
   }
   if (
     !config.runtime.instructionSymlinkTargets ||
     Object.keys(config.runtime.instructionSymlinkTargets).length === 0
   ) {
-    throw new Error("runtime.instructionSymlinkTargets must configure at least one target");
+    throw new Error(
+      "runtime.instructionSymlinkTargets must configure at least one target",
+    );
   }
 
   for (const instructionPath of instructionPaths) {
@@ -990,7 +1170,9 @@ function agentOperations(
 }> {
   const mappings = config.agentModelMappings ?? {};
   const targets = config.runtime.agentSymlinkTargets ?? {};
-  const canonicalAgentsDir = expandHome(config.runtime.canonicalAgentsDir ?? "");
+  const canonicalAgentsDir = expandHome(
+    config.runtime.canonicalAgentsDir ?? "",
+  );
   const operations: Array<{
     agentName: string;
     targetName: string;
@@ -1001,14 +1183,24 @@ function agentOperations(
   }> = [];
 
   for (const selectedAgentName of selectedAgentNames(mappings, agentName)) {
-    for (const selectedTargetName of selectedTargetNames(mappings[selectedAgentName], targets)) {
+    for (const selectedTargetName of selectedTargetNames(
+      mappings[selectedAgentName],
+      targets,
+    )) {
       operations.push({
         agentName: selectedAgentName,
         targetName: selectedTargetName,
         mapping: mappings[selectedAgentName][selectedTargetName],
         sourcePath: join("agents", `${selectedAgentName}.md`),
-        generatedPath: join(canonicalAgentsDir, selectedTargetName, `${selectedAgentName}.md`),
-        linkPath: join(expandHome(targets[selectedTargetName]), `${selectedAgentName}.md`),
+        generatedPath: join(
+          canonicalAgentsDir,
+          selectedTargetName,
+          `${selectedAgentName}.md`,
+        ),
+        linkPath: join(
+          expandHome(targets[selectedTargetName]),
+          `${selectedAgentName}.md`,
+        ),
       });
     }
   }
@@ -1018,10 +1210,20 @@ function agentOperations(
 function instructionOperations(
   config: Config,
   selection: ProfileSelection,
-): Array<{ targetName: string; relativePath: string; sourcePath: string; linkPath: string }> {
+): Array<{
+  targetName: string;
+  relativePath: string;
+  sourcePath: string;
+  linkPath: string;
+}> {
   const targets = config.runtime.instructionSymlinkTargets ?? {};
   const targetNames = Object.keys(targets).sort();
-  const operations: Array<{ targetName: string; relativePath: string; sourcePath: string; linkPath: string }> = [];
+  const operations: Array<{
+    targetName: string;
+    relativePath: string;
+    sourcePath: string;
+    linkPath: string;
+  }> = [];
 
   for (const selectedTargetName of targetNames) {
     for (const instructionPath of selectedInstructionPaths(config, selection)) {
@@ -1029,14 +1231,20 @@ function instructionOperations(
         targetName: selectedTargetName,
         relativePath: instructionPath,
         sourcePath: resolve(instructionPath),
-        linkPath: join(expandHome(targets[selectedTargetName]), instructionPath),
+        linkPath: join(
+          expandHome(targets[selectedTargetName]),
+          instructionPath,
+        ),
       });
     }
   }
   return operations;
 }
 
-function pruneUnselectedInstructionSymlinks(config: Config, selection: ProfileSelection): void {
+function pruneUnselectedInstructionSymlinks(
+  config: Config,
+  selection: ProfileSelection,
+): void {
   const selectedPaths = new Set(selectedInstructionPaths(config, selection));
   const configuredPaths = allConfiguredInstructionPaths(config);
   const targets = config.runtime.instructionSymlinkTargets ?? {};
@@ -1059,10 +1267,19 @@ function pruneUnselectedInstructionSymlinks(config: Config, selection: ProfileSe
 
 function allConfiguredInstructionPaths(config: Config): string[] {
   if (config.profiles && Object.keys(config.profiles).length > 0) {
-    return uniqueNames(Object.values(config.profiles).flatMap((profile) => profile.paths));
+    return uniqueNames(
+      Object.values(config.profiles).flatMap((profile) => profile.paths),
+    );
   }
-  if (config.instructionProfiles && Object.keys(config.instructionProfiles).length > 0) {
-    return uniqueNames(Object.values(config.instructionProfiles).flatMap((profile) => profile.paths));
+  if (
+    config.instructionProfiles &&
+    Object.keys(config.instructionProfiles).length > 0
+  ) {
+    return uniqueNames(
+      Object.values(config.instructionProfiles).flatMap(
+        (profile) => profile.paths,
+      ),
+    );
   }
   return config.instructions?.paths ?? [];
 }
@@ -1089,7 +1306,10 @@ function selectedTargetNames(
     .sort();
 }
 
-export function renderAgent(sourcePath: string, mapping: AgentTargetConfig): string {
+export function renderAgent(
+  sourcePath: string,
+  mapping: AgentTargetConfig,
+): string {
   const source = readFileSync(sourcePath, "utf-8");
   const frontmatter = parseFrontmatter(sourcePath, source);
   let header = setFrontmatterValue(frontmatter.header, "model", mapping.model);
@@ -1101,7 +1321,10 @@ export function renderAgent(sourcePath: string, mapping: AgentTargetConfig): str
   return `---\n${header.trimEnd()}\n---\n${frontmatter.body}`;
 }
 
-function parseFrontmatter(path: string, content: string): { header: string; body: string } {
+function parseFrontmatter(
+  path: string,
+  content: string,
+): { header: string; body: string } {
   if (!content.startsWith("---\n")) {
     throw new Error(`Agent source is missing frontmatter: ${path}`);
   }
@@ -1115,7 +1338,11 @@ function parseFrontmatter(path: string, content: string): { header: string; body
   };
 }
 
-function setFrontmatterValue(header: string, key: string, value: string): string {
+function setFrontmatterValue(
+  header: string,
+  key: string,
+  value: string,
+): string {
   const lines = header.split("\n");
   const index = lines.findIndex((line) => line.startsWith(`${key}:`));
   const newLine = `${key}: ${value}`;
@@ -1134,7 +1361,10 @@ function removeFrontmatterValue(header: string, key: string): string {
     .trimEnd()}\n`;
 }
 
-function expandSkillSources(config: Config, profileName: string): SkillSource[] {
+function expandSkillSources(
+  config: Config,
+  profileName: string,
+): SkillSource[] {
   if (config.version !== 1) {
     throw new Error(`Unsupported config version: ${config.version}`);
   }
@@ -1145,7 +1375,9 @@ function expandSkillSources(config: Config, profileName: string): SkillSource[] 
   for (const blockName of include) {
     const block = config.blocks[blockName];
     if (!block) {
-      throw new Error(`Profile '${profileName}' includes unknown block '${blockName}'`);
+      throw new Error(
+        `Profile '${profileName}' includes unknown block '${blockName}'`,
+      );
     }
     sources.push(...(block.skills ?? []).map(expandSkillSourceNames));
   }
@@ -1162,7 +1394,9 @@ function expandSkillSourceNames(source: SkillSource): SkillSource {
     return source;
   }
   if (!isLocalSource(source)) {
-    throw new Error(`Wildcard skill names are only supported for local skill sources: ${sourceLabel(source)}`);
+    throw new Error(
+      `Wildcard skill names are only supported for local skill sources: ${sourceLabel(source)}`,
+    );
   }
   return {
     ...source,
@@ -1210,11 +1444,15 @@ function validateSource(source: SkillSource): void {
       throw new Error("Local skill source is missing localPath");
     }
     if (!Array.isArray(source.names) || source.names.length === 0) {
-      throw new Error(`Local skill source must list at least one skill name: ${source.localPath}`);
+      throw new Error(
+        `Local skill source must list at least one skill name: ${source.localPath}`,
+      );
     }
     for (const name of source.names) {
       if (!existsSync(join(source.localPath, name, "SKILL.md"))) {
-        throw new Error(`Missing SKILL.md for local skill '${name}' at ${join(source.localPath, name)}`);
+        throw new Error(
+          `Missing SKILL.md for local skill '${name}' at ${join(source.localPath, name)}`,
+        );
       }
     }
     return;
@@ -1243,7 +1481,9 @@ function ensureUniqueSkillNames(sources: SkillSource[]): void {
     for (const name of source.names) {
       const existingSource = seen.get(name);
       if (existingSource) {
-        throw new Error(`Skill '${name}' is configured more than once: ${existingSource}, ${sourceLabel(source)}`);
+        throw new Error(
+          `Skill '${name}' is configured more than once: ${existingSource}, ${sourceLabel(source)}`,
+        );
       }
       seen.set(name, sourceLabel(source));
     }
@@ -1272,21 +1512,32 @@ function ensureCommitAvailable(repoDir: string, commit: string): void {
 
   run("git", ["-C", repoDir, "fetch", "--quiet", "--prune", "origin"]);
   if (!commitExists(repoDir, commit)) {
-    throw new Error(`Commit ${commit} is unavailable in ${repoDir} after fetching origin`);
+    throw new Error(
+      `Commit ${commit} is unavailable in ${repoDir} after fetching origin`,
+    );
   }
 }
 
 function commitExists(repoDir: string, commit: string): boolean {
-  const result = spawnSync("git", ["-C", repoDir, "cat-file", "-e", `${commit}^{commit}`], {
-    encoding: "utf-8",
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  const result = spawnSync(
+    "git",
+    ["-C", repoDir, "cat-file", "-e", `${commit}^{commit}`],
+    {
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
   return result.status === 0;
 }
 
 function resolveCommit(repoDir: string, ref: string): string {
   const remoteRef = ref.startsWith("origin/") ? ref : `origin/${ref}`;
-  return run("git", ["-C", repoDir, "rev-parse", `${remoteRef}^{commit}`]).trim();
+  return run("git", [
+    "-C",
+    repoDir,
+    "rev-parse",
+    `${remoteRef}^{commit}`,
+  ]).trim();
 }
 
 function checkout(repoDir: string, commit: string): void {
@@ -1343,6 +1594,9 @@ function replaceSymlink(target: string, linkPath: string): void {
 export function replaceSafeSymlink(target: string, linkPath: string): void {
   const stats = lstatIfExists(linkPath);
   if (stats) {
+    if (realPathIfExists(linkPath) === realPathIfExists(target)) {
+      return;
+    }
     if (!stats.isSymbolicLink()) {
       throw new Error(`Refusing to replace non-symlink target: ${linkPath}`);
     }
@@ -1363,16 +1617,26 @@ function printPathStatus(label: string, path: string): void {
   console.log(`${pathExists(path) ? "[ok]" : "[missing]"} ${label}: ${path}`);
 }
 
-function printGeneratedStatus(label: string, path: string, expectedContent: string): void {
+function printGeneratedStatus(
+  label: string,
+  path: string,
+  expectedContent: string,
+): void {
   if (!existsSync(path)) {
     console.log(`[missing] ${label}: ${path}`);
     return;
   }
   const actualContent = readFileSync(path, "utf-8");
-  console.log(`${actualContent === expectedContent ? "[ok]" : "[stale]"} ${label}: ${path}`);
+  console.log(
+    `${actualContent === expectedContent ? "[ok]" : "[stale]"} ${label}: ${path}`,
+  );
 }
 
-function printSymlinkStatus(label: string, linkPath: string, expectedTarget: string): void {
+function printSymlinkStatus(
+  label: string,
+  linkPath: string,
+  expectedTarget: string,
+): void {
   const stats = lstatIfExists(linkPath);
   if (!stats) {
     console.log(`[missing] ${label}`);
@@ -1384,34 +1648,57 @@ function printSymlinkStatus(label: string, linkPath: string, expectedTarget: str
   }
   const linkRealPath = realPathIfExists(linkPath);
   const expectedRealPath = realPathIfExists(expectedTarget);
-  console.log(`${linkRealPath === expectedRealPath ? "[ok]" : "[wrong-target]"} ${label}`);
+  console.log(
+    `${linkRealPath === expectedRealPath ? "[ok]" : "[wrong-target]"} ${label}`,
+  );
 }
 
 function pathExists(path: string): boolean {
   return existsSync(path);
 }
 
-export function validateSafeSymlinkTargets(linkPaths: string[]): void {
-  for (const linkPath of linkPaths) {
+export function validateSafeSymlinkTargets(
+  linkPaths: string[] | Array<{ linkPath: string; target: string }>,
+): void {
+  for (const input of linkPaths) {
+    const linkPath = typeof input === "string" ? input : input.linkPath;
+    const target = typeof input === "string" ? undefined : input.target;
     const stats = lstatIfExists(linkPath);
+    if (
+      stats &&
+      target &&
+      realPathIfExists(linkPath) === realPathIfExists(target)
+    ) {
+      continue;
+    }
     if (stats && !stats.isSymbolicLink()) {
       throw new Error(`Refusing to replace non-symlink target: ${linkPath}`);
     }
   }
 }
 
-export function lstatIfExists(path: string): ReturnType<typeof lstatSync> | undefined {
+export function lstatIfExists(
+  path: string,
+): ReturnType<typeof lstatSync> | undefined {
   try {
     return lstatSync(path);
   } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "ENOENT"
+    ) {
       return undefined;
     }
     throw error;
   }
 }
 
-function resolveSkillSymlinkTargets(canonicalSkillsDir: string, targets: string[]): string[] {
+function resolveSkillSymlinkTargets(
+  canonicalSkillsDir: string,
+  targets: string[],
+): string[] {
   const canonicalRealPath = realPathIfExists(canonicalSkillsDir);
   const usableTargets: string[] = [];
   const seen = new Set<string>();
@@ -1419,7 +1706,9 @@ function resolveSkillSymlinkTargets(canonicalSkillsDir: string, targets: string[
   for (const target of targets) {
     const targetRealPath = realPathIfExists(target);
     if (targetRealPath === canonicalRealPath) {
-      console.log(`Skipping skill symlink target ${target}; it already resolves to ${canonicalSkillsDir}`);
+      console.log(
+        `Skipping skill symlink target ${target}; it already resolves to ${canonicalSkillsDir}`,
+      );
       continue;
     }
     if (seen.has(targetRealPath)) {
@@ -1504,13 +1793,18 @@ function run(command: string, args: string[]): string {
   });
 
   if (result.status !== 0) {
-    throw new Error(`${[command, ...args].join(" ")} failed\n${result.stderr || result.stdout}`);
+    throw new Error(
+      `${[command, ...args].join(" ")} failed\n${result.stderr || result.stdout}`,
+    );
   }
 
   return result.stdout;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+) {
   try {
     main();
   } catch (error) {

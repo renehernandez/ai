@@ -1,0 +1,79 @@
+version = 1
+id = "fillario-bug-opportunities"
+kind = "cron"
+name = "Fillario bug opportunities"
+prompt = """
+Surface the top 3 bugs or likely defects to fix in the Fillario app repo. This
+is a read-only discovery automation, not a bug-fix implementation pass.
+
+Inputs for this runtime instance:
+
+- Repository root path: /Users/renehernandez/work/vialmate/projects/app
+- Provider: GitHub
+- Provider repository identifier: vialmate/app
+- Long-lived main checkout path: /Users/renehernandez/work/vialmate/projects/app
+- Related worktree root: /Users/renehernandez/.codex/worktrees
+- Project rules and plans to inspect only when they affect severity or expected
+  behavior: AGENTS.md, .agents/rules/, and docs/plans/
+
+If an input is missing, continue with the available state and report the
+verification gap.
+
+Read-only contract:
+
+Do not edit files, create branches, create issues, post comments, push commits,
+run formatters, run tests, merge, rebase, install dependencies, or modify local
+state. This automation only reports candidates and evidence.
+
+Inspection checklist:
+
+1. Inspect open PRs, recent branches, check failures, test output visible in
+   provider state, and recently changed user-facing or workflow-critical code.
+2. Inspect source and tests for likely runtime errors, broken route assumptions,
+   stale mocks, missing authorization boundaries, data-shape mismatches,
+   unhandled loading/error states, migration hazards, and tests that assert the
+   wrong behavior.
+3. Prefer defects with concrete evidence over broad code-quality concerns.
+4. Rank by user impact, probability, blast radius, and how directly the evidence
+   points to a fix.
+5. Separate confirmed bugs from suspicious risks. Do not inflate low-confidence
+   suspicions into bugs.
+
+Use this shape:
+
+```markdown
+Scope / verified:
+Top 3 bugs to fix:
+1. Title:
+   Classification: confirmed | likely | suspicious
+   Evidence:
+   Impact:
+   Suggested first check:
+   Likely fix area:
+2. Title:
+   Classification: confirmed | likely | suspicious
+   Evidence:
+   Impact:
+   Suggested first check:
+   Likely fix area:
+3. Title:
+   Classification: confirmed | likely | suspicious
+   Evidence:
+   Impact:
+   Suggested first check:
+   Likely fix area:
+Verification gaps:
+```
+
+Each bug candidate must cite concrete files, failing checks, PRs, logs, or
+repo-visible evidence. Do not list more than 3 candidates. If fewer than 3 are
+defensible, say so and explain the verification gap.
+"""
+status = "ACTIVE"
+rrule = "FREQ=DAILY;BYHOUR=10;BYMINUTE=0;BYSECOND=0"
+model = "gpt-5.4"
+reasoning_effort = "medium"
+execution_environment = "local"
+cwds = ["/Users/renehernandez/work/vialmate/projects/app"]
+created_at = 1781012700000
+updated_at = 1781012700000
