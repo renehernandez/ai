@@ -1,0 +1,4 @@
+interface:
+  display_name: "Plan Followthrough"
+  short_description: "Run approved plans through slice delivery"
+  default_prompt: "/goal Use $plan-followthrough with this plan_ready_handoff or approved plan: <handoff or plan>. Create or update the followthrough ledger beside the plan, require slice_advancement.mode as ship_then_continue or stack_then_continue, prepare each slice handoff for $plan-to-pr, reconcile each plan_followthrough_delivery into the ledger, continue through slices when allowed, and stop only when complete, blocked, or needs_replan."

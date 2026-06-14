@@ -11,9 +11,9 @@ Turn planning input into a reviewed implementation handoff. This skill owns brai
 
 ## When To Use
 
-Use for ideas, feature requests, implementation plans that still need review, OpenSpec changes before apply, Linear tickets that need implementation planning, or any request that should be validated before `plan-to-pr`.
+Use for ideas, feature requests, implementation plans that still need review, OpenSpec changes before apply, Linear tickets that need implementation planning, or any request that should be validated before `plan-followthrough`.
 
-Do not use for implementation after the handoff is ready. Use `plan-to-pr` for that second phase.
+Do not use for implementation after the handoff is ready. Use `plan-followthrough` for the followthrough phase; it will route each implementation slice through `plan-to-pr`.
 
 ## Progress Output
 
@@ -47,7 +47,7 @@ After each gate, report one line with the gate, verdict, artifact, and next acti
    - `external_blocker`: record the blocker and do not emit `status: ready` unless the blocker is resolved or the user explicitly accepts the risk.
 8. Run `scrutinize` on the final plan. The handoff requires `Scrutinize verdict: ship`.
 9. Generate the handoff with `scripts/plan-ready.ts handoff-template`, fill it, and validate it with `validate-handoff`.
-10. Stop. Do not invoke `plan-to-pr`, start implementation, create branches, push, open PRs/MRs, or request hosted review.
+10. Stop. Do not invoke `plan-followthrough` or `plan-to-pr`, start implementation, create branches, push, open PRs/MRs, or request hosted review.
 
 ## Reviewer Selection
 
@@ -208,7 +208,7 @@ Do not write this handoff into committed plan files, OpenSpec files, or Linear c
 
 | Mistake | Fix |
 | --- | --- |
-| Starting implementation after a ready verdict | Stop and ask the user to invoke `plan-to-pr` |
+| Starting implementation after a ready verdict | Stop and ask the user to invoke `plan-followthrough` |
 | Treating reviewer subagents as optional | Always run baseline reviewers |
 | Routing Codex plan reviewers through `dispatch` or Claude | Use the current harness's internal Codex subagent tool |
 | Inventing optional reviewer names | Select only from the fixed catalog |
@@ -222,9 +222,10 @@ Do not write this handoff into committed plan files, OpenSpec files, or Linear c
 
 - RED: prior `plan-to-pr` flow mixed brainstorming, plan review, implementation, hosted review, and CI into one workflow.
 - GREEN: this skill creates a separate plan-readiness phase with required internal subagent review, final scrutiny, and a validated handoff.
-- REFACTOR: the skill stops before implementation so the user can verify the ready plan before `plan-to-pr` runs.
+- REFACTOR: the skill stops before implementation so the user can verify the ready plan before `plan-followthrough` runs.
 - RED/GREEN: pressure testing found optional reviewer selection was too implicit for skill/runtime changes; selection rules and `validate-selection` now require fixed-catalog reviewer output.
 - REFACTOR: `refactoring-opportunities` is now a required baseline reviewer so every slice is checked for make-the-change-easy prep work, cross-slice reuse opportunities, and premature abstractions.
+- REFACTOR: ready plans now route to `plan-followthrough` before `plan-to-pr` so every single-slice or multi-slice plan has durable followthrough state.
 - RED: baseline subagent `019eb39e-5890-76c0-a967-f287d449de7a` inspected committed pre-edit files and failed as expected. It cited `Using dispatch to run required plan reviewers.`, `Dispatch all baseline reviewers plus judge-selected optional reviewers as subagents.`, and adapter text `run required dispatch plan reviewers`, rationalizing that explicit `dispatch` would route Codex reviewer execution away from internal Codex subagents.
 - GREEN/REFACTOR: subagent `019eb361-1adb-7771-a77a-388b11dc4b8b` passed after the first routing patch. The workflow now requires the current harness's internal Codex subagent tool and forbids `dispatch`, Claude Code `Task`, and external Claude harnesses.
 - Validation evidence: `bun skills/plan-ready/scripts/plan-ready.ts validate-selection --file /private/tmp/plan-ready-valid-selection.yaml` returned `reviewer_selection_judge valid`; bare rationale and missing optional-reviewer rationale fixtures were rejected; `bun skills/plan-ready/scripts/plan-ready.ts validate-handoff --file /private/tmp/plan-ready-valid-handoff.yaml` returned `plan_ready_handoff valid`; `bun build skills/plan-ready/scripts/plan-ready.ts --outfile /private/tmp/plan-ready-check.js` bundled successfully.

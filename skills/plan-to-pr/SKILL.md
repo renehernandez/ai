@@ -11,13 +11,38 @@ Carry an already-ready plan slice to a reviewed pull request or merge request wi
 
 ## When To Use
 
-Use when the user provides a valid `plan_ready_handoff`, says to proceed after a `plan-ready` handoff, or asks to implement an approved plan slice through PR/MR and CI.
+Use when the user provides a valid `plan_followthrough_slice_handoff` or a valid `plan_ready_handoff` for one approved slice, says to proceed from `plan-followthrough`, or asks to implement an approved plan slice through PR/MR and CI.
 
-Do not use for fuzzy ideas, unreviewed plans, OpenSpec proposal creation, or Linear tickets that still need planning. Use `plan-ready` first.
+Do not use for fuzzy ideas, unreviewed plans, OpenSpec proposal creation, or Linear tickets that still need planning. Use `plan-ready` first. For approved plans, including single-slice plans, the normal path is `plan-followthrough` before `plan-to-pr`.
 
 ## Required Input
 
-Before implementation, locate exactly one handoff from the current session or the user prompt:
+Before implementation, locate exactly one handoff from the current session or the user prompt. Prefer a `plan_followthrough_slice_handoff` when present:
+
+```yaml
+plan_followthrough_slice_handoff:
+  status: ready
+  plan_ready_handoff:
+    status: ready
+    artifact_type: plan
+    artifact_ref: docs/plans/example.md
+    approved_slice: "Implement one reviewed slice."
+    required_reviewers:
+      - implementation-readiness
+      - edge-cases-and-risks
+      - simplification-and-scope-control
+      - refactoring-opportunities
+    optional_reviewers_selected: []
+    unresolved_blockers: []
+    scrutiny_verdict: ship
+  followthrough_context:
+    ledger_ref: docs/plans/example.followthrough.md
+    slice_advancement_mode: ship_then_continue
+    slice_id: slice-01
+    slice_name: Example slice
+```
+
+Otherwise, locate exactly one direct `plan_ready_handoff`:
 
 ```yaml
 plan_ready_handoff:
@@ -35,16 +60,18 @@ plan_ready_handoff:
   scrutiny_verdict: ship
 ```
 
-Run the bundled script `scripts/plan-to-pr.ts validate-handoff` from this skill directory on the handoff before editing files.
+Run the bundled script `scripts/plan-to-pr.ts validate-handoff` from this skill directory on the nested or direct `plan_ready_handoff` before editing files.
 
 If the handoff is missing, invalid, ambiguous, has unresolved blockers, or has `scrutiny_verdict` other than `ship`, stop and ask the user to run `plan-ready` or paste a valid handoff.
+
+If the user asks to implement a reviewed plan directly and there is no `plan_followthrough_slice_handoff`, stop and route to `plan-followthrough` unless the user explicitly asks to bypass followthrough for this run.
 
 ## Goal Invocation
 
 In Codex, prefer starting this workflow as a goal with the handoff included in the objective:
 
 ```text
-/goal Use $plan-to-pr with this plan_ready_handoff: <handoff>. Validate the handoff, inspect the approved slice's Refactoring / Reuse section, print and maintain the refactoring_execution ledger, implement only the approved slice, run local verification, launch implementation reviewers as internal Codex subagents, report launched reviewers and returned subagent IDs in-session, validate the launch report, reconcile reviewer outcomes, run review-feedback-routing, create or update the routed PR/MR, run artifact-host review, wait for routed latest-head feedback, iterate until feedback is resolved, watch artifact-host CI, and finish only when CI is green or blocked with evidence. Include the final reviewer subagent report and delivery gate ledger.
+/goal Use $plan-to-pr with this plan_followthrough_slice_handoff or plan_ready_handoff: <handoff>. Validate the handoff, inspect any followthrough_context, inspect the approved slice's Refactoring / Reuse section, print and maintain the refactoring_execution ledger, implement only the approved slice, run local verification, launch implementation reviewers as internal Codex subagents, report launched reviewers and returned subagent IDs in-session, validate the launch report, reconcile reviewer outcomes, run review-feedback-routing, create or update the routed PR/MR, run artifact-host review, wait for routed latest-head feedback, iterate until feedback is resolved, watch artifact-host CI, and finish only when CI is green or blocked with evidence. Include the final reviewer subagent report, delivery gate ledger, and plan_followthrough_delivery when followthrough_context is present.
 ```
 
 For non-Codex agents or tools without goal state, use the same objective as a normal prompt.
@@ -159,7 +186,8 @@ reviewer_subagent_report:
 16. Apply actionable hosted feedback and repeat local verification plus affected internal Codex reviewer subagents on the updated diff, then push and rerun hosted review. If feedback exposes missing coverage, apply the Fastest Durable Regression rule before rerunning broad checks. If the branch head changes after feedback or CI fixes, earlier hosted review is stale unless it clearly reviewed the new head.
 17. Watch CI through the artifact-host tool: `glab ci`/GitLab pipeline tools for GitLab, and `gh pr checks` or GitHub Actions checks for GitHub. Fix branch-caused failures, rerun relevant verification, rerun scrutiny and docs alignment if the diff changed, and push updates.
 18. Before finishing, generate the gate ledger shape with `scripts/plan-to-pr.ts gate-template`, fill it, and validate it with `validate-ledger`.
-19. Finish only when CI is green or the blocker is external, permission-related, flaky infrastructure, review-feedback timeout, or a product decision with evidence.
+19. If `followthrough_context` was present, generate `scripts/plan-to-pr.ts followthrough-delivery-template`, fill it, and validate it with `validate-followthrough-delivery`.
+20. Finish only when CI is green or the blocker is external, permission-related, flaky infrastructure, review-feedback timeout, or a product decision with evidence.
 
 ## Gate Rules
 
@@ -254,12 +282,39 @@ delivery_gate_ledger:
     evidence: "required checks green"
 ```
 
+When invoked from `plan-followthrough`, also include:
+
+```yaml
+plan_followthrough_delivery:
+  slice_id: slice-01
+  slice_name: Example slice
+  status: shipped
+  artifact:
+    pr_or_mr: <url>
+    commit: <sha>
+    branch: <branch>
+  delivery_ledger_ref: final response
+  verification:
+    passed: []
+    gaps: []
+  review_feedback:
+    resolved: []
+    carried_forward: []
+  refactoring_reuse:
+    implemented: []
+    deferred: []
+    must_consume_later: []
+  changed_assumptions: []
+  recommended_next_action: <next action for plan-followthrough>
+```
+
 ## Mistakes
 
 | Mistake | Fix |
 | --- | --- |
 | Brainstorming inside `plan-to-pr` | Stop and run `plan-ready` |
 | Implementing without a handoff | Ask for a valid `plan_ready_handoff` |
+| Starting from a reviewed plan with no followthrough handoff | Route through `plan-followthrough` unless explicitly bypassed |
 | Expanding beyond `approved_slice` | Update the plan through `plan-ready` first |
 | Ignoring `Refactoring / Reuse` | Fill `refactoring_execution` before editing and reconcile it before push/final delivery |
 | Adding reusable surfaces with no consumer | Rework or defer the abstraction until a current or named later slice consumes it |
@@ -276,6 +331,7 @@ delivery_gate_ledger:
 | Waiting for automatic Nitro feedback when routing requires an explicit request | Post `/request_review @nitro`, then poll the latest head |
 | Omitting the reviewer outcome report | Generate it, validate it, and include it before the delivery ledger |
 | Finishing without a final ledger | Generate, fill, and validate the ledger |
+| Omitting followthrough delivery when followthrough context was present | Generate and validate `plan_followthrough_delivery` |
 | Saying "done" with pending or unknown CI | Watch checks or state the exact blocker |
 
 ## Test Evidence
@@ -284,6 +340,7 @@ delivery_gate_ledger:
 - GREEN: this skill requires a validated `plan_ready_handoff` before editing files.
 - REFACTOR: implementation delivery gates remain explicit, but planning gates move to `plan-ready`.
 - REFACTOR: implementation now carries `refactoring_execution` from the plan's `Refactoring / Reuse` section through delivery, and the final ledger records slice status plus refactoring execution.
+- REFACTOR: plan-to-pr now accepts `followthrough_context` from `plan-followthrough` and must return `plan_followthrough_delivery` for reconciliation.
 - GREEN: pressure testing confirmed missing handoffs and non-`ship` scrutiny handoffs block before implementation.
 - RED: baseline subagent `019eb39e-7a2b-7453-81b0-37fb35df9005` inspected committed pre-edit files and failed as expected. It cited `Run implementation diff review with diff-review`, `Run scrutinize on the implementation diff`, `Run the pre-commit quality gate`, and adapter text `run local verification, implementation review, $scrutinize...`, rationalizing: `inline helper-skill review satisfies the workflow; nothing says I must launch internal Codex reviewer subagents or report each reviewer's final outcome`.
 - GREEN: subagent `019eb370-7dce-75d3-97ff-6c80d6406aab` confirmed the first patch forced internal Codex reviewer subagents and blocked dispatch/Claude, then found validator loopholes for under-launched reports, unresolved `findings`, missing security accounting, one-reviewer examples, and post-feedback inline reruns.

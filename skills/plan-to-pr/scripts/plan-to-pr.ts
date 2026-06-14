@@ -87,6 +87,13 @@ const REVIEW_OUTCOME_STATUSES = [
   "blocked",
   "not_applicable",
 ] as const;
+const FOLLOWTHROUGH_DELIVERY_STATUSES = [
+  "delivered",
+  "shipped",
+  "stacked_pending_merge",
+  "blocked",
+  "needs_replan",
+] as const;
 
 type Command =
   | "detect"
@@ -95,6 +102,8 @@ type Command =
   | "validate-launch-report"
   | "validate-review-report"
   | "refactoring-template"
+  | "followthrough-delivery-template"
+  | "validate-followthrough-delivery"
   | "gate-template"
   | "validate-ledger";
 
@@ -114,7 +123,7 @@ function main(): void {
 
   if (!isCommand(command)) {
     fail(
-      "Usage: plan-to-pr.ts <detect|validate-handoff|reviewer-template|validate-launch-report|validate-review-report|refactoring-template|gate-template|validate-ledger> [--file path]",
+      "Usage: plan-to-pr.ts <detect|validate-handoff|reviewer-template|validate-launch-report|validate-review-report|refactoring-template|followthrough-delivery-template|validate-followthrough-delivery|gate-template|validate-ledger> [--file path]",
     );
   }
 
@@ -138,6 +147,11 @@ function main(): void {
     return;
   }
 
+  if (command === "followthrough-delivery-template") {
+    printFollowthroughDeliveryTemplate();
+    return;
+  }
+
   const input = readInput(args);
   if (command === "validate-handoff") {
     validateHandoff(input);
@@ -151,6 +165,11 @@ function main(): void {
 
   if (command === "validate-review-report") {
     validateReviewReport(input);
+    return;
+  }
+
+  if (command === "validate-followthrough-delivery") {
+    validateFollowthroughDelivery(input);
     return;
   }
 
@@ -258,6 +277,31 @@ function printRefactoringExecutionTemplate(): void {
 `);
 }
 
+function printFollowthroughDeliveryTemplate(): void {
+  console.log(`plan_followthrough_delivery:
+  slice_id: slice-01
+  slice_name: <slice title>
+  status: shipped
+  artifact:
+    pr_or_mr:
+    commit:
+    branch:
+  delivery_ledger_ref:
+  verification:
+    passed: []
+    gaps: []
+  review_feedback:
+    resolved: []
+    carried_forward: []
+  refactoring_reuse:
+    implemented: []
+    deferred: []
+    must_consume_later: []
+  changed_assumptions: []
+  recommended_next_action:
+`);
+}
+
 function validateHandoff(input: string): void {
   const handoff = parseHandoff(input);
   const errors: string[] = [];
@@ -361,6 +405,35 @@ function validateLedger(input: string): void {
   }
 
   console.log("delivery_gate_ledger valid");
+}
+
+function validateFollowthroughDelivery(input: string): void {
+  const errors: string[] = [];
+
+  requireSection(input, "plan_followthrough_delivery", errors);
+  requireValue(scalar(input, "slice_id"), "slice_id", errors);
+  requireValue(scalar(input, "slice_name"), "slice_name", errors);
+  requireValue(scalar(input, "status"), "status", errors);
+  requireSection(input, "artifact", errors);
+  requireSection(input, "verification", errors);
+  requireSection(input, "review_feedback", errors);
+  requireSection(input, "refactoring_reuse", errors);
+
+  const status = scalar(input, "status");
+  if (status && !includes(FOLLOWTHROUGH_DELIVERY_STATUSES, status)) {
+    errors.push(
+      `status must be one of: ${FOLLOWTHROUGH_DELIVERY_STATUSES.join(", ")}`,
+    );
+  }
+
+  if (errors.length > 0) {
+    console.error(
+      `Invalid plan_followthrough_delivery:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+    );
+    process.exit(1);
+  }
+
+  console.log("plan_followthrough_delivery valid");
 }
 
 function validateLaunchReport(input: string): void {
@@ -650,9 +723,19 @@ function findSection(input: string, sectionName: string): string | null {
     .join("\n");
 }
 
+function requireSection(
+  input: string,
+  sectionName: string,
+  errors: string[],
+): void {
+  if (!new RegExp(`^\\s*${escapeRegExp(sectionName)}:\\s*$`, "m").test(input)) {
+    errors.push(`${sectionName} section is required`);
+  }
+}
+
 function scalar(input: string, key: string): string | undefined {
   const match = input.match(
-    new RegExp(`^${escapeRegExp(key)}:\\s*(.+?)\\s*$`, "m"),
+    new RegExp(`^\\s*${escapeRegExp(key)}:\\s*(.+?)\\s*$`, "m"),
   );
   if (!match) {
     return undefined;
@@ -663,7 +746,7 @@ function scalar(input: string, key: string): string | undefined {
 
 function list(input: string, key: string): string[] {
   const inline = input.match(
-    new RegExp(`^${escapeRegExp(key)}:\\s*\\[(.*?)\\]\\s*$`, "m"),
+    new RegExp(`^\\s*${escapeRegExp(key)}:\\s*\\[(.*?)\\]\\s*$`, "m"),
   );
   if (inline) {
     const raw = inline[1].trim();
@@ -672,7 +755,7 @@ function list(input: string, key: string): string[] {
 
   const lines = input.split(/\r?\n/);
   const keyIndex = lines.findIndex((line) =>
-    line.match(new RegExp(`^${escapeRegExp(key)}:\\s*$`)),
+    line.match(new RegExp(`^\\s*${escapeRegExp(key)}:\\s*$`)),
   );
   if (keyIndex === -1) {
     return [];
@@ -738,6 +821,8 @@ function isCommand(command: string | undefined): command is Command {
     "validate-launch-report",
     "validate-review-report",
     "refactoring-template",
+    "followthrough-delivery-template",
+    "validate-followthrough-delivery",
     "gate-template",
     "validate-ledger",
   ].includes(command ?? "");

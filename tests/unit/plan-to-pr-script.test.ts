@@ -83,6 +83,30 @@ const validHandoff = `plan_ready_handoff:
   scrutiny_verdict: ship
 `;
 
+const validFollowthroughDelivery = `plan_followthrough_delivery:
+  slice_id: slice-01
+  slice_name: Upload foundation
+  status: shipped
+  artifact:
+    pr_or_mr: https://example.test/pr/1
+    commit: abc123
+    branch: qms-upload
+  delivery_ledger_ref: final response
+  verification:
+    passed:
+      - pnpm test
+    gaps: []
+  review_feedback:
+    resolved: []
+    carried_forward: []
+  refactoring_reuse:
+    implemented: []
+    deferred: []
+    must_consume_later: []
+  changed_assumptions: []
+  recommended_next_action: continue
+`;
+
 test("validate-handoff requires refactoring-opportunities from plan-ready", () => {
   const valid = runPlanToPr("validate-handoff", validHandoff);
 
@@ -97,6 +121,29 @@ test("validate-handoff requires refactoring-opportunities from plan-ready", () =
   assert.match(
     invalid.stderr,
     /required_reviewers must include refactoring-opportunities/,
+  );
+});
+
+test("validate-followthrough-delivery accepts reconciliation contract", () => {
+  const valid = runPlanToPr(
+    "validate-followthrough-delivery",
+    validFollowthroughDelivery,
+  );
+
+  assert.equal(valid.status, 0);
+
+  const invalid = runPlanToPr(
+    "validate-followthrough-delivery",
+    validFollowthroughDelivery.replace(
+      "  status: shipped\n",
+      "  status: done\n",
+    ),
+  );
+
+  assert.notEqual(invalid.status, 0);
+  assert.match(
+    invalid.stderr,
+    /status must be one of: delivered, shipped, stacked_pending_merge, blocked, needs_replan/,
   );
 });
 
