@@ -1,23 +1,32 @@
 #!/usr/bin/env tsx
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join, relative, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
 
 const BASELINE_REVIEWERS = [
   "implementation-readiness",
   "edge-cases-and-risks",
   "simplification-and-scope-control",
+  "refactoring-opportunities",
 ] as const;
 
 const OPTIONAL_REVIEWER_DESCRIPTIONS = {
-  "security-and-auth": "auth, authorization, secrets, token handling, sensitive data, webhooks, dependency trust",
-  "data-migration-and-backfill": "schema changes, data corrections, reprocessing, idempotency, rollback, irreversible writes",
-  "ci-and-release-impact": "CI config, package publishing, deployment, release automation, branch protection, required checks",
-  "frontend-ux-accessibility": "UI flows, responsive layout, accessibility, visual verification, interaction states",
-  "infra-and-cloud": "Terraform, Kubernetes, Cloudflare, AWS, DNS, queues, storage, environment config",
-  "docs-and-agent-alignment": "docs, agent instructions, skill/rule updates, automation prompts, background-review rubrics, PR description expectations",
-  "performance-and-scale": "hot paths, concurrency, caching, queues, rate limits, batch behavior, operational limits",
-  "agent-runtime-and-skill-compatibility": "Codex skill structure, SKILL.md conventions, agents/openai.yaml, install/update paths, bundled scripts, same-harness subagent routing, runtime compatibility",
+  "security-and-auth":
+    "auth, authorization, secrets, token handling, sensitive data, webhooks, dependency trust",
+  "data-migration-and-backfill":
+    "schema changes, data corrections, reprocessing, idempotency, rollback, irreversible writes",
+  "ci-and-release-impact":
+    "CI config, package publishing, deployment, release automation, branch protection, required checks",
+  "frontend-ux-accessibility":
+    "UI flows, responsive layout, accessibility, visual verification, interaction states",
+  "infra-and-cloud":
+    "Terraform, Kubernetes, Cloudflare, AWS, DNS, queues, storage, environment config",
+  "docs-and-agent-alignment":
+    "docs, agent instructions, skill/rule updates, automation prompts, background-review rubrics, PR description expectations",
+  "performance-and-scale":
+    "hot paths, concurrency, caching, queues, rate limits, batch behavior, operational limits",
+  "agent-runtime-and-skill-compatibility":
+    "Codex skill structure, SKILL.md conventions, agents/openai.yaml, install/update paths, bundled scripts, same-harness subagent routing, runtime compatibility",
 } as const;
 
 const OPTIONAL_REVIEWERS = Object.keys(OPTIONAL_REVIEWER_DESCRIPTIONS) as Array<
@@ -26,7 +35,12 @@ const OPTIONAL_REVIEWERS = Object.keys(OPTIONAL_REVIEWER_DESCRIPTIONS) as Array<
 
 const ARTIFACT_TYPES = ["plan", "openspec", "linear"] as const;
 
-type Command = "detect" | "reviewer-template" | "validate-selection" | "handoff-template" | "validate-handoff";
+type Command =
+  | "detect"
+  | "reviewer-template"
+  | "validate-selection"
+  | "handoff-template"
+  | "validate-handoff";
 
 type ParsedHandoff = {
   status?: string;
@@ -76,7 +90,9 @@ function detect(artifactRef?: string): void {
   const branch = git(["branch", "--show-current"]) || "(detached)";
   const headSha = git(["rev-parse", "--short=12", "HEAD"]) || "unknown";
   const remotes = git(["remote", "-v"]) || "";
-  const relativeArtifact = artifactRef ? toRepoRelative(repoRoot, artifactRef) : "";
+  const relativeArtifact = artifactRef
+    ? toRepoRelative(repoRoot, artifactRef)
+    : "";
   const artifactType = inferArtifactType(relativeArtifact || artifactRef || "");
 
   const result = {
@@ -85,8 +101,8 @@ function detect(artifactRef?: string): void {
     head_sha: headSha,
     remotes: remotes.split("\n").filter(Boolean),
     openspec_present: existsSync(join(repoRoot, "openspec")),
-    plan_directories: ["docs/plans", "plans", "specs", "docs/specs"].filter((path) =>
-      existsSync(join(repoRoot, path)),
+    plan_directories: ["docs/plans", "plans", "specs", "docs/specs"].filter(
+      (path) => existsSync(join(repoRoot, path)),
     ),
     artifact_ref: artifactRef ?? null,
     artifact_type_hint: artifactType,
@@ -105,6 +121,24 @@ ${OPTIONAL_REVIEWERS.map((reviewer) => `    - ${reviewer}: ${OPTIONAL_REVIEWER_D
   selected_optional_reviewers: []
   rationale:
     <optional-reviewer-name>: <why this reviewer is needed>
+
+refactoring_opportunities_contract:
+  make_change_easy:
+    - opportunity: <preparatory refactor>
+      why_now: <current slice risk or later-slice dependency>
+      first_consumer: <current slice or named later slice>
+      later_consumers: []
+      verification: <fastest behavior-preserving verification>
+  reuse_across_slices:
+    - reusable_surface: <component, helper, service, policy, schema helper, or test utility>
+      extract_in_slice: <slice name>
+      consumed_by: []
+      avoid_if: <condition where this becomes premature>
+  blocking_rules:
+    - Block when the current slice is harder or riskier because a small preparatory refactor is missing.
+    - Block when a named later slice clearly needs the same surface and extraction is cheaper because the current slice already touches the boundary.
+    - Block when a reusable abstraction lacks a named current or later consumer.
+    - Block when a required extraction lacks behavior-preserving verification.
 
 selection_rules:
   - Select docs-and-agent-alignment for reusable workflow, docs, skills, rules, automation prompt, background review, or PR/MR description contract changes.
@@ -147,7 +181,10 @@ function validateHandoff(input: string): void {
     errors.push("status must be ready");
   }
 
-  if (handoff.artifact_type && !includes(ARTIFACT_TYPES, handoff.artifact_type)) {
+  if (
+    handoff.artifact_type &&
+    !includes(ARTIFACT_TYPES, handoff.artifact_type)
+  ) {
     errors.push(`artifact_type must be one of: ${ARTIFACT_TYPES.join(", ")}`);
   }
 
@@ -161,7 +198,10 @@ function validateHandoff(input: string): void {
     }
   }
 
-  for (const reviewer of [...handoff.required_reviewers, ...handoff.optional_reviewers_selected]) {
+  for (const reviewer of [
+    ...handoff.required_reviewers,
+    ...handoff.optional_reviewers_selected,
+  ]) {
     if (!isKnownReviewer(reviewer)) {
       errors.push(`unknown reviewer: ${reviewer}`);
     }
@@ -169,7 +209,9 @@ function validateHandoff(input: string): void {
 
   for (const reviewer of handoff.optional_reviewers_selected) {
     if (!includes(OPTIONAL_REVIEWERS, reviewer)) {
-      errors.push(`optional_reviewers_selected can include only optional reviewers: ${reviewer}`);
+      errors.push(
+        `optional_reviewers_selected can include only optional reviewers: ${reviewer}`,
+      );
     }
   }
 
@@ -178,7 +220,9 @@ function validateHandoff(input: string): void {
   }
 
   if (errors.length > 0) {
-    console.error(`Invalid plan_ready_handoff:\n${errors.map((error) => `- ${error}`).join("\n")}`);
+    console.error(
+      `Invalid plan_ready_handoff:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+    );
     process.exit(1);
   }
 
@@ -191,8 +235,14 @@ function validateSelection(input: string): void {
 
   if (!selection.verdict) {
     errors.push("reviewer_selection_judge.verdict is required");
-  } else if (!["baseline_sufficient", "add_optional_reviewers"].includes(selection.verdict)) {
-    errors.push("reviewer_selection_judge.verdict must be baseline_sufficient or add_optional_reviewers");
+  } else if (
+    !["baseline_sufficient", "add_optional_reviewers"].includes(
+      selection.verdict,
+    )
+  ) {
+    errors.push(
+      "reviewer_selection_judge.verdict must be baseline_sufficient or add_optional_reviewers",
+    );
   }
 
   for (const reviewer of BASELINE_REVIEWERS) {
@@ -203,33 +253,52 @@ function validateSelection(input: string): void {
 
   for (const reviewer of selection.baseline_reviewers) {
     if (!includes(BASELINE_REVIEWERS, reviewer)) {
-      errors.push(`baseline_reviewers can include only baseline reviewers: ${reviewer}`);
+      errors.push(
+        `baseline_reviewers can include only baseline reviewers: ${reviewer}`,
+      );
     }
   }
 
   if (selection.baseline_reviewers.length !== BASELINE_REVIEWERS.length) {
-    errors.push(`baseline_reviewers must contain exactly: ${BASELINE_REVIEWERS.join(", ")}`);
+    errors.push(
+      `baseline_reviewers must contain exactly: ${BASELINE_REVIEWERS.join(", ")}`,
+    );
   }
 
   for (const reviewer of selection.selected_optional_reviewers) {
     if (!includes(OPTIONAL_REVIEWERS, reviewer)) {
-      errors.push(`selected_optional_reviewers can include only optional reviewers: ${reviewer}`);
+      errors.push(
+        `selected_optional_reviewers can include only optional reviewers: ${reviewer}`,
+      );
     }
   }
 
-  if (selection.verdict === "add_optional_reviewers" && selection.selected_optional_reviewers.length === 0) {
-    errors.push("add_optional_reviewers requires at least one selected_optional_reviewer");
+  if (
+    selection.verdict === "add_optional_reviewers" &&
+    selection.selected_optional_reviewers.length === 0
+  ) {
+    errors.push(
+      "add_optional_reviewers requires at least one selected_optional_reviewer",
+    );
   }
 
-  if (selection.verdict === "baseline_sufficient" && selection.selected_optional_reviewers.length > 0) {
-    errors.push("baseline_sufficient must not include selected_optional_reviewers");
+  if (
+    selection.verdict === "baseline_sufficient" &&
+    selection.selected_optional_reviewers.length > 0
+  ) {
+    errors.push(
+      "baseline_sufficient must not include selected_optional_reviewers",
+    );
   }
 
   if (!selection.rationalePresent) {
     errors.push("rationale is required");
   }
 
-  if (selection.verdict === "baseline_sufficient" && !selection.rationale.default) {
+  if (
+    selection.verdict === "baseline_sufficient" &&
+    !selection.rationale.default
+  ) {
     errors.push("baseline_sufficient requires a rationale.default explanation");
   }
 
@@ -240,7 +309,9 @@ function validateSelection(input: string): void {
   }
 
   if (errors.length > 0) {
-    console.error(`Invalid reviewer_selection_judge:\n${errors.map((error) => `- ${error}`).join("\n")}`);
+    console.error(
+      `Invalid reviewer_selection_judge:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+    );
     process.exit(1);
   }
 
@@ -302,7 +373,9 @@ function extractSection(input: string, sectionName: string): string {
 }
 
 function scalar(input: string, key: string): string | undefined {
-  const match = input.match(new RegExp(`^${escapeRegExp(key)}:\\s*(.+?)\\s*$`, "m"));
+  const match = input.match(
+    new RegExp(`^${escapeRegExp(key)}:\\s*(.+?)\\s*$`, "m"),
+  );
   if (!match) {
     return undefined;
   }
@@ -311,14 +384,18 @@ function scalar(input: string, key: string): string | undefined {
 }
 
 function list(input: string, key: string): string[] {
-  const inline = input.match(new RegExp(`^${escapeRegExp(key)}:\\s*\\[(.*?)\\]\\s*$`, "m"));
+  const inline = input.match(
+    new RegExp(`^${escapeRegExp(key)}:\\s*\\[(.*?)\\]\\s*$`, "m"),
+  );
   if (inline) {
     const raw = inline[1].trim();
     return raw ? raw.split(",").map(cleanScalar).filter(Boolean) : [];
   }
 
   const lines = input.split(/\r?\n/);
-  const keyIndex = lines.findIndex((line) => line.match(new RegExp(`^${escapeRegExp(key)}:\\s*$`)));
+  const keyIndex = lines.findIndex((line) =>
+    line.match(new RegExp(`^${escapeRegExp(key)}:\\s*$`)),
+  );
   if (keyIndex === -1) {
     return [];
   }
@@ -340,7 +417,9 @@ function list(input: string, key: string): string[] {
 
 function map(input: string, key: string): Record<string, string> {
   const lines = input.split(/\r?\n/);
-  const keyIndex = lines.findIndex((line) => line.match(new RegExp(`^${escapeRegExp(key)}:\\s*$`)));
+  const keyIndex = lines.findIndex((line) =>
+    line.match(new RegExp(`^${escapeRegExp(key)}:\\s*$`)),
+  );
   if (keyIndex === -1) {
     return {};
   }
@@ -382,15 +461,25 @@ function inferArtifactType(artifactRef: string): string | null {
     return null;
   }
 
-  if (artifactRef.includes("openspec/changes/") || artifactRef.startsWith("openspec:")) {
+  if (
+    artifactRef.includes("openspec/changes/") ||
+    artifactRef.startsWith("openspec:")
+  ) {
     return "openspec";
   }
 
-  if (/^[A-Z][A-Z0-9]+-\d+$/.test(artifactRef) || artifactRef.includes("linear.app")) {
+  if (
+    /^[A-Z][A-Z0-9]+-\d+$/.test(artifactRef) ||
+    artifactRef.includes("linear.app")
+  ) {
     return "linear";
   }
 
-  if (artifactRef.endsWith(".md") || artifactRef.includes("docs/plans/") || artifactRef.includes("plans/")) {
+  if (
+    artifactRef.endsWith(".md") ||
+    artifactRef.includes("docs/plans/") ||
+    artifactRef.includes("plans/")
+  ) {
     return "plan";
   }
 
@@ -405,22 +494,38 @@ function toRepoRelative(repoRoot: string, artifactRef: string): string {
   return relative(repoRoot, absolute) || basename(absolute);
 }
 
-function requireValue(value: string | undefined, key: string, errors: string[]): void {
+function requireValue(
+  value: string | undefined,
+  key: string,
+  errors: string[],
+): void {
   if (!value || value.startsWith("<")) {
     errors.push(`${key} is required`);
   }
 }
 
 function isKnownReviewer(reviewer: string): boolean {
-  return includes(BASELINE_REVIEWERS, reviewer) || includes(OPTIONAL_REVIEWERS, reviewer);
+  return (
+    includes(BASELINE_REVIEWERS, reviewer) ||
+    includes(OPTIONAL_REVIEWERS, reviewer)
+  );
 }
 
-function includes<const T extends readonly string[]>(values: T, value: string): value is T[number] {
+function includes<const T extends readonly string[]>(
+  values: T,
+  value: string,
+): value is T[number] {
   return values.includes(value as T[number]);
 }
 
 function isCommand(command: string | undefined): command is Command {
-  return ["detect", "reviewer-template", "validate-selection", "handoff-template", "validate-handoff"].includes(command ?? "");
+  return [
+    "detect",
+    "reviewer-template",
+    "validate-selection",
+    "handoff-template",
+    "validate-handoff",
+  ].includes(command ?? "");
 }
 
 function cleanScalar(value: string): string {

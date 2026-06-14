@@ -4,11 +4,15 @@
   "type": "module",
   "scripts": {
     "agent-runtime": "tsx scripts/agent-runtime.ts",
+    "biome:check": "biome check --staged --no-errors-on-unmatched",
+    "biome:check:all": "biome check .",
+    "biome:write": "biome check --write .",
     "test": "node --import tsx --test tests/unit/*.test.ts tests/integration/*.test.ts",
     "test:unit": "node --import tsx --test tests/unit/*.test.ts",
     "test:integration": "node --import tsx --test tests/integration/*.test.ts"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.0",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3"
   },

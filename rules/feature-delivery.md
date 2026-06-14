@@ -35,6 +35,10 @@ The default workflow is:
 10. For CI failures caused by the branch, fix them, rerun local verification,
    update the branch, and continue monitoring.
 
+When review feedback, CI, or browser checks expose missing coverage, apply the
+Fastest Durable Regression rule in `rules/testing-and-verification.md` before
+rerunning the broader gate.
+
 This applies to normal prompts and goal-style prompts. Do not stop after local
 implementation when the user asked for feature work unless a real blocker is
 reached.

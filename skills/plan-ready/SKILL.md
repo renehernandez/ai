@@ -56,6 +56,33 @@ Baseline reviewers always run:
 - `implementation-readiness`
 - `edge-cases-and-risks`
 - `simplification-and-scope-control`
+- `refactoring-opportunities`
+
+### Refactoring Opportunities Reviewer
+
+`refactoring-opportunities` is a required baseline reviewer. It must look for
+the small structural moves that make the current slice easier and later slices
+cheaper, following the rule: make the change easy, then make the easy change.
+
+This reviewer is constructive, not only defensive. It should identify
+preparatory refactors, reusable components, helpers, services, policies, schema
+helpers, or test utilities that should be extracted in an earlier slice and
+consumed by the current or later named slices. It must reject speculative
+abstractions that do not have a named consumer.
+
+It may block readiness when either:
+
+- the current slice is harder or riskier because a small preparatory refactor is
+  missing;
+- a later named slice clearly needs the same surface, and extraction is cheaper
+  now because the current slice already touches the right boundary;
+- the plan proposes a reusable abstraction without naming current or later
+  consumers;
+- a required extraction lacks behavior-preserving verification.
+
+It should treat plausible but unnamed future reuse, style-only cleanup, broad
+platform work, or extractions that cross unrelated ownership boundaries as
+nonblocking or deferred.
 
 The reviewer-selection judge may select optional reviewers only from this catalog:
 
@@ -96,7 +123,44 @@ nonblocking_findings:
 summary: <one paragraph>
 ```
 
+`refactoring-opportunities` must also include:
+
+```yaml
+make_change_easy:
+  - opportunity: <preparatory refactor>
+    why_now: <current slice risk or later-slice dependency>
+    first_consumer: <current slice or named later slice>
+    later_consumers:
+      - <named slice or workflow>
+    verification: <fastest behavior-preserving verification>
+reuse_across_slices:
+  - reusable_surface: <component, helper, service, policy, schema helper, or test utility>
+    extract_in_slice: <slice name>
+    consumed_by:
+      - <named slice or workflow>
+    avoid_if: <condition where this becomes premature>
+```
+
 Plan readiness requires no unresolved blocking findings.
+
+## Implementation Slice Plan Shape
+
+For implementation-slice plans, every slice should include a short
+`Refactoring / Reuse` subsection:
+
+```md
+### Refactoring / Reuse
+
+- Preparatory refactor:
+- Reusable surface:
+- First consumer:
+- Later consumers:
+- Behavior-preserving verification:
+- Why this is not premature:
+```
+
+The section can explicitly say `None` when no refactoring opportunity is
+justified. It should not be omitted.
 
 ## Handoff Contract
 
@@ -112,6 +176,7 @@ plan_ready_handoff:
     - implementation-readiness
     - edge-cases-and-risks
     - simplification-and-scope-control
+    - refactoring-opportunities
   optional_reviewers_selected: []
   unresolved_blockers: []
   scrutiny_verdict: ship
@@ -151,6 +216,7 @@ Do not write this handoff into committed plan files, OpenSpec files, or Linear c
 | Skipping `agent-runtime-and-skill-compatibility` for skill metadata, script, or runtime changes | Add that optional reviewer |
 | Hiding blocking findings in summary prose | Classify each blocker as `agent_fixable`, `user_decision`, or `external_blocker` |
 | Writing readiness YAML into committed artifacts | Emit the handoff in the final session response only |
+| Treating refactoring as optional polish | Run `refactoring-opportunities` as a baseline reviewer and resolve blockers |
 
 ## Test Evidence
 
@@ -158,6 +224,7 @@ Do not write this handoff into committed plan files, OpenSpec files, or Linear c
 - GREEN: this skill creates a separate plan-readiness phase with required internal subagent review, final scrutiny, and a validated handoff.
 - REFACTOR: the skill stops before implementation so the user can verify the ready plan before `plan-to-pr` runs.
 - RED/GREEN: pressure testing found optional reviewer selection was too implicit for skill/runtime changes; selection rules and `validate-selection` now require fixed-catalog reviewer output.
+- REFACTOR: `refactoring-opportunities` is now a required baseline reviewer so every slice is checked for make-the-change-easy prep work, cross-slice reuse opportunities, and premature abstractions.
 - RED: baseline subagent `019eb39e-5890-76c0-a967-f287d449de7a` inspected committed pre-edit files and failed as expected. It cited `Using dispatch to run required plan reviewers.`, `Dispatch all baseline reviewers plus judge-selected optional reviewers as subagents.`, and adapter text `run required dispatch plan reviewers`, rationalizing that explicit `dispatch` would route Codex reviewer execution away from internal Codex subagents.
 - GREEN/REFACTOR: subagent `019eb361-1adb-7771-a77a-388b11dc4b8b` passed after the first routing patch. The workflow now requires the current harness's internal Codex subagent tool and forbids `dispatch`, Claude Code `Task`, and external Claude harnesses.
 - Validation evidence: `bun skills/plan-ready/scripts/plan-ready.ts validate-selection --file /private/tmp/plan-ready-valid-selection.yaml` returned `reviewer_selection_judge valid`; bare rationale and missing optional-reviewer rationale fixtures were rejected; `bun skills/plan-ready/scripts/plan-ready.ts validate-handoff --file /private/tmp/plan-ready-valid-handoff.yaml` returned `plan_ready_handoff valid`; `bun build skills/plan-ready/scripts/plan-ready.ts --outfile /private/tmp/plan-ready-check.js` bundled successfully.

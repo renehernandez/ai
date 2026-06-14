@@ -1,6 +1,6 @@
 pre-commit:
   commands:
-    unit-tests:
-      run: pnpm test:unit
-    integration-tests:
-      run: pnpm test:integration
+    biome-check:
+      run: pnpm biome:check
+    tests:
+      run: env -u GIT_INDEX_FILE pnpm test

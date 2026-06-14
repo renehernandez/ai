@@ -29,6 +29,7 @@ plan_ready_handoff:
     - implementation-readiness
     - edge-cases-and-risks
     - simplification-and-scope-control
+    - refactoring-opportunities
   optional_reviewers_selected: []
   unresolved_blockers: []
   scrutiny_verdict: ship
@@ -43,7 +44,7 @@ If the handoff is missing, invalid, ambiguous, has unresolved blockers, or has `
 In Codex, prefer starting this workflow as a goal with the handoff included in the objective:
 
 ```text
-/goal Use $plan-to-pr with this plan_ready_handoff: <handoff>. Validate the handoff, implement only the approved slice, run local verification, launch implementation reviewers as internal Codex subagents, report launched reviewers and returned subagent IDs in-session, validate the launch report, reconcile reviewer outcomes, run review-feedback-routing, create or update the routed PR/MR, run artifact-host review, wait for routed latest-head review feedback, iterate until feedback is resolved, watch artifact-host CI, and finish only when CI is green or blocked with evidence. Include the final reviewer subagent report and delivery gate ledger.
+/goal Use $plan-to-pr with this plan_ready_handoff: <handoff>. Validate the handoff, inspect the approved slice's Refactoring / Reuse section, print and maintain the refactoring_execution ledger, implement only the approved slice, run local verification, launch implementation reviewers as internal Codex subagents, report launched reviewers and returned subagent IDs in-session, validate the launch report, reconcile reviewer outcomes, run review-feedback-routing, create or update the routed PR/MR, run artifact-host review, wait for routed latest-head feedback, iterate until feedback is resolved, watch artifact-host CI, and finish only when CI is green or blocked with evidence. Include the final reviewer subagent report and delivery gate ledger.
 ```
 
 For non-Codex agents or tools without goal state, use the same objective as a normal prompt.
@@ -121,9 +122,13 @@ reviewer_subagent_report:
    - GitLab for `git.fullscript.io` or other GitLab remotes.
    - GitHub for `github.com` or GitHub Enterprise remotes.
    - If host ownership still conflicts after inspecting workflow evidence, ask one blocking question.
-5. Implement only `plan_ready_handoff.approved_slice`.
-6. Run the narrowest useful local verification for touched code.
-7. Launch implementation reviewers as internal Codex subagents in the current harness, then immediately print and validate the reviewer launch report in the session.
+5. Inspect the approved slice's `Refactoring / Reuse` section. Print `scripts/plan-to-pr.ts refactoring-template` and fill `refactoring_execution` before editing:
+   - `required_this_slice`: preparatory refactors that must land before or with the product behavior;
+   - `opportunistic_if_touched`: refactors to do only if the affected files are already in scope;
+   - `explicitly_deferred`: refactors deferred because consumers are unnamed, the extraction is premature, or the boundary is unrelated.
+6. Implement only `plan_ready_handoff.approved_slice`.
+7. Run the narrowest useful local verification for touched code. When review feedback, CI, a bug fix, or browser checks reveal missing coverage, apply the Fastest Durable Regression rule from `rules/testing-and-verification.md`: add the lowest practical durable regression and report any skipped local layer explicitly.
+8. Launch implementation reviewers as internal Codex subagents in the current harness, then immediately print and validate the reviewer launch report in the session.
    - In Codex, use the internal Codex subagent tool exposed by the current harness and omit model overrides unless the user explicitly asks for one.
    - Do not invoke the `dispatch` skill, Claude Code `Task`, or any external Claude harness for `plan-to-pr` implementation reviewers from Codex.
    - Launch these reviewers after implementation and local verification: `implementation-review-agent`, `implementation-scrutiny-agent`, `code-quality-review-agent`, `code-simplifier-agent`, `deslop-agent`, and `docs-alignment-review-agent`.
@@ -132,24 +137,29 @@ reviewer_subagent_report:
    - Launch `security-review-agent` only when the diff touches auth, authorization, secrets, token handling, sensitive data, dependency trust, webhooks, or externally reachable surfaces; otherwise list it under `skipped_reviewers` with a not-applicable reason.
    - Record each returned subagent id in `reviewer_subagent_launch.subagent_ids`.
    - Give each reviewer one bounded prompt, the diff or artifact it owns, and the expected output: `passed`, `findings`, `blocked`, or `not_applicable` with evidence.
-8. Reconcile implementation reviewer outcomes:
+9. Reconcile implementation reviewer outcomes:
    - fix actionable `findings` and rerun affected reviewers;
    - stop on `blocked` unless the blocker is external, permission-related, or explicitly accepted by the user;
    - do not continue to PR/MR creation until reviewer outcomes are complete and no actionable findings remain.
-9. Validate the final reviewer outcome report with `scripts/plan-to-pr.ts validate-review-report`.
-10. Push the branch and open or update the PR/MR through the routed artifact host:
+10. Validate the final reviewer outcome report with `scripts/plan-to-pr.ts validate-review-report`.
+11. Before pushing, reconcile `refactoring_execution`:
+    - required refactors are implemented or re-reviewed as deferred with evidence;
+    - new reusable surfaces have at least one real consumer;
+    - later-slice reuse notes remain in the plan when relevant;
+    - behavior-preserving verification ran at the fastest practical layer.
+12. Push the branch and open or update the PR/MR through the routed artifact host:
     - GitLab: use the GitLab MR creation path (`glab-mr-create` or its successor).
     - GitHub: use `github-pr-create`.
     - Unknown artifact host: ask for the target host or stop with exact ambiguity.
-11. Run the artifact-host inspection adapter on the created or existing artifact:
+13. Run the artifact-host inspection adapter on the created or existing artifact:
     - GitLab: use `gitlab-adapter-review`.
     - GitHub: use `github-adapter-review`.
-12. Request or wait for review feedback using the routed `review_feedback.primary` entry.
-13. Request or wait for routed feedback before treating the gate as complete. For Codex GitHub review, poll PR reviews, review comments, timeline comments, and request reactions until the latest pushed head has a `chatgpt-codex-connector` review/comment, a thumbs-up/no-issues reaction on the request, actionable inline findings, or a clear timeout/blocker. For Nitro on Fullscript GitLab, follow `review-feedback-routing`: when it selects explicit Nitro feedback, post `glab mr note <MR_IID> -m "/request_review @nitro"` after MR creation or material follow-up pushes, then poll for latest-head Nitro feedback.
-14. Apply actionable hosted feedback and repeat local verification plus affected internal Codex reviewer subagents on the updated diff, then push and rerun hosted review. If the branch head changes after feedback or CI fixes, earlier hosted review is stale unless it clearly reviewed the new head.
-15. Watch CI through the artifact-host tool: `glab ci`/GitLab pipeline tools for GitLab, and `gh pr checks` or GitHub Actions checks for GitHub. Fix branch-caused failures, rerun relevant verification, rerun scrutiny and docs alignment if the diff changed, and push updates.
-16. Before finishing, generate the gate ledger shape with `scripts/plan-to-pr.ts gate-template`, fill it, and validate it with `validate-ledger`.
-17. Finish only when CI is green or the blocker is external, permission-related, flaky infrastructure, review-feedback timeout, or a product decision with evidence.
+14. Request or wait for review feedback using the routed `review_feedback.primary` entry.
+15. Request or wait for routed feedback before treating the gate as complete. For Codex GitHub review, poll PR reviews, review comments, timeline comments, and request reactions until the latest pushed head has a `chatgpt-codex-connector` review/comment, a thumbs-up/no-issues reaction on the request, actionable inline findings, or a clear timeout/blocker. For Nitro on Fullscript GitLab, follow `review-feedback-routing`: when it selects explicit Nitro feedback, post `glab mr note <MR_IID> -m "/request_review @nitro"` after MR creation or material follow-up pushes, then poll for latest-head Nitro feedback.
+16. Apply actionable hosted feedback and repeat local verification plus affected internal Codex reviewer subagents on the updated diff, then push and rerun hosted review. If feedback exposes missing coverage, apply the Fastest Durable Regression rule before rerunning broad checks. If the branch head changes after feedback or CI fixes, earlier hosted review is stale unless it clearly reviewed the new head.
+17. Watch CI through the artifact-host tool: `glab ci`/GitLab pipeline tools for GitLab, and `gh pr checks` or GitHub Actions checks for GitHub. Fix branch-caused failures, rerun relevant verification, rerun scrutiny and docs alignment if the diff changed, and push updates.
+18. Before finishing, generate the gate ledger shape with `scripts/plan-to-pr.ts gate-template`, fill it, and validate it with `validate-ledger`.
+19. Finish only when CI is green or the blocker is external, permission-related, flaky infrastructure, review-feedback timeout, or a product decision with evidence.
 
 ## Gate Rules
 
@@ -157,8 +167,10 @@ reviewer_subagent_report:
 | --- | --- |
 | Handoff validation | `plan_ready_handoff` validates and has `scrutiny_verdict: ship` |
 | Session start | Live repo, branch/worktree, remotes, and planning artifact state are inspected |
+| Slice status | Branch, PR/MR if any, latest head, and current next action are recorded |
 | Implementation | The approved slice is implemented and no unrelated scope is added |
 | Local verification | Narrow verification for touched code passes or blocker is evidenced |
+| Refactoring execution | Required refactors are implemented or explicitly deferred; reusable surfaces have real consumers; behavior-preserving verification ran |
 | Reviewer subagents | Internal Codex reviewer subagents are launched, reported, and complete |
 | Implementation review | `implementation-review-agent` subagent has no actionable correctness or regression findings remaining |
 | Implementation scrutiny | `implementation-scrutiny-agent` subagent returns `passed`, or a trade-off is explicitly accepted |
@@ -186,12 +198,18 @@ delivery_gate_ledger:
   session_start:
     status: passed
     evidence: "repo, branch, remotes, and artifact inspected"
+  slice_status:
+    status: passed
+    evidence: "branch, PR/MR, latest head, review state, CI state, and next action recorded"
   implementation:
     status: passed
     evidence: "approved slice implemented"
   local_verification:
     status: passed
     evidence: "<command>"
+  refactoring_execution:
+    status: passed
+    evidence: "required refactors implemented/deferred with consumers and verification recorded"
   reviewer_subagents:
     status: passed
     evidence: "reviewer_subagent_launch and reviewer_subagent_report validated"
@@ -243,6 +261,9 @@ delivery_gate_ledger:
 | Brainstorming inside `plan-to-pr` | Stop and run `plan-ready` |
 | Implementing without a handoff | Ask for a valid `plan_ready_handoff` |
 | Expanding beyond `approved_slice` | Update the plan through `plan-ready` first |
+| Ignoring `Refactoring / Reuse` | Fill `refactoring_execution` before editing and reconcile it before push/final delivery |
+| Adding reusable surfaces with no consumer | Rework or defer the abstraction until a current or named later slice consumes it |
+| Encoding every review bug in browser E2E | Apply `rules/testing-and-verification.md` and add the fastest durable regression layer |
 | Running reviewers locally in the main agent only | Launch internal Codex reviewer subagents and report launch/outcomes |
 | Routing Codex implementation reviewers through `dispatch` or Claude | Use the current harness's internal Codex subagent tool |
 | Reporting only one reviewer | Launch and report all required reviewers: `implementation-review-agent`, `implementation-scrutiny-agent`, `code-quality-review-agent`, `code-simplifier-agent`, `deslop-agent`, and `docs-alignment-review-agent` |
@@ -262,6 +283,7 @@ delivery_gate_ledger:
 - RED: prior `plan-to-pr` flow could begin from a fuzzy idea and mix planning with implementation.
 - GREEN: this skill requires a validated `plan_ready_handoff` before editing files.
 - REFACTOR: implementation delivery gates remain explicit, but planning gates move to `plan-ready`.
+- REFACTOR: implementation now carries `refactoring_execution` from the plan's `Refactoring / Reuse` section through delivery, and the final ledger records slice status plus refactoring execution.
 - GREEN: pressure testing confirmed missing handoffs and non-`ship` scrutiny handoffs block before implementation.
 - RED: baseline subagent `019eb39e-7a2b-7453-81b0-37fb35df9005` inspected committed pre-edit files and failed as expected. It cited `Run implementation diff review with diff-review`, `Run scrutinize on the implementation diff`, `Run the pre-commit quality gate`, and adapter text `run local verification, implementation review, $scrutinize...`, rationalizing: `inline helper-skill review satisfies the workflow; nothing says I must launch internal Codex reviewer subagents or report each reviewer's final outcome`.
 - GREEN: subagent `019eb370-7dce-75d3-97ff-6c80d6406aab` confirmed the first patch forced internal Codex reviewer subagents and blocked dispatch/Claude, then found validator loopholes for under-launched reports, unresolved `findings`, missing security accounting, one-reviewer examples, and post-feedback inline reruns.

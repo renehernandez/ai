@@ -1,12 +1,13 @@
 #!/usr/bin/env tsx
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { spawnSync } from "node:child_process";
 
 const BASELINE_REVIEWERS = [
   "implementation-readiness",
   "edge-cases-and-risks",
   "simplification-and-scope-control",
+  "refactoring-opportunities",
 ] as const;
 
 const OPTIONAL_REVIEWERS = [
@@ -51,8 +52,10 @@ const ARTIFACT_TYPES = ["plan", "openspec", "linear"] as const;
 const LEDGER_GATES = [
   "handoff_validation",
   "session_start",
+  "slice_status",
   "implementation",
   "local_verification",
+  "refactoring_execution",
   "reviewer_subagents",
   "implementation_review",
   "implementation_scrutiny",
@@ -78,7 +81,12 @@ const LEDGER_NOT_APPLICABLE_GATES = [
 ] as const;
 
 const LEDGER_STATUSES = ["passed", "blocked", "not_applicable"] as const;
-const REVIEW_OUTCOME_STATUSES = ["passed", "findings", "blocked", "not_applicable"] as const;
+const REVIEW_OUTCOME_STATUSES = [
+  "passed",
+  "findings",
+  "blocked",
+  "not_applicable",
+] as const;
 
 type Command =
   | "detect"
@@ -86,6 +94,7 @@ type Command =
   | "reviewer-template"
   | "validate-launch-report"
   | "validate-review-report"
+  | "refactoring-template"
   | "gate-template"
   | "validate-ledger";
 
@@ -105,7 +114,7 @@ function main(): void {
 
   if (!isCommand(command)) {
     fail(
-      "Usage: plan-to-pr.ts <detect|validate-handoff|reviewer-template|validate-launch-report|validate-review-report|gate-template|validate-ledger> [--file path]",
+      "Usage: plan-to-pr.ts <detect|validate-handoff|reviewer-template|validate-launch-report|validate-review-report|refactoring-template|gate-template|validate-ledger> [--file path]",
     );
   }
 
@@ -121,6 +130,11 @@ function main(): void {
 
   if (command === "reviewer-template") {
     printReviewerTemplate();
+    return;
+  }
+
+  if (command === "refactoring-template") {
+    printRefactoringExecutionTemplate();
     return;
   }
 
@@ -155,11 +169,12 @@ function detect(): void {
     branch,
     head_sha: headSha,
     remotes: remotes.split("\n").filter(Boolean),
-    artifact_host_hint: remoteText.includes("gitlab") || remoteText.includes("git.fullscript.io")
-      ? "gitlab"
-      : remoteText.includes("github")
-        ? "github"
-        : null,
+    artifact_host_hint:
+      remoteText.includes("gitlab") || remoteText.includes("git.fullscript.io")
+        ? "gitlab"
+        : remoteText.includes("github")
+          ? "github"
+          : null,
     openspec_present: existsSync(join(repoRoot, "openspec")),
   };
 
@@ -226,6 +241,23 @@ review_execution_rules:
 `);
 }
 
+function printRefactoringExecutionTemplate(): void {
+  console.log(`refactoring_execution:
+  required_this_slice:
+    - <refactor required before or with the approved product behavior>
+  opportunistic_if_touched:
+    - <refactor to do only if the affected files are already being changed>
+  explicitly_deferred:
+    - <refactor deferred because consumers are not named or the extraction is premature>
+  implemented:
+    - <refactor completed with first real consumer>
+  rejected_as_premature:
+    - <abstraction rejected because it lacks a named consumer>
+  verification:
+    - <fastest behavior-preserving verification>
+`);
+}
+
 function validateHandoff(input: string): void {
   const handoff = parseHandoff(input);
   const errors: string[] = [];
@@ -240,7 +272,10 @@ function validateHandoff(input: string): void {
     errors.push("status must be ready");
   }
 
-  if (handoff.artifact_type && !includes(ARTIFACT_TYPES, handoff.artifact_type)) {
+  if (
+    handoff.artifact_type &&
+    !includes(ARTIFACT_TYPES, handoff.artifact_type)
+  ) {
     errors.push(`artifact_type must be one of: ${ARTIFACT_TYPES.join(", ")}`);
   }
 
@@ -254,7 +289,10 @@ function validateHandoff(input: string): void {
     }
   }
 
-  for (const reviewer of [...handoff.required_reviewers, ...handoff.optional_reviewers_selected]) {
+  for (const reviewer of [
+    ...handoff.required_reviewers,
+    ...handoff.optional_reviewers_selected,
+  ]) {
     if (!isKnownReviewer(reviewer)) {
       errors.push(`unknown reviewer: ${reviewer}`);
     }
@@ -262,7 +300,9 @@ function validateHandoff(input: string): void {
 
   for (const reviewer of handoff.optional_reviewers_selected) {
     if (!includes(OPTIONAL_REVIEWERS, reviewer)) {
-      errors.push(`optional_reviewers_selected can include only optional reviewers: ${reviewer}`);
+      errors.push(
+        `optional_reviewers_selected can include only optional reviewers: ${reviewer}`,
+      );
     }
   }
 
@@ -271,7 +311,9 @@ function validateHandoff(input: string): void {
   }
 
   if (errors.length > 0) {
-    console.error(`Invalid plan_ready_handoff:\n${errors.map((error) => `- ${error}`).join("\n")}`);
+    console.error(
+      `Invalid plan_ready_handoff:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+    );
     process.exit(1);
   }
 
@@ -296,8 +338,13 @@ function validateLedger(input: string): void {
     if (!status) {
       errors.push(`${gate}.status is required`);
     } else if (!includes(LEDGER_STATUSES, status)) {
-      errors.push(`${gate}.status must be one of: ${LEDGER_STATUSES.join(", ")}`);
-    } else if (status === "not_applicable" && !includes(LEDGER_NOT_APPLICABLE_GATES, gate)) {
+      errors.push(
+        `${gate}.status must be one of: ${LEDGER_STATUSES.join(", ")}`,
+      );
+    } else if (
+      status === "not_applicable" &&
+      !includes(LEDGER_NOT_APPLICABLE_GATES, gate)
+    ) {
       errors.push(`${gate}.status cannot be not_applicable`);
     }
 
@@ -307,7 +354,9 @@ function validateLedger(input: string): void {
   }
 
   if (errors.length > 0) {
-    console.error(`Invalid delivery_gate_ledger:\n${errors.map((error) => `- ${error}`).join("\n")}`);
+    console.error(
+      `Invalid delivery_gate_ledger:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+    );
     process.exit(1);
   }
 
@@ -331,13 +380,25 @@ function validateLaunchReport(input: string): void {
 
   requireRequiredReviewers(launchedReviewers, errors);
   requireKnownReviewers(launchedReviewers, "launched", errors);
-  requireConditionalReviewerAccounting("security-review-agent", launchedReviewers, skippedReviewerNames, errors);
-  requireConditionalReviewerAccounting("ai-readiness-upkeep-agent", launchedReviewers, skippedReviewerNames, errors);
+  requireConditionalReviewerAccounting(
+    "security-review-agent",
+    launchedReviewers,
+    skippedReviewerNames,
+    errors,
+  );
+  requireConditionalReviewerAccounting(
+    "ai-readiness-upkeep-agent",
+    launchedReviewers,
+    skippedReviewerNames,
+    errors,
+  );
 
   for (const subagentId of subagentIds) {
     const parsed = subagentId.match(/^([^:]+):\s*(.+)$/);
     if (!parsed) {
-      errors.push(`subagent id must use '<reviewer>: <returned subagent id>': ${subagentId}`);
+      errors.push(
+        `subagent id must use '<reviewer>: <returned subagent id>': ${subagentId}`,
+      );
       continue;
     }
 
@@ -362,7 +423,9 @@ function validateLaunchReport(input: string): void {
   }
 
   if (errors.length > 0) {
-    console.error(`Invalid reviewer_subagent_launch:\n${errors.map((error) => `- ${error}`).join("\n")}`);
+    console.error(
+      `Invalid reviewer_subagent_launch:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+    );
     process.exit(1);
   }
 
@@ -386,8 +449,18 @@ function validateReviewReport(input: string): void {
 
   requireRequiredReviewers(launchedReviewers, errors);
   requireKnownReviewers(launchedReviewers, "launched", errors);
-  requireConditionalReviewerAccounting("security-review-agent", launchedReviewers, skippedReviewerNames, errors);
-  requireConditionalReviewerAccounting("ai-readiness-upkeep-agent", launchedReviewers, skippedReviewerNames, errors);
+  requireConditionalReviewerAccounting(
+    "security-review-agent",
+    launchedReviewers,
+    skippedReviewerNames,
+    errors,
+  );
+  requireConditionalReviewerAccounting(
+    "ai-readiness-upkeep-agent",
+    launchedReviewers,
+    skippedReviewerNames,
+    errors,
+  );
 
   if (outcomes.length === 0) {
     errors.push("outcomes must include each launched reviewer");
@@ -396,7 +469,9 @@ function validateReviewReport(input: string): void {
   for (const outcome of outcomes) {
     const parsed = outcome.match(/^([^:]+):\s*([a-z_]+)\b\s*-\s*(.+)$/);
     if (!parsed) {
-      errors.push(`outcome must use '<reviewer>: <status> - <evidence>': ${outcome}`);
+      errors.push(
+        `outcome must use '<reviewer>: <status> - <evidence>': ${outcome}`,
+      );
       continue;
     }
 
@@ -409,14 +484,21 @@ function validateReviewReport(input: string): void {
     }
 
     if (!includes(REVIEW_OUTCOME_STATUSES, outcomeStatus)) {
-      errors.push(`${reviewer} outcome must be one of: ${REVIEW_OUTCOME_STATUSES.join(", ")}`);
+      errors.push(
+        `${reviewer} outcome must be one of: ${REVIEW_OUTCOME_STATUSES.join(", ")}`,
+      );
     }
 
     if (outcomeStatus === "findings" || outcomeStatus === "blocked") {
-      errors.push(`${reviewer} outcome must be reconciled before final report: ${outcomeStatus}`);
+      errors.push(
+        `${reviewer} outcome must be reconciled before final report: ${outcomeStatus}`,
+      );
     }
 
-    if (includes(MUST_PASS_REVIEW_SUBAGENTS, reviewer) && outcomeStatus !== "passed") {
+    if (
+      includes(MUST_PASS_REVIEW_SUBAGENTS, reviewer) &&
+      outcomeStatus !== "passed"
+    ) {
       errors.push(`${reviewer} outcome must be passed`);
     }
 
@@ -424,7 +506,12 @@ function validateReviewReport(input: string): void {
       errors.push(`${reviewer} outcome evidence is required`);
     }
 
-    if (reviewer === "ai-readiness-upkeep-agent" && !evidence.match(/validate-report|validated ai_readiness_upkeep_report|ai_readiness_upkeep_report valid/i)) {
+    if (
+      reviewer === "ai-readiness-upkeep-agent" &&
+      !evidence.match(
+        /validate-report|validated ai_readiness_upkeep_report|ai_readiness_upkeep_report valid/i,
+      )
+    ) {
       errors.push(
         "ai-readiness-upkeep-agent outcome evidence must mention validate-report or a validated ai_readiness_upkeep_report",
       );
@@ -440,22 +527,33 @@ function validateReviewReport(input: string): void {
   }
 
   if (errors.length > 0) {
-    console.error(`Invalid reviewer_subagent_report:\n${errors.map((error) => `- ${error}`).join("\n")}`);
+    console.error(
+      `Invalid reviewer_subagent_report:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+    );
     process.exit(1);
   }
 
   console.log("reviewer_subagent_report valid");
 }
 
-function requireRequiredReviewers(launchedReviewers: string[], errors: string[]): void {
+function requireRequiredReviewers(
+  launchedReviewers: string[],
+  errors: string[],
+): void {
   for (const reviewer of REQUIRED_REVIEW_SUBAGENTS) {
     if (!launchedReviewers.includes(reviewer)) {
-      errors.push(`launched_reviewers must include required reviewer: ${reviewer}`);
+      errors.push(
+        `launched_reviewers must include required reviewer: ${reviewer}`,
+      );
     }
   }
 }
 
-function requireKnownReviewers(reviewers: string[], label: string, errors: string[]): void {
+function requireKnownReviewers(
+  reviewers: string[],
+  label: string,
+  errors: string[],
+): void {
   for (const reviewer of reviewers) {
     if (!includes(REVIEW_SUBAGENTS, reviewer)) {
       errors.push(`unknown ${label} reviewer: ${reviewer}`);
@@ -469,18 +567,30 @@ function requireConditionalReviewerAccounting(
   skippedReviewerNames: Set<string>,
   errors: string[],
 ): void {
-  if (!launchedReviewers.includes(reviewer) && !skippedReviewerNames.has(reviewer)) {
-    errors.push(`${reviewer} must be launched or listed under skipped_reviewers with not_applicable evidence`);
+  if (
+    !launchedReviewers.includes(reviewer) &&
+    !skippedReviewerNames.has(reviewer)
+  ) {
+    errors.push(
+      `${reviewer} must be launched or listed under skipped_reviewers with not_applicable evidence`,
+    );
   }
 }
 
-function parseSkippedReviewers(skippedReviewers: string[], errors: string[]): Set<string> {
+function parseSkippedReviewers(
+  skippedReviewers: string[],
+  errors: string[],
+): Set<string> {
   const skippedReviewerNames = new Set<string>();
 
   for (const skippedReviewer of skippedReviewers) {
-    const parsed = skippedReviewer.match(/^([^:]+):\s*not_applicable\b\s*-\s*(.+)$/);
+    const parsed = skippedReviewer.match(
+      /^([^:]+):\s*not_applicable\b\s*-\s*(.+)$/,
+    );
     if (!parsed) {
-      errors.push(`skipped reviewer must use '<reviewer>: not_applicable - <evidence>': ${skippedReviewer}`);
+      errors.push(
+        `skipped reviewer must use '<reviewer>: not_applicable - <evidence>': ${skippedReviewer}`,
+      );
       continue;
     }
 
@@ -541,7 +651,9 @@ function findSection(input: string, sectionName: string): string | null {
 }
 
 function scalar(input: string, key: string): string | undefined {
-  const match = input.match(new RegExp(`^${escapeRegExp(key)}:\\s*(.+?)\\s*$`, "m"));
+  const match = input.match(
+    new RegExp(`^${escapeRegExp(key)}:\\s*(.+?)\\s*$`, "m"),
+  );
   if (!match) {
     return undefined;
   }
@@ -550,14 +662,18 @@ function scalar(input: string, key: string): string | undefined {
 }
 
 function list(input: string, key: string): string[] {
-  const inline = input.match(new RegExp(`^${escapeRegExp(key)}:\\s*\\[(.*?)\\]\\s*$`, "m"));
+  const inline = input.match(
+    new RegExp(`^${escapeRegExp(key)}:\\s*\\[(.*?)\\]\\s*$`, "m"),
+  );
   if (inline) {
     const raw = inline[1].trim();
     return raw ? raw.split(",").map(cleanScalar).filter(Boolean) : [];
   }
 
   const lines = input.split(/\r?\n/);
-  const keyIndex = lines.findIndex((line) => line.match(new RegExp(`^${escapeRegExp(key)}:\\s*$`)));
+  const keyIndex = lines.findIndex((line) =>
+    line.match(new RegExp(`^${escapeRegExp(key)}:\\s*$`)),
+  );
   if (keyIndex === -1) {
     return [];
   }
@@ -590,17 +706,27 @@ function readInput(args: string[]): string {
   return readFileSync(0, "utf8");
 }
 
-function requireValue(value: string | undefined, key: string, errors: string[]): void {
+function requireValue(
+  value: string | undefined,
+  key: string,
+  errors: string[],
+): void {
   if (!value || value.startsWith("<")) {
     errors.push(`${key} is required`);
   }
 }
 
 function isKnownReviewer(reviewer: string): boolean {
-  return includes(BASELINE_REVIEWERS, reviewer) || includes(OPTIONAL_REVIEWERS, reviewer);
+  return (
+    includes(BASELINE_REVIEWERS, reviewer) ||
+    includes(OPTIONAL_REVIEWERS, reviewer)
+  );
 }
 
-function includes<const T extends readonly string[]>(values: T, value: string): value is T[number] {
+function includes<const T extends readonly string[]>(
+  values: T,
+  value: string,
+): value is T[number] {
   return values.includes(value as T[number]);
 }
 
@@ -611,6 +737,7 @@ function isCommand(command: string | undefined): command is Command {
     "reviewer-template",
     "validate-launch-report",
     "validate-review-report",
+    "refactoring-template",
     "gate-template",
     "validate-ledger",
   ].includes(command ?? "");
