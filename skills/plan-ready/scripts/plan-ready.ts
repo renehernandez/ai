@@ -2,6 +2,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join, relative, resolve } from "node:path";
+import { validateSliceReviewInput } from "../../plan-slices/scripts/plan-slices.ts";
 
 const BASELINE_REVIEWERS = [
   "implementation-readiness",
@@ -53,12 +54,18 @@ type ParsedHandoff = {
   scrutiny_verdict?: string;
 };
 
+type ParsedSliceReview = {
+  status?: string;
+  artifact_ref?: string;
+  artifact_fingerprint?: string;
+};
+
 function main(): void {
   const [command, ...args] = process.argv.slice(2);
 
   if (!isCommand(command)) {
     fail(
-      "Usage: plan-ready.ts <detect|reviewer-template|handoff-template|validate-handoff> [artifact-ref] [--file path]",
+      "Usage: plan-ready.ts <detect|reviewer-template|validate-selection|handoff-template|validate-handoff> [artifact-ref] [--file path]",
     );
   }
 
@@ -165,10 +172,27 @@ review_execution_rules:
 }
 
 function printHandoffTemplate(): void {
-  console.log(`plan_ready_handoff:
+  console.log(`slice_plan_review:
+  status: pass
+  artifact_ref: <local plan file path>
+  artifact_fingerprint: <sha256 of artifact_ref>
+  mode: audit
+  slices:
+    - id: slice-01
+      title: <slice title>
+      observable_outcome: pass
+      bounded_scope: pass
+      sequencing: pass
+      verification: pass
+      refactoring_reuse: pass
+      delivery_fit: pass
+  blocking_findings: []
+  warnings: []
+
+plan_ready_handoff:
   status: ready
   artifact_type: plan
-  artifact_ref: <path, OpenSpec change id/path, Linear issue key, or URL>
+  artifact_ref: <local plan file path>
   approved_slice: <short implementation slice>
   required_reviewers:
 ${BASELINE_REVIEWERS.map((reviewer) => `    - ${reviewer}`).join("\n")}
@@ -180,6 +204,7 @@ ${BASELINE_REVIEWERS.map((reviewer) => `    - ${reviewer}`).join("\n")}
 
 function validateHandoff(input: string): void {
   const handoff = parseHandoff(input);
+  const sliceReview = parseSliceReview(input);
   const errors: string[] = [];
 
   requireValue(handoff.status, "status", errors);
@@ -230,6 +255,8 @@ function validateHandoff(input: string): void {
     errors.push("unresolved_blockers must be empty before status ready");
   }
 
+  validateSliceReviewForHandoff(input, sliceReview, handoff, errors);
+
   if (errors.length > 0) {
     console.error(
       `Invalid plan_ready_handoff:\n${errors.map((error) => `- ${error}`).join("\n")}`,
@@ -238,6 +265,37 @@ function validateHandoff(input: string): void {
   }
 
   console.log("plan_ready_handoff valid");
+}
+
+function validateSliceReviewForHandoff(
+  input: string,
+  sliceReview: ParsedSliceReview,
+  handoff: ParsedHandoff,
+  errors: string[],
+): void {
+  errors.push(
+    ...validateSliceReviewInput(input).map(
+      (error) => `slice_plan_review.${error}`,
+    ),
+  );
+
+  if (sliceReview.status && sliceReview.status !== "pass") {
+    errors.push("slice_plan_review.status must be pass before status ready");
+  }
+
+  if (
+    handoff.artifact_ref &&
+    sliceReview.artifact_ref &&
+    handoff.artifact_ref !== sliceReview.artifact_ref
+  ) {
+    errors.push("slice_plan_review.artifact_ref must match artifact_ref");
+  }
+
+  if (handoff.artifact_type && handoff.artifact_type !== "plan") {
+    errors.push(
+      "slice_plan_review currently supports local plan file artifacts only",
+    );
+  }
 }
 
 function validateSelection(input: string): void {
@@ -342,6 +400,17 @@ function parseHandoff(input: string): ParsedHandoff {
     optional_reviewers_selected: list(section, "optional_reviewers_selected"),
     unresolved_blockers: list(section, "unresolved_blockers"),
     scrutiny_verdict: scalar(section, "scrutiny_verdict"),
+  };
+}
+
+function parseSliceReview(input: string): ParsedSliceReview {
+  const body = extractYaml(input);
+  const section = extractSection(body, "slice_plan_review");
+
+  return {
+    status: scalar(section, "status"),
+    artifact_ref: scalar(section, "artifact_ref"),
+    artifact_fingerprint: scalar(section, "artifact_fingerprint"),
   };
 }
 

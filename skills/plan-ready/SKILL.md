@@ -21,6 +21,7 @@ Announce each helper step before it starts:
 
 - `Using $session-start to inspect live repo and planning-artifact context.`
 - `Using $brainstorming to settle scope before plan review.`
+- `Using $plan-slices to create or audit implementation slices before readiness.`
 - `Using the plan-ready reviewer-selection judge to choose optional reviewer lenses.`
 - `Using internal Codex subagents to run required plan reviewers.`
 - `Using $scrutinize on the final plan before handoff.`
@@ -36,18 +37,24 @@ After each gate, report one line with the gate, verdict, artifact, and next acti
    - plan file in the project's established plan location;
    - OpenSpec change through the project's OpenSpec workflow;
    - Linear ticket or linked plan context.
-5. Run the bundled script `scripts/plan-ready.ts reviewer-template`, make the reviewer-selection judge decision from that exact catalog, and validate the judge output with `scripts/plan-ready.ts validate-selection`.
-6. Run all baseline reviewers plus judge-selected optional reviewers as internal subagents in the current harness.
+5. Run `plan-slices` against the authoritative artifact before reviewer selection:
+   - use `mode: create` when slices are missing;
+   - use `mode: audit` when slices already exist, including single-slice plans;
+   - use a local plan file artifact for the mandatory fingerprinted v1 gate;
+   - validate the emitted `slice_plan_review` with `scripts/plan-slices.ts validate-review`.
+6. Run the bundled script `scripts/plan-ready.ts reviewer-template`, make the reviewer-selection judge decision from that exact catalog, and validate the judge output with `scripts/plan-ready.ts validate-selection`.
+7. Run all baseline reviewers plus judge-selected optional reviewers as internal subagents in the current harness.
    - In Codex, use the internal Codex subagent tool exposed by the current harness and omit model overrides unless the user explicitly asks for one.
    - Do not invoke the `dispatch` skill, Claude Code `Task`, or any external Claude harness for plan reviewers from Codex.
    - Give each reviewer one bounded prompt, the reviewer name, the planning artifact, and the Reviewer Output Contract below.
-7. Resolve every blocking finding:
+8. Resolve every blocking finding:
    - `agent_fixable`: update the planning artifact and rerun affected reviewers.
    - `user_decision`: ask one focused question and incorporate the answer.
    - `external_blocker`: record the blocker and do not emit `status: ready` unless the blocker is resolved or the user explicitly accepts the risk.
-8. Run `scrutinize` on the final plan. The handoff requires `Scrutinize verdict: ship`.
-9. Generate the handoff with `scripts/plan-ready.ts handoff-template`, fill it, and validate it with `validate-handoff`.
-10. Stop. Do not invoke `plan-followthrough` or `plan-to-pr`, start implementation, create branches, push, open PRs/MRs, or request hosted review.
+9. Rerun `plan-slices` after any planning-artifact edit from reviewer feedback or `scrutinize`; stale artifact fingerprints must not pass.
+10. Run `scrutinize` on the final plan. The handoff requires `Scrutinize verdict: ship`.
+11. Generate the handoff with `scripts/plan-ready.ts handoff-template`, fill it with the current passing `slice_plan_review`, and validate it with `validate-handoff`.
+12. Stop. Do not invoke `plan-followthrough` or `plan-to-pr`, start implementation, create branches, push, open PRs/MRs, or request hosted review.
 
 ## Reviewer Selection
 
@@ -197,6 +204,23 @@ justified. It should not be omitted.
 The final response must include one fenced YAML block:
 
 ```yaml
+slice_plan_review:
+  status: pass
+  artifact_ref: docs/plans/example.md
+  artifact_fingerprint: <sha256 of artifact_ref>
+  mode: audit
+  slices:
+    - id: slice-01
+      title: Example slice
+      observable_outcome: pass
+      bounded_scope: pass
+      sequencing: pass
+      verification: pass
+      refactoring_reuse: pass
+      delivery_fit: pass
+  blocking_findings: []
+  warnings: []
+
 plan_ready_handoff:
   status: ready
   artifact_type: plan
@@ -214,13 +238,19 @@ plan_ready_handoff:
 
 Do not write this handoff into committed plan files, OpenSpec files, or Linear comments by default. It is session handoff state, not reviewable product documentation.
 
+`validate-handoff` requires `slice_plan_review.status: pass`, a matching
+`artifact_ref`, no blocking findings, and an artifact fingerprint that matches
+the current file content. The v1 machine-checkable slice gate supports local
+plan file artifacts; OpenSpec and Linear inputs must be represented by a local
+plan artifact before this handoff validator can pass.
+
 ## Artifact Modes
 
 | Mode | Requirement |
 | --- | --- |
 | Plan file | Update the plan file, but keep readiness state out of the file |
-| OpenSpec | Use OpenSpec proposal/spec/design/tasks workflow and run `openspec validate <change-id> --strict --no-interactive` |
-| Linear | Use the ticket as planning input; do not post the full handoff as a comment unless the user asks |
+| OpenSpec | Use OpenSpec proposal/spec/design/tasks workflow and run `openspec validate <change-id> --strict --no-interactive`; mirror the ready implementation plan into a local plan artifact before `slice_plan_review` validation |
+| Linear | Use the ticket as planning input; do not post the full handoff as a comment unless the user asks; mirror the ready implementation plan into a local plan artifact before `slice_plan_review` validation |
 
 ## Gate Rules
 
@@ -228,6 +258,7 @@ Do not write this handoff into committed plan files, OpenSpec files, or Linear c
 | --- | --- |
 | Artifact intake | Planning artifact is identified or created |
 | Brainstorming | Scope, constraints, and success criteria are clear |
+| Slice plan review | `plan-slices` emits a current passing `slice_plan_review` for the artifact |
 | Reviewer selection | Judge output validates and uses only the fixed optional reviewer catalog |
 | Internal subagent review | Baseline reviewers and selected optional reviewers return verdicts |
 | Feedback resolution | No blocking reviewer findings remain unresolved |
@@ -248,6 +279,9 @@ Do not write this handoff into committed plan files, OpenSpec files, or Linear c
 | Writing readiness YAML into committed artifacts | Emit the handoff in the final session response only |
 | Treating refactoring as optional polish | Run `refactoring-opportunities` as a baseline reviewer and resolve blockers |
 | Absorbing a significant refactor into the current product slice | Add it as a proposed refactoring slice, block readiness, and rerun brainstorming plus plan review |
+| Treating single-slice plans as exempt from slice review | Run `plan-slices` in `mode: audit` and synthesize `slice-01` if needed |
+| Reusing a slice review after plan edits | Recompute the artifact fingerprint and validate a new `slice_plan_review` |
+| Passing a Linear key, URL, or OpenSpec ID as `slice_plan_review.artifact_ref` | Use a local plan file artifact for the v1 fingerprinted gate |
 
 ## Test Evidence
 
@@ -261,4 +295,6 @@ Do not write this handoff into committed plan files, OpenSpec files, or Linear c
 - GREEN/REFACTOR: subagent `019eb361-1adb-7771-a77a-388b11dc4b8b` passed after the first routing patch. The workflow now requires the current harness's internal Codex subagent tool and forbids `dispatch`, Claude Code `Task`, and external Claude harnesses.
 - RED: thread `019ec3c6-27cd-7962-9c30-313332a857d0` showed slice delivery dragging when significant refactors, reviewer churn, docs, hardening, and implementation all stayed inside one in-flight slice.
 - GREEN/REFACTOR: significant refactors found during plan-ready now become separate proposed slices and block readiness until brainstorming and plan review confirm their value and sequence.
-- Validation evidence: `bun skills/plan-ready/scripts/plan-ready.ts validate-selection --file /private/tmp/plan-ready-valid-selection.yaml` returned `reviewer_selection_judge valid`; bare rationale and missing optional-reviewer rationale fixtures were rejected; `bun skills/plan-ready/scripts/plan-ready.ts validate-handoff --file /private/tmp/plan-ready-valid-handoff.yaml` returned `plan_ready_handoff valid`; `bun build skills/plan-ready/scripts/plan-ready.ts --outfile /private/tmp/plan-ready-check.js` bundled successfully.
+- Validation evidence: `pnpm exec node --import tsx --test tests/unit/plan-ready-script.test.ts` returned passing tests for reviewer selection, handoff validation, and handoff template generation.
+- RED/GREEN: `validate-handoff` now rejects missing, blocked, mismatched, or stale `slice_plan_review` blocks before emitting `status: ready`.
+- REFACTOR: slice creation and audit live in `plan-slices`; `plan-ready` owns the readiness gate and validates the slice review against the same artifact.

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Plan Slices"
+  short_description: "Create or audit implementation slices before plan-ready"
+  default_prompt: "Use $plan-slices for <plan artifact>. Read the plan, create or audit implementation slices, ensure every slice has observable outcome, bounded scope, sequencing, verification, Refactoring / Reuse, and delivery fit, run the bundled fingerprint and review-template helpers, emit slice_plan_review, validate it with validate-review, and return blocked until the review passes for the current artifact fingerprint."
