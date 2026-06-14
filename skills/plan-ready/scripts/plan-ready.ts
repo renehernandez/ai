@@ -134,11 +134,22 @@ refactoring_opportunities_contract:
       extract_in_slice: <slice name>
       consumed_by: []
       avoid_if: <condition where this becomes premature>
+  refactor_scope_gate:
+    minor_in_slice_allowed:
+      - <local behavior-preserving refactor that does not change slice scope>
+    significant_refactor_suggestions:
+      - title: <separate refactoring slice or none>
+        placement: before_slice | after_slice | later_backlog
+        relative_to_slice: <slice id or title>
+        why_significant: <boundary, contract, data model, broad caller, or sequencing impact>
+        readiness_effect: blocks_plan_ready
+        required_next_step: rerun_brainstorming_and_plan_review
   blocking_rules:
     - Block when the current slice is harder or riskier because a small preparatory refactor is missing.
     - Block when a named later slice clearly needs the same surface and extraction is cheaper because the current slice already touches the boundary.
     - Block when a reusable abstraction lacks a named current or later consumer.
     - Block when a required extraction lacks behavior-preserving verification.
+    - Block when a significant refactor should become a new or reordered slice; rerun brainstorming and plan review before readiness.
 
 selection_rules:
   - Select docs-and-agent-alignment for reusable workflow, docs, skills, rules, automation prompt, background review, or PR/MR description contract changes.

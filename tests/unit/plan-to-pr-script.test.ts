@@ -103,6 +103,7 @@ const validFollowthroughDelivery = `plan_followthrough_delivery:
     implemented: []
     deferred: []
     must_consume_later: []
+  significant_refactor_suggestions: []
   changed_assumptions: []
   recommended_next_action: continue
 `;
@@ -145,6 +146,40 @@ test("validate-followthrough-delivery accepts reconciliation contract", () => {
     invalid.stderr,
     /status must be one of: delivered, shipped, stacked_pending_merge, blocked, needs_replan/,
   );
+});
+
+test("validate-followthrough-delivery requires significant refactor suggestions key", () => {
+  const invalid = runPlanToPr(
+    "validate-followthrough-delivery",
+    validFollowthroughDelivery.replace(
+      "  significant_refactor_suggestions: []\n",
+      "",
+    ),
+  );
+
+  assert.notEqual(invalid.status, 0);
+  assert.match(invalid.stderr, /significant_refactor_suggestions is required/);
+});
+
+test("refactoring-template records significant refactor suggestions", () => {
+  const result = spawnSync(
+    "pnpm",
+    [
+      "exec",
+      "tsx",
+      "skills/plan-to-pr/scripts/plan-to-pr.ts",
+      "refactoring-template",
+    ],
+    {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    },
+  );
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /minor_in_slice:/);
+  assert.match(result.stdout, /significant_refactor_suggestions:/);
+  assert.match(result.stdout, /suggested_planning_action/);
 });
 
 test("validate-launch-report requires AI readiness accounting", () => {

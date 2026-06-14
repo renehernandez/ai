@@ -64,6 +64,7 @@ const validLedger = `plan_followthrough_ledger:
       status: pending
   carry_forward:
     refactoring_reuse: []
+    significant_refactor_suggestions: []
     review_findings: []
     verification_gaps: []
     changed_assumptions: []
@@ -95,6 +96,7 @@ const validSliceHandoff = `plan_followthrough_slice_handoff:
     prior_slices: []
     carry_forward:
       refactoring_reuse: []
+      significant_refactor_suggestions: []
       review_findings: []
       verification_gaps: []
       changed_assumptions: []
@@ -121,6 +123,7 @@ const validDelivery = `plan_followthrough_delivery:
     implemented: []
     deferred: []
     must_consume_later: []
+  significant_refactor_suggestions: []
   changed_assumptions: []
   recommended_next_action: run next slice
 `;
@@ -150,7 +153,7 @@ test("validate-slice-handoff requires followthrough context before plan-to-pr", 
   const invalid = runPlanFollowthrough(
     "validate-slice-handoff",
     validSliceHandoff.replace(
-      "  followthrough_context:\n    ledger_ref: docs/plans/qms-v1.followthrough.md\n    slice_advancement_mode: stack_then_continue\n    slice_id: slice-01\n    slice_name: Upload foundation\n    prior_slices: []\n    carry_forward:\n      refactoring_reuse: []\n      review_findings: []\n      verification_gaps: []\n      changed_assumptions: []\n    stop_conditions: []\n",
+      "  followthrough_context:\n    ledger_ref: docs/plans/qms-v1.followthrough.md\n    slice_advancement_mode: stack_then_continue\n    slice_id: slice-01\n    slice_name: Upload foundation\n    prior_slices: []\n    carry_forward:\n      refactoring_reuse: []\n      significant_refactor_suggestions: []\n      review_findings: []\n      verification_gaps: []\n      changed_assumptions: []\n    stop_conditions: []\n",
       "",
     ),
   );
@@ -174,4 +177,49 @@ test("validate-delivery gives followthrough a reconciliation contract", () => {
     invalid.stderr,
     /status must be one of: delivered, shipped, stacked_pending_merge, blocked, needs_replan/,
   );
+});
+
+test("validate-delivery requires significant refactor suggestions key", () => {
+  const invalid = runPlanFollowthrough(
+    "validate-delivery",
+    validDelivery.replace("  significant_refactor_suggestions: []\n", ""),
+  );
+
+  assert.notEqual(invalid.status, 0);
+  assert.match(invalid.stderr, /significant_refactor_suggestions is required/);
+});
+
+test("templates carry significant refactor suggestions through ledger and delivery", () => {
+  const ledger = spawnSync(
+    "pnpm",
+    [
+      "exec",
+      "tsx",
+      "skills/plan-followthrough/scripts/plan-followthrough.ts",
+      "ledger-template",
+    ],
+    {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    },
+  );
+
+  const delivery = spawnSync(
+    "pnpm",
+    [
+      "exec",
+      "tsx",
+      "skills/plan-followthrough/scripts/plan-followthrough.ts",
+      "delivery-template",
+    ],
+    {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    },
+  );
+
+  assert.equal(ledger.status, 0);
+  assert.equal(delivery.status, 0);
+  assert.match(ledger.stdout, /significant_refactor_suggestions:/);
+  assert.match(delivery.stdout, /significant_refactor_suggestions:/);
 });

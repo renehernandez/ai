@@ -84,6 +84,26 @@ It should treat plausible but unnamed future reuse, style-only cleanup, broad
 platform work, or extractions that cross unrelated ownership boundaries as
 nonblocking or deferred.
 
+### Refactor Scope Gate
+
+Refactoring suggestions must be classified before readiness can pass:
+
+- **Minor in-slice refactor:** local, behavior-preserving, already inside the
+  approved files or boundary, and does not change acceptance criteria,
+  sequencing, ownership, or verification scope. Keep it inside the current
+  slice.
+- **Significant refactor:** adds or reorders a slice, creates a new package or
+  module boundary, changes a public contract or data model, establishes a shared
+  abstraction for future slices, rewires broad existing callers, or changes
+  ownership boundaries. Extract it as a proposed refactoring slice.
+
+When `refactoring-opportunities` finds a significant refactor, it must return a
+blocking finding and add a `significant_refactor_suggestions` entry. Plan
+readiness stays blocked after adding or moving that refactoring slice until
+brainstorming and plan review run again to confirm value, placement, acceptance
+criteria, and verification. The significant refactor must not be absorbed into
+the same product slice just because plan review discovered it.
+
 The reviewer-selection judge may select optional reviewers only from this catalog:
 
 - `security-and-auth`: auth, authorization, secrets, token handling, sensitive data, webhooks, dependency trust.
@@ -139,6 +159,16 @@ reuse_across_slices:
     consumed_by:
       - <named slice or workflow>
     avoid_if: <condition where this becomes premature>
+refactor_scope_gate:
+  minor_in_slice_allowed:
+    - <local behavior-preserving refactor that does not change slice scope>
+  significant_refactor_suggestions:
+    - title: <separate refactoring slice or none>
+      placement: before_slice | after_slice | later_backlog
+      relative_to_slice: <slice id or title>
+      why_significant: <boundary, contract, data model, broad caller, or sequencing impact>
+      readiness_effect: blocks_plan_ready
+      required_next_step: rerun_brainstorming_and_plan_review
 ```
 
 Plan readiness requires no unresolved blocking findings.
@@ -217,6 +247,7 @@ Do not write this handoff into committed plan files, OpenSpec files, or Linear c
 | Hiding blocking findings in summary prose | Classify each blocker as `agent_fixable`, `user_decision`, or `external_blocker` |
 | Writing readiness YAML into committed artifacts | Emit the handoff in the final session response only |
 | Treating refactoring as optional polish | Run `refactoring-opportunities` as a baseline reviewer and resolve blockers |
+| Absorbing a significant refactor into the current product slice | Add it as a proposed refactoring slice, block readiness, and rerun brainstorming plus plan review |
 
 ## Test Evidence
 
@@ -228,4 +259,6 @@ Do not write this handoff into committed plan files, OpenSpec files, or Linear c
 - REFACTOR: ready plans now route to `plan-followthrough` before `plan-to-pr` so every single-slice or multi-slice plan has durable followthrough state.
 - RED: baseline subagent `019eb39e-5890-76c0-a967-f287d449de7a` inspected committed pre-edit files and failed as expected. It cited `Using dispatch to run required plan reviewers.`, `Dispatch all baseline reviewers plus judge-selected optional reviewers as subagents.`, and adapter text `run required dispatch plan reviewers`, rationalizing that explicit `dispatch` would route Codex reviewer execution away from internal Codex subagents.
 - GREEN/REFACTOR: subagent `019eb361-1adb-7771-a77a-388b11dc4b8b` passed after the first routing patch. The workflow now requires the current harness's internal Codex subagent tool and forbids `dispatch`, Claude Code `Task`, and external Claude harnesses.
+- RED: thread `019ec3c6-27cd-7962-9c30-313332a857d0` showed slice delivery dragging when significant refactors, reviewer churn, docs, hardening, and implementation all stayed inside one in-flight slice.
+- GREEN/REFACTOR: significant refactors found during plan-ready now become separate proposed slices and block readiness until brainstorming and plan review confirm their value and sequence.
 - Validation evidence: `bun skills/plan-ready/scripts/plan-ready.ts validate-selection --file /private/tmp/plan-ready-valid-selection.yaml` returned `reviewer_selection_judge valid`; bare rationale and missing optional-reviewer rationale fixtures were rejected; `bun skills/plan-ready/scripts/plan-ready.ts validate-handoff --file /private/tmp/plan-ready-valid-handoff.yaml` returned `plan_ready_handoff valid`; `bun build skills/plan-ready/scripts/plan-ready.ts --outfile /private/tmp/plan-ready-check.js` bundled successfully.

@@ -262,16 +262,18 @@ review_execution_rules:
 
 function printRefactoringExecutionTemplate(): void {
   console.log(`refactoring_execution:
-  required_this_slice:
-    - <refactor required before or with the approved product behavior>
-  opportunistic_if_touched:
-    - <refactor to do only if the affected files are already being changed>
-  explicitly_deferred:
-    - <refactor deferred because consumers are not named or the extraction is premature>
-  implemented:
-    - <refactor completed with first real consumer>
+  minor_in_slice:
+    - <local behavior-preserving refactor inside the approved slice boundary>
+  deferred_minor:
+    - <minor refactor deferred with evidence>
   rejected_as_premature:
     - <abstraction rejected because it lacks a named consumer>
+  significant_refactor_suggestions:
+    - title: <short suggested refactoring slice or none>
+      discovered_during: implementation | local_review | hosted_review | ci_fix
+      why_not_in_scope: <why this changes slice scope, sequencing, boundary, contract, or acceptance criteria>
+      suggested_planning_action: add_refactor_slice | revisit_sequence | reject_later
+      affected_slices: []
   verification:
     - <fastest behavior-preserving verification>
 `);
@@ -297,6 +299,7 @@ function printFollowthroughDeliveryTemplate(): void {
     implemented: []
     deferred: []
     must_consume_later: []
+  significant_refactor_suggestions: []
   changed_assumptions: []
   recommended_next_action:
 `);
@@ -418,6 +421,7 @@ function validateFollowthroughDelivery(input: string): void {
   requireSection(input, "verification", errors);
   requireSection(input, "review_feedback", errors);
   requireSection(input, "refactoring_reuse", errors);
+  requireKey(input, "significant_refactor_suggestions", errors);
 
   const status = scalar(input, "status");
   if (status && !includes(FOLLOWTHROUGH_DELIVERY_STATUSES, status)) {
@@ -730,6 +734,12 @@ function requireSection(
 ): void {
   if (!new RegExp(`^\\s*${escapeRegExp(sectionName)}:\\s*$`, "m").test(input)) {
     errors.push(`${sectionName} section is required`);
+  }
+}
+
+function requireKey(input: string, key: string, errors: string[]): void {
+  if (!new RegExp(`^\\s*${escapeRegExp(key)}:\\s*`, "m").test(input)) {
+    errors.push(`${key} is required`);
   }
 }
 

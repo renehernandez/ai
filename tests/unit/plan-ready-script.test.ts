@@ -107,3 +107,24 @@ test("validate-selection requires refactoring-opportunities in baseline reviewer
     /baseline_reviewers must include refactoring-opportunities/,
   );
 });
+
+test("reviewer-template includes significant refactor scope gate", () => {
+  const result = spawnSync(
+    "pnpm",
+    [
+      "exec",
+      "tsx",
+      "skills/plan-ready/scripts/plan-ready.ts",
+      "reviewer-template",
+    ],
+    {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    },
+  );
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /refactor_scope_gate:/);
+  assert.match(result.stdout, /significant_refactor_suggestions:/);
+  assert.match(result.stdout, /blocks_plan_ready/);
+});

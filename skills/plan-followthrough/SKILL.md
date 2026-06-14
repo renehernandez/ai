@@ -26,6 +26,9 @@ Do not use for fuzzy ideas, unreviewed plans, or plan authoring. Run `plan-ready
 - Route every implementation slice through `plan-to-pr`; do not implement directly inside `plan-followthrough`.
 - Do not spawn implementation subagents directly. `plan-to-pr` owns implementation and its reviewer subagents.
 - Reconcile every `plan-to-pr` result before selecting another slice.
+- Aggregate every nonblocking `significant_refactor_suggestions` entry from
+  `plan-to-pr` into the followthrough ledger and surface the full list when the
+  plan finishes, blocks, or needs replanning.
 - Stop on `blocked`, `needs_replan`, missing mode, missing ledger, missing next slice, or invalid delivery output.
 
 ## Workflow
@@ -37,7 +40,8 @@ Do not use for fuzzy ideas, unreviewed plans, or plan authoring. Run `plan-ready
 5. Select the next pending slice. Use `slice-01`, `slice-02`, etc. when the plan has no stable IDs.
 6. Run `scripts/plan-followthrough.ts slice-handoff-template`, fill it, validate it, and pass it to `plan-to-pr`.
 7. When `plan-to-pr` finishes, require `plan_followthrough_delivery`, validate it, and append a slice reconciliation to the ledger.
-8. Continue to the next slice when the mode allows it. Otherwise close as `complete`, `blocked`, or `needs_replan`.
+8. Copy any `significant_refactor_suggestions` into `carry_forward.significant_refactor_suggestions`; keep them nonblocking unless the delivery status is `needs_replan` or `blocked`.
+9. Continue to the next slice when the mode allows it. Otherwise close as `complete`, `blocked`, or `needs_replan`.
 
 ## Resume Recovery
 
@@ -73,6 +77,7 @@ plan_followthrough_ledger:
       status: pending | active | delivered | shipped | stacked_pending_merge | reconciled | skipped
   carry_forward:
     refactoring_reuse: []
+    significant_refactor_suggestions: []
     review_findings: []
     verification_gaps: []
     changed_assumptions: []
@@ -109,6 +114,7 @@ plan_followthrough_slice_handoff:
     prior_slices: []
     carry_forward:
       refactoring_reuse: []
+      significant_refactor_suggestions: []
       review_findings: []
       verification_gaps: []
       changed_assumptions: []
@@ -139,6 +145,12 @@ plan_followthrough_delivery:
     implemented: []
     deferred: []
     must_consume_later: []
+  significant_refactor_suggestions:
+    - title: <short suggested refactoring slice or none>
+      discovered_during: implementation | local_review | hosted_review | ci_fix
+      why_not_in_scope: <why this changes slice scope, sequencing, boundary, contract, or acceptance criteria>
+      suggested_planning_action: add_refactor_slice | revisit_sequence | reject_later
+      affected_slices: []
   changed_assumptions: []
   recommended_next_action:
 ```
@@ -157,7 +169,10 @@ Block only when continuing would corrupt continuity:
 - directly relevant carry-forward refactoring/reuse context is missing from the next handoff;
 - remaining plan needs `plan-ready` again.
 
-Warnings do not block: rough slice names, optional historical gaps, plausible future reuse with no active consumer, or verification improvements when current gates passed.
+Warnings do not block: rough slice names, optional historical gaps, plausible
+future reuse with no active consumer, significant refactor suggestions that do
+not invalidate the approved slice, or verification improvements when current
+gates passed.
 
 ## Mistakes
 
@@ -172,11 +187,15 @@ Warnings do not block: rough slice names, optional historical gaps, plausible fu
 | Using captain terminology | Use followthrough, continuity, slice handoff, and reconciliation |
 | Treating "continue the campaign" as permission to skip recovery | Recover live state, write the ledger, then select the next slice |
 | Inferring advancement mode from momentum | Ask for `ship_then_continue` or `stack_then_continue` |
+| Dropping significant refactor suggestions between slices | Append them to `carry_forward.significant_refactor_suggestions` and surface them at the end |
+| Stopping a multi-slice run only because a significant refactor was suggested | Continue unless the current delivery is `blocked` or `needs_replan` with evidence |
 
 ## Test Evidence
 
 - RED: subagent `019ec436-aba2-77e2-9764-aad7765f8108` would continue to slice 2 after writing a ledger, but would not ask for the required advancement mode.
 - RED: subagent `019ec436-c027-7381-bee0-8e3aef663b46` would route a single-slice `plan_ready_handoff` directly to `plan-to-pr` with no followthrough ledger.
 - RED: subagent `019ec436-cdd5-7a72-bb92-4df1da35d1cb` would reconstruct only a temporary response ledger after compaction when no ledger file existed.
+- RED: thread `019ec3c6-27cd-7962-9c30-313332a857d0` showed why significant refactor ideas need durable followthrough carry-forward instead of being worked into the active slice.
 - GREEN: subagent `019ec43c-5192-7741-bbc7-15932daaac8d` used `plan-followthrough`, created `<plan>.followthrough.md`, reconciled Slice 1, and stopped to ask for missing advancement mode before Slice 2.
 - GREEN: subagent `019ec43c-640f-7cb2-aa40-a6bcda0d80dd` routed direct `plan-to-pr` pressure back through followthrough, created the durable ledger, and asked for `ship_then_continue` or `stack_then_continue`.
+- GREEN/REFACTOR: followthrough ledgers now aggregate `significant_refactor_suggestions` across slice deliveries and surface them for a later planning review without blocking the current delivery sequence.

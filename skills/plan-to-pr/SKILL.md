@@ -71,7 +71,7 @@ If the user asks to implement a reviewed plan directly and there is no `plan_fol
 In Codex, prefer starting this workflow as a goal with the handoff included in the objective:
 
 ```text
-/goal Use $plan-to-pr with this plan_followthrough_slice_handoff or plan_ready_handoff: <handoff>. Validate the handoff, inspect any followthrough_context, inspect the approved slice's Refactoring / Reuse section, print and maintain the refactoring_execution ledger, implement only the approved slice, run local verification, launch implementation reviewers as internal Codex subagents, report launched reviewers and returned subagent IDs in-session, validate the launch report, reconcile reviewer outcomes, run review-feedback-routing, create or update the routed PR/MR, run artifact-host review, wait for routed latest-head feedback, iterate until feedback is resolved, watch artifact-host CI, and finish only when CI is green or blocked with evidence. Include the final reviewer subagent report, delivery gate ledger, and plan_followthrough_delivery when followthrough_context is present.
+/goal Use $plan-to-pr with this plan_followthrough_slice_handoff or plan_ready_handoff: <handoff>. Validate the handoff, inspect any followthrough_context, inspect the approved slice's Refactoring / Reuse section, print and maintain the refactoring_execution ledger, implement only the approved slice, keep minor local refactors inside the slice, record naturally discovered significant_refactor_suggestions as carry-forward instead of implementing them, run local verification, launch implementation reviewers as internal Codex subagents, report launched reviewers and returned subagent IDs in-session, validate the launch report, reconcile reviewer outcomes, run review-feedback-routing, create or update the routed PR/MR, run artifact-host review, wait for routed latest-head feedback, iterate until feedback is resolved, watch artifact-host CI, and finish only when CI is green or blocked with evidence. Include the final reviewer subagent report, delivery gate ledger, and plan_followthrough_delivery when followthrough_context is present.
 ```
 
 For non-Codex agents or tools without goal state, use the same objective as a normal prompt.
@@ -150,9 +150,8 @@ reviewer_subagent_report:
    - GitHub for `github.com` or GitHub Enterprise remotes.
    - If host ownership still conflicts after inspecting workflow evidence, ask one blocking question.
 5. Inspect the approved slice's `Refactoring / Reuse` section. Print `scripts/plan-to-pr.ts refactoring-template` and fill `refactoring_execution` before editing:
-   - `required_this_slice`: preparatory refactors that must land before or with the product behavior;
-   - `opportunistic_if_touched`: refactors to do only if the affected files are already in scope;
-   - `explicitly_deferred`: refactors deferred because consumers are unnamed, the extraction is premature, or the boundary is unrelated.
+   - `minor_in_slice`: local behavior-preserving refactors already inside the approved slice boundary;
+   - `significant_refactor_suggestions`: significant refactors discovered naturally during delivery, recorded for later planning but not implemented in this slice.
 6. Implement only `plan_ready_handoff.approved_slice`.
 7. Run the narrowest useful local verification for touched code. When review feedback, CI, a bug fix, or browser checks reveal missing coverage, apply the Fastest Durable Regression rule from `rules/testing-and-verification.md`: add the lowest practical durable regression and report any skipped local layer explicitly.
 8. Launch implementation reviewers as internal Codex subagents in the current harness, then immediately print and validate the reviewer launch report in the session.
@@ -170,9 +169,9 @@ reviewer_subagent_report:
    - do not continue to PR/MR creation until reviewer outcomes are complete and no actionable findings remain.
 10. Validate the final reviewer outcome report with `scripts/plan-to-pr.ts validate-review-report`.
 11. Before pushing, reconcile `refactoring_execution`:
-    - required refactors are implemented or re-reviewed as deferred with evidence;
-    - new reusable surfaces have at least one real consumer;
-    - later-slice reuse notes remain in the plan when relevant;
+    - minor in-slice refactors are implemented or deferred with evidence;
+    - new reusable surfaces have at least one real current consumer;
+    - significant refactor suggestions remain unimplemented unless they are already part of the approved slice;
     - behavior-preserving verification ran at the fastest practical layer.
 12. Push the branch and open or update the PR/MR through the routed artifact host:
     - GitLab: use the GitLab MR creation path (`glab-mr-create` or its successor).
@@ -214,9 +213,37 @@ reviewer_subagent_report:
 | Review feedback | Routed feedback produced a latest-head result with no actionable findings, or blocker is evidenced |
 | CI | Required checks are green, or non-branch blocker is evidenced |
 
+## Significant Refactor Suggestions
+
+`plan-to-pr` does not hunt for new significant refactors. Those should have
+been caught during `plan-ready` and turned into approved slices before delivery.
+
+If a significant refactor appears naturally during implementation, local review,
+hosted review, or CI repair, record it as carry-forward data and keep delivering
+the approved slice:
+
+```yaml
+significant_refactor_suggestions:
+  - title: <short suggested refactoring slice>
+    discovered_during: implementation | local_review | hosted_review | ci_fix
+    why_not_in_scope: <why this changes slice scope, sequencing, boundary, contract, or acceptance criteria>
+    suggested_planning_action: add_refactor_slice | revisit_sequence | reject_later
+    affected_slices:
+      - <slice id, title, or unknown>
+```
+
+The suggestion is nonblocking by default. It blocks only when the current
+approved slice can no longer satisfy its acceptance criteria or verification
+without reopening the plan; in that case, report `blocked` or `needs_replan`
+with evidence rather than implementing the significant refactor opportunistically.
+
 ## Final Delivery Ledger
 
 The final response must include every gate. Use `passed` or `blocked` for mandatory gates, and use `not_applicable` only for conditional gates accepted by `validate-ledger`, with one line of evidence.
+
+When no `followthrough_context` is present, also include
+`significant_refactor_suggestions` after the ledger, using `[]` when none were
+discovered.
 
 ```yaml
 delivery_gate_ledger:
@@ -237,7 +264,7 @@ delivery_gate_ledger:
     evidence: "<command>"
   refactoring_execution:
     status: passed
-    evidence: "required refactors implemented/deferred with consumers and verification recorded"
+    evidence: "minor refactors implemented/deferred and significant refactor suggestions recorded"
   reviewer_subagents:
     status: passed
     evidence: "reviewer_subagent_launch and reviewer_subagent_report validated"
@@ -304,6 +331,7 @@ plan_followthrough_delivery:
     implemented: []
     deferred: []
     must_consume_later: []
+  significant_refactor_suggestions: []
   changed_assumptions: []
   recommended_next_action: <next action for plan-followthrough>
 ```
@@ -318,6 +346,8 @@ plan_followthrough_delivery:
 | Expanding beyond `approved_slice` | Update the plan through `plan-ready` first |
 | Ignoring `Refactoring / Reuse` | Fill `refactoring_execution` before editing and reconcile it before push/final delivery |
 | Adding reusable surfaces with no consumer | Rework or defer the abstraction until a current or named later slice consumes it |
+| Hunting for new significant refactors during implementation | Stay on the approved slice and record only naturally discovered suggestions |
+| Implementing a significant refactor discovered during delivery | Record it as carry-forward unless the current plan is invalid and must block or return to planning |
 | Encoding every review bug in browser E2E | Apply `rules/testing-and-verification.md` and add the fastest durable regression layer |
 | Running reviewers locally in the main agent only | Launch internal Codex reviewer subagents and report launch/outcomes |
 | Routing Codex implementation reviewers through `dispatch` or Claude | Use the current harness's internal Codex subagent tool |
@@ -341,6 +371,8 @@ plan_followthrough_delivery:
 - REFACTOR: implementation delivery gates remain explicit, but planning gates move to `plan-ready`.
 - REFACTOR: implementation now carries `refactoring_execution` from the plan's `Refactoring / Reuse` section through delivery, and the final ledger records slice status plus refactoring execution.
 - REFACTOR: plan-to-pr now accepts `followthrough_context` from `plan-followthrough` and must return `plan_followthrough_delivery` for reconciliation.
+- RED: thread `019ec3c6-27cd-7962-9c30-313332a857d0` showed delivery slowing when significant refactor ideas stayed attached to the active slice.
+- GREEN/REFACTOR: significant refactors discovered during delivery are nonblocking carry-forward suggestions unless they invalidate the approved slice; followthrough delivery now exposes them for later planning review.
 - GREEN: pressure testing confirmed missing handoffs and non-`ship` scrutiny handoffs block before implementation.
 - RED: baseline subagent `019eb39e-7a2b-7453-81b0-37fb35df9005` inspected committed pre-edit files and failed as expected. It cited `Run implementation diff review with diff-review`, `Run scrutinize on the implementation diff`, `Run the pre-commit quality gate`, and adapter text `run local verification, implementation review, $scrutinize...`, rationalizing: `inline helper-skill review satisfies the workflow; nothing says I must launch internal Codex reviewer subagents or report each reviewer's final outcome`.
 - GREEN: subagent `019eb370-7dce-75d3-97ff-6c80d6406aab` confirmed the first patch forced internal Codex reviewer subagents and blocked dispatch/Claude, then found validator loopholes for under-launched reports, unresolved `findings`, missing security accounting, one-reviewer examples, and post-feedback inline reruns.

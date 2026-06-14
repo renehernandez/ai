@@ -76,6 +76,7 @@ function printLedgerTemplate(): void {
       status: pending
   carry_forward:
     refactoring_reuse: []
+    significant_refactor_suggestions: []
     review_findings: []
     verification_gaps: []
     changed_assumptions: []
@@ -109,6 +110,7 @@ function printSliceHandoffTemplate(): void {
     prior_slices: []
     carry_forward:
       refactoring_reuse: []
+      significant_refactor_suggestions: []
       review_findings: []
       verification_gaps: []
       changed_assumptions: []
@@ -136,6 +138,7 @@ function printDeliveryTemplate(): void {
     implemented: []
     deferred: []
     must_consume_later: []
+  significant_refactor_suggestions: []
   changed_assumptions: []
   recommended_next_action:
 `);
@@ -200,6 +203,7 @@ function validateDelivery(input: string): void {
   requireSection(input, "verification", errors);
   requireSection(input, "review_feedback", errors);
   requireSection(input, "refactoring_reuse", errors);
+  requireKey(input, "significant_refactor_suggestions", errors);
 
   if (errors.length > 0) {
     fail(`Invalid plan_followthrough_delivery:\n${formatErrors(errors)}`);
@@ -217,6 +221,12 @@ function requireRoot(input: string, root: string, errors: string[]): void {
 function requireSection(input: string, key: string, errors: string[]): void {
   if (!new RegExp(`^\\s*${escapeRegExp(key)}:\\s*$`, "m").test(input)) {
     errors.push(`${key} section is required`);
+  }
+}
+
+function requireKey(input: string, key: string, errors: string[]): void {
+  if (!new RegExp(`^\\s*${escapeRegExp(key)}:\\s*`, "m").test(input)) {
+    errors.push(`${key} is required`);
   }
 }
 
