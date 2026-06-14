@@ -82,6 +82,10 @@ slice_plan_review:
 `blocking_findings: []`. `status: blocked` requires concrete blocking findings
 or at least one blocked slice gate.
 
+When `plan-ready` consumes a passing review, every reviewed slice ID becomes
+`plan_ready_handoff.reviewed_slices`; only `approved_slice` is selected for the
+next delivery loop.
+
 ## Common Mistakes
 
 | Mistake | Fix |

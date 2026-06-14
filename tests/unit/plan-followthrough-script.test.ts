@@ -79,6 +79,8 @@ const validSliceHandoff = `plan_followthrough_slice_handoff:
     status: ready
     artifact_type: plan
     artifact_ref: docs/plans/qms-v1.md
+    reviewed_slices:
+      - slice-01
     approved_slice: Implement upload foundation.
     required_reviewers:
       - implementation-readiness
@@ -160,6 +162,16 @@ test("validate-slice-handoff requires followthrough context before plan-to-pr", 
 
   assert.notEqual(invalid.status, 0);
   assert.match(invalid.stderr, /followthrough_context section is required/);
+});
+
+test("validate-slice-handoff requires reviewed slice ids", () => {
+  const invalid = runPlanFollowthrough(
+    "validate-slice-handoff",
+    validSliceHandoff.replace("    reviewed_slices:\n      - slice-01\n", ""),
+  );
+
+  assert.notEqual(invalid.status, 0);
+  assert.match(invalid.stderr, /reviewed_slices is required/);
 });
 
 test("validate-delivery gives followthrough a reconciliation contract", () => {

@@ -31,7 +31,7 @@ plan_review_request:
   unresolved_blockers: []
 ```
 
-A `plan_ready_handoff` from `plan-ready` is also valid input when `status: ready`, `artifact_type`, `artifact_ref`, `approved_slice`, `unresolved_blockers: []`, and `scrutiny_verdict: ship` are present.
+A `plan_ready_handoff` from `plan-ready` is also valid input when `status: ready`, `artifact_type`, `artifact_ref`, `reviewed_slices`, `approved_slice`, `unresolved_blockers: []`, and `scrutiny_verdict: ship` are present. `reviewed_slices` is upfront slice-plan evidence; it is not permission to implement every slice at once.
 
 Run `scripts/plan-to-review.ts validate-request` from this skill directory before publishing anything. If input is missing, ambiguous, stale, or has unresolved blockers, stop and ask for `plan-ready` or a valid `plan_review_request`.
 

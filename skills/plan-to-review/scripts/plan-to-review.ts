@@ -1,11 +1,18 @@
 #!/usr/bin/env tsx
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { spawnSync } from "node:child_process";
 
 const ARTIFACT_TYPES = ["plan", "openspec", "linear"] as const;
 const REQUEST_STATUSES = ["ready_for_review"] as const;
-const REQUESTED_REVIEWERS = ["nitro", "codex", "developers", "human", "security", "docs"] as const;
+const REQUESTED_REVIEWERS = [
+  "nitro",
+  "codex",
+  "developers",
+  "human",
+  "security",
+  "docs",
+] as const;
 const LEDGER_GATES = [
   "request_validation",
   "session_start",
@@ -18,10 +25,18 @@ const LEDGER_GATES = [
   "developer_review",
   "no_implementation",
 ] as const;
-const LEDGER_NOT_APPLICABLE_GATES = ["automated_feedback", "developer_review"] as const;
+const LEDGER_NOT_APPLICABLE_GATES = [
+  "automated_feedback",
+  "developer_review",
+] as const;
 const LEDGER_STATUSES = ["passed", "blocked", "not_applicable"] as const;
 
-type Command = "detect" | "request-template" | "validate-request" | "gate-template" | "validate-ledger";
+type Command =
+  | "detect"
+  | "request-template"
+  | "validate-request"
+  | "gate-template"
+  | "validate-ledger";
 
 type ParsedRequest = {
   source: "plan_review_request" | "plan_ready_handoff" | "ambiguous";
@@ -31,6 +46,7 @@ type ParsedRequest = {
   review_goal?: string;
   requested_reviewers: string[];
   unresolved_blockers: string[];
+  reviewed_slices: string[];
   approved_slice?: string;
   scrutiny_verdict?: string;
 };
@@ -82,13 +98,16 @@ function detect(): void {
     branch,
     head_sha: headSha,
     remotes: remotes.split("\n").filter(Boolean),
-    artifact_host_hint: remoteText.includes("gitlab") || remoteText.includes("git.fullscript.io")
-      ? "gitlab"
-      : remoteText.includes("github")
-        ? "github"
-        : null,
+    artifact_host_hint:
+      remoteText.includes("gitlab") || remoteText.includes("git.fullscript.io")
+        ? "gitlab"
+        : remoteText.includes("github")
+          ? "github"
+          : null,
     openspec_present: existsSync(join(repoRoot, "openspec")),
-    plan_dirs_present: ["docs/plans", "plans", "docs"].filter((path) => existsSync(join(repoRoot, path))),
+    plan_dirs_present: ["docs/plans", "plans", "docs"].filter((path) =>
+      existsSync(join(repoRoot, path)),
+    ),
   };
 
   console.log(JSON.stringify(result, null, 2));
@@ -122,7 +141,9 @@ function validateRequest(input: string): void {
   const errors: string[] = [];
 
   if (request.source === "ambiguous") {
-    console.error("Invalid ambiguous:\n- provide exactly one of plan_review_request or plan_ready_handoff");
+    console.error(
+      "Invalid ambiguous:\n- provide exactly one of plan_review_request or plan_ready_handoff",
+    );
     process.exit(1);
   }
 
@@ -153,22 +174,34 @@ function validateRequest(input: string): void {
 
     requireValue(request.approved_slice, "approved_slice", errors);
     requireValue(request.scrutiny_verdict, "scrutiny_verdict", errors);
+    if (request.reviewed_slices.length === 0) {
+      errors.push(
+        "plan_ready_handoff reviewed_slices must include every upfront-reviewed slice id",
+      );
+    }
 
     if (request.scrutiny_verdict && request.scrutiny_verdict !== "ship") {
       errors.push("plan_ready_handoff scrutiny_verdict must be ship");
     }
   }
 
-  if (request.artifact_type && !includes(ARTIFACT_TYPES, request.artifact_type)) {
+  if (
+    request.artifact_type &&
+    !includes(ARTIFACT_TYPES, request.artifact_type)
+  ) {
     errors.push(`artifact_type must be one of: ${ARTIFACT_TYPES.join(", ")}`);
   }
 
   if (request.unresolved_blockers.length > 0) {
-    errors.push("unresolved_blockers must be empty before publishing for review");
+    errors.push(
+      "unresolved_blockers must be empty before publishing for review",
+    );
   }
 
   if (errors.length > 0) {
-    console.error(`Invalid ${request.source}:\n${errors.map((error) => `- ${error}`).join("\n")}`);
+    console.error(
+      `Invalid ${request.source}:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+    );
     process.exit(1);
   }
 
@@ -193,8 +226,13 @@ function validateLedger(input: string): void {
     if (!status) {
       errors.push(`${gate}.status is required`);
     } else if (!includes(LEDGER_STATUSES, status)) {
-      errors.push(`${gate}.status must be one of: ${LEDGER_STATUSES.join(", ")}`);
-    } else if (status === "not_applicable" && !includes(LEDGER_NOT_APPLICABLE_GATES, gate)) {
+      errors.push(
+        `${gate}.status must be one of: ${LEDGER_STATUSES.join(", ")}`,
+      );
+    } else if (
+      status === "not_applicable" &&
+      !includes(LEDGER_NOT_APPLICABLE_GATES, gate)
+    ) {
       errors.push(`${gate}.status cannot be not_applicable`);
     }
 
@@ -204,7 +242,9 @@ function validateLedger(input: string): void {
   }
 
   if (errors.length > 0) {
-    console.error(`Invalid plan_review_gate_ledger:\n${errors.map((error) => `- ${error}`).join("\n")}`);
+    console.error(
+      `Invalid plan_review_gate_ledger:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+    );
     process.exit(1);
   }
 
@@ -233,6 +273,7 @@ function parseRequest(input: string): ParsedRequest {
       review_goal: scalar(reviewSection, "review_goal"),
       requested_reviewers: list(reviewSection, "requested_reviewers"),
       unresolved_blockers: list(reviewSection, "unresolved_blockers"),
+      reviewed_slices: [],
     };
   }
 
@@ -245,6 +286,7 @@ function parseRequest(input: string): ParsedRequest {
     review_goal: scalar(handoffBody, "review_goal"),
     requested_reviewers: list(handoffBody, "requested_reviewers"),
     unresolved_blockers: list(handoffBody, "unresolved_blockers"),
+    reviewed_slices: list(handoffBody, "reviewed_slices"),
     approved_slice: scalar(handoffBody, "approved_slice"),
     scrutiny_verdict: scalar(handoffBody, "scrutiny_verdict"),
   };
@@ -274,7 +316,9 @@ function findSection(input: string, sectionName: string): string | null {
 }
 
 function scalar(input: string, key: string): string | undefined {
-  const match = input.match(new RegExp(`^${escapeRegExp(key)}:\\s*(.+?)\\s*$`, "m"));
+  const match = input.match(
+    new RegExp(`^${escapeRegExp(key)}:\\s*(.+?)\\s*$`, "m"),
+  );
   if (!match) {
     return undefined;
   }
@@ -283,14 +327,18 @@ function scalar(input: string, key: string): string | undefined {
 }
 
 function list(input: string, key: string): string[] {
-  const inline = input.match(new RegExp(`^${escapeRegExp(key)}:\\s*\\[(.*?)\\]\\s*$`, "m"));
+  const inline = input.match(
+    new RegExp(`^${escapeRegExp(key)}:\\s*\\[(.*?)\\]\\s*$`, "m"),
+  );
   if (inline) {
     const raw = inline[1].trim();
     return raw ? raw.split(",").map(cleanScalar).filter(Boolean) : [];
   }
 
   const lines = input.split(/\r?\n/);
-  const keyIndex = lines.findIndex((line) => line.match(new RegExp(`^${escapeRegExp(key)}:\\s*$`)));
+  const keyIndex = lines.findIndex((line) =>
+    line.match(new RegExp(`^${escapeRegExp(key)}:\\s*$`)),
+  );
   if (keyIndex === -1) {
     return [];
   }
@@ -323,18 +371,31 @@ function readInput(args: string[]): string {
   return readFileSync(0, "utf8");
 }
 
-function requireValue(value: string | undefined, key: string, errors: string[]): void {
+function requireValue(
+  value: string | undefined,
+  key: string,
+  errors: string[],
+): void {
   if (!value || value.startsWith("<")) {
     errors.push(`${key} is required`);
   }
 }
 
-function includes<const T extends readonly string[]>(values: T, value: string): value is T[number] {
+function includes<const T extends readonly string[]>(
+  values: T,
+  value: string,
+): value is T[number] {
   return values.includes(value as T[number]);
 }
 
 function isCommand(command: string | undefined): command is Command {
-  return ["detect", "request-template", "validate-request", "gate-template", "validate-ledger"].includes(command ?? "");
+  return [
+    "detect",
+    "request-template",
+    "validate-request",
+    "gate-template",
+    "validate-ledger",
+  ].includes(command ?? "");
 }
 
 function cleanScalar(value: string): string {

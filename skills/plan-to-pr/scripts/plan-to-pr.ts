@@ -111,6 +111,7 @@ type ParsedHandoff = {
   status?: string;
   artifact_type?: string;
   artifact_ref?: string;
+  reviewed_slices: string[];
   approved_slice?: string;
   required_reviewers: string[];
   optional_reviewers_selected: string[];
@@ -312,6 +313,9 @@ function validateHandoff(input: string): void {
   requireValue(handoff.status, "status", errors);
   requireValue(handoff.artifact_type, "artifact_type", errors);
   requireValue(handoff.artifact_ref, "artifact_ref", errors);
+  if (handoff.reviewed_slices.length === 0) {
+    errors.push("reviewed_slices must include every upfront-reviewed slice id");
+  }
   requireValue(handoff.approved_slice, "approved_slice", errors);
   requireValue(handoff.scrutiny_verdict, "scrutiny_verdict", errors);
 
@@ -696,6 +700,7 @@ function parseHandoff(input: string): ParsedHandoff {
     status: scalar(section, "status"),
     artifact_type: scalar(section, "artifact_type"),
     artifact_ref: scalar(section, "artifact_ref"),
+    reviewed_slices: list(section, "reviewed_slices"),
     approved_slice: scalar(section, "approved_slice"),
     required_reviewers: list(section, "required_reviewers"),
     optional_reviewers_selected: list(section, "optional_reviewers_selected"),

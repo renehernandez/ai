@@ -87,6 +87,8 @@ plan_ready_handoff:
   status: ready
   artifact_type: plan
   artifact_ref: ${artifactRef}
+  reviewed_slices:
+    - slice-01
   approved_slice: Implement the first reviewed slice.
   required_reviewers:
     - implementation-readiness
@@ -144,6 +146,42 @@ test("validate-handoff requires a passing slice_plan_review", () => {
     assert.match(
       blocked.stderr,
       /slice_plan_review\.status must be pass before status ready/,
+    );
+  });
+});
+
+test("validate-handoff requires reviewed_slices to match the slice review", () => {
+  withTempPlan(({ artifactRef, fingerprint }) => {
+    const missing = runPlanReady(
+      "validate-handoff",
+      validHandoff(artifactRef, fingerprint).replace(
+        "  reviewed_slices:\n    - slice-01\n",
+        "",
+      ),
+    );
+
+    assert.notEqual(missing.status, 0);
+    assert.match(
+      missing.stderr,
+      /reviewed_slices must include every reviewed slice id/,
+    );
+
+    const mismatched = runPlanReady(
+      "validate-handoff",
+      validHandoff(artifactRef, fingerprint).replace(
+        "    - slice-01",
+        "    - slice-02",
+      ),
+    );
+
+    assert.notEqual(mismatched.status, 0);
+    assert.match(
+      mismatched.stderr,
+      /reviewed_slices must include slice_plan_review slices: slice-01/,
+    );
+    assert.match(
+      mismatched.stderr,
+      /reviewed_slices must not include slices missing from slice_plan_review: slice-02/,
     );
   });
 });
@@ -282,5 +320,6 @@ test("handoff-template includes mandatory slice plan review", () => {
   assert.equal(result.status, 0);
   assert.match(result.stdout, /slice_plan_review:/);
   assert.match(result.stdout, /artifact_fingerprint:/);
+  assert.match(result.stdout, /reviewed_slices:/);
   assert.match(result.stdout, /plan_ready_handoff:/);
 });

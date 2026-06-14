@@ -72,6 +72,8 @@ const validHandoff = `plan_ready_handoff:
   status: ready
   artifact_type: plan
   artifact_ref: docs/plans/example.md
+  reviewed_slices:
+    - slice-01
   approved_slice: Implement the first reviewed slice.
   required_reviewers:
     - implementation-readiness
@@ -122,6 +124,19 @@ test("validate-handoff requires refactoring-opportunities from plan-ready", () =
   assert.match(
     invalid.stderr,
     /required_reviewers must include refactoring-opportunities/,
+  );
+});
+
+test("validate-handoff requires upfront reviewed slice ids", () => {
+  const invalid = runPlanToPr(
+    "validate-handoff",
+    validHandoff.replace("  reviewed_slices:\n    - slice-01\n", ""),
+  );
+
+  assert.notEqual(invalid.status, 0);
+  assert.match(
+    invalid.stderr,
+    /reviewed_slices must include every upfront-reviewed slice id/,
   );
 });
 

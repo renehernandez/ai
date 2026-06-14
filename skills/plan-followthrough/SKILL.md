@@ -89,6 +89,8 @@ plan_followthrough_ledger:
 ## Slice Handoff To Plan To PR
 
 `plan-to-pr` still receives a valid `plan_ready_handoff`; followthrough context is extra.
+`reviewed_slices` records the upfront-reviewed slice plan; `approved_slice`
+remains the one slice prepared for the next `plan-to-pr` run.
 
 ```yaml
 plan_followthrough_slice_handoff:
@@ -97,6 +99,9 @@ plan_followthrough_slice_handoff:
     status: ready
     artifact_type: plan
     artifact_ref: docs/plans/example.md
+    reviewed_slices:
+      - slice-01
+      - slice-02
     approved_slice: <one slice only>
     required_reviewers:
       - implementation-readiness

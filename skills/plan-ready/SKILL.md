@@ -225,6 +225,8 @@ plan_ready_handoff:
   status: ready
   artifact_type: plan
   artifact_ref: docs/plans/example.md
+  reviewed_slices:
+    - slice-01
   approved_slice: "Implement the first reviewed slice."
   required_reviewers:
     - implementation-readiness
@@ -238,11 +240,17 @@ plan_ready_handoff:
 
 Do not write this handoff into committed plan files, OpenSpec files, or Linear comments by default. It is session handoff state, not reviewable product documentation.
 
-`validate-handoff` requires `slice_plan_review.status: pass`, a matching
-`artifact_ref`, no blocking findings, and an artifact fingerprint that matches
-the current file content. The v1 machine-checkable slice gate supports local
-plan file artifacts; OpenSpec and Linear inputs must be represented by a local
-plan artifact before this handoff validator can pass.
+`reviewed_slices` records every slice that passed upfront slice-plan review.
+`approved_slice` names the next implementation slice selected for delivery.
+Do not use `reviewed_slices` as permission to implement every slice in one
+delivery loop.
+
+`validate-handoff` requires `slice_plan_review.status: pass`, matching
+`artifact_ref`, `reviewed_slices` that exactly match the reviewed slice IDs, no
+blocking findings, and an artifact fingerprint that matches the current file
+content. The v1 machine-checkable slice gate supports local plan file artifacts;
+OpenSpec and Linear inputs must be represented by a local plan artifact before
+this handoff validator can pass.
 
 ## Artifact Modes
 
@@ -282,6 +290,7 @@ plan artifact before this handoff validator can pass.
 | Treating single-slice plans as exempt from slice review | Run `plan-slices` in `mode: audit` and synthesize `slice-01` if needed |
 | Reusing a slice review after plan edits | Recompute the artifact fingerprint and validate a new `slice_plan_review` |
 | Passing a Linear key, URL, or OpenSpec ID as `slice_plan_review.artifact_ref` | Use a local plan file artifact for the v1 fingerprinted gate |
+| Treating `reviewed_slices` as approval to implement every slice at once | Implement only `approved_slice`; use `reviewed_slices` as upfront slice-plan evidence |
 
 ## Test Evidence
 
@@ -298,3 +307,4 @@ plan artifact before this handoff validator can pass.
 - Validation evidence: `pnpm exec node --import tsx --test tests/unit/plan-ready-script.test.ts` returned passing tests for reviewer selection, handoff validation, and handoff template generation.
 - RED/GREEN: `validate-handoff` now rejects missing, blocked, mismatched, or stale `slice_plan_review` blocks before emitting `status: ready`.
 - REFACTOR: slice creation and audit live in `plan-slices`; `plan-ready` owns the readiness gate and validates the slice review against the same artifact.
+- REFACTOR: `reviewed_slices` now records all upfront-reviewed slice IDs while `approved_slice` remains the single selected delivery slice.

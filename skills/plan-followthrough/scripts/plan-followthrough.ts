@@ -167,6 +167,7 @@ function validateSliceHandoff(input: string): void {
   requireSection(input, "plan_ready_handoff", errors);
   requireValue(input, "artifact_type", errors);
   requireValue(input, "artifact_ref", errors);
+  requireValue(input, "reviewed_slices", errors);
   requireValue(input, "approved_slice", errors);
   validateScalar(input, "scrutiny_verdict", ["ship"] as const, errors);
   requireSection(input, "followthrough_context", errors);

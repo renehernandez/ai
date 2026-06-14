@@ -96,6 +96,12 @@ export function validateSliceReviewInput(input: string): string[] {
   return validateParsedReview(parseReview(input));
 }
 
+export function sliceIdsFromReviewInput(input: string): string[] {
+  return parseReview(input)
+    .slices.map((slice) => slice.id)
+    .filter((id): id is string => Boolean(id));
+}
+
 function validateParsedReview(review: ParsedReview): string[] {
   const errors: string[] = [];
 

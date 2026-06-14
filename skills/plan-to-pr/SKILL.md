@@ -26,6 +26,9 @@ plan_followthrough_slice_handoff:
     status: ready
     artifact_type: plan
     artifact_ref: docs/plans/example.md
+    reviewed_slices:
+      - slice-01
+      - slice-02
     approved_slice: "Implement one reviewed slice."
     required_reviewers:
       - implementation-readiness
@@ -49,6 +52,9 @@ plan_ready_handoff:
   status: ready
   artifact_type: plan
   artifact_ref: docs/plans/example.md
+  reviewed_slices:
+    - slice-01
+    - slice-02
   approved_slice: "Implement the first reviewed slice."
   required_reviewers:
     - implementation-readiness
@@ -343,6 +349,7 @@ plan_followthrough_delivery:
 | Brainstorming inside `plan-to-pr` | Stop and run `plan-ready` |
 | Implementing without a handoff | Ask for a valid `plan_ready_handoff` |
 | Starting from a reviewed plan with no followthrough handoff | Route through `plan-followthrough` unless explicitly bypassed |
+| Treating `reviewed_slices` as current implementation scope | Use it as upfront slice-plan evidence; implement only `approved_slice` |
 | Expanding beyond `approved_slice` | Update the plan through `plan-ready` first |
 | Ignoring `Refactoring / Reuse` | Fill `refactoring_execution` before editing and reconcile it before push/final delivery |
 | Adding reusable surfaces with no consumer | Rework or defer the abstraction until a current or named later slice consumes it |

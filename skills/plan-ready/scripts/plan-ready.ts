@@ -2,7 +2,10 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join, relative, resolve } from "node:path";
-import { validateSliceReviewInput } from "../../plan-slices/scripts/plan-slices.ts";
+import {
+  sliceIdsFromReviewInput,
+  validateSliceReviewInput,
+} from "../../plan-slices/scripts/plan-slices.ts";
 
 const BASELINE_REVIEWERS = [
   "implementation-readiness",
@@ -48,6 +51,7 @@ type ParsedHandoff = {
   artifact_type?: string;
   artifact_ref?: string;
   approved_slice?: string;
+  reviewed_slices: string[];
   required_reviewers: string[];
   optional_reviewers_selected: string[];
   unresolved_blockers: string[];
@@ -193,6 +197,8 @@ plan_ready_handoff:
   status: ready
   artifact_type: plan
   artifact_ref: <local plan file path>
+  reviewed_slices:
+    - slice-01
   approved_slice: <short implementation slice>
   required_reviewers:
 ${BASELINE_REVIEWERS.map((reviewer) => `    - ${reviewer}`).join("\n")}
@@ -210,6 +216,9 @@ function validateHandoff(input: string): void {
   requireValue(handoff.status, "status", errors);
   requireValue(handoff.artifact_type, "artifact_type", errors);
   requireValue(handoff.artifact_ref, "artifact_ref", errors);
+  if (handoff.reviewed_slices.length === 0) {
+    errors.push("reviewed_slices must include every reviewed slice id");
+  }
   requireValue(handoff.approved_slice, "approved_slice", errors);
   requireValue(handoff.scrutiny_verdict, "scrutiny_verdict", errors);
 
@@ -294,6 +303,26 @@ function validateSliceReviewForHandoff(
   if (handoff.artifact_type && handoff.artifact_type !== "plan") {
     errors.push(
       "slice_plan_review currently supports local plan file artifacts only",
+    );
+  }
+
+  const sliceReviewIds = sliceIdsFromReviewInput(input);
+  const missingReviewedSlices = sliceReviewIds.filter(
+    (sliceId) => !handoff.reviewed_slices.includes(sliceId),
+  );
+  const extraReviewedSlices = handoff.reviewed_slices.filter(
+    (sliceId) => !sliceReviewIds.includes(sliceId),
+  );
+
+  if (missingReviewedSlices.length > 0) {
+    errors.push(
+      `reviewed_slices must include slice_plan_review slices: ${missingReviewedSlices.join(", ")}`,
+    );
+  }
+
+  if (extraReviewedSlices.length > 0) {
+    errors.push(
+      `reviewed_slices must not include slices missing from slice_plan_review: ${extraReviewedSlices.join(", ")}`,
     );
   }
 }
@@ -395,6 +424,7 @@ function parseHandoff(input: string): ParsedHandoff {
     status: scalar(section, "status"),
     artifact_type: scalar(section, "artifact_type"),
     artifact_ref: scalar(section, "artifact_ref"),
+    reviewed_slices: list(section, "reviewed_slices"),
     approved_slice: scalar(section, "approved_slice"),
     required_reviewers: list(section, "required_reviewers"),
     optional_reviewers_selected: list(section, "optional_reviewers_selected"),
