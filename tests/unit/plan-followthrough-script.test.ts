@@ -108,9 +108,14 @@ const validSliceHandoff = `plan_followthrough_slice_handoff:
 const validDelivery = `plan_followthrough_delivery:
   slice_id: slice-01
   slice_name: Upload foundation
+  slice_advancement_mode: ship_then_continue
   status: shipped
   artifact:
-    pr_or_mr: https://example.test/pr/1
+    pr_or_mr:
+      url: https://example.test/pr/1
+      draft: false
+      latest_head: abc123
+      merge_state: merged
     commit: abc123
     branch: qms-upload
   delivery_ledger_ref: final response
@@ -119,6 +124,8 @@ const validDelivery = `plan_followthrough_delivery:
       - pnpm test
     gaps: []
   review_feedback:
+    status: passed
+    reviewed_head: abc123
     resolved: []
     carried_forward: []
   refactoring_reuse:
@@ -187,8 +194,80 @@ test("validate-delivery gives followthrough a reconciliation contract", () => {
   assert.notEqual(invalid.status, 0);
   assert.match(
     invalid.stderr,
-    /status must be one of: delivered, shipped, stacked_pending_merge, blocked, needs_replan/,
+    /status must be one of: shipped, stacked_pending_merge, blocked, needs_replan/,
   );
+});
+
+test("validate-delivery rejects shipped draft PRs", () => {
+  const invalid = runPlanFollowthrough(
+    "validate-delivery",
+    validDelivery.replace("      draft: false\n", "      draft: true\n"),
+  );
+
+  assert.notEqual(invalid.status, 0);
+  assert.match(invalid.stderr, /shipped delivery cannot reference a draft PR/);
+});
+
+test("validate-delivery rejects shipped delivery with blocked review feedback", () => {
+  const invalid = runPlanFollowthrough(
+    "validate-delivery",
+    validDelivery.replace("    status: passed\n", "    status: blocked\n"),
+  );
+
+  assert.notEqual(invalid.status, 0);
+  assert.match(
+    invalid.stderr,
+    /review_feedback.status blocked requires delivery status blocked/,
+  );
+});
+
+test("validate-delivery rejects stale hosted review head", () => {
+  const invalid = runPlanFollowthrough(
+    "validate-delivery",
+    validDelivery.replace(
+      "    reviewed_head: abc123\n",
+      "    reviewed_head: def456\n",
+    ),
+  );
+
+  assert.notEqual(invalid.status, 0);
+  assert.match(
+    invalid.stderr,
+    /review_feedback.reviewed_head must match artifact.pr_or_mr.latest_head/,
+  );
+});
+
+test("validate-delivery rejects stacked delivery under ship_then_continue", () => {
+  const stacked = validDelivery
+    .replace("  status: shipped\n", "  status: stacked_pending_merge\n")
+    .replace("      merge_state: merged\n", "      merge_state: mergeable\n");
+
+  const invalid = runPlanFollowthrough("validate-delivery", stacked);
+
+  assert.notEqual(invalid.status, 0);
+  assert.match(
+    invalid.stderr,
+    /stacked_pending_merge is not valid for ship_then_continue/,
+  );
+});
+
+test("validate-delivery accepts stacked delivery with passed review under stack_then_continue", () => {
+  const stacked = validDelivery
+    .replace(
+      "  slice_advancement_mode: ship_then_continue\n",
+      "  slice_advancement_mode: stack_then_continue\n",
+    )
+    .replace("  status: shipped\n", "  status: stacked_pending_merge\n")
+    .replace("      draft: false\n", "      draft: true\n")
+    .replace("      merge_state: merged\n", "      merge_state: draft\n")
+    .replace(
+      "  recommended_next_action: run next slice\n",
+      "  recommended_next_action: continue_stack\n",
+    );
+
+  const valid = runPlanFollowthrough("validate-delivery", stacked);
+
+  assert.equal(valid.status, 0);
 });
 
 test("validate-delivery requires significant refactor suggestions key", () => {

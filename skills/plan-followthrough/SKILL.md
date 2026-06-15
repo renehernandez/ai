@@ -21,7 +21,7 @@ Do not use for fuzzy ideas, unreviewed plans, or plan authoring. Run `plan-ready
 - Always mirror the latest compact ledger snapshot in-session.
 - Require `slice_advancement.mode` before implementation starts:
   - `ship_then_continue`: advance only after the current slice is shipped/landed through the delivery workflow.
-  - `stack_then_continue`: advance after implementation and automated feedback are resolved, while tracking the dependency stack.
+  - `stack_then_continue`: advance after latest-head review feedback and CI pass, while tracking the dependency stack.
 - If the mode is not explicit from the user or an existing ledger, ask one question and stop before implementation.
 - Route every implementation slice through `plan-to-pr`; do not implement directly inside `plan-followthrough`.
 - Do not spawn implementation subagents directly. `plan-to-pr` owns implementation and its reviewer subagents.
@@ -41,7 +41,7 @@ Do not use for fuzzy ideas, unreviewed plans, or plan authoring. Run `plan-ready
 6. Run `scripts/plan-followthrough.ts slice-handoff-template`, fill it, validate it, and pass it to `plan-to-pr`.
 7. When `plan-to-pr` finishes, require `plan_followthrough_delivery`, validate it, and append a slice reconciliation to the ledger.
 8. Copy any `significant_refactor_suggestions` into `carry_forward.significant_refactor_suggestions`; keep them nonblocking unless the delivery status is `needs_replan` or `blocked`.
-9. Continue to the next slice when the mode allows it. Otherwise close as `complete`, `blocked`, or `needs_replan`.
+9. Continue to the next slice only when the reconciled delivery status and mode allow it. Otherwise close as `complete`, `blocked`, or `needs_replan`.
 
 ## Resume Recovery
 
@@ -51,7 +51,7 @@ When the user says "continue the campaign", "continue the plan", or resumes afte
 2. Locate the reviewed plan and any existing `<plan>.followthrough.md`.
 3. If no ledger exists, create it beside the plan before implementation.
 4. Recover prior slice state from live repo/provider evidence where available: branch, commits, PR/MR status, checks, review feedback, and files changed.
-5. Map prior delivery back to the reviewed slice list. Mark slices as `shipped`, `stacked_pending_merge`, `delivered`, `blocked`, `needs_replan`, or `pending`.
+5. Map prior delivery back to the reviewed slice list. Mark slices as `shipped`, `stacked_pending_merge`, `blocked`, `needs_replan`, or `pending`.
 6. If `slice_advancement.mode` is missing, ask exactly one question and stop before implementation: "Should followthrough use `ship_then_continue` or `stack_then_continue` for the remaining slices?"
 7. Proceed autonomously only after the ledger exists, mode is known, and recovery identifies exactly one valid next slice with satisfied prerequisites.
 
@@ -74,7 +74,7 @@ plan_followthrough_ledger:
   slices:
     - id: slice-01
       title: <slice title>
-      status: pending | active | delivered | shipped | stacked_pending_merge | reconciled | skipped
+      status: pending | active | shipped | stacked_pending_merge | reconciled | skipped
   carry_forward:
     refactoring_reuse: []
     significant_refactor_suggestions: []
@@ -134,9 +134,14 @@ When invoked from `plan-followthrough`, `plan-to-pr` must include:
 plan_followthrough_delivery:
   slice_id: slice-01
   slice_name: <slice title>
-  status: delivered | shipped | stacked_pending_merge | blocked | needs_replan
+  slice_advancement_mode: ship_then_continue | stack_then_continue
+  status: shipped | stacked_pending_merge | blocked | needs_replan
   artifact:
     pr_or_mr:
+      url: <url or none>
+      draft: true | false
+      latest_head: <sha>
+      merge_state: draft | open | mergeable | merged | direct_published
     commit:
     branch:
   delivery_ledger_ref:
@@ -144,6 +149,8 @@ plan_followthrough_delivery:
     passed: []
     gaps: []
   review_feedback:
+    status: passed | blocked
+    reviewed_head: <sha>
     resolved: []
     carried_forward: []
   refactoring_reuse:
@@ -171,8 +178,17 @@ Block only when continuing would corrupt continuity:
 - previous slice has no valid `plan_followthrough_delivery`;
 - previous slice is blocked and unresolved;
 - next slice depends on an earlier slice that did not complete or become a valid stack base;
+- `review_feedback.status` is `blocked`;
+- delivery status is `stacked_pending_merge` while `slice_advancement.mode` is `ship_then_continue`;
+- delivery status is `shipped` but the PR/MR is still draft or lacks merged/direct-published evidence;
 - directly relevant carry-forward refactoring/reuse context is missing from the next handoff;
 - remaining plan needs `plan-ready` again.
+
+`ship_then_continue` may advance only from `shipped`.
+`stack_then_continue` may advance from `stacked_pending_merge` only when
+latest-head review feedback passed, CI passed, and the slice is a valid stack
+base. Draft PR/MR state can support stacking only under `stack_then_continue`;
+it is never `shipped`.
 
 Warnings do not block: rough slice names, optional historical gaps, plausible
 future reuse with no active consumer, significant refactor suggestions that do
@@ -189,6 +205,8 @@ gates passed.
 | Reconstructing only a response ledger after compaction | Write or update `<plan>.followthrough.md` |
 | Implementing directly | Emit a slice handoff and run `plan-to-pr` |
 | Parsing prose from `plan-to-pr` | Require `plan_followthrough_delivery` |
+| Treating green CI on a draft PR as shipped | Reconcile as `blocked` or `stacked_pending_merge` according to mode and review feedback |
+| Advancing with missing hosted feedback | Stop because required `review_feedback.status: blocked` blocks both advancement modes |
 | Using captain terminology | Use followthrough, continuity, slice handoff, and reconciliation |
 | Treating "continue the campaign" as permission to skip recovery | Recover live state, write the ledger, then select the next slice |
 | Inferring advancement mode from momentum | Ask for `ship_then_continue` or `stack_then_continue` |

@@ -5,11 +5,18 @@ const STATUSES = ["active", "complete", "blocked", "needs_replan"] as const;
 const MODES = ["ship_then_continue", "stack_then_continue"] as const;
 const SLICE_HANDOFF_STATUSES = ["ready", "blocked"] as const;
 const DELIVERY_STATUSES = [
-  "delivered",
   "shipped",
   "stacked_pending_merge",
   "blocked",
   "needs_replan",
+] as const;
+const REVIEW_FEEDBACK_STATUSES = ["passed", "blocked"] as const;
+const MERGE_STATES = [
+  "draft",
+  "open",
+  "mergeable",
+  "merged",
+  "direct_published",
 ] as const;
 
 type Command =
@@ -93,6 +100,8 @@ function printSliceHandoffTemplate(): void {
     status: ready
     artifact_type: plan
     artifact_ref: <plan artifact>
+    reviewed_slices:
+      - slice-01
     approved_slice: <one slice only>
     required_reviewers:
       - implementation-readiness
@@ -122,9 +131,14 @@ function printDeliveryTemplate(): void {
   console.log(`plan_followthrough_delivery:
   slice_id: slice-01
   slice_name: <slice title>
+  slice_advancement_mode: ship_then_continue | stack_then_continue
   status: shipped
   artifact:
     pr_or_mr:
+      url: <url or none>
+      draft: false
+      latest_head: <sha>
+      merge_state: merged | direct_published
     commit:
     branch:
   delivery_ledger_ref:
@@ -132,6 +146,8 @@ function printDeliveryTemplate(): void {
     passed: []
     gaps: []
   review_feedback:
+    status: passed
+    reviewed_head: <sha>
     resolved: []
     carried_forward: []
   refactoring_reuse:
@@ -199,12 +215,78 @@ function validateDelivery(input: string): void {
   requireRoot(input, "plan_followthrough_delivery", errors);
   requireValue(input, "slice_id", errors);
   requireValue(input, "slice_name", errors);
+  validateScalar(input, "slice_advancement_mode", MODES, errors);
   validateScalar(input, "status", DELIVERY_STATUSES, errors);
   requireSection(input, "artifact", errors);
+  requireSection(input, "pr_or_mr", errors);
+  requireValue(input, "url", errors, "artifact.pr_or_mr.url");
+  requireValue(input, "draft", errors, "artifact.pr_or_mr.draft");
+  requireValue(input, "latest_head", errors, "artifact.pr_or_mr.latest_head");
+  requireValue(input, "merge_state", errors, "artifact.pr_or_mr.merge_state");
   requireSection(input, "verification", errors);
   requireSection(input, "review_feedback", errors);
+  requireValue(input, "reviewed_head", errors, "review_feedback.reviewed_head");
+  validateScalar(input, "status", REVIEW_FEEDBACK_STATUSES, errors, {
+    errorLabel: "review_feedback.status",
+    sectionName: "review_feedback",
+  });
   requireSection(input, "refactoring_reuse", errors);
   requireKey(input, "significant_refactor_suggestions", errors);
+
+  const status = scalar(input, "status");
+  const mode = scalar(input, "slice_advancement_mode");
+  const draft = scalar(input, "draft");
+  const latestHead = scalar(input, "latest_head");
+  const mergeState = scalar(input, "merge_state");
+  const reviewedHead = scalar(input, "reviewed_head");
+  const reviewFeedbackStatus = scalar(input, "status", "review_feedback");
+
+  if (draft && !["true", "false"].includes(draft)) {
+    errors.push("artifact.pr_or_mr.draft must be true or false");
+  }
+
+  if (mergeState && !includes(MERGE_STATES, mergeState)) {
+    errors.push(
+      `artifact.pr_or_mr.merge_state must be one of: ${MERGE_STATES.join(", ")}`,
+    );
+  }
+
+  if (latestHead && reviewedHead && latestHead !== reviewedHead) {
+    errors.push(
+      "review_feedback.reviewed_head must match artifact.pr_or_mr.latest_head",
+    );
+  }
+
+  if (reviewFeedbackStatus === "blocked" && status !== "blocked") {
+    errors.push(
+      "review_feedback.status blocked requires delivery status blocked",
+    );
+  }
+
+  if (
+    (status === "shipped" || status === "stacked_pending_merge") &&
+    reviewFeedbackStatus !== "passed"
+  ) {
+    errors.push(`${status} requires review_feedback.status passed`);
+  }
+
+  if (status === "shipped" && draft === "true") {
+    errors.push("shipped delivery cannot reference a draft PR/MR");
+  }
+
+  if (
+    status === "shipped" &&
+    mergeState &&
+    !["merged", "direct_published"].includes(mergeState)
+  ) {
+    errors.push(
+      "shipped delivery requires merge_state merged or direct_published",
+    );
+  }
+
+  if (status === "stacked_pending_merge" && mode === "ship_then_continue") {
+    errors.push("stacked_pending_merge is not valid for ship_then_continue");
+  }
 
   if (errors.length > 0) {
     fail(`Invalid plan_followthrough_delivery:\n${formatErrors(errors)}`);
@@ -231,10 +313,15 @@ function requireKey(input: string, key: string, errors: string[]): void {
   }
 }
 
-function requireValue(input: string, key: string, errors: string[]): void {
+function requireValue(
+  input: string,
+  key: string,
+  errors: string[],
+  errorLabel = key,
+): void {
   const value = scalar(input, key);
   if (!value || value.startsWith("<")) {
-    errors.push(`${key} is required`);
+    errors.push(`${errorLabel} is required`);
   }
 }
 
@@ -243,23 +330,51 @@ function validateScalar<const T extends readonly string[]>(
   key: string,
   allowed: T,
   errors: string[],
+  options: { errorLabel?: string; sectionName?: string } = {},
 ): void {
-  const value = scalar(input, key);
+  const errorLabel = options.errorLabel ?? key;
+  const value = scalar(input, key, options.sectionName);
   if (!value || value.startsWith("<")) {
-    errors.push(`${key} is required`);
+    errors.push(`${errorLabel} is required`);
     return;
   }
 
   if (!allowed.includes(value as T[number])) {
-    errors.push(`${key} must be one of: ${allowed.join(", ")}`);
+    errors.push(`${errorLabel} must be one of: ${allowed.join(", ")}`);
   }
 }
 
-function scalar(input: string, key: string): string | undefined {
-  const match = input.match(
+function scalar(
+  input: string,
+  key: string,
+  sectionName?: string,
+): string | undefined {
+  const source = sectionName ? extractSection(input, sectionName) : input;
+  const match = source.match(
     new RegExp(`^\\s*${escapeRegExp(key)}:\\s*(.+?)\\s*$`, "m"),
   );
   return match?.[1]?.trim();
+}
+
+function extractSection(input: string, sectionName: string): string {
+  const lines = input.split(/\r?\n/);
+  const start = lines.findIndex((line) => line.trim() === `${sectionName}:`);
+  if (start === -1) {
+    return input;
+  }
+
+  return lines
+    .slice(start + 1)
+    .filter((line) => line.startsWith(" ") || line.trim() === "")
+    .map((line) => line.replace(/^ {2}/, ""))
+    .join("\n");
+}
+
+function includes<const T extends readonly string[]>(
+  values: T,
+  value: string,
+): value is T[number] {
+  return values.includes(value as T[number]);
 }
 
 function readInput(args: string[]): string {

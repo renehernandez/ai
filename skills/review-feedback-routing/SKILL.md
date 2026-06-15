@@ -57,11 +57,26 @@ If `origin`, `upstream`, or a supplied PR/MR URL point to different artifact hos
 | `manual` | Tell the user the exact manual request needed |
 | `disabled` | Do not request that feedback route |
 
-Use `trigger` to clarify the expected automatic or explicit event, such as `artifact_created`, `review_requested`, `label_added`, or `comment_posted`. If `required: true`, the review gate cannot pass until feedback is collected, unavailable with evidence, or explicitly waived.
+Use `trigger` to clarify the expected automatic or explicit event, such as `artifact_created`, `review_requested`, `label_added`, or `comment_posted`. If `required: true`, the review gate cannot pass until latest-head feedback is collected and resolved. Missing, unavailable, stale, timed-out, or unresolved required feedback is blocking.
 
 ## Staleness Rule
 
-Review feedback must name the artifact head SHA to satisfy a review gate. Feedback with no head SHA is useful context, but the gate remains `unknown` until the reviewer output is tied to the latest PR/MR head or the gap is explicitly accepted.
+Review feedback must name the artifact head SHA to satisfy a review gate. Feedback with no head SHA is useful context, but the gate remains blocked until the reviewer output is tied to the latest PR/MR head.
+
+## Delivery Gate Outcome
+
+For required review feedback, normalize the final gate outcome before returning
+to `plan-to-pr`:
+
+```yaml
+review_feedback:
+  status: passed | blocked
+  reviewed_head: <latest artifact head sha>
+```
+
+Use `passed` only when the routed reviewer produced latest-head feedback and no
+actionable findings remain. Use `blocked` for missing feedback, timeout, stale
+feedback, unavailable adapters, unresolved findings, or unknown head SHA.
 
 ## Normalized Feedback Contract
 
@@ -87,7 +102,7 @@ verification_gaps: <none | list>
 | Letting CLI config decide review policy | Read routing YAML instead |
 | Letting a typo fail open | Unmatched routes must ask or block according to `unmatched` |
 | Assuming `automatic` explains itself | Set a `trigger` and record whether the expected event happened |
-| Passing stale feedback as clean | Require matching `head_sha` or mark the gate unknown |
+| Passing stale feedback as clean | Require matching `head_sha` or mark the gate blocked |
 
 ## Validation Scenarios
 

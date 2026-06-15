@@ -88,11 +88,22 @@ const REVIEW_OUTCOME_STATUSES = [
   "not_applicable",
 ] as const;
 const FOLLOWTHROUGH_DELIVERY_STATUSES = [
-  "delivered",
   "shipped",
   "stacked_pending_merge",
   "blocked",
   "needs_replan",
+] as const;
+const FOLLOWTHROUGH_ADVANCEMENT_MODES = [
+  "ship_then_continue",
+  "stack_then_continue",
+] as const;
+const REVIEW_FEEDBACK_STATUSES = ["passed", "blocked"] as const;
+const MERGE_STATES = [
+  "draft",
+  "open",
+  "mergeable",
+  "merged",
+  "direct_published",
 ] as const;
 
 type Command =
@@ -284,9 +295,14 @@ function printFollowthroughDeliveryTemplate(): void {
   console.log(`plan_followthrough_delivery:
   slice_id: slice-01
   slice_name: <slice title>
+  slice_advancement_mode: ship_then_continue | stack_then_continue
   status: shipped
   artifact:
     pr_or_mr:
+      url: <url or none>
+      draft: false
+      latest_head: <sha>
+      merge_state: merged | direct_published
     commit:
     branch:
   delivery_ledger_ref:
@@ -294,6 +310,8 @@ function printFollowthroughDeliveryTemplate(): void {
     passed: []
     gaps: []
   review_feedback:
+    status: passed
+    reviewed_head: <sha>
     resolved: []
     carried_forward: []
   refactoring_reuse:
@@ -420,18 +438,115 @@ function validateFollowthroughDelivery(input: string): void {
   requireSection(input, "plan_followthrough_delivery", errors);
   requireValue(scalar(input, "slice_id"), "slice_id", errors);
   requireValue(scalar(input, "slice_name"), "slice_name", errors);
+  requireValue(
+    scalar(input, "slice_advancement_mode"),
+    "slice_advancement_mode",
+    errors,
+  );
   requireValue(scalar(input, "status"), "status", errors);
   requireSection(input, "artifact", errors);
+  requireSection(input, "pr_or_mr", errors);
+  requireValue(scalar(input, "url"), "artifact.pr_or_mr.url", errors);
+  requireValue(scalar(input, "draft"), "artifact.pr_or_mr.draft", errors);
+  requireValue(
+    scalar(input, "latest_head"),
+    "artifact.pr_or_mr.latest_head",
+    errors,
+  );
+  requireValue(
+    scalar(input, "merge_state"),
+    "artifact.pr_or_mr.merge_state",
+    errors,
+  );
   requireSection(input, "verification", errors);
   requireSection(input, "review_feedback", errors);
+  requireValue(
+    scalar(input, "reviewed_head"),
+    "review_feedback.reviewed_head",
+    errors,
+  );
+  requireValue(
+    scalar(input, "status", "review_feedback"),
+    "review_feedback.status",
+    errors,
+  );
   requireSection(input, "refactoring_reuse", errors);
   requireKey(input, "significant_refactor_suggestions", errors);
 
   const status = scalar(input, "status");
+  const mode = scalar(input, "slice_advancement_mode");
+  const draft = scalar(input, "draft");
+  const latestHead = scalar(input, "latest_head");
+  const mergeState = scalar(input, "merge_state");
+  const reviewedHead = scalar(input, "reviewed_head");
+  const reviewFeedbackStatus = scalar(input, "status", "review_feedback");
+
   if (status && !includes(FOLLOWTHROUGH_DELIVERY_STATUSES, status)) {
     errors.push(
       `status must be one of: ${FOLLOWTHROUGH_DELIVERY_STATUSES.join(", ")}`,
     );
+  }
+
+  if (mode && !includes(FOLLOWTHROUGH_ADVANCEMENT_MODES, mode)) {
+    errors.push(
+      `slice_advancement_mode must be one of: ${FOLLOWTHROUGH_ADVANCEMENT_MODES.join(", ")}`,
+    );
+  }
+
+  if (draft && !["true", "false"].includes(draft)) {
+    errors.push("artifact.pr_or_mr.draft must be true or false");
+  }
+
+  if (mergeState && !includes(MERGE_STATES, mergeState)) {
+    errors.push(
+      `artifact.pr_or_mr.merge_state must be one of: ${MERGE_STATES.join(", ")}`,
+    );
+  }
+
+  if (
+    reviewFeedbackStatus &&
+    !includes(REVIEW_FEEDBACK_STATUSES, reviewFeedbackStatus)
+  ) {
+    errors.push(
+      `review_feedback.status must be one of: ${REVIEW_FEEDBACK_STATUSES.join(", ")}`,
+    );
+  }
+
+  if (latestHead && reviewedHead && latestHead !== reviewedHead) {
+    errors.push(
+      "review_feedback.reviewed_head must match artifact.pr_or_mr.latest_head",
+    );
+  }
+
+  if (reviewFeedbackStatus === "blocked" && status !== "blocked") {
+    errors.push(
+      "review_feedback.status blocked requires delivery status blocked",
+    );
+  }
+
+  if (
+    (status === "shipped" || status === "stacked_pending_merge") &&
+    reviewFeedbackStatus !== "passed"
+  ) {
+    errors.push(`${status} requires review_feedback.status passed`);
+  }
+
+  if (status === "shipped" && draft === "true") {
+    errors.push("shipped delivery cannot reference a draft PR/MR");
+  }
+
+  if (
+    status === "shipped" &&
+    mergeState &&
+    !["merged", "direct_published"].includes(mergeState)
+  ) {
+    errors.push(
+      "shipped delivery requires merge_state merged or direct_published",
+    );
+  }
+
+  if (status === "stacked_pending_merge" && mode === "ship_then_continue") {
+    errors.push("stacked_pending_merge is not valid for ship_then_continue");
   }
 
   if (errors.length > 0) {
@@ -748,8 +863,13 @@ function requireKey(input: string, key: string, errors: string[]): void {
   }
 }
 
-function scalar(input: string, key: string): string | undefined {
-  const match = input.match(
+function scalar(
+  input: string,
+  key: string,
+  sectionName?: string,
+): string | undefined {
+  const source = sectionName ? extractSection(input, sectionName) : input;
+  const match = source.match(
     new RegExp(`^\\s*${escapeRegExp(key)}:\\s*(.+?)\\s*$`, "m"),
   );
   if (!match) {

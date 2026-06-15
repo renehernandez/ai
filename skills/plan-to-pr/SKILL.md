@@ -77,7 +77,7 @@ If the user asks to implement a reviewed plan directly and there is no `plan_fol
 In Codex, prefer starting this workflow as a goal with the handoff included in the objective:
 
 ```text
-/goal Use $plan-to-pr with this plan_followthrough_slice_handoff or plan_ready_handoff: <handoff>. Validate the handoff, inspect any followthrough_context, inspect the approved slice's Refactoring / Reuse section, print and maintain the refactoring_execution ledger, implement only the approved slice, keep minor local refactors inside the slice, record naturally discovered significant_refactor_suggestions as carry-forward instead of implementing them, run local verification, launch implementation reviewers as internal Codex subagents, report launched reviewers and returned subagent IDs in-session, validate the launch report, reconcile reviewer outcomes, run review-feedback-routing, create or update the routed PR/MR, run artifact-host review, wait for routed latest-head feedback, iterate until feedback is resolved, watch artifact-host CI, and finish only when CI is green or blocked with evidence. Include the final reviewer subagent report, delivery gate ledger, and plan_followthrough_delivery when followthrough_context is present.
+/goal Use $plan-to-pr with this plan_followthrough_slice_handoff or plan_ready_handoff: <handoff>. Validate the handoff, inspect any followthrough_context, inspect the approved slice's Refactoring / Reuse section, print and maintain the refactoring_execution ledger, implement only the approved slice, keep minor local refactors inside the slice, record naturally discovered significant_refactor_suggestions as carry-forward instead of implementing them, run local verification, launch implementation reviewers as internal Codex subagents, report launched reviewers and returned subagent IDs in-session, validate the launch report, reconcile reviewer outcomes, run review-feedback-routing, create or update the routed PR/MR, run artifact-host review, wait for routed latest-head feedback, iterate until feedback is resolved, watch artifact-host CI, and finish with the exact delivery state: shipped only when landed or directly published, stacked_pending_merge only when stack_then_continue allows it with passed latest-head review feedback, or blocked with evidence. Include the final reviewer subagent report, delivery gate ledger, and plan_followthrough_delivery when followthrough_context is present.
 ```
 
 For non-Codex agents or tools without goal state, use the same objective as a normal prompt.
@@ -187,12 +187,12 @@ reviewer_subagent_report:
     - GitLab: use `gitlab-adapter-review`.
     - GitHub: use `github-adapter-review`.
 14. Request or wait for review feedback using the routed `review_feedback.primary` entry.
-15. Request or wait for routed feedback before treating the gate as complete. For Codex GitHub review, poll PR reviews, review comments, timeline comments, and request reactions until the latest pushed head has a `chatgpt-codex-connector` review/comment, a thumbs-up/no-issues reaction on the request, actionable inline findings, or a clear timeout/blocker. For Nitro on Fullscript GitLab, follow `review-feedback-routing`: when it selects explicit Nitro feedback, post `glab mr note <MR_IID> -m "/request_review @nitro"` after MR creation or material follow-up pushes, then poll for latest-head Nitro feedback.
+15. Request or wait for routed feedback before treating the gate as complete. For Codex GitHub review, poll PR reviews, review comments, timeline comments, and request reactions until the latest pushed head has a `chatgpt-codex-connector` review/comment, actionable inline findings, or a clear blocker. For Nitro on Fullscript GitLab, follow `review-feedback-routing`: when it selects explicit Nitro feedback, post `glab mr note <MR_IID> -m "/request_review @nitro"` after MR creation or material follow-up pushes, then poll for latest-head Nitro feedback. Missing, stale, timed-out, or unresolved required review feedback is blocking.
 16. Apply actionable hosted feedback and repeat local verification plus affected internal Codex reviewer subagents on the updated diff, then push and rerun hosted review. If feedback exposes missing coverage, apply the Fastest Durable Regression rule before rerunning broad checks. If the branch head changes after feedback or CI fixes, earlier hosted review is stale unless it clearly reviewed the new head.
 17. Watch CI through the artifact-host tool: `glab ci`/GitLab pipeline tools for GitLab, and `gh pr checks` or GitHub Actions checks for GitHub. Fix branch-caused failures, rerun relevant verification, rerun scrutiny and docs alignment if the diff changed, and push updates.
 18. Before finishing, generate the gate ledger shape with `scripts/plan-to-pr.ts gate-template`, fill it, and validate it with `validate-ledger`.
 19. If `followthrough_context` was present, generate `scripts/plan-to-pr.ts followthrough-delivery-template`, fill it, and validate it with `validate-followthrough-delivery`.
-20. Finish only when CI is green or the blocker is external, permission-related, flaky infrastructure, review-feedback timeout, or a product decision with evidence.
+20. Finish with the exact delivery state. `shipped` requires landed/merged evidence or an explicit direct-publish policy. `stacked_pending_merge` requires `slice_advancement_mode: stack_then_continue`, passed latest-head review feedback, and green CI. Missing, stale, timed-out, or unresolved required review feedback must produce `blocked`, even when implementation and CI are otherwise complete.
 
 ## Gate Rules
 
@@ -218,6 +218,23 @@ reviewer_subagent_report:
 | Artifact-host review | `gitlab-adapter-review` or `github-adapter-review` reviewed the latest hosted artifact head |
 | Review feedback | Routed feedback produced a latest-head result with no actionable findings, or blocker is evidenced |
 | CI | Required checks are green, or non-branch blocker is evidenced |
+
+## Delivery State Contract
+
+`implementation complete` is not the same as `delivery shipped`.
+
+| Status | Meaning |
+| --- | --- |
+| `shipped` | The slice landed/merged, or repo policy explicitly allowed direct publishing to the target branch |
+| `stacked_pending_merge` | The slice has passed latest-head review feedback and CI, can support the next stacked slice, and has not landed |
+| `blocked` | Delivery cannot advance because review feedback, CI, artifact state, permissions, or product decisions are unresolved |
+| `needs_replan` | The approved slice no longer matches the work needed |
+
+Draft PRs/MRs are never `shipped`. Required review feedback is mandatory: missing,
+stale, timed-out, unavailable, or unresolved hosted feedback maps to
+`review_feedback.status: blocked` and `plan_followthrough_delivery.status:
+blocked`. `stacked_pending_merge` is valid only for `stack_then_continue`; it is
+not valid for `ship_then_continue`.
 
 ## Significant Refactor Suggestions
 
@@ -321,9 +338,14 @@ When invoked from `plan-followthrough`, also include:
 plan_followthrough_delivery:
   slice_id: slice-01
   slice_name: Example slice
+  slice_advancement_mode: ship_then_continue
   status: shipped
   artifact:
-    pr_or_mr: <url>
+    pr_or_mr:
+      url: <url or none>
+      draft: false
+      latest_head: <sha>
+      merge_state: merged | direct_published
     commit: <sha>
     branch: <branch>
   delivery_ledger_ref: final response
@@ -331,6 +353,8 @@ plan_followthrough_delivery:
     passed: []
     gaps: []
   review_feedback:
+    status: passed
+    reviewed_head: <sha>
     resolved: []
     carried_forward: []
   refactoring_reuse:
@@ -364,11 +388,13 @@ plan_followthrough_delivery:
 | Leaving `findings` or `blocked` in the final reviewer report | Fix findings, resolve blockers, and validate only the reconciled final report |
 | Treating implementation review as enough | Run all implementation reviewer subagents and reconcile outcomes |
 | Treating review request as feedback | Wait for latest-head routed feedback |
+| Treating missing or timed-out review feedback as acceptable | Mark `review_feedback.status: blocked` and stop delivery advancement |
 | Reusing hosted review from an older head | Re-request hosted review after pushing fixes |
 | Waiting for automatic Nitro feedback when routing requires an explicit request | Post `/request_review @nitro`, then poll the latest head |
 | Omitting the reviewer outcome report | Generate it, validate it, and include it before the delivery ledger |
 | Finishing without a final ledger | Generate, fill, and validate the ledger |
 | Omitting followthrough delivery when followthrough context was present | Generate and validate `plan_followthrough_delivery` |
+| Reporting a draft PR as shipped | Use `blocked` or `stacked_pending_merge` according to `slice_advancement_mode` and review feedback state |
 | Saying "done" with pending or unknown CI | Watch checks or state the exact blocker |
 
 ## Test Evidence
