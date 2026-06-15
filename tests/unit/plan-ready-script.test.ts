@@ -319,6 +319,7 @@ test("handoff-template includes mandatory slice plan review", () => {
 
   assert.equal(result.status, 0);
   assert.match(result.stdout, /slice_plan_review:/);
+  assert.match(result.stdout, /first end-to-end sliver/);
   assert.match(result.stdout, /artifact_fingerprint:/);
   assert.match(result.stdout, /reviewed_slices:/);
   assert.match(result.stdout, /plan_ready_handoff:/);

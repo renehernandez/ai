@@ -193,6 +193,7 @@ test("review-template includes the six mandatory slice gates", () => {
   const result = runPlanSlices("review-template");
 
   assert.equal(result.status, 0);
+  assert.match(result.stdout, /first end-to-end sliver/);
   assert.match(result.stdout, /observable_outcome:/);
   assert.match(result.stdout, /bounded_scope:/);
   assert.match(result.stdout, /sequencing:/);
