@@ -40,6 +40,12 @@ The linked rule files are normative and preserve the detailed policies.
 
 ## Harness Entrypoints
 
+### Project Setup
+
+- Use `mise install` to install the project toolchain.
+- Use `mise run setup` to install dependencies and configure Lefthook git hooks.
+- Use `mise run check` to run the local Lefthook verification gate.
+
 ### Shared Automations
 
 - Store reusable Codex automation definitions under [automations/](automations/).

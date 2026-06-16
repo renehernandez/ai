@@ -1,0 +1,15 @@
+[tools]
+node = "26.3.0"
+"npm:lefthook" = "2.1.6"
+
+[tasks.setup]
+description = "Install dependencies and configure git hooks"
+run = [
+  "corepack enable",
+  "pnpm install --frozen-lockfile",
+  "lefthook install",
+]
+
+[tasks.check]
+description = "Run local verification"
+run = "lefthook run pre-commit"
