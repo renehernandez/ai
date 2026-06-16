@@ -1,0 +1,4 @@
+interface:
+  display_name: "Research Technical"
+  short_description: "Research current technical implementation evidence"
+  default_prompt: "Use $research-technical to produce a source-backed technical research_brief. Aim for 5-10 credible sources, use stable source IDs, map every actionable claim through evidence_map.supported_by, and stop before planning or coding."

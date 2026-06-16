@@ -1,0 +1,4 @@
+interface:
+  display_name: "Research Router"
+  short_description: "Route research requests to the right research skill"
+  default_prompt: "Use $research-router to route this research request. Return only the research_routing decision with selected_skill, secondary_skill, reason, and next_step."

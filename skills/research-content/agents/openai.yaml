@@ -1,0 +1,4 @@
+interface:
+  display_name: "Research Content"
+  short_description: "Research credible material and framing for content"
+  default_prompt: "Use $research-content to produce a source-backed content research_brief. Aim for 5-10 credible sources, include audience context, tired framing, claim strength, possible angles, stable source IDs, and stop before drafting or outlining."
