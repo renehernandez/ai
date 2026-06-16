@@ -38,6 +38,18 @@ Every implementation slice must pass six gates:
 | Refactoring / Reuse | Includes the `plan-ready` refactoring subsection or says `None`. |
 | Delivery fit | Fits one `plan-to-pr` delivery loop without absorbing follow-up work. |
 
+The first implementation slice has an extra pressure: it should be the first
+end-to-end proof of the desired outcome. It may be manual, advisory,
+fixture-backed, or happy-path-only, but it must run through the real entrypoint,
+perform the real operation, and show a visible result. A foundation-only first
+slice is blocked unless safety, data migration, compliance, or operational risk
+makes a consumed foundation prerequisite unavoidable.
+
+If a plan starts with package scaffolding, schemas, adapters, registries, config,
+secret wiring, or runtime plumbing, fold the minimum version into the same slice
+that consumes it for the first visible workflow. Otherwise move it after the
+first proof or make it a later refactoring slice with a named consumer.
+
 Single-slice plans are not exempt. Audit them in `mode: audit` and synthesize
 `slice-01` when no stable slice ID exists.
 
@@ -48,6 +60,14 @@ Single-slice plans are not exempt. Audit them in `mode: audit` and synthesize
    slices.
 3. Create or revise slices so each one has a real outcome and bounded delivery
    surface.
+   - For `slice-01`, explicitly verify that the first PR-sized delivery produces
+     a narrow end-to-end sliver of the target outcome.
+   - Do not pass `slice-01` when its result is only "foundation ready",
+     "adapter ready", "runtime ready", or "configuration in place" and the
+     first real workflow is deferred to another slice.
+   - Feature flags, rollout variables, and optional enablement gates belong in a
+     slice only when the plan names the safety, cost, compliance, or operational
+     risk they mitigate.
 4. Run `scripts/plan-slices.ts fingerprint <artifact-ref>`.
 5. Emit `slice_plan_review` using `scripts/plan-slices.ts review-template`.
 6. Validate it with `scripts/plan-slices.ts validate-review --file <file>`.
@@ -91,6 +111,9 @@ next delivery loop.
 | Mistake | Fix |
 | --- | --- |
 | Treating a schema, adapter, or framework as the first slice outcome | Rewrite around the first real operation and visible result. |
+| Passing a first slice whose only visible state is a new package, runtime, config variable, or generated artifact | Require the same PR to consume it in the smallest end-to-end workflow. |
+| Deferring the first real user/system workflow to Slice 2 because Slice 1 feels like safe setup | Pull a manual, advisory, fixture-backed, or happy-path sliver into Slice 1. |
+| Adding feature flags or rollout variables by default | Require a named safety, cost, compliance, or operational risk; otherwise use eligibility checks only. |
 | Letting one slice include validation, runtime sync, docs, dashboard, hosted review, and future adapters | Split by current delivery outcome and defer future surfaces. |
 | Reusing an older slice review after plan edits | Recompute the artifact fingerprint and emit a new review. |
 | Exempting single-slice plans | Audit as `mode: audit` with `slice-01`. |
@@ -99,6 +122,7 @@ next delivery loop.
 ## Test Evidence
 
 - RED: baseline subagent `019ec7a4-ba8d-7aa1-83c1-8e5b477353e1` turned a software-factory idea into foundation slices for artifact schemas, provider boundaries, dashboard exports, and metadata before proving the mandatory slice gate.
+- RED: thread `019ec851-0d15-74e0-ab86-1f105de1c358` showed a first PR-review slice centered on runtime/package foundations while real hosted review behavior and enablement came later, so the first-slice gate now requires an early end-to-end sliver.
 - GREEN control: baseline subagent `019ec7a5-1498-7732-bdf1-fd128bd5757a` rejected an obviously broad provider/dashboard slice using existing `plan-ready` and `scrutinize` rules, showing those rules help but do not provide the mandatory machine-checkable `slice_plan_review`.
 - GREEN control: baseline subagent `019ec7a5-1540-78e1-bab2-e5f9920d15ba` rejected stale slice-review reuse when the changed slice bundled validator, runtime install, docs, dashboard, hosted review, and future adapters.
 - REFACTOR: this skill codifies the missing mandatory review block, artifact fingerprint, single-slice audit rule, and six-gate rubric so `plan-ready` can enforce slice quality mechanically.

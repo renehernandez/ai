@@ -183,7 +183,7 @@ function printHandoffTemplate(): void {
   mode: audit
   slices:
     - id: slice-01
-      title: <slice title>
+      title: <first end-to-end sliver>
       observable_outcome: pass
       bounded_scope: pass
       sequencing: pass
@@ -199,7 +199,7 @@ plan_ready_handoff:
   artifact_ref: <local plan file path>
   reviewed_slices:
     - slice-01
-  approved_slice: <short implementation slice>
+  approved_slice: <first end-to-end sliver>
   required_reviewers:
 ${BASELINE_REVIEWERS.map((reviewer) => `    - ${reviewer}`).join("\n")}
   optional_reviewers_selected: []

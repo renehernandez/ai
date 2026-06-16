@@ -41,6 +41,16 @@ After each gate, report one line with the gate, verdict, artifact, and next acti
    - use `mode: create` when slices are missing;
    - use `mode: audit` when slices already exist, including single-slice plans;
    - use a local plan file artifact for the mandatory fingerprinted v1 gate;
+   - require `slice-01` / `approved_slice` to prove a narrow end-to-end sliver
+     of the desired outcome in the first PR unless a named safety, data
+     migration, compliance, or operational risk makes a consumed foundation
+     prerequisite unavoidable;
+   - reject first slices that leave the first real workflow, hosted proof,
+     visible result, or user/system outcome for a later PR while shipping only
+     package/runtime/schema/config setup;
+   - reject default feature flags, rollout variables, and optional enablement
+     gates unless the plan names the concrete safety, cost, compliance, or
+     operational risk they mitigate;
    - validate the emitted `slice_plan_review` with `scripts/plan-slices.ts validate-review`.
 6. Run the bundled script `scripts/plan-ready.ts reviewer-template`, make the reviewer-selection judge decision from that exact catalog, and validate the judge output with `scripts/plan-ready.ts validate-selection`.
 7. Run all baseline reviewers plus judge-selected optional reviewers as internal subagents in the current harness.
@@ -90,6 +100,25 @@ It may block readiness when either:
 It should treat plausible but unnamed future reuse, style-only cleanup, broad
 platform work, or extractions that cross unrelated ownership boundaries as
 nonblocking or deferred.
+
+### Early End-to-End Reviewer Pressure
+
+Every baseline reviewer should check whether the approved first slice proves the
+target workflow soon enough. The acceptable first PR can be narrow: manual
+trigger, advisory mode, fixture-backed input, one happy path, or limited
+operator-only visibility are all valid when they exercise the real entrypoint,
+real operation, and visible success/failure result.
+
+Readiness is blocked when the first slice mainly creates packages, adapters,
+schemas, registries, runtime wiring, configuration, docs, or generated artifacts
+and delays the first real workflow to a later slice. Keep only the minimum
+foundation that the same first slice consumes to produce the sliver.
+
+Readiness is also blocked when the plan adds feature flags, repo variables,
+rollout switches, or optional enablement guards by default. These are allowed
+only when tied to concrete safety, model-spend, compliance, migration, secret, or
+operational risk. Prefer eligibility checks for real hazards over generic
+"enabled" variables.
 
 ### Refactor Scope Gate
 
@@ -278,6 +307,9 @@ this handoff validator can pass.
 | Mistake | Fix |
 | --- | --- |
 | Starting implementation after a ready verdict | Stop and ask the user to invoke `plan-followthrough` |
+| Passing a first slice that only prepares packages, adapters, schemas, runtime wiring, config, docs, or generated artifacts | Block readiness until the first PR proves a narrow end-to-end sliver of the target outcome |
+| Letting the first real hosted/user/system proof appear in Slice 2+ without a named prerequisite risk | Move the smallest manual, advisory, fixture-backed, or happy-path proof into the approved first slice |
+| Adding default feature flags, rollout variables, or optional enablement gates | Require a named safety, spend, compliance, migration, secret, or operational risk; otherwise remove the gate from the plan |
 | Treating reviewer subagents as optional | Always run baseline reviewers |
 | Routing Codex plan reviewers through `dispatch` or Claude | Use the current harness's internal Codex subagent tool |
 | Inventing optional reviewer names | Select only from the fixed catalog |
@@ -304,6 +336,7 @@ this handoff validator can pass.
 - GREEN/REFACTOR: subagent `019eb361-1adb-7771-a77a-388b11dc4b8b` passed after the first routing patch. The workflow now requires the current harness's internal Codex subagent tool and forbids `dispatch`, Claude Code `Task`, and external Claude harnesses.
 - RED: thread `019ec3c6-27cd-7962-9c30-313332a857d0` showed slice delivery dragging when significant refactors, reviewer churn, docs, hardening, and implementation all stayed inside one in-flight slice.
 - GREEN/REFACTOR: significant refactors found during plan-ready now become separate proposed slices and block readiness until brainstorming and plan review confirm their value and sequence.
+- RED: thread `019ec851-0d15-74e0-ab86-1f105de1c358` showed a PR-review migration where the first approved slice focused on packages/runtime/local payload while the first real hosted review proof and enablement behavior landed later; readiness now blocks that sequencing unless the foundation is unavoidable and consumed by the same first PR.
 - Validation evidence: `pnpm exec node --import tsx --test tests/unit/plan-ready-script.test.ts` returned passing tests for reviewer selection, handoff validation, and handoff template generation.
 - RED/GREEN: `validate-handoff` now rejects missing, blocked, mismatched, or stale `slice_plan_review` blocks before emitting `status: ready`.
 - REFACTOR: slice creation and audit live in `plan-slices`; `plan-ready` owns the readiness gate and validates the slice review against the same artifact.

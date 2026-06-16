@@ -50,12 +50,20 @@ Examples of scope-setting questions:
 - Lead with your recommendation and explain why
 - Prefer the approach that proves a real outcome soonest, unless safety, data migration, compliance, or operational risk requires foundation first
 - Do not recommend a platform/core/foundation approach while claiming the first slice is thin; the recommendation and first slice must match
+- Treat the first PR as the first proof point: it should deliver a narrow
+  end-to-end sliver of the desired outcome, not only setup for later PRs
+- The first sliver may be manually triggered, advisory, fixture-backed, or
+  limited to one happy path, but it must exercise the real entrypoint, operation,
+  and visible success/failure result
+- Foundation work belongs in the first PR only when that same PR consumes it to
+  produce the sliver; otherwise push it behind the first proof or fold only the
+  minimum needed into the sliver
 - Use this format for each approach:
 
 ```
 **Approach: [Name]**
 - How it works: [Brief description]
-- First working outcome: [What becomes observable or usable first]
+- First working outcome: [The earliest PR-sized end-to-end sliver: entrypoint, operation, visible result]
 - What it reuses: [Existing systems, paths, infrastructure, or conventions]
 - What it defers: [Hardening, generalization, integrations, polish]
 - Pros: [What you gain]
@@ -86,7 +94,12 @@ Examples of scope-setting questions:
 **Before finalizing:**
 - Check that the first slice produces an observable user/system outcome
 - Check that the first slice includes the real entrypoint, real operation, and visible result for one path
+- Check that the first PR proves a sliver of the target end-to-end workflow even
+  if the sliver is manual, advisory, fixture-backed, or happy-path-only
 - Check that foundation work is directly consumed by that first slice
+- Check that feature flags, rollout switches, config gates, and optional guards
+  are justified by a concrete safety, cost, compliance, or operational risk; do
+  not add them only because staged rollout feels cautious
 - Check that hardening and future integrations are separated unless required for v1 safety
 - Check that existing systems are reused before proposing new infrastructure
 - Check that the recommendation matches the first slice; if the first slice is thin, recommend the thin-slice approach
@@ -168,6 +181,8 @@ Ask: "The design looks complete. I see this project uses [detected pattern]. Wan
 | Building generic adapters before one concrete path works | Use a narrow internal shape, extract after a second use case |
 | Recommending a platform while implementing a thin slice | Recommend the thin slice; describe the platform as a future extraction |
 | Treating interface readiness as the outcome | Make the outcome a real operation with visible success/failure |
+| Making Slice 1 a package, runtime, schema, or config foundation while the first real workflow appears in Slice 2+ | Reshape Slice 1 so the same PR proves the smallest real end-to-end path |
+| Adding feature flags or repository variables as default rollout guards | Add only eligibility/safety checks tied to concrete risk; otherwise let the narrow path run |
 | Designing components before knowing the first workflow | Ask which workflow to prove first |
 | Asking a scope question and continuing anyway | Stop after the question; wait for the answer |
 | Using "assuming..." to keep designing after a question | Do not assume; wait for the answer |
@@ -193,3 +208,4 @@ Ask: "The design looks complete. I see this project uses [detected pattern]. Wan
 - REFACTOR: subagent `019eb4d7-8214-79b2-8688-f10c170d9846` still asked an advisory-vs-required question and then continued into a provider-adapter orchestrator design, so the hard stop is now at the top of the skill.
 - REFACTOR: subagent `019eb4d8-3ba1-7360-9997-7ab236cb6f73` used "assuming the goal..." after a scope question to continue into a verification orchestrator, so the skill now explicitly forbids that bypass.
 - REFACTOR: subagent `019eb4d8-f28a-72c2-aab4-22c94f353fe4` asked a scope question but smuggled design through recommended answer choices, architecture, first slice, and deferred work.
+- RED: thread `019ec851-0d15-74e0-ab86-1f105de1c358` planned the PR-review migration with an early runtime/package slice and cautious enablement flag before the first real hosted review proof, causing later correction around direct end-to-end evidence and unnecessary variables.

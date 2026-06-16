@@ -67,7 +67,7 @@ function printReviewTemplate(): void {
   mode: audit
   slices:
     - id: slice-01
-      title: <slice title>
+      title: <first end-to-end sliver>
       observable_outcome: pass
       bounded_scope: pass
       sequencing: pass
