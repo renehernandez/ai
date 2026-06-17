@@ -238,6 +238,9 @@ slice_plan_review:
   artifact_ref: docs/plans/example.md
   artifact_fingerprint: <sha256 of artifact_ref>
   mode: audit
+  review_mode_rationale:
+    source: existing_sliced_plan
+    reason: <why this internal path was selected>
   slices:
     - id: slice-01
       title: Example slice

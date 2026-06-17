@@ -18,6 +18,15 @@ Use for large plans, existing sliced plans, single-slice plans, resumed plans
 with changed content, or any plan where slice size, sequencing, verification, or
 delivery fit is uncertain.
 
+Infer the internal review path from the artifact shape. Fuzzy or unsliced
+planning artifacts need a multi-slice implementation breakdown. Existing plans
+with concrete slices should be audited. Do not ask the user to choose
+`create` or `audit`; keep that as validator metadata in `slice_plan_review`.
+
+A passing review for a newly sliced artifact needs at least 3 implementation
+slices. A one-slice audit can pass only when the artifact is an existing sliced
+plan or the work is explicitly atomic, and the review explains that rationale.
+
 The v1 validator fingerprints local plan files. When planning starts from
 OpenSpec, Linear, or a URL, first mirror the implementation plan into a local
 plan artifact before emitting `slice_plan_review`.
@@ -57,9 +66,15 @@ Single-slice plans are not exempt. Audit them in `mode: audit` and synthesize
 
 1. Read the plan artifact.
 2. Decide `mode: create` for unsliced plans or `mode: audit` for existing
-   slices.
+   slices as internal validator metadata. Infer this yourself; do not ask the
+   user to choose a mode.
 3. Create or revise slices so each one has a real outcome and bounded delivery
    surface.
+   - For newly sliced plans, name at least 3 implementation slices before
+     choosing the approved first slice.
+   - For one-slice audits, include `review_mode_rationale` and reject broad
+     roadmap, v1, platform, feature, generation, architecture, framework, or
+     foundation titles.
    - For `slice-01`, explicitly verify that the first PR-sized delivery produces
      a narrow end-to-end sliver of the target outcome.
    - Do not pass `slice-01` when its result is only "foundation ready",
@@ -85,6 +100,9 @@ slice_plan_review:
   artifact_ref: docs/plans/example.md
   artifact_fingerprint: <sha256 of artifact_ref>
   mode: create | audit
+  review_mode_rationale:
+    source: created_from_unsliced_artifact | existing_sliced_plan | atomic_change
+    reason: <why this internal path was selected>
   slices:
     - id: slice-01
       title: Example slice
@@ -117,6 +135,9 @@ next delivery loop.
 | Letting one slice include validation, runtime sync, docs, dashboard, hosted review, and future adapters | Split by current delivery outcome and defer future surfaces. |
 | Reusing an older slice review after plan edits | Recompute the artifact fingerprint and emit a new review. |
 | Exempting single-slice plans | Audit as `mode: audit` with `slice-01`. |
+| Asking the user whether to use create or audit mode | Infer the internal review path from artifact shape and keep the mode in YAML only. |
+| Creating one broad "v1" or "feature" slice from an unsliced plan | Break the feature into at least 3 PR-sized implementation slices. |
+| Passing a one-slice audit with a broad roadmap title | Block it unless the review proves the work is existing sliced work or a genuinely atomic change. |
 | Turning every future reuse idea into Slice 1 | Require a named current or later consumer. |
 
 ## Test Evidence
@@ -126,3 +147,5 @@ next delivery loop.
 - GREEN control: baseline subagent `019ec7a5-1498-7732-bdf1-fd128bd5757a` rejected an obviously broad provider/dashboard slice using existing `plan-ready` and `scrutinize` rules, showing those rules help but do not provide the mandatory machine-checkable `slice_plan_review`.
 - GREEN control: baseline subagent `019ec7a5-1540-78e1-bab2-e5f9920d15ba` rejected stale slice-review reuse when the changed slice bundled validator, runtime install, docs, dashboard, hosted review, and future adapters.
 - REFACTOR: this skill codifies the missing mandatory review block, artifact fingerprint, single-slice audit rule, and six-gate rubric so `plan-ready` can enforce slice quality mechanically.
+- RED: thread `019ed2b5-6e2e-7581-8fc5-e776bde1c1ec` selected Stat AI generation as one broad first feature direction before repeated user correction forced a true implementation breakdown.
+- GREEN: newly sliced reviews now need at least 3 implementation slices, so unsliced plans cannot validate by marking one broad feature direction as `slice-01`.

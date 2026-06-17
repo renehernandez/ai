@@ -11,6 +11,18 @@ type TempPlan = {
   fingerprint: string;
 };
 
+type ReviewSliceFixture = {
+  id: string;
+  title: string;
+};
+
+const DEFAULT_SLICE_GATES = `      observable_outcome: pass
+      bounded_scope: pass
+      sequencing: pass
+      verification: pass
+      refactoring_reuse: pass
+      delivery_fit: pass`;
+
 function withTempPlan(callback: (plan: TempPlan) => void): void {
   const directory = mkdtempSync(join(tmpdir(), "plan-slices-script-"));
   const artifactRef = join(directory, "plan.md");
@@ -81,23 +93,69 @@ function runValidateReview(content: string): {
 }
 
 function validReview(artifactRef: string, fingerprint: string): string {
+  return reviewYaml({
+    artifactRef,
+    fingerprint,
+    mode: "audit",
+    reason:
+      "Existing plan already has one concrete atomic implementation slice.",
+    slices: [{ id: "slice-01", title: "Example slice" }],
+    source: "existing_sliced_plan",
+  });
+}
+
+function validCreateReview(artifactRef: string, fingerprint: string): string {
+  return reviewYaml({
+    artifactRef,
+    fingerprint,
+    mode: "create",
+    reason: "New plan needed a multi-slice implementation breakdown.",
+    slices: [
+      { id: "slice-01", title: "Example slice" },
+      { id: "slice-02", title: "Second slice" },
+      { id: "slice-03", title: "Third slice" },
+    ],
+    source: "created_from_unsliced_artifact",
+  });
+}
+
+function reviewYaml({
+  artifactRef,
+  fingerprint,
+  mode,
+  reason,
+  slices,
+  source,
+}: {
+  artifactRef: string;
+  fingerprint: string;
+  mode: "audit" | "create";
+  reason: string;
+  slices: ReviewSliceFixture[];
+  source:
+    | "atomic_change"
+    | "created_from_unsliced_artifact"
+    | "existing_sliced_plan";
+}): string {
   return `slice_plan_review:
   status: pass
   artifact_ref: ${artifactRef}
   artifact_fingerprint: ${fingerprint}
-  mode: audit
+  mode: ${mode}
+  review_mode_rationale:
+    source: ${source}
+    reason: ${reason}
   slices:
-    - id: slice-01
-      title: Example slice
-      observable_outcome: pass
-      bounded_scope: pass
-      sequencing: pass
-      verification: pass
-      refactoring_reuse: pass
-      delivery_fit: pass
+${slices.map(sliceYaml).join("\n")}
   blocking_findings: []
   warnings: []
 `;
+}
+
+function sliceYaml(slice: ReviewSliceFixture): string {
+  return `    - id: ${slice.id}
+      title: ${slice.title}
+${DEFAULT_SLICE_GATES}`;
 }
 
 test("fingerprint returns the current artifact sha256", () => {
@@ -115,6 +173,95 @@ test("validate-review accepts a current passing single-slice audit", () => {
 
     assert.equal(result.status, 0);
     assert.match(result.stdout, /slice_plan_review valid/);
+  });
+});
+
+test("validate-review accepts an explicitly atomic single-slice audit", () => {
+  withTempPlan(({ artifactRef, fingerprint }) => {
+    const result = runValidateReview(
+      reviewYaml({
+        artifactRef,
+        fingerprint,
+        mode: "audit",
+        reason:
+          "The change is one validator error message and cannot be split into independent delivery slices.",
+        slices: [{ id: "slice-01", title: "Example slice" }],
+        source: "atomic_change",
+      }),
+    );
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /slice_plan_review valid/);
+  });
+});
+
+test("validate-review accepts atomic single-slice audits with broad title terms", () => {
+  withTempPlan(({ artifactRef, fingerprint }) => {
+    const result = runValidateReview(
+      reviewYaml({
+        artifactRef,
+        fingerprint,
+        mode: "audit",
+        reason:
+          "This edits one feature flag cleanup message and cannot be split into independent delivery slices.",
+        slices: [{ id: "slice-01", title: "Feature flag cleanup message" }],
+        source: "atomic_change",
+      }),
+    );
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /slice_plan_review valid/);
+  });
+});
+
+test("validate-review accepts a current passing multi-slice create review", () => {
+  withTempPlan(({ artifactRef, fingerprint }) => {
+    const result = runValidateReview(
+      validCreateReview(artifactRef, fingerprint),
+    );
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /slice_plan_review valid/);
+  });
+});
+
+test("validate-review rejects passing create reviews without multiple slices", () => {
+  withTempPlan(({ artifactRef, fingerprint }) => {
+    const result = runValidateReview(
+      validReview(artifactRef, fingerprint)
+        .replace("  mode: audit", "  mode: create")
+        .replace(
+          "    source: existing_sliced_plan",
+          "    source: created_from_unsliced_artifact",
+        )
+        .replace(
+          "    reason: Existing plan already has one concrete atomic implementation slice.",
+          "    reason: New plan needed a multi-slice implementation breakdown.",
+        ),
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /created_from_unsliced_artifact pass reviews must include at least 3 implementation slices/,
+    );
+  });
+});
+
+test("validate-review rejects broad one-slice audits", () => {
+  withTempPlan(({ artifactRef, fingerprint }) => {
+    const result = runValidateReview(
+      validReview(artifactRef, fingerprint).replace(
+        "      title: Example slice",
+        "      title: AI generation v1",
+      ),
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /pass reviews with one slice must not use broad roadmap/,
+    );
   });
 });
 
@@ -193,7 +340,11 @@ test("review-template includes the six mandatory slice gates", () => {
   const result = runPlanSlices("review-template");
 
   assert.equal(result.status, 0);
+  assert.match(result.stdout, /mode: create/);
+  assert.match(result.stdout, /review_mode_rationale:/);
+  assert.match(result.stdout, /created_from_unsliced_artifact/);
   assert.match(result.stdout, /first end-to-end sliver/);
+  assert.match(result.stdout, /slice-03/);
   assert.match(result.stdout, /observable_outcome:/);
   assert.match(result.stdout, /bounded_scope:/);
   assert.match(result.stdout, /sequencing:/);

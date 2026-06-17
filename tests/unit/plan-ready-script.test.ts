@@ -71,6 +71,9 @@ function validHandoff(artifactRef: string, fingerprint: string): string {
   artifact_ref: ${artifactRef}
   artifact_fingerprint: ${fingerprint}
   mode: audit
+  review_mode_rationale:
+    source: existing_sliced_plan
+    reason: Existing plan already has one concrete implementation slice.
   slices:
     - id: slice-01
       title: Example slice

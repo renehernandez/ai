@@ -181,6 +181,9 @@ function printHandoffTemplate(): void {
   artifact_ref: <local plan file path>
   artifact_fingerprint: <sha256 of artifact_ref>
   mode: audit
+  review_mode_rationale:
+    source: existing_sliced_plan
+    reason: <why this internal path was selected>
   slices:
     - id: slice-01
       title: <first end-to-end sliver>

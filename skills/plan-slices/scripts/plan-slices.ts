@@ -6,7 +6,23 @@ import { pathToFileURL } from "node:url";
 
 const REVIEW_STATUSES = ["pass", "blocked"] as const;
 const REVIEW_MODES = ["create", "audit"] as const;
+const REVIEW_MODE_RATIONALE_SOURCES = [
+  "created_from_unsliced_artifact",
+  "existing_sliced_plan",
+  "atomic_change",
+] as const;
 const GATE_STATUSES = ["pass", "blocked"] as const;
+const MIN_CREATED_SLICES = 3;
+const BROAD_SINGLE_SLICE_TERMS = [
+  "v1",
+  "roadmap",
+  "platform",
+  "foundation",
+  "feature",
+  "generation",
+  "architecture",
+  "framework",
+] as const;
 const SLICE_GATES = [
   "observable_outcome",
   "bounded_scope",
@@ -28,6 +44,10 @@ type ParsedReview = {
   artifact_ref?: string;
   artifact_fingerprint?: string;
   mode?: string;
+  review_mode_rationale: {
+    source?: string;
+    reason?: string;
+  };
   slices: ParsedSlice[];
   blocking_findings: string[];
   warnings: string[];
@@ -64,10 +84,29 @@ function printReviewTemplate(): void {
   status: pass
   artifact_ref: docs/plans/example.md
   artifact_fingerprint: <sha256 of artifact_ref>
-  mode: audit
+  mode: create
+  review_mode_rationale:
+    source: created_from_unsliced_artifact
+    reason: <why this plan needed a new multi-slice breakdown>
   slices:
     - id: slice-01
       title: <first end-to-end sliver>
+      observable_outcome: pass
+      bounded_scope: pass
+      sequencing: pass
+      verification: pass
+      refactoring_reuse: pass
+      delivery_fit: pass
+    - id: slice-02
+      title: <next bounded capability>
+      observable_outcome: pass
+      bounded_scope: pass
+      sequencing: pass
+      verification: pass
+      refactoring_reuse: pass
+      delivery_fit: pass
+    - id: slice-03
+      title: <third bounded capability>
       observable_outcome: pass
       bounded_scope: pass
       sequencing: pass
@@ -109,6 +148,16 @@ function validateParsedReview(review: ParsedReview): string[] {
   requireValue(review.artifact_ref, "artifact_ref", errors);
   requireValue(review.artifact_fingerprint, "artifact_fingerprint", errors);
   requireValue(review.mode, "mode", errors);
+  requireValue(
+    review.review_mode_rationale.source,
+    "review_mode_rationale.source",
+    errors,
+  );
+  requireValue(
+    review.review_mode_rationale.reason,
+    "review_mode_rationale.reason",
+    errors,
+  );
 
   if (review.status && !includes(REVIEW_STATUSES, review.status)) {
     errors.push(`status must be one of: ${REVIEW_STATUSES.join(", ")}`);
@@ -117,6 +166,20 @@ function validateParsedReview(review: ParsedReview): string[] {
   if (review.mode && !includes(REVIEW_MODES, review.mode)) {
     errors.push(`mode must be one of: ${REVIEW_MODES.join(", ")}`);
   }
+
+  if (
+    review.review_mode_rationale.source &&
+    !includes(
+      REVIEW_MODE_RATIONALE_SOURCES,
+      review.review_mode_rationale.source,
+    )
+  ) {
+    errors.push(
+      `review_mode_rationale.source must be one of: ${REVIEW_MODE_RATIONALE_SOURCES.join(", ")}`,
+    );
+  }
+
+  validateReviewModeRationale(review, errors);
 
   if (review.artifact_ref && !existsSync(review.artifact_ref)) {
     errors.push(`artifact_ref file is unavailable: ${review.artifact_ref}`);
@@ -133,6 +196,16 @@ function validateParsedReview(review: ParsedReview): string[] {
 
   if (review.slices.length === 0) {
     errors.push("slices must include at least one slice");
+  }
+
+  if (
+    review.status === "pass" &&
+    review.review_mode_rationale.source === "created_from_unsliced_artifact" &&
+    review.slices.length < MIN_CREATED_SLICES
+  ) {
+    errors.push(
+      `created_from_unsliced_artifact pass reviews must include at least ${MIN_CREATED_SLICES} implementation slices`,
+    );
   }
 
   let blockedGateCount = 0;
@@ -163,6 +236,15 @@ function validateParsedReview(review: ParsedReview): string[] {
     if (blockedGateCount > 0) {
       errors.push("pass reviews must not include blocked slice gates");
     }
+    if (
+      review.slices.length === 1 &&
+      review.review_mode_rationale.source !== "atomic_change" &&
+      looksBroadSingleSlice(review.slices[0].title)
+    ) {
+      errors.push(
+        "pass reviews with one slice must not use broad roadmap, v1, platform, feature, generation, architecture, framework, or foundation titles",
+      );
+    }
   }
 
   if (
@@ -187,10 +269,56 @@ function parseReview(input: string): ParsedReview {
     artifact_ref: scalar(section, "artifact_ref"),
     artifact_fingerprint: scalar(section, "artifact_fingerprint"),
     mode: scalar(section, "mode"),
+    review_mode_rationale: parseReviewModeRationale(section),
     slices: listObjects(section, "slices").map(parseSlice),
     blocking_findings: list(section, "blocking_findings"),
     warnings: list(section, "warnings"),
   };
+}
+
+function parseReviewModeRationale(
+  input: string,
+): ParsedReview["review_mode_rationale"] {
+  const section = extractSection(input, "review_mode_rationale");
+
+  return {
+    source: scalar(section, "source"),
+    reason: scalar(section, "reason"),
+  };
+}
+
+function validateReviewModeRationale(
+  review: ParsedReview,
+  errors: string[],
+): void {
+  const source = review.review_mode_rationale.source;
+
+  if (!source || !review.mode) {
+    return;
+  }
+
+  if (source === "created_from_unsliced_artifact" && review.mode !== "create") {
+    errors.push("created_from_unsliced_artifact requires mode create metadata");
+  }
+
+  if (
+    (source === "existing_sliced_plan" || source === "atomic_change") &&
+    review.mode !== "audit"
+  ) {
+    errors.push(`${source} requires mode audit metadata`);
+  }
+
+  if (source === "atomic_change" && review.slices.length > 1) {
+    errors.push("atomic_change rationale requires exactly one slice");
+  }
+}
+
+function looksBroadSingleSlice(title?: string): boolean {
+  const normalizedTitle = (title ?? "").toLowerCase();
+
+  return BROAD_SINGLE_SLICE_TERMS.some((term) =>
+    normalizedTitle.includes(term),
+  );
 }
 
 function parseSlice(input: string): ParsedSlice {
