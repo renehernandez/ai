@@ -104,6 +104,50 @@ plan_ready_handoff:
 `;
 }
 
+function validMultiSliceHandoff(
+  artifactRef: string,
+  fingerprint: string,
+): string {
+  return validHandoff(artifactRef, fingerprint)
+    .replace("  mode: audit", "  mode: create")
+    .replace(
+      "    source: existing_sliced_plan",
+      "    source: created_from_unsliced_artifact",
+    )
+    .replace(
+      "    reason: Existing plan already has one concrete implementation slice.",
+      "    reason: New plan needed a multi-slice implementation breakdown.",
+    )
+    .replace(
+      "  blocking_findings: []",
+      `    - id: slice-02
+      title: Second slice
+      observable_outcome: pass
+      bounded_scope: pass
+      sequencing: pass
+      verification: pass
+      refactoring_reuse: pass
+      delivery_fit: pass
+    - id: slice-03
+      title: Third slice
+      observable_outcome: pass
+      bounded_scope: pass
+      sequencing: pass
+      verification: pass
+      refactoring_reuse: pass
+      delivery_fit: pass
+  blocking_findings: []`,
+    )
+    .replace(
+      "  reviewed_slices:\n    - slice-01\n",
+      "  reviewed_slices:\n    - slice-01\n    - slice-02\n    - slice-03\n",
+    )
+    .replace(
+      "  approved_slice: Implement the first reviewed slice.",
+      "  approved_slice: slice-01: Implement the first reviewed slice.",
+    );
+}
+
 test("validate-handoff requires refactoring-opportunities as a baseline reviewer", () => {
   withTempPlan(({ artifactRef, fingerprint }) => {
     const handoff = validHandoff(artifactRef, fingerprint);
@@ -186,6 +230,18 @@ test("validate-handoff requires reviewed_slices to match the slice review", () =
       mismatched.stderr,
       /reviewed_slices must not include slices missing from slice_plan_review: slice-02/,
     );
+  });
+});
+
+test("validate-handoff accepts multiple reviewed slices with one approved slice", () => {
+  withTempPlan(({ artifactRef, fingerprint }) => {
+    const result = runPlanReady(
+      "validate-handoff",
+      validMultiSliceHandoff(artifactRef, fingerprint),
+    );
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /plan_ready_handoff valid/);
   });
 });
 
@@ -322,8 +378,15 @@ test("handoff-template includes mandatory slice plan review", () => {
 
   assert.equal(result.status, 0);
   assert.match(result.stdout, /slice_plan_review:/);
+  assert.match(result.stdout, /mode: create/);
+  assert.match(result.stdout, /review_mode_rationale:/);
+  assert.match(result.stdout, /created_from_unsliced_artifact/);
+  assert.match(result.stdout, /slice-03/);
   assert.match(result.stdout, /first end-to-end sliver/);
   assert.match(result.stdout, /artifact_fingerprint:/);
   assert.match(result.stdout, /reviewed_slices:/);
+  assert.match(result.stdout, /- slice-03/);
   assert.match(result.stdout, /plan_ready_handoff:/);
+  assert.doesNotMatch(result.stdout, /choose create/i);
+  assert.doesNotMatch(result.stdout, /choose audit/i);
 });

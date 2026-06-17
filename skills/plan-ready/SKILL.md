@@ -38,8 +38,13 @@ After each gate, report one line with the gate, verdict, artifact, and next acti
    - OpenSpec change through the project's OpenSpec workflow;
    - Linear ticket or linked plan context.
 5. Run `plan-slices` against the authoritative artifact before reviewer selection:
-   - use `mode: create` when slices are missing;
-   - use `mode: audit` when slices already exist, including single-slice plans;
+   - infer the internal review path from the artifact shape instead of asking
+     the user to choose a mode;
+   - use `mode: create` metadata when slices are missing;
+   - use `mode: audit` metadata when slices already exist, including
+     single-slice plans;
+   - keep `create` / `audit` inside `slice_plan_review` YAML with
+     `review_mode_rationale`;
    - use a local plan file artifact for the mandatory fingerprinted v1 gate;
    - require `slice-01` / `approved_slice` to prove a narrow end-to-end sliver
      of the desired outcome in the first PR unless a named safety, data
@@ -237,13 +242,29 @@ slice_plan_review:
   status: pass
   artifact_ref: docs/plans/example.md
   artifact_fingerprint: <sha256 of artifact_ref>
-  mode: audit
+  mode: create
   review_mode_rationale:
-    source: existing_sliced_plan
-    reason: <why this internal path was selected>
+    source: created_from_unsliced_artifact
+    reason: <why this artifact needed a multi-slice implementation breakdown>
   slices:
     - id: slice-01
       title: Example slice
+      observable_outcome: pass
+      bounded_scope: pass
+      sequencing: pass
+      verification: pass
+      refactoring_reuse: pass
+      delivery_fit: pass
+    - id: slice-02
+      title: Example follow-up slice
+      observable_outcome: pass
+      bounded_scope: pass
+      sequencing: pass
+      verification: pass
+      refactoring_reuse: pass
+      delivery_fit: pass
+    - id: slice-03
+      title: Example third slice
       observable_outcome: pass
       bounded_scope: pass
       sequencing: pass
@@ -259,6 +280,8 @@ plan_ready_handoff:
   artifact_ref: docs/plans/example.md
   reviewed_slices:
     - slice-01
+    - slice-02
+    - slice-03
   approved_slice: "Implement the first reviewed slice."
   required_reviewers:
     - implementation-readiness
@@ -323,6 +346,7 @@ this handoff validator can pass.
 | Treating refactoring as optional polish | Run `refactoring-opportunities` as a baseline reviewer and resolve blockers |
 | Absorbing a significant refactor into the current product slice | Add it as a proposed refactoring slice, block readiness, and rerun brainstorming plus plan review |
 | Treating single-slice plans as exempt from slice review | Run `plan-slices` in `mode: audit` and synthesize `slice-01` if needed |
+| Asking the user whether plan-slices should create or audit | Infer the path internally and record `mode` plus `review_mode_rationale` only in YAML |
 | Reusing a slice review after plan edits | Recompute the artifact fingerprint and validate a new `slice_plan_review` |
 | Passing a Linear key, URL, or OpenSpec ID as `slice_plan_review.artifact_ref` | Use a local plan file artifact for the v1 fingerprinted gate |
 | Treating `reviewed_slices` as approval to implement every slice at once | Implement only `approved_slice`; use `reviewed_slices` as upfront slice-plan evidence |

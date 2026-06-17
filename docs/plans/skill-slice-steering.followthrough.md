@@ -10,8 +10,8 @@ plan_followthrough_ledger:
     mode: ship_then_continue
     source: user_statement
   current_slice:
-    id: slice-02
-    title: Brainstorming And Plan-Slices Prompt Alignment
+    id: slice-03
+    title: Plan-Ready Handoff Integration
   slices:
     - id: slice-01
       title: Hidden-Mode Slice Gate
@@ -21,7 +21,7 @@ plan_followthrough_ledger:
       status: shipped
     - id: slice-03
       title: Plan-Ready Handoff Integration
-      status: pending
+      status: shipped
     - id: slice-04
       title: Runtime Sync And Draft Cleanup
       status: pending
@@ -33,13 +33,15 @@ plan_followthrough_ledger:
       - Code quality finding resolved by exempting atomic_change reviews from the broad-title guard and adding a regression test.
       - Ledger scope finding resolved by documenting the plan-ready template and fixture edits as Slice 1 compatibility work.
       - Slice 2 direct review found no prompt/prose scope issues after subagent reviewer lanes failed with backend 404 responses.
+      - Slice 3 direct review found the plan-ready handoff template now records multiple reviewed slices while selecting one approved slice.
     verification_gaps:
       - Runtime profile refresh remains pending for Slice 4 before treating the shared skill source changes as live in installed profiles.
       - Full Biome check remains blocked by unrelated pre-existing formatting drift outside this slice.
       - mise run check remains blocked in this detached worktree because mise does not trust this worktree config and reports no available tasks.
       - Slice 2 reviewer subagents were unavailable because every launched lane returned the same backend 404 before producing reviewer output.
+      - Slice 3 reviewer subagents were not relaunched because the Slice 2 reviewer pool failed consistently with backend 404 responses.
     changed_assumptions: []
-  next_action: continue_with_slice_03
+  next_action: continue_with_slice_04
   blockers: []
   warnings:
     - Existing dirty draft hunks were inventoried and out-of-scope Slice 2-4 draft files were restored before Slice 1 implementation.

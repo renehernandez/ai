@@ -180,13 +180,29 @@ function printHandoffTemplate(): void {
   status: pass
   artifact_ref: <local plan file path>
   artifact_fingerprint: <sha256 of artifact_ref>
-  mode: audit
+  mode: create
   review_mode_rationale:
-    source: existing_sliced_plan
-    reason: <why this internal path was selected>
+    source: created_from_unsliced_artifact
+    reason: <why this artifact needed a multi-slice implementation breakdown>
   slices:
     - id: slice-01
       title: <first end-to-end sliver>
+      observable_outcome: pass
+      bounded_scope: pass
+      sequencing: pass
+      verification: pass
+      refactoring_reuse: pass
+      delivery_fit: pass
+    - id: slice-02
+      title: <next bounded capability>
+      observable_outcome: pass
+      bounded_scope: pass
+      sequencing: pass
+      verification: pass
+      refactoring_reuse: pass
+      delivery_fit: pass
+    - id: slice-03
+      title: <third bounded capability>
       observable_outcome: pass
       bounded_scope: pass
       sequencing: pass
@@ -202,6 +218,8 @@ plan_ready_handoff:
   artifact_ref: <local plan file path>
   reviewed_slices:
     - slice-01
+    - slice-02
+    - slice-03
   approved_slice: <first end-to-end sliver>
   required_reviewers:
 ${BASELINE_REVIEWERS.map((reviewer) => `    - ${reviewer}`).join("\n")}
