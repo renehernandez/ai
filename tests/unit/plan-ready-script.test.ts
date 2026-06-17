@@ -65,24 +65,79 @@ function withTempPlan(
   }
 }
 
-function validHandoff(artifactRef: string, fingerprint: string): string {
-  return `slice_plan_review:
-  status: pass
-  artifact_ref: ${artifactRef}
-  artifact_fingerprint: ${fingerprint}
-  mode: audit
-  review_mode_rationale:
-    source: existing_sliced_plan
-    reason: Existing plan already has one concrete implementation slice.
-  slices:
-    - id: slice-01
-      title: Example slice
-      observable_outcome: pass
+type HandoffSliceFixture = {
+  id: string;
+  title: string;
+};
+
+const DEFAULT_HANDOFF_SLICE_GATES = `      observable_outcome: pass
       bounded_scope: pass
       sequencing: pass
       verification: pass
       refactoring_reuse: pass
-      delivery_fit: pass
+      delivery_fit: pass`;
+
+function validHandoff(artifactRef: string, fingerprint: string): string {
+  return handoffYaml({
+    artifactRef,
+    approvedSlice: "Implement the first reviewed slice.",
+    fingerprint,
+    mode: "audit",
+    reason: "Existing plan already has one concrete implementation slice.",
+    slices: [{ id: "slice-01", title: "Example slice" }],
+    source: "existing_sliced_plan",
+  });
+}
+
+function validMultiSliceHandoff(
+  artifactRef: string,
+  fingerprint: string,
+): string {
+  return handoffYaml({
+    artifactRef,
+    approvedSlice: "slice-01: Implement the first reviewed slice.",
+    fingerprint,
+    mode: "create",
+    reason: "New plan needed a multi-slice implementation breakdown.",
+    slices: [
+      { id: "slice-01", title: "Example slice" },
+      { id: "slice-02", title: "Second slice" },
+      { id: "slice-03", title: "Third slice" },
+    ],
+    source: "created_from_unsliced_artifact",
+  });
+}
+
+function handoffYaml({
+  approvedSlice,
+  artifactRef,
+  fingerprint,
+  mode,
+  reason,
+  slices,
+  source,
+}: {
+  approvedSlice: string;
+  artifactRef: string;
+  fingerprint: string;
+  mode: "audit" | "create";
+  reason: string;
+  slices: HandoffSliceFixture[];
+  source:
+    | "atomic_change"
+    | "created_from_unsliced_artifact"
+    | "existing_sliced_plan";
+}): string {
+  return `slice_plan_review:
+  status: pass
+  artifact_ref: ${artifactRef}
+  artifact_fingerprint: ${fingerprint}
+  mode: ${mode}
+  review_mode_rationale:
+    source: ${source}
+    reason: ${reason}
+  slices:
+${slices.map(handoffSliceYaml).join("\n")}
   blocking_findings: []
   warnings: []
 
@@ -91,8 +146,8 @@ plan_ready_handoff:
   artifact_type: plan
   artifact_ref: ${artifactRef}
   reviewed_slices:
-    - slice-01
-  approved_slice: Implement the first reviewed slice.
+${slices.map((slice) => `    - ${slice.id}`).join("\n")}
+  approved_slice: ${approvedSlice}
   required_reviewers:
     - implementation-readiness
     - edge-cases-and-risks
@@ -104,48 +159,10 @@ plan_ready_handoff:
 `;
 }
 
-function validMultiSliceHandoff(
-  artifactRef: string,
-  fingerprint: string,
-): string {
-  return validHandoff(artifactRef, fingerprint)
-    .replace("  mode: audit", "  mode: create")
-    .replace(
-      "    source: existing_sliced_plan",
-      "    source: created_from_unsliced_artifact",
-    )
-    .replace(
-      "    reason: Existing plan already has one concrete implementation slice.",
-      "    reason: New plan needed a multi-slice implementation breakdown.",
-    )
-    .replace(
-      "  blocking_findings: []",
-      `    - id: slice-02
-      title: Second slice
-      observable_outcome: pass
-      bounded_scope: pass
-      sequencing: pass
-      verification: pass
-      refactoring_reuse: pass
-      delivery_fit: pass
-    - id: slice-03
-      title: Third slice
-      observable_outcome: pass
-      bounded_scope: pass
-      sequencing: pass
-      verification: pass
-      refactoring_reuse: pass
-      delivery_fit: pass
-  blocking_findings: []`,
-    )
-    .replace(
-      "  reviewed_slices:\n    - slice-01\n",
-      "  reviewed_slices:\n    - slice-01\n    - slice-02\n    - slice-03\n",
-    )
-    .replace(
-      "  approved_slice: Implement the first reviewed slice.",
-      "  approved_slice: slice-01: Implement the first reviewed slice.",
-    );
+function handoffSliceYaml(slice: HandoffSliceFixture): string {
+  return `    - id: ${slice.id}
+      title: ${slice.title}
+${DEFAULT_HANDOFF_SLICE_GATES}`;
 }
 
 test("validate-handoff requires refactoring-opportunities as a baseline reviewer", () => {

@@ -248,19 +248,66 @@ test("validate-review rejects passing create reviews without multiple slices", (
   });
 });
 
-test("validate-review rejects broad one-slice audits", () => {
+test("validate-review accepts existing single-slice audits with broad title terms", () => {
   withTempPlan(({ artifactRef, fingerprint }) => {
     const result = runValidateReview(
       validReview(artifactRef, fingerprint).replace(
         "      title: Example slice",
-        "      title: AI generation v1",
+        "      title: Feature flag cleanup message",
       ),
+    );
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /slice_plan_review valid/);
+  });
+});
+
+test("validate-review rejects newly sliced broad one-slice reviews", () => {
+  withTempPlan(({ artifactRef, fingerprint }) => {
+    const result = runValidateReview(
+      reviewYaml({
+        artifactRef,
+        fingerprint,
+        mode: "create",
+        reason: "New plan needed a multi-slice implementation breakdown.",
+        slices: [{ id: "slice-01", title: "AI generation v1" }],
+        source: "created_from_unsliced_artifact",
+      }),
     );
 
     assert.notEqual(result.status, 0);
     assert.match(
       result.stderr,
-      /pass reviews with one slice must not use broad roadmap/,
+      /created_from_unsliced_artifact pass reviews must include at least 3 implementation slices/,
+    );
+    assert.match(
+      result.stderr,
+      /created_from_unsliced_artifact one-slice reviews must not use broad title terms/,
+    );
+  });
+});
+
+test("validate-review rejects duplicate slice ids", () => {
+  withTempPlan(({ artifactRef, fingerprint }) => {
+    const result = runValidateReview(
+      reviewYaml({
+        artifactRef,
+        fingerprint,
+        mode: "create",
+        reason: "New plan needed a multi-slice implementation breakdown.",
+        slices: [
+          { id: "slice-01", title: "Example slice" },
+          { id: "slice-01", title: "Second slice" },
+          { id: "slice-03", title: "Third slice" },
+        ],
+        source: "created_from_unsliced_artifact",
+      }),
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /slices must not include duplicate ids: slice-01/,
     );
   });
 });

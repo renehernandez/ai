@@ -53,16 +53,18 @@ review_mode_rationale:
 
 Validator behavior:
 
-- `created_from_unsliced_artifact` requires a multi-slice review.
+- `created_from_unsliced_artifact` requires a multi-slice review with unique
+  slice IDs.
 - `existing_sliced_plan` may audit existing slices, but a one-slice review still
   has to pass the observable outcome, bounded scope, sequencing, verification,
   refactoring/reuse, and delivery-fit gates.
 - `atomic_change` may pass with one slice only when `reason` explains why the
   work cannot be split without inventing fake slices.
-- Any one-slice audit whose machine-readable slice title is a broad roadmap
-  feature, v1 objective, platform, or generic foundation must be marked blocked
-  and decomposed before plan-ready can continue, unless the review marks the work
-  as explicitly atomic.
+- Any one-slice review for a newly sliced artifact whose machine-readable title
+  is a broad roadmap feature, v1 objective, platform, or generic foundation must
+  be marked blocked and decomposed before plan-ready can continue. Existing
+  sliced or explicitly atomic audits use `review_mode_rationale` rather than
+  title wording as the machine signal.
 
 ## Proposed Flow
 
@@ -139,10 +141,12 @@ Includes:
   shared `plan-slices` validator.
 - Add or update unit tests for:
   - broad one-slice create review rejected;
+  - duplicate slice IDs rejected;
   - multi-slice create review accepted;
   - single-slice audit accepted only with an explicit atomic or existing-slice
     rationale;
-  - one-slice audit with broad feature evidence rejected or blocked;
+  - existing or atomic one-slice audits with broad title wording accepted when
+    the rationale is explicit;
   - review template nudges multiple slices without presenting mode as a user
     decision.
 

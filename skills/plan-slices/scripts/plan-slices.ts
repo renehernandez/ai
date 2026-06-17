@@ -23,6 +23,7 @@ const BROAD_SINGLE_SLICE_TERMS = [
   "architecture",
   "framework",
 ] as const;
+const BROAD_SINGLE_SLICE_TERMS_MESSAGE = BROAD_SINGLE_SLICE_TERMS.join(", ");
 const SLICE_GATES = [
   "observable_outcome",
   "bounded_scope",
@@ -209,9 +210,17 @@ function validateParsedReview(review: ParsedReview): string[] {
   }
 
   let blockedGateCount = 0;
+  const seenSliceIds = new Set<string>();
   review.slices.forEach((slice, index) => {
     requireValue(slice.id, `slices[${index}].id`, errors);
     requireValue(slice.title, `slices[${index}].title`, errors);
+
+    if (slice.id) {
+      if (seenSliceIds.has(slice.id)) {
+        errors.push(`slices must not include duplicate ids: ${slice.id}`);
+      }
+      seenSliceIds.add(slice.id);
+    }
 
     for (const gate of SLICE_GATES) {
       const value = slice[gate];
@@ -238,11 +247,12 @@ function validateParsedReview(review: ParsedReview): string[] {
     }
     if (
       review.slices.length === 1 &&
-      review.review_mode_rationale.source !== "atomic_change" &&
+      review.review_mode_rationale.source ===
+        "created_from_unsliced_artifact" &&
       looksBroadSingleSlice(review.slices[0].title)
     ) {
       errors.push(
-        "pass reviews with one slice must not use broad roadmap, v1, platform, feature, generation, architecture, framework, or foundation titles",
+        `created_from_unsliced_artifact one-slice reviews must not use broad title terms: ${BROAD_SINGLE_SLICE_TERMS_MESSAGE}`,
       );
     }
   }

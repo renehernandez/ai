@@ -23,9 +23,10 @@ planning artifacts need a multi-slice implementation breakdown. Existing plans
 with concrete slices should be audited. Do not ask the user to choose
 `create` or `audit`; keep that as validator metadata in `slice_plan_review`.
 
-A passing review for a newly sliced artifact needs at least 3 implementation
-slices. A one-slice audit can pass only when the artifact is an existing sliced
-plan or the work is explicitly atomic, and the review explains that rationale.
+A passing review for a newly sliced artifact needs at least 3 uniquely identified
+implementation slices. A one-slice audit can pass when the artifact is an
+existing sliced plan or the work is explicitly atomic, and the review explains
+that rationale.
 
 The v1 validator fingerprints local plan files. When planning starts from
 OpenSpec, Linear, or a URL, first mirror the implementation plan into a local
@@ -72,9 +73,8 @@ Single-slice plans are not exempt. Audit them in `mode: audit` and synthesize
    surface.
    - For newly sliced plans, name at least 3 implementation slices before
      choosing the approved first slice.
-   - For one-slice audits, include `review_mode_rationale` and reject broad
-     roadmap, v1, platform, feature, generation, architecture, framework, or
-     foundation titles.
+   - For one-slice audits, include `review_mode_rationale`; title wording alone
+     should not make existing sliced or explicitly atomic work invalid.
    - For `slice-01`, explicitly verify that the first PR-sized delivery produces
      a narrow end-to-end sliver of the target outcome.
    - Do not pass `slice-01` when its result is only "foundation ready",
@@ -137,7 +137,7 @@ next delivery loop.
 | Exempting single-slice plans | Audit as `mode: audit` with `slice-01`. |
 | Asking the user whether to use create or audit mode | Infer the internal review path from artifact shape and keep the mode in YAML only. |
 | Creating one broad "v1" or "feature" slice from an unsliced plan | Break the feature into at least 3 PR-sized implementation slices. |
-| Passing a one-slice audit with a broad roadmap title | Block it unless the review proves the work is existing sliced work or a genuinely atomic change. |
+| Passing a newly sliced plan with one broad roadmap slice | Block it; newly sliced plans need at least 3 uniquely identified implementation slices. |
 | Turning every future reuse idea into Slice 1 | Require a named current or later consumer. |
 
 ## Test Evidence
