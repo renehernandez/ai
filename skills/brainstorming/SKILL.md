@@ -49,6 +49,14 @@ Examples of scope-setting questions:
 - Propose 2-3 different approaches with trade-offs
 - Lead with your recommendation and explain why
 - Prefer the approach that proves a real outcome soonest, unless safety, data migration, compliance, or operational risk requires foundation first
+- When the user asks for a first feature slice, different slices, or an
+  implementation plan, separate the response into: objective, selected feature,
+  already-shipped context, multiple implementation slices, and recommended first
+  slice
+- Do not let a roadmap objective or selected feature stand in for an
+  implementation slice; decompose the feature into PR-sized slices first
+- Do not ask the user to choose `create` or `audit`; those are internal
+  validator metadata for `plan-slices`, not brainstorming vocabulary
 - Do not recommend a platform/core/foundation approach while claiming the first slice is thin; the recommendation and first slice must match
 - Treat the first PR as the first proof point: it should deliver a narrow
   end-to-end sliver of the desired outcome, not only setup for later PRs
@@ -92,6 +100,10 @@ Examples of scope-setting questions:
 - Be ready to go back and clarify if something doesn't make sense
 
 **Before finalizing:**
+- Check that the visible output distinguishes the objective, selected feature,
+  already-shipped context, implementation slices, and recommended first slice
+- Check that there are multiple implementation slices unless the work is
+  genuinely atomic and the atomic rationale is explicit
 - Check that the first slice produces an observable user/system outcome
 - Check that the first slice includes the real entrypoint, real operation, and visible result for one path
 - Check that the first PR proves a sliver of the target end-to-end workflow even
@@ -191,6 +203,8 @@ Ask: "The design looks complete. I see this project uses [detected pattern]. Wan
 | Creating dedicated infrastructure by default | Reuse existing infrastructure unless isolation is required |
 | Adding full auth/security hardening to the first proof | Keep the minimum meaningful safety, harden after the path exists |
 | Treating docs, telemetry, dashboards, and polish as v1 foundations | Add only what is needed to operate and verify the first slice |
+| Treating a feature direction as the first implementation slice | Break the feature into multiple PR-sized slices and recommend the first one |
+| Asking the user whether planning should use create or audit mode | Infer that later in `plan-slices`; keep brainstorming focused on outcomes and slices |
 
 ## Test Evidence
 
@@ -209,3 +223,5 @@ Ask: "The design looks complete. I see this project uses [detected pattern]. Wan
 - REFACTOR: subagent `019eb4d8-3ba1-7360-9997-7ab236cb6f73` used "assuming the goal..." after a scope question to continue into a verification orchestrator, so the skill now explicitly forbids that bypass.
 - REFACTOR: subagent `019eb4d8-f28a-72c2-aab4-22c94f353fe4` asked a scope question but smuggled design through recommended answer choices, architecture, first slice, and deferred work.
 - RED: thread `019ec851-0d15-74e0-ab86-1f105de1c358` planned the PR-review migration with an early runtime/package slice and cautious enablement flag before the first real hosted review proof, causing later correction around direct end-to-end evidence and unnecessary variables.
+- RED: thread `019ed2b5-6e2e-7581-8fc5-e776bde1c1ec` treated the selected feature direction as the first slice until user correction forced a true objective / feature / implementation-slice breakdown.
+- GREEN: brainstorming now requires implementation-plan responses to show objective, selected feature, shipped context, multiple implementation slices, and a recommended first slice while leaving `create` / `audit` hidden for plan-slices metadata.
