@@ -43,9 +43,11 @@ The linked rule files are normative and preserve the detailed policies.
 
 ### Project Setup
 
-- Use `mise install` to install the project toolchain.
-- Use `mise run setup` to install dependencies and configure Lefthook git hooks.
-- Use `mise run check` to run the local Lefthook verification gate.
+- Use the current project's local setup, dependency, and verification
+  instructions. Prefer commands declared in the project `AGENTS.md`, task
+  runner config, package scripts, README, or nearby docs.
+- Do not assume this user-level instruction file defines a universal setup
+  command. Project-specific commands belong in project-specific instructions.
 
 ### Shared Automations
 
