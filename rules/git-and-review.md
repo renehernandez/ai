@@ -34,6 +34,7 @@ These rules cover Git, GitHub, GitLab, Linear, review routing, and external comm
 
 - Always use the `/glab-commit` skill when committing and pushing changes.
 - Never use `--no-verify` when committing.
+- Do not force push for ordinary follow-up work, review feedback, or CI fixes. Use subsequent commits because the user's hosted diffs are squash-merged. Force push only when it is necessary to resolve a Git history change, rebase, conflict, stale remote update, or when the user explicitly asks for a history rewrite.
 - If a commit fails due to pre-commit hooks, fix branch-caused failures and retry; ask the user how to proceed only when the failure is unrelated, external, or requires a product decision.
 - Always ask before committing or pushing to default branches such as `main` or `master`.
 - In this `ai` agent-runtime repo, user requests to commit and push completed work are approval to commit on `main` and push `main` to the `github` remote. Do not create feature branches, hosted review branches, PRs, or MRs for this repo unless the user explicitly asks.
