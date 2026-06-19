@@ -48,7 +48,14 @@ function configureProgramForTest(command: Command): void {
 }
 
 test("Commander dispatches scoped skills commands", () => {
-  const [parsed] = parseCommand(["skills", "validate", "--profile", "work", "--config", "custom.json"]);
+  const [parsed] = parseCommand([
+    "skills",
+    "validate",
+    "--profile",
+    "work",
+    "--config",
+    "custom.json",
+  ]);
 
   assert.equal(parsed.scope, "skills");
   assert.equal(parsed.command, "validate");
@@ -57,7 +64,12 @@ test("Commander dispatches scoped skills commands", () => {
 });
 
 test("Commander dispatches scoped agent filters", () => {
-  const [parsed] = parseCommand(["agents", "status", "--agent", "implementation-review-agent"]);
+  const [parsed] = parseCommand([
+    "agents",
+    "status",
+    "--agent",
+    "implementation-review-agent",
+  ]);
 
   assert.equal(parsed.scope, "agents");
   assert.equal(parsed.command, "status");
@@ -65,7 +77,13 @@ test("Commander dispatches scoped agent filters", () => {
 });
 
 test("Commander dispatches top-level wrapper commands", () => {
-  const [parsed] = parseCommand(["status", "--agent", "github-review-agent", "--profile", "personal"]);
+  const [parsed] = parseCommand([
+    "status",
+    "--agent",
+    "github-review-agent",
+    "--profile",
+    "personal",
+  ]);
 
   assert.equal(parsed.scope, undefined);
   assert.equal(parsed.command, "status");
@@ -81,7 +99,12 @@ test("Commander dispatches all selection flags", () => {
 });
 
 test("Commander rejects agent flags on skills commands", () => {
-  const error = parseInvalidCommand(["skills", "status", "--agent", "implementation-review-agent"]);
+  const error = parseInvalidCommand([
+    "skills",
+    "status",
+    "--agent",
+    "implementation-review-agent",
+  ]);
 
   assert.match(error.message, /unknown option '--agent'/);
 });
@@ -93,7 +116,12 @@ test("Commander rejects removed skillset flags", () => {
 });
 
 test("Commander rejects removed harness flags", () => {
-  const error = parseInvalidCommand(["agents", "status", "--harness", "claude"]);
+  const error = parseInvalidCommand([
+    "agents",
+    "status",
+    "--harness",
+    "claude",
+  ]);
 
   assert.match(error.message, /unknown option '--harness'/);
 });

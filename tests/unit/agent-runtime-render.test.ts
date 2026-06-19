@@ -31,7 +31,10 @@ Body
       "utf-8",
     );
 
-    const rendered = renderAgent(sourcePath, { model: "gpt-5.4", reasoning: "high" });
+    const rendered = renderAgent(sourcePath, {
+      model: "gpt-5.4",
+      reasoning: "high",
+    });
 
     assert.match(rendered, /^model: gpt-5\.4$/m);
     assert.match(rendered, /^reasoning: high$/m);
@@ -67,6 +70,9 @@ test("renderAgent rejects files without frontmatter", () => {
     const sourcePath = join(directory, "agent.md");
     writeFileSync(sourcePath, "Body only\n", "utf-8");
 
-    assert.throws(() => renderAgent(sourcePath, { model: "opus" }), /missing frontmatter/);
+    assert.throws(
+      () => renderAgent(sourcePath, { model: "opus" }),
+      /missing frontmatter/,
+    );
   });
 });

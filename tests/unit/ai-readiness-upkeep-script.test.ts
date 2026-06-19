@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawnSync } from "node:child_process";
 import test from "node:test";
 
 function withTempFile(content: string, callback: (path: string) => void): void {
@@ -16,20 +16,28 @@ function withTempFile(content: string, callback: (path: string) => void): void {
   }
 }
 
-function validateReport(content: string): { status: number | null; stderr: string; stdout: string } {
+function validateReport(content: string): {
+  status: number | null;
+  stderr: string;
+  stdout: string;
+} {
   let result: ReturnType<typeof spawnSync> | undefined;
   withTempFile(content, (path) => {
-    result = spawnSync("pnpm", [
-      "exec",
-      "tsx",
-      "skills/ai-readiness-upkeep/scripts/ai-readiness-upkeep.ts",
-      "validate-report",
-      "--file",
-      path,
-    ], {
-      cwd: process.cwd(),
-      encoding: "utf8",
-    });
+    result = spawnSync(
+      "pnpm",
+      [
+        "exec",
+        "tsx",
+        "skills/ai-readiness-upkeep/scripts/ai-readiness-upkeep.ts",
+        "validate-report",
+        "--file",
+        path,
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8",
+      },
+    );
   });
 
   assert.ok(result);
@@ -74,7 +82,10 @@ test("validate-report rejects reports missing checked evidence", () => {
 `);
 
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /checked\.evidence must include at least one evidence item/);
+  assert.match(
+    result.stderr,
+    /checked\.evidence must include at least one evidence item/,
+  );
 });
 
 test("validate-report rejects reports missing findings sections", () => {
@@ -137,7 +148,10 @@ ${checked}
 `);
 
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /passed reports must not include nonblocking findings/);
+  assert.match(
+    result.stderr,
+    /passed reports must not include nonblocking findings/,
+  );
 });
 
 test("validate-report rejects passed reports with deferred items", () => {
@@ -174,8 +188,14 @@ ${checked}
 `);
 
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /not_applicable reports must not include nonblocking findings/);
-  assert.match(result.stderr, /not_applicable reports must not include deferred items/);
+  assert.match(
+    result.stderr,
+    /not_applicable reports must not include nonblocking findings/,
+  );
+  assert.match(
+    result.stderr,
+    /not_applicable reports must not include deferred items/,
+  );
 });
 
 test("validate-report accepts blocked reports with enforceable blocking findings", () => {
@@ -237,7 +257,10 @@ ${checked}
 `);
 
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /passed reports must not include blocking findings/);
+  assert.match(
+    result.stderr,
+    /passed reports must not include blocking findings/,
+  );
 });
 
 test("validate-report rejects blocking findings missing required fields", () => {

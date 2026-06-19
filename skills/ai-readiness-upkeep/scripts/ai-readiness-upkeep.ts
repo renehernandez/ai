@@ -2,8 +2,22 @@
 import { readFileSync } from "node:fs";
 
 const VERDICTS = ["passed", "findings", "blocked", "not_applicable"] as const;
-const LANES = ["task_command", "local_hook", "ci", "release_or_deploy", "scheduled", "manual", "none"] as const;
-const ACTION_TYPES = ["add_verification", "wire_automation", "update_intent", "create_skill", "defer"] as const;
+const LANES = [
+  "task_command",
+  "local_hook",
+  "ci",
+  "release_or_deploy",
+  "scheduled",
+  "manual",
+  "none",
+] as const;
+const ACTION_TYPES = [
+  "add_verification",
+  "wire_automation",
+  "update_intent",
+  "create_skill",
+  "defer",
+] as const;
 const BLOCKING_REQUIRED_FIELDS = [
   "title",
   "contract",
@@ -13,7 +27,13 @@ const BLOCKING_REQUIRED_FIELDS = [
   "lane",
   "target_surface",
 ] as const;
-const NONBLOCKING_REQUIRED_FIELDS = ["title", "evidence", "suggestion", "action_type", "lane"] as const;
+const NONBLOCKING_REQUIRED_FIELDS = [
+  "title",
+  "evidence",
+  "suggestion",
+  "action_type",
+  "lane",
+] as const;
 const DEFERRED_REQUIRED_FIELDS = ["item", "reason"] as const;
 
 type Command = "report-template" | "validate-report";
@@ -23,7 +43,9 @@ function main(): void {
   const [command, ...args] = process.argv.slice(2);
 
   if (!isCommand(command)) {
-    fail("Usage: ai-readiness-upkeep.ts <report-template|validate-report> [--file path]");
+    fail(
+      "Usage: ai-readiness-upkeep.ts <report-template|validate-report> [--file path]",
+    );
   }
 
   if (command === "report-template") {
@@ -79,10 +101,18 @@ function validateReport(input: string): void {
   const checkedSection = nestedSection(section, "checked");
   const findingsSection = nestedSection(section, "findings");
   const verdict = scalar(section, "verdict");
-  const surfaces = checkedSection.found ? listValues(checkedSection.body, "surfaces") : [];
-  const evidence = checkedSection.found ? listValues(checkedSection.body, "evidence") : [];
-  const blockingFindings = findingsSection.found ? objectList(findingsSection.body, "blocking") : [];
-  const nonblockingFindings = findingsSection.found ? objectList(findingsSection.body, "nonblocking") : [];
+  const surfaces = checkedSection.found
+    ? listValues(checkedSection.body, "surfaces")
+    : [];
+  const evidence = checkedSection.found
+    ? listValues(checkedSection.body, "evidence")
+    : [];
+  const blockingFindings = findingsSection.found
+    ? objectList(findingsSection.body, "blocking")
+    : [];
+  const nonblockingFindings = findingsSection.found
+    ? objectList(findingsSection.body, "nonblocking")
+    : [];
   const deferredItems = objectList(section, "deferred");
 
   if (!verdict) {
@@ -116,30 +146,59 @@ function validateReport(input: string): void {
     errors.push("deferred is required");
   }
 
-  validateFindings("blocking", blockingFindings, BLOCKING_REQUIRED_FIELDS, errors);
-  validateFindings("nonblocking", nonblockingFindings, NONBLOCKING_REQUIRED_FIELDS, errors);
+  validateFindings(
+    "blocking",
+    blockingFindings,
+    BLOCKING_REQUIRED_FIELDS,
+    errors,
+  );
+  validateFindings(
+    "nonblocking",
+    nonblockingFindings,
+    NONBLOCKING_REQUIRED_FIELDS,
+    errors,
+  );
   validateFindings("deferred", deferredItems, DEFERRED_REQUIRED_FIELDS, errors);
 
   for (const finding of [...blockingFindings, ...nonblockingFindings]) {
     validateKnownValue(finding, "lane", LANES, "lane", errors);
-    validateKnownValue(finding, "action_type", ACTION_TYPES, "action_type", errors);
+    validateKnownValue(
+      finding,
+      "action_type",
+      ACTION_TYPES,
+      "action_type",
+      errors,
+    );
   }
 
   for (const finding of blockingFindings) {
     if (finding.lane === "manual" || finding.lane === "none") {
-      errors.push(`blocking finding lane must be enforceable, not ${finding.lane}: ${finding.title}`);
+      errors.push(
+        `blocking finding lane must be enforceable, not ${finding.lane}: ${finding.title}`,
+      );
     }
   }
 
-  if ((verdict === "passed" || verdict === "findings" || verdict === "not_applicable") && blockingFindings.length > 0) {
+  if (
+    (verdict === "passed" ||
+      verdict === "findings" ||
+      verdict === "not_applicable") &&
+    blockingFindings.length > 0
+  ) {
     errors.push(`${verdict} reports must not include blocking findings`);
   }
 
-  if ((verdict === "passed" || verdict === "not_applicable") && nonblockingFindings.length > 0) {
+  if (
+    (verdict === "passed" || verdict === "not_applicable") &&
+    nonblockingFindings.length > 0
+  ) {
     errors.push(`${verdict} reports must not include nonblocking findings`);
   }
 
-  if ((verdict === "passed" || verdict === "not_applicable") && deferredItems.length > 0) {
+  if (
+    (verdict === "passed" || verdict === "not_applicable") &&
+    deferredItems.length > 0
+  ) {
     errors.push(`${verdict} reports must not include deferred items`);
   }
 
@@ -148,7 +207,9 @@ function validateReport(input: string): void {
   }
 
   if (errors.length > 0) {
-    console.error(`Invalid ai_readiness_upkeep_report:\n${errors.map((error) => `- ${error}`).join("\n")}`);
+    console.error(
+      `Invalid ai_readiness_upkeep_report:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+    );
     process.exit(1);
   }
 
@@ -185,7 +246,9 @@ function validateKnownValue<const T extends readonly string[]>(
 
 function objectList(input: string, key: string): Finding[] {
   const lines = input.split(/\r?\n/);
-  const keyIndex = lines.findIndex((line) => line.match(new RegExp(`^\\s*${escapeRegExp(key)}:\\s*(?:\\[\\])?\\s*$`)));
+  const keyIndex = lines.findIndex((line) =>
+    line.match(new RegExp(`^\\s*${escapeRegExp(key)}:\\s*(?:\\[\\])?\\s*$`)),
+  );
   if (keyIndex === -1 || lines[keyIndex].includes("[]")) {
     return [];
   }
@@ -226,9 +289,14 @@ function objectList(input: string, key: string): Finding[] {
   return findings;
 }
 
-function nestedSection(input: string, key: string): { body: string; found: boolean } {
+function nestedSection(
+  input: string,
+  key: string,
+): { body: string; found: boolean } {
   const lines = input.split(/\r?\n/);
-  const keyIndex = lines.findIndex((line) => line.match(new RegExp(`^\\s*${escapeRegExp(key)}:\\s*(?:\\[\\])?\\s*$`)));
+  const keyIndex = lines.findIndex((line) =>
+    line.match(new RegExp(`^\\s*${escapeRegExp(key)}:\\s*(?:\\[\\])?\\s*$`)),
+  );
   if (keyIndex === -1 || lines[keyIndex].includes("[]")) {
     return { body: "", found: keyIndex !== -1 };
   }
@@ -248,25 +316,37 @@ function nestedSection(input: string, key: string): { body: string; found: boole
       break;
     }
 
-    nestedLines.push(line.startsWith(" ".repeat(childIndent)) ? line.slice(childIndent) : line.trimStart());
+    nestedLines.push(
+      line.startsWith(" ".repeat(childIndent))
+        ? line.slice(childIndent)
+        : line.trimStart(),
+    );
   }
 
   return { body: nestedLines.join("\n"), found: true };
 }
 
 function hasKey(input: string, key: string): boolean {
-  return input.split(/\r?\n/).some((line) => line.match(new RegExp(`^\\s*${escapeRegExp(key)}:\\s*(?:\\[\\])?\\s*$`)));
+  return input
+    .split(/\r?\n/)
+    .some((line) =>
+      line.match(new RegExp(`^\\s*${escapeRegExp(key)}:\\s*(?:\\[\\])?\\s*$`)),
+    );
 }
 
 function listValues(input: string, key: string): string[] {
-  const inline = input.match(new RegExp(`^\\s*${escapeRegExp(key)}:\\s*\\[(.*?)\\]\\s*$`, "m"));
+  const inline = input.match(
+    new RegExp(`^\\s*${escapeRegExp(key)}:\\s*\\[(.*?)\\]\\s*$`, "m"),
+  );
   if (inline) {
     const raw = inline[1].trim();
     return raw ? raw.split(",").map(cleanScalar).filter(Boolean) : [];
   }
 
   const lines = input.split(/\r?\n/);
-  const keyIndex = lines.findIndex((line) => line.match(new RegExp(`^\\s*${escapeRegExp(key)}:\\s*$`)));
+  const keyIndex = lines.findIndex((line) =>
+    line.match(new RegExp(`^\\s*${escapeRegExp(key)}:\\s*$`)),
+  );
   if (keyIndex === -1) {
     return [];
   }
@@ -293,7 +373,9 @@ function listValues(input: string, key: string): string[] {
 }
 
 function scalar(input: string, key: string): string | undefined {
-  const match = input.match(new RegExp(`^\\s*${escapeRegExp(key)}:\\s*(.+?)\\s*$`, "m"));
+  const match = input.match(
+    new RegExp(`^\\s*${escapeRegExp(key)}:\\s*(.+?)\\s*$`, "m"),
+  );
   if (!match) {
     return undefined;
   }
@@ -337,7 +419,10 @@ function isCommand(command: string | undefined): command is Command {
   return ["report-template", "validate-report"].includes(command ?? "");
 }
 
-function includes<const T extends readonly string[]>(values: T, value: string): value is T[number] {
+function includes<const T extends readonly string[]>(
+  values: T,
+  value: string,
+): value is T[number] {
   return values.includes(value as T[number]);
 }
 
