@@ -27,7 +27,7 @@ Use during plan-to-PR workflows, feature-delivery quality gates, PR reviews, bac
    - test strategy, verification layers, or release/rollback expectations;
    - agent expectations in `AGENTS.md`, `.agents/rules/*`, skills, hooks, automation prompts, or background-review rubrics.
 4. Check relevant documentation surfaces:
-   - user and engineering docs such as `README*`, `docs/*`, `.agencies/plans/*`, `docs/specs/*`;
+   - user and engineering docs such as `README*`, `docs/*`, `.agents/plans/*`, `docs/specs/*`;
    - repo-visible agent docs such as `AGENTS.md` and `.agents/rules/*`;
    - shared agent docs and skills when the change affects reusable agent behavior;
    - PR title/body when reviewers need plan links, verification, or context.

@@ -119,12 +119,9 @@ function detect(artifactRef?: string): void {
     head_sha: headSha,
     remotes: remotes.split("\n").filter(Boolean),
     openspec_present: existsSync(join(repoRoot, "openspec")),
-    plan_directories: [
-      ".agencies/plans",
-      "plans",
-      "specs",
-      "docs/specs",
-    ].filter((path) => existsSync(join(repoRoot, path))),
+    plan_directories: [".agents/plans", "plans", "specs", "docs/specs"].filter(
+      (path) => existsSync(join(repoRoot, path)),
+    ),
     artifact_ref: artifactRef ?? null,
     artifact_type_hint: artifactType,
   };
@@ -157,7 +154,7 @@ function printHandoffTemplate(): void {
   route: atomic_plan
   artifact:
     type: plan
-    ref: .agencies/plans/example.md
+    ref: .agents/plans/example.md
     fingerprint: <sha256 of artifact ref or current commit sha>
   approved_unit:
     id: atomic
@@ -503,7 +500,7 @@ function inferArtifactType(artifactRef: string): string | null {
 
   if (
     artifactRef.endsWith(".md") ||
-    artifactRef.includes(".agencies/plans/") ||
+    artifactRef.includes(".agents/plans/") ||
     artifactRef.includes("plans/")
   ) {
     return "plan";

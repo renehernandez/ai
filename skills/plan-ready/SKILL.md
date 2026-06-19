@@ -23,7 +23,7 @@ slice reviews, or followthrough ledgers.
 ## Plan Artifacts
 
 When `plan-ready` or the user asks to write a plan artifact, write it under
-`.agencies/plans/`. Do not create new planning files under `docs/plans/`.
+`.agents/plans/`. Do not create new planning files under `docs/plans/`.
 
 ## Workflow
 
@@ -72,7 +72,7 @@ plan_coordinate_handoff:
   route: atomic_plan
   artifact:
     type: plan
-    ref: .agencies/plans/example.md
+    ref: .agents/plans/example.md
     fingerprint: <sha256 of artifact ref or current commit sha>
   approved_unit:
     id: atomic

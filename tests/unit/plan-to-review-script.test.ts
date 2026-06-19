@@ -63,7 +63,7 @@ const coordinateHandoff = `plan_coordinate_handoff:
   route: atomic_plan
   artifact:
     type: plan
-    ref: .agencies/plans/example.md
+    ref: .agents/plans/example.md
     fingerprint: abc123
   approved_unit:
     id: atomic
