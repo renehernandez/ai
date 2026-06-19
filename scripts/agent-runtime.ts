@@ -49,8 +49,15 @@ type SkillsetConfig = {
 
 type ProfileConfig = {
   include: string[];
-  paths: string[];
+  paths: InstructionPathConfig[];
 };
+
+type InstructionPathConfig =
+  | string
+  | {
+      sourcePath: string;
+      targetPath: string;
+    };
 
 type Config = {
   version: 1;
@@ -63,7 +70,7 @@ type Config = {
     lockFile?: string;
   };
   instructions?: {
-    paths: string[];
+    paths: InstructionPathConfig[];
   };
   instructionProfiles?: Record<string, InstructionProfileConfig>;
   profiles?: Record<string, ProfileConfig>;
@@ -73,7 +80,7 @@ type Config = {
 };
 
 type InstructionProfileConfig = {
-  paths: string[];
+  paths: InstructionPathConfig[];
 };
 
 type AgentTargetConfig = {
@@ -402,10 +409,10 @@ function resolveProfileSelection(
 function selectedInstructionPaths(
   config: Config,
   selection: ProfileSelection,
-): string[] {
+): InstructionPathConfig[] {
   if (config.profiles && Object.keys(config.profiles).length > 0) {
     validateProfileNames(config, selection.profileNames);
-    return uniqueNames(
+    return uniqueInstructionPaths(
       selection.profileNames.flatMap(
         (profileName) => config.profiles?.[profileName]?.paths ?? [],
       ),
@@ -420,11 +427,47 @@ function selectedInstructionPaths(
   }
 
   validateInstructionProfileNames(config, selection.profileNames);
-  return uniqueNames(
+  return uniqueInstructionPaths(
     selection.profileNames.flatMap(
       (profileName) => config.instructionProfiles?.[profileName]?.paths ?? [],
     ),
   );
+}
+
+function instructionSourcePath(instructionPath: InstructionPathConfig): string {
+  return typeof instructionPath === "string"
+    ? instructionPath
+    : instructionPath.sourcePath;
+}
+
+function instructionTargetPath(instructionPath: InstructionPathConfig): string {
+  return typeof instructionPath === "string"
+    ? instructionPath
+    : instructionPath.targetPath;
+}
+
+function instructionLabel(instructionPath: InstructionPathConfig): string {
+  const sourcePath = instructionSourcePath(instructionPath);
+  const targetPath = instructionTargetPath(instructionPath);
+  return sourcePath === targetPath
+    ? sourcePath
+    : `${sourcePath} -> ${targetPath}`;
+}
+
+function uniqueInstructionPaths(
+  instructionPaths: InstructionPathConfig[],
+): InstructionPathConfig[] {
+  const seen = new Set<string>();
+  const selected: InstructionPathConfig[] = [];
+  for (const instructionPath of instructionPaths) {
+    const key = `${instructionSourcePath(instructionPath)}\0${instructionTargetPath(instructionPath)}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    selected.push(instructionPath);
+  }
+  return selected;
 }
 
 function selectedSkillProfileNames(
@@ -1032,9 +1075,7 @@ function runInstructions(
   const operations = instructionOperations(config, selection);
   if (command === "status") {
     for (const operation of operations) {
-      console.log(
-        `Instruction ${operation.relativePath} (${operation.targetName})`,
-      );
+      console.log(`Instruction ${operation.label} (${operation.targetName})`);
       printPathStatus(`  source`, operation.sourcePath);
       printSymlinkStatus(
         `  ${operation.linkPath}`,
@@ -1055,7 +1096,7 @@ function runInstructions(
   for (const operation of operations) {
     replaceSafeSymlink(operation.sourcePath, operation.linkPath);
     console.log(
-      `${command === "install" ? "Installed" : "Updated"} ${operation.relativePath} for ${operation.targetName}`,
+      `${command === "install" ? "Installed" : "Updated"} ${operation.label} for ${operation.targetName}`,
     );
   }
 }
@@ -1151,8 +1192,9 @@ function validateInstructionConfig(
   }
 
   for (const instructionPath of instructionPaths) {
-    if (!existsSync(instructionPath)) {
-      throw new Error(`Missing instruction path: ${instructionPath}`);
+    const sourcePath = instructionSourcePath(instructionPath);
+    if (!existsSync(sourcePath)) {
+      throw new Error(`Missing instruction path: ${sourcePath}`);
     }
   }
 }
@@ -1212,7 +1254,8 @@ function instructionOperations(
   selection: ProfileSelection,
 ): Array<{
   targetName: string;
-  relativePath: string;
+  label: string;
+  targetPath: string;
   sourcePath: string;
   linkPath: string;
 }> {
@@ -1220,21 +1263,22 @@ function instructionOperations(
   const targetNames = Object.keys(targets).sort();
   const operations: Array<{
     targetName: string;
-    relativePath: string;
+    label: string;
+    targetPath: string;
     sourcePath: string;
     linkPath: string;
   }> = [];
 
   for (const selectedTargetName of targetNames) {
     for (const instructionPath of selectedInstructionPaths(config, selection)) {
+      const sourcePath = instructionSourcePath(instructionPath);
+      const targetPath = instructionTargetPath(instructionPath);
       operations.push({
         targetName: selectedTargetName,
-        relativePath: instructionPath,
-        sourcePath: resolve(instructionPath),
-        linkPath: join(
-          expandHome(targets[selectedTargetName]),
-          instructionPath,
-        ),
+        label: instructionLabel(instructionPath),
+        targetPath,
+        sourcePath: resolve(sourcePath),
+        linkPath: join(expandHome(targets[selectedTargetName]), targetPath),
       });
     }
   }
@@ -1245,29 +1289,34 @@ function pruneUnselectedInstructionSymlinks(
   config: Config,
   selection: ProfileSelection,
 ): void {
-  const selectedPaths = new Set(selectedInstructionPaths(config, selection));
+  const selectedPaths = new Set(
+    selectedInstructionPaths(config, selection).map(instructionTargetPath),
+  );
   const configuredPaths = allConfiguredInstructionPaths(config);
   const targets = config.runtime.instructionSymlinkTargets ?? {};
 
   for (const instructionPath of configuredPaths) {
-    if (selectedPaths.has(instructionPath)) {
+    const targetPath = instructionTargetPath(instructionPath);
+    if (selectedPaths.has(targetPath)) {
       continue;
     }
     for (const target of Object.values(targets)) {
-      const linkPath = join(expandHome(target), instructionPath);
+      const linkPath = join(expandHome(target), targetPath);
       const stats = lstatIfExists(linkPath);
       if (!stats?.isSymbolicLink()) {
         continue;
       }
       rmSync(linkPath, { force: true });
-      console.log(`Pruned ${instructionPath} from ${expandHome(target)}`);
+      console.log(`Pruned ${targetPath} from ${expandHome(target)}`);
     }
   }
 }
 
-function allConfiguredInstructionPaths(config: Config): string[] {
+function allConfiguredInstructionPaths(
+  config: Config,
+): InstructionPathConfig[] {
   if (config.profiles && Object.keys(config.profiles).length > 0) {
-    return uniqueNames(
+    return uniqueInstructionPaths(
       Object.values(config.profiles).flatMap((profile) => profile.paths),
     );
   }
@@ -1275,7 +1324,7 @@ function allConfiguredInstructionPaths(config: Config): string[] {
     config.instructionProfiles &&
     Object.keys(config.instructionProfiles).length > 0
   ) {
-    return uniqueNames(
+    return uniqueInstructionPaths(
       Object.values(config.instructionProfiles).flatMap(
         (profile) => profile.paths,
       ),

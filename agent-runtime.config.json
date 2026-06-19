@@ -2,9 +2,7 @@
   "version": 1,
   "runtime": {
     "canonicalSkillsDir": "~/.agents/skills",
-    "skillSymlinkTargets": [
-      "~/.claude/skills"
-    ],
+    "skillSymlinkTargets": ["~/.claude/skills"],
     "canonicalAgentsDir": "~/.agents/agents",
     "agentSymlinkTargets": {
       "codex": "~/.codex/agents",
@@ -13,17 +11,18 @@
     },
     "instructionSymlinkTargets": {
       "agents": "~/.agents",
-      "claude": "~/.claude"
+      "claude": "~/.claude",
+      "codex": "~/.codex"
     }
   },
   "profiles": {
     "personal": {
-      "include": [
-        "personal-skills",
-        "cloudflare"
-      ],
+      "include": ["personal-skills", "cloudflare"],
       "paths": [
-        "AGENTS.md",
+        {
+          "sourcePath": "instructions/AGENTS.md",
+          "targetPath": "AGENTS.md"
+        },
         "rules/agent-surface-routing.md",
         "rules/command-and-tools.md",
         "rules/confidence.md",
@@ -37,13 +36,12 @@
       ]
     },
     "work": {
-      "include": [
-        "personal-skills",
-        "cloudflare",
-        "fullscript"
-      ],
+      "include": ["personal-skills", "cloudflare", "fullscript"],
       "paths": [
-        "AGENTS.md",
+        {
+          "sourcePath": "instructions/AGENTS.md",
+          "targetPath": "AGENTS.md"
+        },
         "rules/agent-surface-routing.md",
         "rules/ci-infra-and-cloudflare.md",
         "rules/command-and-tools.md",
@@ -114,9 +112,7 @@
       "skills": [
         {
           "localPath": "skills",
-          "names": [
-            "*"
-          ]
+          "names": ["*"]
         }
       ]
     },
@@ -144,12 +140,7 @@
           "url": "https://git.fullscript.io/ai/skills.git",
           "ref": "main",
           "basePath": ".",
-          "names": [
-            "glab-cli",
-            "glab-stacked-diffs",
-            "legoland",
-            "terraform"
-          ]
+          "names": ["glab-cli", "glab-stacked-diffs", "legoland", "terraform"]
         }
       ]
     }

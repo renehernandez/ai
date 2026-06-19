@@ -7,6 +7,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readlinkSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -568,9 +569,17 @@ test("CLI installs and reports instruction symlinks", () => {
       "command-and-tools.md",
     );
     assert.equal(lstatSync(agentsLink).isSymbolicLink(), true);
+    assert.equal(
+      readlinkSync(agentsLink),
+      join(repoRoot, "instructions/AGENTS.md"),
+    );
     assert.equal(lstatSync(rulesDir).isDirectory(), true);
     assert.equal(lstatSync(ruleLink).isSymbolicLink(), true);
     assert.equal(lstatSync(claudeAgentsLink).isSymbolicLink(), true);
+    assert.equal(
+      readlinkSync(claudeAgentsLink),
+      join(repoRoot, "instructions/AGENTS.md"),
+    );
     assert.equal(lstatSync(claudeRuleLink).isSymbolicLink(), true);
 
     const status = runAgentRuntime([
@@ -582,7 +591,10 @@ test("CLI installs and reports instruction symlinks", () => {
       configPath,
     ]);
     assert.equal(status.status, 0, status.stderr || status.stdout);
-    assert.match(status.stdout, /Instruction AGENTS\.md/);
+    assert.match(
+      status.stdout,
+      /Instruction instructions\/AGENTS\.md -> AGENTS\.md/,
+    );
     assert.match(status.stdout, /\[ok\].*AGENTS\.md/);
     assert.match(status.stdout, /Instruction rules\/command-and-tools\.md/);
     assert.match(status.stdout, /\[ok\].*rules\/command-and-tools\.md/);
