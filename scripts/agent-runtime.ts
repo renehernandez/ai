@@ -21,7 +21,7 @@ import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Command } from "commander";
 
-type Scope = "skills" | "agents" | "instructions";
+type Scope = "skills" | "agents" | "instructions" | "openspec";
 type RuntimeCommand = "install" | "update" | "validate" | "status";
 type SkillCommand = Extract<RuntimeCommand, "install" | "update" | "validate">;
 
@@ -190,6 +190,7 @@ export function createProgram(
   addSkillsCommands(program, execute);
   addAgentsCommands(program, execute);
   addInstructionsCommands(program, execute);
+  addOpenSpecCommands(program, execute);
 
   return program;
 }
@@ -303,6 +304,28 @@ function addInstructionsCommands(
   }
 }
 
+function addOpenSpecCommands(program: Command, execute: CommandExecutor): void {
+  const openspec = program
+    .command("openspec")
+    .description("Manage repo-local OpenSpec scaffolding");
+  for (const command of runtimeCommands()) {
+    openspec
+      .command(command)
+      .description(
+        `${labelForCommand(command)} repo-local OpenSpec scaffolding`,
+      )
+      .option("--config <path>", "Path to agent runtime config", CONFIG_FILE)
+      .action((first: CommandOptions | Command, second?: Command) => {
+        const { options, commandObject } = actionContext(first, second);
+        execute({
+          scope: "openspec",
+          command,
+          configPath: configPathFor(commandObject, options),
+        });
+      });
+  }
+}
+
 type CommandOptions = {
   config?: string;
   agent?: string;
@@ -369,6 +392,14 @@ function resolveProfileSelectionForScope(
         profileNames: uniqueNames(input.profileNames ?? []),
         interactive: false,
       };
+    }
+    return { profileNames: [], interactive: false };
+  }
+  if (scope === "openspec") {
+    if ((input.profileNames?.length ?? 0) > 0 || input.allProfiles) {
+      throw new Error(
+        "--profile can only be used with skills, instructions, or wrapper commands",
+      );
     }
     return { profileNames: [], interactive: false };
   }
@@ -639,10 +670,23 @@ function runScope(
     runAgents(input.command, input.config, input.agentName);
     return;
   }
+  if (scope === "openspec") {
+    if (input.agentName) {
+      throw new Error("--agent can only be used with the agents scope");
+    }
+    runOpenSpec(input.command);
+    return;
+  }
   if (input.agentName) {
     throw new Error("--agent can only be used with the agents scope");
   }
   runInstructions(input.command, input.config, input.profileSelection);
+}
+
+function runOpenSpec(command: RuntimeCommand): void {
+  throw new Error(
+    `${labelForCommand(command)} repo-local OpenSpec scaffolding is not implemented yet`,
+  );
 }
 
 function runSkills(

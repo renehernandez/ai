@@ -159,7 +159,19 @@ test("CLI shows global help", () => {
   assert.match(result.stdout, /Commands:/);
   assert.match(result.stdout, /agents/);
   assert.match(result.stdout, /instructions/);
+  assert.match(result.stdout, /openspec/);
   assert.match(result.stdout, /skills/);
+});
+
+test("CLI shows OpenSpec scope help", () => {
+  const result = runAgentRuntime(["openspec", "--help"]);
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /Usage: agent-runtime openspec/);
+  assert.match(result.stdout, /install/);
+  assert.match(result.stdout, /status/);
+  assert.match(result.stdout, /update/);
+  assert.match(result.stdout, /validate/);
 });
 
 test("CLI shows command-specific help", () => {

@@ -91,6 +91,19 @@ test("Commander dispatches top-level wrapper commands", () => {
   assert.deepEqual(parsed.profileNames, ["personal"]);
 });
 
+test("Commander dispatches scoped OpenSpec commands", () => {
+  const [parsed] = parseCommand([
+    "openspec",
+    "install",
+    "--config",
+    "custom.json",
+  ]);
+
+  assert.equal(parsed.scope, "openspec");
+  assert.equal(parsed.command, "install");
+  assert.equal(parsed.configPath, "custom.json");
+});
+
 test("Commander dispatches all selection flags", () => {
   const [parsed] = parseCommand(["install", "--all-profiles"]);
 
@@ -107,6 +120,17 @@ test("Commander rejects agent flags on skills commands", () => {
   ]);
 
   assert.match(error.message, /unknown option '--agent'/);
+});
+
+test("Commander rejects profile flags on OpenSpec commands", () => {
+  const error = parseInvalidCommand([
+    "openspec",
+    "status",
+    "--profile",
+    "work",
+  ]);
+
+  assert.match(error.message, /unknown option '--profile'/);
 });
 
 test("Commander rejects removed skillset flags", () => {
