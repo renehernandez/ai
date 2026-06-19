@@ -1,24 +1,91 @@
 ---
 name: brainstorming
-description: Use when brainstorming, designing features, exploring requirements, thinking through problems, or turning rough ideas into implementation-ready plans.
+description: Use when brainstorming, designing features, exploring requirements, thinking through problems, shaping plans, or turning rough ideas into implementation-ready designs.
 allowed-tools: Read, Glob, Grep, AskUserQuestion
 ---
 
 # Brainstorming Ideas Into Designs
 
-Help turn ideas into fully formed designs through collaborative dialogue.
+Help turn ideas into designs through a skimmable first pass, explicit defaults,
+and selective drilldown. The default posture is: map first, drill second.
 
-Start by understanding the current project context, then ask questions one at a time to refine the idea. Once you understand what you're building, present the design in small sections (200-300 words), checking after each whether it looks right.
+## Default Flow
+
+1. **Inspect context first.** Read relevant files, docs, recent plans, glossary
+   files, and code before asking questions the project can answer.
+2. **Open with an orientation map.** Show the full decision shape up front:
+   objective, domain terms, approach options, recommended defaults, discussion
+   queue, and likely capture artifact.
+3. **Keep the discussion queue short.** Pick 1-3 high-leverage decisions to
+   discuss. Put the rest under recommended defaults or parking lot.
+4. **Drill one item at a time.** Ask one question at a time only for items in
+   the discussion queue. Everything else proceeds with the recommended default
+   unless the user objects.
+5. **Converge into an implementation-ready shape.** Summarize the objective,
+   selected feature, shipped context, implementation slices, recommended first
+   slice, deferred work, domain terms, and artifact routing.
+
+Treat agreement such as "agreed", "sounds good", or "yes" as accepting the
+current recommendation set. Move to the next unresolved discussion item instead
+of re-litigating accepted defaults.
+
+## Orientation Map
+
+The first substantive brainstorming response should be compact and scannable.
+Use this structure unless the user asks for a different format:
+
+```markdown
+**Orientation Map**
+| Area | Recommended default | Why | Discuss? |
+|---|---|---|---|
+| Objective | ... | ... | Yes/No |
+| Domain terms | ... | ... | Yes/No |
+| Approach | ... | ... | Yes/No |
+| First slice | ... | ... | Yes/No |
+| Capture | ... | ... | Yes/No |
+
+**Discussion Queue**
+1. [Decision that needs user judgment]
+2. [Decision that changes scope, safety, architecture, or visible behavior]
+
+**Defaultable**
+- [Decision]: [recommended default unless the user objects]
+
+**First question**
+[Ask only the highest-leverage unresolved question.]
+```
+
+Keep the first question tied to the discussion queue. Do not ask about mechanics
+that can be inferred later, such as task-audit workflow details.
+
+## Domain Terms
+
+Always include a lightweight domain-terms pass. Identify 2-5 terms that could
+be fuzzy, overloaded, or inconsistent with the repo's language. Compare the
+user's wording against `CONTEXT.md`, glossary files, existing docs, or code when
+available.
+
+For each term, either:
+- propose a canonical meaning,
+- flag why it needs discussion, or
+- say it appears unambiguous and can use the repo's existing meaning.
+
+Use concrete scenarios sparingly when a boundary is unclear. One good edge case
+is better than a chain of abstract questions.
+
+`CONTEXT.md` and glossary updates are capture recommendations, not automatic
+brainstorming edits. Only write them when the user explicitly asks to capture
+the outcome.
 
 ## Hard Stops
 
-If the user lists long-term capabilities such as future integrations, dedicated infrastructure, signing, evals, artifacts, gates, generic platforms, adapter models, or robust architecture, do not design the solution yet. Ask one scope-setting question that identifies the first real outcome or the v1 trust level, then stop.
+If the first real outcome is unknown and any recommendation would smuggle
+architecture, ask one scope-setting question and stop. Do not add recommended
+defaults, approaches, first slices, or deferred lists for the blocked decision.
 
-If you ask a scope-setting question, the response ends after that question. Do not include a recommended default, approaches, components, first slice, or deferred list.
-
-Do not bypass this with "assuming..." or "if I had to recommend..." after the question. That is continuing the design without the answer.
-
-Do not bypass this by adding recommended choices under the question. Offer choices only if none are marked as recommended and they do not smuggle a design.
+Use a hard stop for unresolved answers that decide whether v1 needs a hard gate,
+dedicated infrastructure, signing, generic orchestration, multiple providers, or
+another high-cost foundation.
 
 Examples of scope-setting questions:
 
@@ -26,187 +93,125 @@ Examples of scope-setting questions:
 - "Should v1 be advisory while it earns trust, or required from the first release?"
 - "Can v1 reuse the existing path, or is isolation required for a concrete risk?"
 
-## The Process
+You may still show a neutral map of categories to be decided later, but do not
+recommend an answer for the blocked category.
 
-**Understanding the idea:**
-- Check out the current project state first (files, docs, recent commits)
-- Ask questions one at a time using AskUserQuestion
-- Prefer multiple choice when possible; open-ended is fine too
-- Focus on: purpose, constraints, success criteria, first useful outcome
-- Ask what "good enough for v1" means before designing the long-term shape
-- If the first real workflow/outcome is unknown, ask that before proposing architecture
-- If you ask a scope-setting question whose answer changes v1 shape, stop there. Do not ask and then continue designing.
-- A message with a scope-setting question must end after the question. No recommendation, approaches, components, first slice, or deferred list in the same response.
+## Scope Pressure
 
-**Scope pressure gate:**
-- Long-term capabilities are future shape, not v1 scope, until the user explicitly promotes them
-- If a user lists many advanced nouns, first separate "v1 proof" from "future shape"
-- Default v1 is one real path on existing infrastructure with the minimum safety and diagnostics needed to trust it
-- Do not design a generic core, adapter contract, provider-neutral manifest, dedicated environment, hard gate, signing scheme, or two-provider skeleton unless a concrete first-slice risk requires it
-- Treat "orchestrator with provider adapters" as a platform design; do not recommend it for v1 until one real path proves the need
+Long-term capabilities are future shape, not v1 scope, until the user explicitly
+promotes them. If the user lists future integrations, dedicated infrastructure,
+signing, evals, artifacts, gates, generic platforms, adapter models, or robust
+architecture, separate "v1 proof" from "future shape" before proposing a design.
 
-**Exploring approaches:**
-- Propose 2-3 different approaches with trade-offs
-- Lead with your recommendation and explain why
-- Prefer the approach that proves a real outcome soonest, unless safety, data migration, compliance, or operational risk requires foundation first
-- When the user asks for a first feature slice, different slices, or an
-  implementation plan, separate the response into: objective, selected feature,
-  already-shipped context, multiple implementation slices, and recommended first
-  slice
-- Do not let a roadmap objective or selected feature stand in for an
-  implementation slice; decompose the feature into PR-sized slices first
-- Do not ask the user to choose task-audit mechanics; those are internal
-  `openspec-tasks` concerns, not brainstorming vocabulary
-- Do not recommend a platform/core/foundation approach while claiming the first slice is thin; the recommendation and first slice must match
-- Treat the first PR as the first proof point: it should deliver a narrow
-  end-to-end sliver of the desired outcome, not only setup for later PRs
-- The first sliver may be manually triggered, advisory, fixture-backed, or
-  limited to one happy path, but it must exercise the real entrypoint, operation,
-  and visible success/failure result
-- Foundation work belongs in the first PR only when that same PR consumes it to
-  produce the sliver; otherwise push it behind the first proof or fold only the
-  minimum needed into the sliver
-- Use this format for each approach:
+Default v1 is one real path on existing infrastructure with the minimum safety
+and diagnostics needed to trust it. Do not design a generic core, provider
+adapter contract, provider-neutral manifest, dedicated environment, hard gate,
+signing scheme, or two-provider skeleton unless a concrete first-slice risk
+requires it.
 
-```
+## Approaches
+
+When approaches are useful, propose 2-3 options with a recommendation. Keep each
+option brief enough to scan:
+
+```markdown
 **Approach: [Name]**
-- How it works: [Brief description]
-- First working outcome: [The earliest PR-sized end-to-end sliver: entrypoint, operation, visible result]
-- What it reuses: [Existing systems, paths, infrastructure, or conventions]
-- What it defers: [Hardening, generalization, integrations, polish]
-- Pros: [What you gain]
-- Cons: [What you lose or defer]
-- Best when: [Conditions where this shines]
+- How it works:
+- First working outcome:
+- What it reuses:
+- What it defers:
+- Best when:
 ```
 
-**Good-enough design pressure:**
-- Ask: "What is the smallest real outcome that would prove this direction works?"
-- Ask: "Which existing path or infrastructure can carry v1?"
-- Ask: "What would we delete if this had to ship in one iteration?"
-- Ask: "What risk are we actually addressing, and is it present in v1?"
-- When the user lists long-term capabilities, separate "future shape" from "v1 proof" before proposing architecture
-- Do not include an advanced capability in v1 only because the user mentioned it as long-term scope
-- Treat foundation, generic frameworks, plugin systems, broad schemas, dashboards, and future integrations as suspect until tied to the first outcome
-- Allow simple duplication when it keeps the first version readable and can be extracted after the second real use case appears
-- Require a concrete v1 reason before adding dedicated infrastructure, signed/encrypted protocols, hard gates, provider-neutral manifests, contract tests, or two-provider skeletons
-- If no concrete v1 reason is known, default to existing infrastructure, advisory/non-required verification, minimal trustworthy metadata, one real integration, and bounded artifacts
-- If the first workflow is not known, stop at the approach trade-off and ask which workflow to prove first
-- Do not continue into components after asking whether v1 is advisory vs required, existing vs dedicated infrastructure, or single vs multiple providers
+Prefer the approach that proves a real outcome soonest, unless safety, data
+migration, compliance, or operational risk requires foundation first. If the
+first slice is thin, the recommended approach must also be the thin-slice
+approach.
 
-**Presenting the design:**
-- Break the design into sections of 200-300 words
-- Ask after each section whether it looks right
-- Cover: first outcome, architecture, components, data flow, error handling, testing, deferred work
-- Be ready to go back and clarify if something doesn't make sense
+## Slices
 
-**Before finalizing:**
-- Check that the visible output distinguishes the objective, selected feature,
-  already-shipped context, implementation slices, and recommended first slice
-- Check that there are multiple implementation slices unless the work is
-  genuinely atomic and the atomic rationale is explicit
-- Check that the first slice produces an observable user/system outcome
-- Check that the first slice includes the real entrypoint, real operation, and visible result for one path
-- Check that the first PR proves a sliver of the target end-to-end workflow even
-  if the sliver is manual, advisory, fixture-backed, or happy-path-only
-- Check that foundation work is directly consumed by that first slice
-- Check that feature flags, rollout switches, config gates, and optional guards
-  are justified by a concrete safety, cost, compliance, or operational risk; do
-  not add them only because staged rollout feels cautious
-- Check that hardening and future integrations are separated unless required for v1 safety
-- Check that existing systems are reused before proposing new infrastructure
-- Check that the recommendation matches the first slice; if the first slice is thin, recommend the thin-slice approach
-- Check that any dedicated environment, hard gate, signing, adapter contract, or second provider has an explicit v1 risk it addresses
-- Check that long-term requirements are named as future shape or deferred work, not silently promoted into the first slice
-- If the first slice is mostly schema, registry, adapter, platform, or infrastructure work, rewrite it around the first real outcome
-- Do not accept "a second adapter can be sketched" or "the contract is ready" as first-slice success; success must prove behavior through a real path
-- If you cannot name the real entrypoint, operation, and visible result, ask a question instead of inventing components
-- If an unresolved answer would decide whether to use a hard gate, dedicated infrastructure, signing, or generic orchestration, ask the question and stop
-- If you ask a question and then write "recommended default," "recommended approach," or "first implementation slice," you violated this skill
-- If you ask a question and then write "assuming..." to continue, you violated this skill
-- If you ask a question and then list a "recommended" option, you violated this skill
+When the user asks for a first feature slice, different slices, or an
+implementation plan, separate:
+- objective,
+- selected feature,
+- already-shipped context,
+- multiple implementation slices,
+- recommended first slice.
 
-## Ending the Session
+The first slice must produce an observable user or system outcome. It should
+exercise the real entrypoint, real operation, and visible success/failure result
+for one path. Foundation work belongs in the first slice only when that same
+slice consumes it to prove the outcome.
 
-When the design is complete, detect what documentation patterns exist in the project and recommend the best fit.
+Do not let a roadmap objective or selected feature stand in for an
+implementation slice. Decompose the feature into PR-sized slices first.
 
-**First, scan the project for existing patterns:**
+## Artifact Routing
+
+When the design is complete, recommend the capture path:
+
+| Artifact | Use when |
+|---|---|
+| OpenSpec | Complex product or behavior changes that need specs, tasks, acceptance criteria, or reviewable implementation sequence |
+| Single plan file | Simple implementation plans where one document can coordinate the work |
+| ADR | A durable decision is hard to reverse, surprising without context, and the result of a real trade-off |
+| Glossary or `CONTEXT.md` | A domain term was clarified and the repo has a glossary/context pattern |
+| No artifact yet | The conversation is still exploratory or the user wants to keep it in chat |
+
+OpenSpec and plan files answer "what are we going to do?" ADRs answer "what
+decision should future work preserve?" ADRs sit beside the plan when needed;
+they do not replace OpenSpec or a plan file.
+
+Before recommending an artifact, scan for existing project patterns:
+
 ```bash
-# Check for OpenSpec (directory with specs/ subdirectory)
 ls -d openspec/ openspec/specs/ 2>/dev/null
-
-# Check for plan/spec directories
 ls -d .agents/plans docs/specs specs/ plans/ design/ 2>/dev/null
-
-# Look at recent markdown files for patterns
 find . -name "*.md" -path "*/docs/*" -mtime -30 2>/dev/null | head -10
 ```
 
-Also check if Linear MCP tools are available (e.g., `mcp__linear-server__create_issue`). If so, Linear is an option for capturing the design.
+Ask before writing the artifact. Brainstorming agreement is design confirmation,
+not permission to edit files.
 
-**Recommend based on what exists:**
+## Challenge Rules
 
-| If you find... | Recommend |
-|----------------|-----------|
-| `openspec/` directory with `specs/` | OpenSpec proposal - formal spec workflow is set up |
-| `.agents/plans/` | Plan document in `.agents/plans/` |
-| `specs/` | Plan/spec document in that directory |
-| Linear MCP available | Linear issue or project doc for team visibility |
-| Nothing specific | Ask user preference, suggest plan file in project |
+Challenge only high-risk defaults: reversibility, scope, safety, data,
+architecture, cost, operations, or user-visible behavior. Let low-risk defaults
+stand so the conversation does not become a questionnaire.
 
-Ask: "The design looks complete. I see this project uses [detected pattern]. Want me to create a [spec/plan/doc] there, or would you prefer something else?"
+Ask the repo before asking the user. If code or docs can answer a question,
+inspect them and present the finding.
 
-**Options to offer:**
+## Before Finalizing
 
-| Option | When to use |
-|--------|-------------|
-| **OpenSpec proposal** | Project has OpenSpec configured; formal designs needing review |
-| **Plan/spec document** | Project has established docs structure; implementation-ready work |
-| **Start implementing** | Simple changes where conversation provides enough context |
-| **End session** | User wants to think more or hand off |
+Check that:
+- the orientation map showed recommended defaults and the discussion queue,
+- domain terms were included,
+- the discussion queue stayed at 1-3 items unless the user asked for more,
+- accepted defaults were not re-litigated,
+- the first slice proves a real path with visible result,
+- foundation work is directly consumed by the first slice,
+- hardening and future integrations are separated unless required for v1 safety,
+- existing systems are reused before proposing new infrastructure,
+- feature flags, rollout switches, config gates, and optional guards are tied to
+  concrete safety, cost, compliance, or operational risk,
+- ADRs are recommended only for durable, surprising, trade-off decisions,
+- artifact routing distinguishes OpenSpec, single plan files, ADRs, and glossary
+  updates.
 
-**If creating a document:**
-- Write implementation plans under `.agents/plans/`
-- Use the project's established format
-- Capture all design decisions, requirements, and trade-offs
-- Include enough context for someone unfamiliar to understand
-
-**If implementing:**
-- Ask if they want to continue in this session or start fresh
-- If starting fresh, provide a detailed prompt with sufficient context
-
-## Key Principles
-
-- **One question at a time** - Don't overwhelm with multiple questions
-- **Multiple choice preferred** - Easier to answer than open-ended
-- **Good enough beats imagined complete** - Find the smallest solution that works, is understandable, and can be safely improved
-- **YAGNI ruthlessly** - Remove unnecessary features from designs
-- **Outcome before foundation** - Prefer proving the real path before building reusable layers
-- **Reuse before inventing** - Existing workflows, environments, and conventions are usually the best v1 substrate
-- **Explore alternatives** - Always propose 2-3 approaches before settling
-- **Incremental validation** - Present design in sections, validate each
-- **Context-aware** - Respect the project's existing documentation patterns
-
-## Common Overengineering Traps
+## Common Traps
 
 | Trap | Better move |
-|------|-------------|
-| Designing for every future integration | Name future needs, implement the first real path |
-| Promoting long-term requirements into v1 | Keep them as future shape unless they address a concrete first-slice risk |
-| Building generic adapters before one concrete path works | Use a narrow internal shape, extract after a second use case |
-| Recommending a platform while implementing a thin slice | Recommend the thin slice; describe the platform as a future extraction |
+|---|---|
+| Walking every branch of the decision tree | Show the whole tree, then drill into 1-3 high-leverage decisions |
+| Treating every "agree" as a chance to restate the design | Accept the defaults and move to the next unresolved item |
+| Skipping vocabulary because the topic feels obvious | Include a lightweight domain-terms pass every time |
+| Promoting future requirements into v1 | Keep them as future shape unless they address a concrete first-slice risk |
+| Recommending a platform while implementing a thin slice | Recommend the thin-slice approach and name the platform as future extraction |
+| Making Slice 1 a package, runtime, schema, or config foundation | Reshape Slice 1 around the smallest real end-to-end outcome |
 | Treating interface readiness as the outcome | Make the outcome a real operation with visible success/failure |
-| Making Slice 1 a package, runtime, schema, or config foundation while the first real workflow appears in Slice 2+ | Reshape Slice 1 so the same PR proves the smallest real end-to-end path |
-| Adding feature flags or repository variables as default rollout guards | Add only eligibility/safety checks tied to concrete risk; otherwise let the narrow path run |
-| Designing components before knowing the first workflow | Ask which workflow to prove first |
-| Asking a scope question and continuing anyway | Stop after the question; wait for the answer |
-| Using "assuming..." to keep designing after a question | Do not assume; wait for the answer |
-| Hiding a design in multiple-choice answers | Keep choices neutral and stop |
-| Calling a provider-adapter orchestrator the v1 design | Prove one real path first, then extract orchestration |
-| Creating dedicated infrastructure by default | Reuse existing infrastructure unless isolation is required |
-| Adding full auth/security hardening to the first proof | Keep the minimum meaningful safety, harden after the path exists |
-| Treating docs, telemetry, dashboards, and polish as v1 foundations | Add only what is needed to operate and verify the first slice |
-| Treating a feature direction as the first implementation slice | Break the feature into multiple PR-sized slices and recommend the first one |
-| Asking the user whether planning should use task-audit mechanics | Infer that later in `openspec-tasks`; keep brainstorming focused on outcomes and slices |
+| Adding feature flags by habit | Add only eligibility or safety checks tied to concrete risk |
+| Asking about task-audit mechanics | Infer those later in `openspec-tasks`; keep brainstorming focused on outcomes and slices |
 
 ## Test Evidence
 
@@ -221,9 +226,10 @@ Ask: "The design looks complete. I see this project uses [detected pattern]. Wan
 - REFACTOR: subagent `019eb4d4-d58d-7cf2-b5f8-4aa708f63c01` improved the framing but designed a generic workflow core and adapter contract before naming the first real workflow.
 - REFACTOR: subagent `019eb4d5-e8a7-72a2-a1af-0f489995d6b8` asked whether v1 should be advisory or required, then continued into an orchestrator/provider-adapter design with dedicated environments and signed markers anyway.
 - REFACTOR: subagent `019eb4d6-be88-7423-bd5a-ad2ee01e9d61` asked an eval-vs-operational question, then continued with recommendations, approaches, and a first slice in the same response.
-- REFACTOR: subagent `019eb4d7-8214-79b2-8688-f10c170d9846` still asked an advisory-vs-required question and then continued into a provider-adapter orchestrator design, so the hard stop is now at the top of the skill.
-- REFACTOR: subagent `019eb4d8-3ba1-7360-9997-7ab236cb6f73` used "assuming the goal..." after a scope question to continue into a verification orchestrator, so the skill now explicitly forbids that bypass.
+- REFACTOR: subagent `019eb4d7-8214-79b2-8688-f10c170d9846` still asked an advisory-vs-required question and then continued into a provider-adapter orchestrator design, so the hard stop remains explicit.
+- REFACTOR: subagent `019eb4d8-3ba1-7360-9997-7ab236cb6f73` used "assuming the goal..." after a scope question to continue into a verification orchestrator, so the skill forbids that bypass.
 - REFACTOR: subagent `019eb4d8-f28a-72c2-aab4-22c94f353fe4` asked a scope question but smuggled design through recommended answer choices, architecture, first slice, and deferred work.
 - RED: thread `019ec851-0d15-74e0-ab86-1f105de1c358` planned the PR-review migration with an early runtime/package slice and cautious enablement flag before the first real hosted review proof, causing later correction around direct end-to-end evidence and unnecessary variables.
 - RED: thread `019ed2b5-6e2e-7581-8fc5-e776bde1c1ec` treated the selected feature direction as the first slice until user correction forced a true objective / feature / implementation-slice breakdown.
-- GREEN: brainstorming now requires implementation-plan responses to show objective, selected feature, shipped context, multiple implementation slices, and a recommended first slice while leaving OpenSpec task-audit mechanics hidden from brainstorming vocabulary.
+- RED: this session found that the prior skill forced section-by-section validation, which made defaultable decisions feel like required discussion.
+- GREEN: brainstorming now opens with a compact orientation map, always includes domain terms, caps the discussion queue, treats agreement as accepting defaults, and routes artifacts to OpenSpec, single plan files, ADRs, glossary/context updates, or no artifact.
