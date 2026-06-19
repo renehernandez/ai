@@ -58,7 +58,7 @@ function runPlanToPr(
   };
 }
 
-const validHandoff = `plan_coordinate_handoff:
+const validHandoff = `plan_delivery_handoff:
   status: ready
   route: openspec_task
   artifact:
@@ -67,10 +67,10 @@ const validHandoff = `plan_coordinate_handoff:
     fingerprint: abc123
   approved_unit:
     id: "1.1"
-    title: Add the coordinator
+    title: Add plan delivery
     scope: Implement one OpenSpec checkbox task.
     acceptance:
-      - The coordinator validates the handoff.
+      - Plan Delivery validates the handoff.
     verification:
       - pnpm test:unit
   constraints:
@@ -115,7 +115,7 @@ const launchedReport = `reviewer_subagent_launch:
 const deliveryLedger = `delivery_gate_ledger:
   handoff_validation:
     status: passed
-    evidence: plan_coordinate_handoff validated
+    evidence: plan_delivery_handoff validated
   session_start:
     status: passed
     evidence: repo inspected
@@ -175,11 +175,11 @@ const deliveryLedger = `delivery_gate_ledger:
     evidence: latest-head automatic review feedback resolved
 `;
 
-test("validate-handoff accepts the coordinator handoff", () => {
+test("validate-handoff accepts the delivery handoff", () => {
   const result = runPlanToPr("validate-handoff", validHandoff);
 
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /plan_coordinate_handoff valid/);
+  assert.match(result.stdout, /plan_delivery_handoff valid/);
 });
 
 test("validate-handoff rejects legacy handoffs", () => {

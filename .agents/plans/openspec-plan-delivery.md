@@ -1,12 +1,12 @@
-# OpenSpec Delivery Coordination
+# OpenSpec Plan Delivery
 
 ## Goal
 
 Replace the current slice-ledger planning workflow with a simpler delivery model:
 
-- `plan-ready` decides whether work is atomic or needs OpenSpec.
+- `plan-ready` decides whether work is atomic or needs an OpenSpec Blueprint.
 - `openspec-tasks` audits OpenSpec checkbox tasks as minor deliverables.
-- `plan-coordinate` becomes the single delivery coordinator entry point.
+- `plan-delivery` becomes the single delivery entry point.
 - `plan-to-pr` implements exactly one approved unit.
 - OpenSpec `tasks.md` is the only durable multi-step ledger.
 
@@ -30,18 +30,19 @@ OpenSpec already has the right durable shape for multi-step work:
 
 The new workflow should use that native shape. For one-off atomic plans, no
 ledger is needed. For multi-deliverable work, OpenSpec owns the plan and task
-progress.
+progress after `plan-ready` emits a reviewed `openspec_blueprint`.
 
 ## Desired Workflow
 
 ```mermaid
 flowchart LR
   input[Idea, plan, ticket, or OpenSpec change] --> ready[plan-ready]
-  ready -->|atomic plan| coord[plan-coordinate]
-  ready -->|multi-deliverable| openspec[OpenSpec change]
+  ready -->|atomic plan| delivery[plan-delivery]
+  ready -->|multi-deliverable| blueprint[openspec_blueprint]
+  blueprint --> openspec[OpenSpec change]
   openspec --> audit[openspec-tasks]
-  audit --> coord
-  coord --> unit[Selected approved unit]
+  audit --> delivery
+  delivery --> unit[Selected approved unit]
   unit --> pr[plan-to-pr]
   pr --> done[PR/MR or direct publish]
   done -->|OpenSpec task| checkbox[Task checked in same PR/MR]
@@ -51,7 +52,7 @@ flowchart LR
 
 ### `plan-ready`
 
-`plan-ready` is a readiness router.
+`plan-ready` is a readiness router and blueprint generator.
 
 It validates whether the planning input can be delivered as one atomic unit. An
 atomic plan must have:
@@ -63,9 +64,9 @@ atomic plan must have:
 - no hidden migration, deployment, or manual prerequisite chain.
 
 If the plan is atomic, `plan-ready` emits a ready handoff for
-`plan-coordinate`. If the plan is multi-deliverable, `plan-ready` returns
-`needs_openspec` and stops. It must not create synthetic slices or emit
-`slice_plan_review`.
+`plan-delivery`. If the plan is multi-deliverable, `plan-ready` emits a
+reviewed `openspec_blueprint` and stops before writing OpenSpec files. It must
+not create synthetic slices or emit `slice_plan_review`.
 
 ### `openspec-tasks`
 
@@ -88,11 +89,11 @@ The audit checks:
 `openspec-tasks` may recommend edits to `tasks.md`, but it does not maintain
 separate state.
 
-### `plan-coordinate`
+### `plan-delivery`
 
-`plan-coordinate` is the single coordinator entry point.
+`plan-delivery` is the single delivery entry point.
 
-For an atomic plan, it validates the new `plan_coordinate_handoff`, calls
+For an atomic plan, it validates the new `plan_delivery_handoff`, calls
 `plan-to-pr` for one delivery, reports the delivery result, and stops.
 
 For an OpenSpec change, it validates OpenSpec with:
@@ -106,13 +107,13 @@ refreshes that target, records the target commit used for task selection, reads
 `tasks.md` from that refreshed target state, selects the first unchecked
 deliverable task in document order, and calls `plan-to-pr` for that task.
 
-`plan-coordinate` does not keep a ledger. It advances from target-branch
-OpenSpec state only. An open PR/MR branch can have a task checked, but the
-coordinator does not treat that task as complete until the branch is merged or
+`plan-delivery` does not keep a ledger. It advances from target-branch
+OpenSpec state only. An open PR/MR branch can have a task checked, but Plan
+Delivery does not treat that task as complete until the branch is merged or
 directly published according to repo policy.
 
 If the target branch cannot be identified, cannot be refreshed, or changes
-between task selection and delivery start, `plan-coordinate` must stop with
+between task selection and delivery start, `plan-delivery` must stop with
 `selected_task_stale` or `needs_plan_ready`. It must not select work from a
 detached checkout, stale local branch, or in-progress PR/MR branch without
 comparing that state to the recorded target commit.
@@ -131,15 +132,15 @@ commit for task completion.
 `plan-to-pr` blocks if implementation requires broadening the approved unit,
 editing unrelated OpenSpec tasks, or adding new OpenSpec tasks.
 
-## New Handoff Contract
+## New Readiness Contracts
 
 The old `slice_plan_review`, `reviewed_slices`, and
 `plan_followthrough_slice_handoff` shapes are removed.
 
-`plan-ready` and `plan-coordinate` exchange one route-specific handoff:
+`plan-ready` and `plan-delivery` exchange one route-specific handoff:
 
 ```yaml
-plan_coordinate_handoff:
+plan_delivery_handoff:
   status: ready
   route: atomic_plan | openspec_task
   artifact:
@@ -173,6 +174,53 @@ plan_coordinate_handoff:
   blockers: []
 ```
 
+For complex work, `plan-ready` emits an OpenSpec Blueprint instead of failing
+hard:
+
+```yaml
+openspec_blueprint:
+  status: ready_for_openspec
+  change:
+    suggested_id: <verb-noun-change-id>
+    title: <OpenSpec change title>
+    objective: <one paragraph objective>
+  scope:
+    in:
+      - <included outcome>
+    out:
+      - <explicit non-goal>
+  specs:
+    affected_or_new:
+      - <existing capability or new spec area>
+    proposed_requirements:
+      - <requirement summary for OpenSpec spec delta>
+  tasks:
+    - id: "1.1"
+      title: <minor deliverable title>
+      deliverable: <PR/MR-sized outcome>
+      acceptance:
+        - <observable result>
+      verification:
+        - <required command, check, or manual proof>
+      dependencies: []
+  recommended_first_task: "1.1"
+  review:
+    reviewers_used:
+      - implementation-readiness
+      - edge-cases-and-risks
+      - simplification-and-scope-control
+      - refactoring-opportunities
+    findings:
+      - <review finding that shaped the blueprint>
+  risks:
+    - <risk or rollout concern>
+  blockers: []
+  next_action: create_openspec_change
+```
+
+The next step converts the blueprint into OpenSpec files: `proposal.md`,
+optional `design.md`, `specs/**/spec.md`, and `tasks.md`.
+
 ## Failure Routing
 
 Every skill returns a mechanical failure route:
@@ -180,10 +228,12 @@ Every skill returns a mechanical failure route:
 | Status | Meaning | Next step |
 | --- | --- | --- |
 | `needs_plan_ready` | Input is stale, fuzzy, or legacy-shaped | Rerun `plan-ready` |
-| `needs_openspec` | Work is multi-deliverable | Create or update OpenSpec |
+| `blocked_readiness` | PlanReady lacks required decisions | Answer the specific blockers |
+| `ready_for_openspec` | Blueprint is ready | Create or update OpenSpec from the blueprint |
+| `needs_openspec` | Plan Delivery was invoked before OpenSpec exists | Run `plan-ready` and create OpenSpec from the blueprint |
 | `openspec_invalid` | OpenSpec validation fails | Repair OpenSpec |
 | `needs_openspec_tasks` | `tasks.md` is not deliverable | Run `openspec-tasks` and edit tasks |
-| `selected_task_stale` | Target branch changed task state | Rerun `plan-coordinate` |
+| `selected_task_stale` | Target branch changed task state | Rerun `plan-delivery` |
 | `implementation_scope_escape` | Approved unit is too small or wrong | Return to OpenSpec or `plan-ready` |
 | `delivery_blocked` | Execution failed inside approved scope | Stay in `plan-to-pr` |
 | `needs_human_action` | Manual or external prerequisite blocks progress | Pause with evidence |
@@ -200,11 +250,11 @@ before implementation. The task list below describes the expected OpenSpec
 ## 1. Rename and Contract Surface
 
 - [ ] 1.1 Replace `plan-followthrough` skill documentation with
-  `plan-coordinate` responsibilities.
+  `plan-delivery` responsibilities.
 - [ ] 1.2 Replace `plan-followthrough` adapter prompt metadata with
-  `plan-coordinate` invocation guidance.
+  `plan-delivery` invocation guidance.
 - [ ] 1.3 Rename or replace the `plan-followthrough` helper script entry points
-  with `plan-coordinate` route validation commands.
+  with `plan-delivery` route validation commands.
 - [ ] 1.4 Replace `plan-slices` skill documentation with `openspec-tasks`
   responsibilities.
 - [ ] 1.5 Replace `plan-slices` adapter prompt metadata with `openspec-tasks`
@@ -212,7 +262,7 @@ before implementation. The task list below describes the expected OpenSpec
 - [ ] 1.6 Rename or replace the `plan-slices` helper script entry points with
   `openspec-tasks` task-audit commands.
 - [ ] 1.7 Update discoverability surfaces so the available skill list exposes
-  `plan-coordinate` and `openspec-tasks`: skill folder names, `SKILL.md`
+  `plan-delivery` and `openspec-tasks`: skill folder names, `SKILL.md`
   `name` fields, `agents/openai.yaml` display metadata, adapter prompts, and
   installed runtime skill listings.
 
@@ -221,7 +271,7 @@ before implementation. The task list below describes the expected OpenSpec
 - [ ] 2.1 Update `plan-ready` documentation and adapter prompt to make atomic
   vs OpenSpec-required routing the first readiness gate.
 - [ ] 2.2 Update `plan-ready` helper validation to emit and validate
-  `plan_coordinate_handoff` for atomic plans.
+  `plan_delivery_handoff` for atomic plans.
 - [ ] 2.3 Reject legacy `slice_plan_review`, `reviewed_slices`, and
   `plan_followthrough_slice_handoff` inputs in `plan-ready` with
   `needs_plan_ready`.
@@ -233,26 +283,26 @@ before implementation. The task list below describes the expected OpenSpec
 - [ ] 3.2 Validate that each OpenSpec checkbox task maps to one minor
   deliverable and that broad phase tasks block delivery.
 - [ ] 3.3 Classify manual, deployment, monitoring, and external-prerequisite
-  tasks so the coordinator pauses with `needs_human_action` instead of sending
+  tasks so Plan Delivery pauses with `needs_human_action` instead of sending
   them to `plan-to-pr`.
 
-## 4. Coordinator Delivery Route
+## 4. Plan Delivery Route
 
-- [ ] 4.1 Teach `plan-coordinate` to consume atomic `plan_coordinate_handoff`
+- [ ] 4.1 Teach `plan-delivery` to consume atomic `plan_delivery_handoff`
   inputs and invoke the one-unit delivery path.
-- [ ] 4.2 Teach `plan-coordinate` to resolve the repo policy target branch and
+- [ ] 4.2 Teach `plan-delivery` to resolve the repo policy target branch and
   publishing remote, refresh the target branch, and record the target commit
   used for OpenSpec task selection.
-- [ ] 4.3 Teach `plan-coordinate` to validate OpenSpec changes, read
+- [ ] 4.3 Teach `plan-delivery` to validate OpenSpec changes, read
   target-branch `tasks.md` from the recorded target commit, and select the first
   unchecked deliverable task.
-- [ ] 4.4 Ensure coordinator completion is based on target-branch state after
+- [ ] 4.4 Ensure delivery completion is based on target-branch state after
   merge or direct publish, not open PR/MR branch state.
 - [ ] 4.5 Add stale-state handling when the selected task is already complete,
   missing, or changed on the refreshed target branch before delivery starts.
 - [ ] 4.6 Reject legacy `plan_ready_handoff`,
   `plan_followthrough_slice_handoff`, `reviewed_slices`, and
-  followthrough-ledger inputs in `plan-coordinate` with `needs_plan_ready`.
+  followthrough-ledger inputs in `plan-delivery` with `needs_plan_ready`.
 
 ## 5. Plan-To-PR Unit Execution
 
@@ -269,7 +319,7 @@ before implementation. The task list below describes the expected OpenSpec
 ## 6. Plan-To-Review Alignment
 
 - [ ] 6.1 Update `plan-to-review` documentation so planning-only review accepts
-  OpenSpec changes and new coordinator handoffs, not legacy `reviewed_slices`.
+  OpenSpec changes and new delivery handoffs, not legacy `reviewed_slices`.
 - [ ] 6.2 Update `plan-to-review` adapter prompt metadata to remove
   `reviewed_slices` as upfront slice-plan evidence.
 - [ ] 6.3 Update `plan-to-review` helper validation and tests to reject legacy
@@ -279,9 +329,9 @@ before implementation. The task list below describes the expected OpenSpec
 
 - [ ] 7.1 Replace unit tests for `slice_plan_review`, `reviewed_slices`, and
   followthrough ledgers with tests for the new handoff and route statuses.
-- [ ] 7.2 Add OpenSpec task parser and coordinator selection tests using Nitro
+- [ ] 7.2 Add OpenSpec task parser and delivery selection tests using Nitro
   style `tasks.md` fixtures.
-- [ ] 7.3 Add coordinator tests for detached worktrees, stale local target
+- [ ] 7.3 Add delivery tests for detached worktrees, stale local target
   branches, checked OpenSpec tasks on open PR/MR branches, and target-branch
   changes between task selection and delivery start.
 - [ ] 7.4 Run repo tests and refresh installed runtime skill copies for the
@@ -307,17 +357,17 @@ before implementation. The task list below describes the expected OpenSpec
 
 This plan is not atomic. It touches skill names, adapter prompts, helper
 scripts, tests, runtime install behavior, and delivery contracts. Under the new
-workflow it should route to OpenSpec before implementation.
+workflow, `plan-ready` should produce an `openspec_blueprint` before OpenSpec
+files are created.
 
 `plan-ready` verdict for this artifact:
 
 ```yaml
-plan_ready_result:
-  status: needs_openspec
-  artifact_type: plan
-  artifact_ref: .agents/plans/openspec-delivery-coordinate.md
-  reason: The change contains multiple independently reviewable deliverables and
-    must be represented as an OpenSpec change before delivery.
-  recommended_next_action: Create an OpenSpec change whose tasks.md uses the
-    implementation tasks in this plan as one-checkbox-per-deliverable work.
+openspec_blueprint:
+  status: ready_for_openspec
+  change:
+    suggested_id: update-openspec-plan-delivery
+    title: Update OpenSpec plan delivery workflow
+    objective: Make complex PlanReady output a reviewed OpenSpec Blueprint.
+  next_action: create_openspec_change
 ```

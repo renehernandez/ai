@@ -1,18 +1,18 @@
 ---
-name: plan-coordinate
-description: Use as the single coordinator entry point for atomic plan delivery or the next OpenSpec task delivery.
+name: plan-delivery
+description: Use as the single entry point for atomic plan delivery or the next OpenSpec task delivery.
 ---
 
-# Plan Coordinate
+# Plan Delivery
 
 ## Overview
 
-Coordinate one approved delivery unit. This skill does not keep a ledger. For
+Deliver one approved delivery unit. This skill does not keep a ledger. For
 multi-step work, OpenSpec `tasks.md` is the durable state.
 
 ## When To Use
 
-Use after `plan-ready` emits a valid atomic `plan_coordinate_handoff`, or when
+Use after `plan-ready` emits a valid atomic `plan_delivery_handoff`, or when
 the user asks to continue an OpenSpec change. Do not use for fuzzy ideas,
 unreviewed plans, or plan authoring.
 
@@ -20,7 +20,7 @@ unreviewed plans, or plan authoring.
 
 ### Atomic Plan
 
-Validate `plan_coordinate_handoff`, pass the single approved unit to
+Validate `plan_delivery_handoff`, pass the single approved unit to
 `plan-to-pr`, report the result, and stop.
 
 ### OpenSpec Change
@@ -39,7 +39,7 @@ Validate `plan_coordinate_handoff`, pass the single approved unit to
 7. Select the first unchecked deliverable task in document order.
 8. Pass that task to `plan-to-pr`.
 
-The coordinator advances only from target-branch state. A checked task on an
+Plan Delivery advances only from target-branch state. A checked task on an
 open PR/MR branch is not complete until merged or directly published according
 to repo policy.
 
@@ -51,19 +51,19 @@ to repo policy.
 | `needs_openspec` | Work is multi-deliverable but not in OpenSpec | Create or update OpenSpec |
 | `openspec_invalid` | OpenSpec validation fails | Repair OpenSpec |
 | `needs_openspec_tasks` | `tasks.md` is not deliverable | Run `openspec-tasks` |
-| `selected_task_stale` | Target task state changed | Rerun `plan-coordinate` |
+| `selected_task_stale` | Target task state changed | Rerun `plan-delivery` |
 | `needs_human_action` | Manual or external task blocks progress | Pause with evidence |
 
 ## Scripts
 
-- `scripts/plan-coordinate.ts detect`
-- `scripts/plan-coordinate.ts handoff-template`
-- `scripts/plan-coordinate.ts validate-handoff --file <path>`
-- `scripts/plan-coordinate.ts select-next-task <tasks.md>`
+- `scripts/plan-delivery.ts detect`
+- `scripts/plan-delivery.ts handoff-template`
+- `scripts/plan-delivery.ts validate-handoff --file <path>`
+- `scripts/plan-delivery.ts select-next-task <tasks.md>`
 
 Legacy `plan_ready_handoff`, `plan_followthrough_slice_handoff`,
-`reviewed_slices`, `slice_plan_review`, and followthrough-ledger inputs are
-unsupported. Return `needs_plan_ready`.
+`plan_coordinate_handoff`, `reviewed_slices`, `slice_plan_review`, and
+followthrough-ledger inputs are unsupported. Return `needs_plan_ready`.
 
 ## Mistakes
 
@@ -77,4 +77,4 @@ unsupported. Return `needs_plan_ready`.
 ## Test Evidence
 
 - RED: previous followthrough workflow maintained a separate ledger.
-- GREEN: coordinator selection now depends on target-branch OpenSpec task state.
+- GREEN: delivery selection now depends on target-branch OpenSpec task state.

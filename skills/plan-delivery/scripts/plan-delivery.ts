@@ -19,6 +19,7 @@ const BASELINE_REVIEWERS = [
 ] as const;
 const LEGACY_ROOTS = [
   "slice_plan_review",
+  "plan_coordinate_handoff",
   "plan_ready_handoff",
   "plan_followthrough_slice_handoff",
   "plan_followthrough_ledger",
@@ -36,7 +37,7 @@ function main(): void {
 
   if (!isCommand(command)) {
     fail(
-      "Usage: plan-coordinate.ts <detect|handoff-template|validate-handoff|select-next-task> [--file path|tasks.md]",
+      "Usage: plan-delivery.ts <detect|handoff-template|validate-handoff|select-next-task> [--file path|tasks.md]",
     );
   }
 
@@ -88,7 +89,7 @@ function detect(): void {
 }
 
 function printHandoffTemplate(): void {
-  console.log(`plan_coordinate_handoff:
+  console.log(`plan_delivery_handoff:
   status: ready
   route: openspec_task
   artifact:
@@ -179,12 +180,12 @@ function validateHandoff(input: string): void {
 
   if (errors.length > 0) {
     console.error(
-      `Invalid plan_coordinate_handoff:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+      `Invalid plan_delivery_handoff:\n${errors.map((error) => `- ${error}`).join("\n")}`,
     );
     process.exit(1);
   }
 
-  console.log("plan_coordinate_handoff valid");
+  console.log("plan_delivery_handoff valid");
 }
 
 function selectNextTask(path: string | undefined): void {
@@ -230,7 +231,7 @@ function parseHandoff(input: string): {
   blockers: string[];
 } {
   const body = extractYaml(input);
-  const section = extractSection(body, "plan_coordinate_handoff");
+  const section = extractSection(body, "plan_delivery_handoff");
   const artifact = extractSection(section, "artifact");
   const unit = extractSection(section, "approved_unit");
   const constraints = extractSection(section, "constraints");

@@ -9,16 +9,16 @@ description: Use when an idea, feature request, plan file, OpenSpec change, Line
 
 Route planning input to the right delivery path before implementation starts.
 `plan-ready` decides whether the work is atomic enough for one delivery loop or
-must move into OpenSpec.
+needs a reviewed OpenSpec Blueprint.
 
 ## When To Use
 
 Use for ideas, feature requests, implementation plans, OpenSpec changes before
 delivery, Linear tickets, and any request that needs readiness validation before
-`plan-coordinate`.
+`plan-delivery`.
 
 Do not use after implementation has started. Do not create synthetic slices,
-slice reviews, or followthrough ledgers.
+slice reviews, followthrough ledgers, or OpenSpec files directly.
 
 ## Plan Artifacts
 
@@ -36,12 +36,12 @@ When `plan-ready` or the user asks to write a plan artifact, write it under
    - no required sequencing across multiple PRs or MRs;
    - one verification story;
    - no hidden migration, deployment, or manual prerequisite chain.
-5. If the work is multi-deliverable, return `needs_openspec` and stop.
-6. If the work is atomic, run reviewer selection, plan reviewers, and final
-   scrutiny.
-7. Emit a validated `plan_coordinate_handoff`.
-8. Stop. Do not invoke `plan-coordinate`, `plan-to-pr`, create branches, push,
-   open PRs/MRs, or request hosted review.
+5. Run reviewer selection, plan reviewers, and final scrutiny.
+6. If the work is atomic, emit a validated `plan_delivery_handoff`.
+7. If the work is multi-deliverable, emit a validated `openspec_blueprint`.
+8. If missing decisions make either output unsafe, emit `blocked_readiness`.
+9. Stop. Do not invoke `plan-delivery`, `plan-to-pr`, create branches, push,
+   open PRs/MRs, request hosted review, or write OpenSpec files directly.
 
 ## Reviewer Selection
 
@@ -61,13 +61,13 @@ prompts, install/update behavior, or runtime compatibility changes.
 Use `scripts/plan-ready.ts reviewer-template` and validate the judge output with
 `scripts/plan-ready.ts validate-selection`.
 
-## Handoff Contract
+## Atomic Handoff Contract
 
 Use `scripts/plan-ready.ts handoff-template` and validate with
 `scripts/plan-ready.ts validate-handoff`.
 
 ```yaml
-plan_coordinate_handoff:
+plan_delivery_handoff:
   status: ready
   route: atomic_plan
   artifact:
@@ -100,6 +100,57 @@ plan_coordinate_handoff:
   blockers: []
 ```
 
+## OpenSpec Blueprint Contract
+
+Use `scripts/plan-ready.ts blueprint-template` and validate with
+`scripts/plan-ready.ts validate-blueprint`.
+
+```yaml
+openspec_blueprint:
+  status: ready_for_openspec
+  change:
+    suggested_id: <verb-noun-change-id>
+    title: <OpenSpec change title>
+    objective: <one paragraph objective>
+  scope:
+    in:
+      - <included outcome>
+    out:
+      - <explicit non-goal>
+  specs:
+    affected_or_new:
+      - <existing capability or new spec area>
+    proposed_requirements:
+      - <requirement summary for OpenSpec spec delta>
+  tasks:
+    - id: "1.1"
+      title: <minor deliverable title>
+      deliverable: <PR/MR-sized outcome>
+      acceptance:
+        - <observable result>
+      verification:
+        - <required command, check, or manual proof>
+      dependencies: []
+  recommended_first_task: "1.1"
+  review:
+    reviewers_used:
+      - implementation-readiness
+      - edge-cases-and-risks
+      - simplification-and-scope-control
+      - refactoring-opportunities
+    findings:
+      - <review finding that shaped the blueprint>
+  risks:
+    - <risk or rollout concern>
+  blockers: []
+  next_action: create_openspec_change
+```
+
+The blueprint is the successful complex-plan output. It should make OpenSpec
+creation mostly mechanical: `proposal.md` takes the objective and scope,
+`tasks.md` takes the reviewed deliverables, spec deltas take proposed
+requirements, and `design.md` captures tradeoffs when needed.
+
 Legacy `slice_plan_review`, `reviewed_slices`,
 `plan_ready_handoff`, `plan_followthrough_slice_handoff`, and
 followthrough-ledger inputs are unsupported. Return `needs_plan_ready` and ask
@@ -107,34 +158,34 @@ the user to rerun `plan-ready`.
 
 ## Result Shape
 
-For non-atomic work:
+For atomic work, emit `plan_delivery_handoff` only in the final response. For
+complex work, emit `openspec_blueprint` only in the final response.
 
 ```yaml
-plan_ready_result:
-  status: needs_openspec
-  artifact_type: plan | openspec | linear
-  artifact_ref: <artifact>
-  reason: <why this requires OpenSpec>
-  recommended_next_action: Create or update an OpenSpec change.
+blocked_readiness:
+  status: blocked
+  reason: <missing decision or unsafe ambiguity>
+  required_input:
+    - <specific answer needed>
 ```
 
-For atomic work, emit `plan_coordinate_handoff` only in the final response. Do
-not write readiness YAML into committed plan files, OpenSpec files, or Linear
-comments by default.
+Do not write readiness YAML into committed plan files, OpenSpec files, or
+Linear comments by default.
 
 ## Mistakes
 
 | Mistake | Fix |
 | --- | --- |
-| Creating slices from an unsliced plan | Return `needs_openspec` |
+| Failing hard for complex work | Produce a reviewed `openspec_blueprint` |
+| Writing OpenSpec files in PlanReady | Stop at `openspec_blueprint` |
 | Maintaining a followthrough ledger | Use OpenSpec `tasks.md` for multi-step state |
 | Accepting old handoff shapes | Return `needs_plan_ready` |
-| Starting implementation after readiness | Stop and wait for `plan-coordinate` |
+| Starting implementation after readiness | Stop and wait for `plan-delivery` |
 | Skipping baseline reviewers | Run all baseline reviewers before ready |
 
 ## Test Evidence
 
 - RED: previous workflow duplicated OpenSpec through `slice_plan_review`,
   `reviewed_slices`, and followthrough ledgers.
-- GREEN: new workflow routes atomic work to `plan_coordinate_handoff` and
-  multi-deliverable work to OpenSpec.
+- GREEN: new workflow routes atomic work to `plan_delivery_handoff` and
+  multi-deliverable work to a validated `openspec_blueprint`.

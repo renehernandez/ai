@@ -50,8 +50,8 @@ const validTasks = `# Tasks
 
 ## 1. Core delivery
 
-- [x] 1.1 Add the coordinator detector
-- [ ] 1.2 Validate the coordinator handoff
+- [x] 1.1 Add the delivery detector
+- [ ] 1.2 Validate the delivery handoff
 - [ ] 1.3 Manual production verification after merge
 
 ## 2. Follow-up
@@ -91,7 +91,7 @@ test("audit rejects broad deliverable tasks", () => {
 
 ## 1. Delivery
 
-- [ ] 1.1 Implement parser and coordinator and PR workflow
+- [ ] 1.1 Implement parser and delivery and PR workflow
 `,
   );
 

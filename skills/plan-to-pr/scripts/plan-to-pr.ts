@@ -367,12 +367,12 @@ function validateHandoff(input: string): void {
 
   if (errors.length > 0) {
     console.error(
-      `Invalid plan_coordinate_handoff:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+      `Invalid plan_delivery_handoff:\n${errors.map((error) => `- ${error}`).join("\n")}`,
     );
     process.exit(1);
   }
 
-  console.log("plan_coordinate_handoff valid");
+  console.log("plan_delivery_handoff valid");
 }
 
 function validateLedger(input: string): void {
@@ -693,7 +693,7 @@ function parseSkippedReviewers(
 
 function parseHandoff(input: string): ParsedHandoff {
   const body = extractYaml(input);
-  const section = findSection(body, "plan_coordinate_handoff") ?? "";
+  const section = findSection(body, "plan_delivery_handoff") ?? "";
   const artifact = findSection(section, "artifact") ?? "";
   const approvedUnit = findSection(section, "approved_unit") ?? "";
   const constraints = findSection(section, "constraints") ?? "";
@@ -725,6 +725,7 @@ function legacyErrors(input: string): string[] {
   const errors: string[] = [];
   for (const legacy of [
     "slice_plan_review",
+    "plan_coordinate_handoff",
     "plan_ready_handoff",
     "plan_followthrough_slice_handoff",
     "plan_followthrough_ledger",

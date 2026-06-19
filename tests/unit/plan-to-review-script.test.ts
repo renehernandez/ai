@@ -58,7 +58,7 @@ const planReviewRequest = `plan_review_request:
   unresolved_blockers: []
 `;
 
-const coordinateHandoff = `plan_coordinate_handoff:
+const deliveryHandoff = `plan_delivery_handoff:
   status: ready
   route: atomic_plan
   artifact:
@@ -91,11 +91,11 @@ test("validate-request accepts plan review requests", () => {
   assert.match(result.stdout, /plan_review_request valid/);
 });
 
-test("validate-request accepts coordinator handoffs for planning review", () => {
-  const result = runPlanToReview("validate-request", coordinateHandoff);
+test("validate-request accepts delivery handoffs for planning review", () => {
+  const result = runPlanToReview("validate-request", deliveryHandoff);
 
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /plan_coordinate_handoff valid/);
+  assert.match(result.stdout, /plan_delivery_handoff valid/);
 });
 
 test("validate-request rejects legacy plan-ready handoffs", () => {
@@ -115,16 +115,16 @@ test("validate-request rejects legacy plan-ready handoffs", () => {
   );
 });
 
-test("validate-request rejects ambiguous review and coordinate inputs", () => {
+test("validate-request rejects ambiguous review and delivery inputs", () => {
   const result = runPlanToReview(
     "validate-request",
     `${planReviewRequest}
-${coordinateHandoff}`,
+${deliveryHandoff}`,
   );
 
   assert.notEqual(result.status, 0);
   assert.match(
     result.stderr,
-    /provide exactly one of plan_review_request or plan_coordinate_handoff/,
+    /provide exactly one of plan_review_request or plan_delivery_handoff/,
   );
 });

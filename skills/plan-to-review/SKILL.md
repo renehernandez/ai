@@ -18,7 +18,7 @@ branch for Nitro, Codex, or developer review before coding starts.
 
 Use `plan-ready` first when the plan still needs scope hardening. Use
 `plan-to-pr` when the user is ready to implement a validated
-`plan_coordinate_handoff`.
+`plan_delivery_handoff`.
 
 ## Required Input
 
@@ -36,7 +36,7 @@ plan_review_request:
   unresolved_blockers: []
 ```
 
-A `plan_coordinate_handoff` is also valid when the plan-ready artifact should be
+A `plan_delivery_handoff` is also valid when the plan-ready artifact should be
 published for review before implementation.
 
 Legacy `plan_ready_handoff`, `reviewed_slices`, `slice_plan_review`,
@@ -117,7 +117,7 @@ and next action.
 
 | Gate | Passes when |
 | --- | --- |
-| Request validation | Exactly one valid `plan_review_request` or `plan_coordinate_handoff` is available |
+| Request validation | Exactly one valid `plan_review_request` or `plan_delivery_handoff` is available |
 | Session start | Live repo, branch, remotes, existing artifacts, and planning artifact are inspected |
 | Planning-only diff | Diff contains no implementation changes, or implementation changes are explicitly split out |
 | Artifact validation | OpenSpec/doc/ticket validation passes or a precise gap is reported |
@@ -183,4 +183,4 @@ plan_review_gate_ledger:
 
 - RED: previous workflow accepted `plan_ready_handoff` as hosted-review input.
 - GREEN: the validator now accepts `plan_review_request` and
-  `plan_coordinate_handoff`, and rejects legacy slice/followthrough shapes.
+  `plan_delivery_handoff`, and rejects legacy slice/followthrough shapes.

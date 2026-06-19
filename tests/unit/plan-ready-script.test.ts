@@ -66,7 +66,7 @@ function runPlanReady(
 }
 
 function validHandoff(artifactRef: string, fingerprint: string): string {
-  return `plan_coordinate_handoff:
+  return `plan_delivery_handoff:
   status: ready
   route: atomic_plan
   artifact:
@@ -98,7 +98,49 @@ function validHandoff(artifactRef: string, fingerprint: string): string {
 `;
 }
 
-test("validate-handoff accepts an atomic plan coordinate handoff", () => {
+function validBlueprint(): string {
+  return `openspec_blueprint:
+  status: ready_for_openspec
+  change:
+    suggested_id: add-plan-blueprints
+    title: Add PlanReady OpenSpec blueprints
+    objective: Make complex PlanReady output reviewed OpenSpec-ready breakdowns.
+  scope:
+    in:
+      - Complex plans produce a reviewed blueprint.
+    out:
+      - PlanReady writes OpenSpec files directly.
+  specs:
+    affected_or_new:
+      - plan-readiness
+    proposed_requirements:
+      - PlanReady MUST emit an OpenSpec Blueprint for complex work that is ready for mechanical OpenSpec creation.
+  tasks:
+    - id: "1.1"
+      title: Add blueprint validation
+      deliverable: Validate the complex-plan blueprint schema.
+      acceptance:
+        - Valid blueprints pass validation.
+      verification:
+        - pnpm test:unit
+      dependencies: []
+  recommended_first_task: "1.1"
+  review:
+    reviewers_used:
+      - implementation-readiness
+      - edge-cases-and-risks
+      - simplification-and-scope-control
+      - refactoring-opportunities
+    findings:
+      - The breakdown is ready to translate into OpenSpec files.
+  risks:
+    - OpenSpec authors may still need to choose exact requirement wording.
+  blockers: []
+  next_action: create_openspec_change
+`;
+}
+
+test("validate-handoff accepts an atomic plan delivery handoff", () => {
   withTempPlan(({ artifactRef, fingerprint }) => {
     const result = runPlanReady(
       "validate-handoff",
@@ -106,7 +148,7 @@ test("validate-handoff accepts an atomic plan coordinate handoff", () => {
     );
 
     assert.equal(result.status, 0);
-    assert.match(result.stdout, /plan_coordinate_handoff valid/);
+    assert.match(result.stdout, /plan_delivery_handoff valid/);
   });
 });
 
@@ -160,7 +202,7 @@ test("validate-handoff rejects stale artifact fingerprints", () => {
   });
 });
 
-test("handoff-template emits the new coordinator contract", () => {
+test("handoff-template emits the plan delivery contract", () => {
   const result = spawnSync(
     "pnpm",
     [
@@ -176,8 +218,73 @@ test("handoff-template emits the new coordinator contract", () => {
   );
 
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /plan_coordinate_handoff:/);
+  assert.match(result.stdout, /plan_delivery_handoff:/);
   assert.match(result.stdout, /\.agents\/plans\/example\.md/);
   assert.doesNotMatch(result.stdout, /reviewed_slices/);
   assert.doesNotMatch(result.stdout, /docs\/plans\/example\.md/);
+});
+
+test("blueprint-template emits the OpenSpec blueprint contract", () => {
+  const result = spawnSync(
+    "pnpm",
+    [
+      "exec",
+      "tsx",
+      "skills/plan-ready/scripts/plan-ready.ts",
+      "blueprint-template",
+    ],
+    {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    },
+  );
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /openspec_blueprint:/);
+  assert.match(result.stdout, /status: ready_for_openspec/);
+  assert.match(result.stdout, /next_action: create_openspec_change/);
+  assert.doesNotMatch(result.stdout, /needs_openspec/);
+});
+
+test("validate-blueprint accepts a reviewed OpenSpec blueprint", () => {
+  const result = runPlanReady("validate-blueprint", validBlueprint());
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /openspec_blueprint valid/);
+});
+
+test("validate-blueprint requires the recommended first task to exist", () => {
+  const result = runPlanReady(
+    "validate-blueprint",
+    validBlueprint().replace(
+      '  recommended_first_task: "1.1"\n',
+      '  recommended_first_task: "9.9"\n',
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /recommended_first_task must match an existing task id/,
+  );
+});
+
+test("validate-blueprint rejects a recommended first task with dependencies", () => {
+  const result = runPlanReady(
+    "validate-blueprint",
+    validBlueprint().replace(
+      "      dependencies: []\n",
+      '      dependencies: ["2.1"]\n',
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /recommended_first_task must not have dependencies/,
+  );
+  assert.match(
+    result.stderr,
+    /tasks.1.1.dependencies includes unknown task 2.1/,
+  );
 });

@@ -41,7 +41,7 @@ type Command =
 type ParsedRequest = {
   source:
     | "plan_review_request"
-    | "plan_coordinate_handoff"
+    | "plan_delivery_handoff"
     | "legacy"
     | "ambiguous";
   status?: string;
@@ -144,7 +144,7 @@ function validateRequest(input: string): void {
 
   if (request.source === "ambiguous") {
     console.error(
-      "Invalid ambiguous:\n- provide exactly one of plan_review_request or plan_coordinate_handoff",
+      "Invalid ambiguous:\n- provide exactly one of plan_review_request or plan_delivery_handoff",
     );
     process.exit(1);
   }
@@ -178,11 +178,11 @@ function validateRequest(input: string): void {
     }
   } else {
     if (request.status && request.status !== "ready") {
-      errors.push("plan_coordinate_handoff status must be ready");
+      errors.push("plan_delivery_handoff status must be ready");
     }
 
     if (request.blockers.length > 0) {
-      errors.push("plan_coordinate_handoff blockers must be empty");
+      errors.push("plan_delivery_handoff blockers must be empty");
     }
   }
 
@@ -255,8 +255,9 @@ function validateLedger(input: string): void {
 function parseRequest(input: string): ParsedRequest {
   const body = extractYaml(input);
   const reviewSection = findSection(body, "plan_review_request");
-  const handoffSection = findSection(body, "plan_coordinate_handoff");
+  const handoffSection = findSection(body, "plan_delivery_handoff");
   const legacySection = findSection(body, "plan_ready_handoff");
+  const legacyCoordinateHandoff = findSection(body, "plan_coordinate_handoff");
   const legacyReviewedSlices = /^\s*reviewed_slices:\s*/m.test(body);
 
   if (reviewSection && handoffSection) {
@@ -268,7 +269,7 @@ function parseRequest(input: string): ParsedRequest {
     };
   }
 
-  if (legacySection || legacyReviewedSlices) {
+  if (legacySection || legacyCoordinateHandoff || legacyReviewedSlices) {
     return {
       source: "legacy",
       requested_reviewers: [],
@@ -293,7 +294,7 @@ function parseRequest(input: string): ParsedRequest {
   const handoffBody = handoffSection ?? body;
   const artifact = findSection(handoffBody, "artifact") ?? "";
   return {
-    source: "plan_coordinate_handoff",
+    source: "plan_delivery_handoff",
     status: scalar(handoffBody, "status"),
     artifact_type: scalar(artifact, "type"),
     artifact_ref: scalar(artifact, "ref"),

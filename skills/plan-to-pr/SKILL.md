@@ -1,6 +1,6 @@
 ---
 name: plan-to-pr
-description: Use when one validated plan_coordinate_handoff approved unit should be implemented through local verification, review gates, hosted PR/MR feedback, and CI.
+description: Use when one validated plan_delivery_handoff approved unit should be implemented through local verification, review gates, hosted PR/MR feedback, and CI.
 ---
 
 # Plan To PR
@@ -8,15 +8,15 @@ description: Use when one validated plan_coordinate_handoff approved unit should
 ## Overview
 
 Implement exactly one approved unit. The unit is either an atomic plan or one
-OpenSpec checkbox task selected by `plan-coordinate`.
+OpenSpec checkbox task selected by `plan-delivery`.
 
 This skill does not brainstorm, author plans, manage OpenSpec sequences, or keep
 a followthrough ledger.
 
 ## When To Use
 
-Use when the user provides a valid `plan_coordinate_handoff`, or when
-`plan-coordinate` passes one approved atomic unit or OpenSpec task.
+Use when the user provides a valid `plan_delivery_handoff`, or when
+`plan-delivery` passes one approved atomic unit or OpenSpec task.
 
 Do not use for fuzzy ideas, unreviewed plans, OpenSpec proposal creation, Linear
 tickets that still need planning, or legacy handoff shapes.
@@ -35,7 +35,7 @@ follow-up bookkeeping commit for task completion.
 
 ## Workflow
 
-1. Validate the `plan_coordinate_handoff`.
+1. Validate the `plan_delivery_handoff`.
 2. Inspect live repo, branch, remotes, and artifact-host routing.
 3. Implement only `approved_unit`.
 4. If the approved unit is an OpenSpec task, check off only that task in
@@ -76,10 +76,10 @@ scripts/plan-to-pr.ts validate-ledger --file <ledger>
 
 | Mistake | Fix |
 | --- | --- |
-| Implementing without `plan_coordinate_handoff` | Return `needs_plan_ready` |
+| Implementing without `plan_delivery_handoff` | Return `needs_plan_ready` |
 | Accepting legacy slice/followthrough handoffs | Return `needs_plan_ready` |
 | Checking OpenSpec tasks in a follow-up commit | Check the task in the implementation PR/MR |
-| Implementing multiple OpenSpec tasks at once | Return to OpenSpec or `plan-coordinate` |
+| Implementing multiple OpenSpec tasks at once | Return to OpenSpec or `plan-delivery` |
 | Treating delivery gate evidence as durable state | Keep sequence state in OpenSpec |
 | Treating an open PR/MR as done before pipelines settle | Keep monitoring latest-head pipelines |
 | Assuming automatic review feedback is absent immediately after push | Wait until feedback resolves or the timeout proves nothing posted |
@@ -88,5 +88,5 @@ scripts/plan-to-pr.ts validate-ledger --file <ledger>
 
 - RED: previous workflow accepted direct `plan_ready_handoff` and
   `plan_followthrough_slice_handoff`.
-- GREEN: the validator now accepts only `plan_coordinate_handoff` and rejects
+- GREEN: the validator now accepts only `plan_delivery_handoff` and rejects
   legacy shapes.

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 function withTempFile(content: string, callback: (path: string) => void): void {
-  const directory = mkdtempSync(join(tmpdir(), "plan-coordinate-script-"));
+  const directory = mkdtempSync(join(tmpdir(), "plan-delivery-script-"));
   const path = join(directory, "input.yaml");
   try {
     writeFileSync(path, content, "utf8");
@@ -16,7 +16,7 @@ function withTempFile(content: string, callback: (path: string) => void): void {
   }
 }
 
-function runPlanCoordinate(
+function runPlanDelivery(
   command: string,
   content: string,
 ): { status: number | null; stderr: string; stdout: string } {
@@ -27,7 +27,7 @@ function runPlanCoordinate(
       [
         "exec",
         "tsx",
-        "skills/plan-coordinate/scripts/plan-coordinate.ts",
+        "skills/plan-delivery/scripts/plan-delivery.ts",
         command,
         "--file",
         path,
@@ -59,7 +59,7 @@ function runSelectNextTask(content: string): {
       [
         "exec",
         "tsx",
-        "skills/plan-coordinate/scripts/plan-coordinate.ts",
+        "skills/plan-delivery/scripts/plan-delivery.ts",
         "select-next-task",
         path,
       ],
@@ -78,7 +78,7 @@ function runSelectNextTask(content: string): {
   };
 }
 
-const validHandoff = `plan_coordinate_handoff:
+const validHandoff = `plan_delivery_handoff:
   status: ready
   route: openspec_task
   artifact:
@@ -87,15 +87,15 @@ const validHandoff = `plan_coordinate_handoff:
     fingerprint: abc123
   approved_unit:
     id: "1.1"
-    title: Add the coordinator
+    title: Add plan delivery
     scope: Implement one OpenSpec checkbox task.
     acceptance:
-      - The coordinator validates the handoff.
+      - Plan Delivery validates the handoff.
     verification:
       - pnpm test:unit
   constraints:
     files_or_areas:
-      - skills/plan-coordinate
+      - skills/plan-delivery
     out_of_scope: []
   delivery:
     expected_host: github_pr
@@ -112,14 +112,14 @@ const validHandoff = `plan_coordinate_handoff:
 `;
 
 test("validate-handoff accepts a ready OpenSpec task handoff", () => {
-  const result = runPlanCoordinate("validate-handoff", validHandoff);
+  const result = runPlanDelivery("validate-handoff", validHandoff);
 
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /plan_coordinate_handoff valid/);
+  assert.match(result.stdout, /plan_delivery_handoff valid/);
 });
 
 test("validate-handoff rejects legacy followthrough ledgers", () => {
-  const result = runPlanCoordinate(
+  const result = runPlanDelivery(
     "validate-handoff",
     `plan_followthrough_ledger:
   status: active
@@ -130,6 +130,19 @@ test("validate-handoff rejects legacy followthrough ledgers", () => {
   assert.match(
     result.stderr,
     /plan_followthrough_ledger is legacy; rerun plan-ready/,
+  );
+});
+
+test("validate-handoff rejects old coordinate-root handoffs", () => {
+  const result = runPlanDelivery(
+    "validate-handoff",
+    validHandoff.replace("plan_delivery_handoff:", "plan_coordinate_handoff:"),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /plan_coordinate_handoff is legacy; rerun plan-ready/,
   );
 });
 

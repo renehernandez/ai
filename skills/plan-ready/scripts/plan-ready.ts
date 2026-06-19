@@ -38,6 +38,7 @@ const ROUTES = ["atomic_plan", "openspec_task"] as const;
 const EXPECTED_HOSTS = ["github_pr", "gitlab_mr", "direct_publish"] as const;
 const LEGACY_ROOTS = [
   "slice_plan_review",
+  "plan_coordinate_handoff",
   "plan_ready_handoff",
   "plan_followthrough_slice_handoff",
   "plan_followthrough_ledger",
@@ -49,7 +50,9 @@ type Command =
   | "reviewer-template"
   | "validate-selection"
   | "handoff-template"
-  | "validate-handoff";
+  | "validate-handoff"
+  | "blueprint-template"
+  | "validate-blueprint";
 
 type ParsedHandoff = {
   status?: string;
@@ -71,12 +74,39 @@ type ParsedHandoff = {
   blockers: string[];
 };
 
+type BlueprintTask = {
+  id?: string;
+  title?: string;
+  deliverable?: string;
+  acceptance: string[];
+  verification: string[];
+  dependencies: string[];
+};
+
+type ParsedBlueprint = {
+  status?: string;
+  suggested_id?: string;
+  title?: string;
+  objective?: string;
+  scope_in: string[];
+  scope_out: string[];
+  affected_or_new_specs: string[];
+  proposed_requirements: string[];
+  tasks: BlueprintTask[];
+  recommended_first_task?: string;
+  reviewers_used: string[];
+  findings: string[];
+  risks: string[];
+  blockers: string[];
+  next_action?: string;
+};
+
 function main(): void {
   const [command, ...args] = process.argv.slice(2);
 
   if (!isCommand(command)) {
     fail(
-      "Usage: plan-ready.ts <detect|reviewer-template|validate-selection|handoff-template|validate-handoff> [artifact-ref] [--file path]",
+      "Usage: plan-ready.ts <detect|reviewer-template|validate-selection|handoff-template|validate-handoff|blueprint-template|validate-blueprint> [artifact-ref] [--file path]",
     );
   }
 
@@ -97,6 +127,16 @@ function main(): void {
 
   if (command === "handoff-template") {
     printHandoffTemplate();
+    return;
+  }
+
+  if (command === "blueprint-template") {
+    printBlueprintTemplate();
+    return;
+  }
+
+  if (command === "validate-blueprint") {
+    validateBlueprint(readInput(args));
     return;
   }
 
@@ -149,7 +189,7 @@ selection_rules:
 }
 
 function printHandoffTemplate(): void {
-  console.log(`plan_coordinate_handoff:
+  console.log(`plan_delivery_handoff:
   status: ready
   route: atomic_plan
   artifact:
@@ -177,6 +217,45 @@ function printHandoffTemplate(): void {
 ${BASELINE_REVIEWERS.map((reviewer) => `      - ${reviewer}`).join("\n")}
     optional_reviewers: []
   blockers: []
+`);
+}
+
+function printBlueprintTemplate(): void {
+  console.log(`openspec_blueprint:
+  status: ready_for_openspec
+  change:
+    suggested_id: <verb-noun-change-id>
+    title: <OpenSpec change title>
+    objective: <one paragraph objective>
+  scope:
+    in:
+      - <included outcome>
+    out:
+      - <explicit non-goal>
+  specs:
+    affected_or_new:
+      - <existing capability or new spec area>
+    proposed_requirements:
+      - <requirement summary for OpenSpec spec delta>
+  tasks:
+    - id: "1.1"
+      title: <minor deliverable title>
+      deliverable: <PR/MR-sized outcome>
+      acceptance:
+        - <observable result>
+      verification:
+        - <required command, check, or manual proof>
+      dependencies: []
+  recommended_first_task: "1.1"
+  review:
+    reviewers_used:
+${BASELINE_REVIEWERS.map((reviewer) => `      - ${reviewer}`).join("\n")}
+    findings:
+      - <review finding that shaped the blueprint>
+  risks:
+    - <risk or rollout concern>
+  blockers: []
+  next_action: create_openspec_change
 `);
 }
 
@@ -289,12 +368,135 @@ function validateHandoff(input: string): void {
 
   if (errors.length > 0) {
     console.error(
-      `Invalid plan_coordinate_handoff:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+      `Invalid plan_delivery_handoff:\n${errors.map((error) => `- ${error}`).join("\n")}`,
     );
     process.exit(1);
   }
 
-  console.log("plan_coordinate_handoff valid");
+  console.log("plan_delivery_handoff valid");
+}
+
+function validateBlueprint(input: string): void {
+  const errors = legacyErrors(input);
+  const blueprint = parseBlueprint(input);
+  const taskIds = blueprint.tasks
+    .map((task) => task.id)
+    .filter((id): id is string => Boolean(id));
+
+  requireValue(blueprint.status, "status", errors);
+  requireValue(blueprint.suggested_id, "change.suggested_id", errors);
+  requireValue(blueprint.title, "change.title", errors);
+  requireValue(blueprint.objective, "change.objective", errors);
+  requireValue(
+    blueprint.recommended_first_task,
+    "recommended_first_task",
+    errors,
+  );
+  requireValue(blueprint.next_action, "next_action", errors);
+
+  if (blueprint.status && blueprint.status !== "ready_for_openspec") {
+    errors.push("status must be ready_for_openspec");
+  }
+
+  if (
+    blueprint.suggested_id &&
+    !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(blueprint.suggested_id)
+  ) {
+    errors.push("change.suggested_id must be a lowercase kebab-case id");
+  }
+
+  if (blueprint.scope_in.length === 0) {
+    errors.push("scope.in must include at least one item");
+  }
+
+  if (blueprint.affected_or_new_specs.length === 0) {
+    errors.push("specs.affected_or_new must include at least one item");
+  }
+
+  if (blueprint.proposed_requirements.length === 0) {
+    errors.push("specs.proposed_requirements must include at least one item");
+  }
+
+  if (blueprint.tasks.length === 0) {
+    errors.push("tasks must include at least one minor deliverable");
+  }
+
+  const duplicateIds = taskIds.filter(
+    (id, index) => taskIds.indexOf(id) !== index,
+  );
+  for (const id of new Set(duplicateIds)) {
+    errors.push(`duplicate task id: ${id}`);
+  }
+
+  for (const [index, task] of blueprint.tasks.entries()) {
+    const label = task.id ? `tasks.${task.id}` : `tasks[${index}]`;
+    requireValue(task.id, `${label}.id`, errors);
+    requireValue(task.title, `${label}.title`, errors);
+    requireValue(task.deliverable, `${label}.deliverable`, errors);
+    if (task.acceptance.length === 0) {
+      errors.push(`${label}.acceptance must include at least one item`);
+    }
+    if (task.verification.length === 0) {
+      errors.push(`${label}.verification must include at least one item`);
+    }
+    for (const dependency of task.dependencies) {
+      if (!taskIds.includes(dependency)) {
+        errors.push(
+          `${label}.dependencies includes unknown task ${dependency}`,
+        );
+      }
+    }
+  }
+
+  if (
+    blueprint.recommended_first_task &&
+    !taskIds.includes(blueprint.recommended_first_task)
+  ) {
+    errors.push("recommended_first_task must match an existing task id");
+  }
+
+  const recommendedTask = blueprint.tasks.find(
+    (task) => task.id === blueprint.recommended_first_task,
+  );
+  if (recommendedTask && recommendedTask.dependencies.length > 0) {
+    errors.push("recommended_first_task must not have dependencies");
+  }
+
+  for (const reviewer of BASELINE_REVIEWERS) {
+    if (!blueprint.reviewers_used.includes(reviewer)) {
+      errors.push(`reviewers_used must include ${reviewer}`);
+    }
+  }
+
+  for (const reviewer of blueprint.reviewers_used) {
+    if (!isKnownReviewer(reviewer)) {
+      errors.push(`unknown reviewer: ${reviewer}`);
+    }
+  }
+
+  if (blueprint.findings.length === 0) {
+    errors.push("review.findings must include at least one item");
+  }
+
+  if (blueprint.blockers.length > 0) {
+    errors.push("blockers must be empty before status ready_for_openspec");
+  }
+
+  if (
+    blueprint.next_action &&
+    blueprint.next_action !== "create_openspec_change"
+  ) {
+    errors.push("next_action must be create_openspec_change");
+  }
+
+  if (errors.length > 0) {
+    console.error(
+      `Invalid openspec_blueprint:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+    );
+    process.exit(1);
+  }
+
+  console.log("openspec_blueprint valid");
 }
 
 function validateSelection(input: string): void {
@@ -388,7 +590,7 @@ function validateSelection(input: string): void {
 
 function parseHandoff(input: string): ParsedHandoff {
   const body = extractYaml(input);
-  const section = extractSection(body, "plan_coordinate_handoff");
+  const section = extractSection(body, "plan_delivery_handoff");
   const artifact = extractSection(section, "artifact");
   const approvedUnit = extractSection(section, "approved_unit");
   const constraints = extractSection(section, "constraints");
@@ -414,6 +616,102 @@ function parseHandoff(input: string): ParsedHandoff {
     optional_reviewers: list(review, "optional_reviewers"),
     blockers: list(section, "blockers"),
   };
+}
+
+function parseBlueprint(input: string): ParsedBlueprint {
+  const body = extractYaml(input);
+  const section = extractSection(body, "openspec_blueprint");
+  const change = extractSection(section, "change");
+  const scope = extractSection(section, "scope");
+  const specs = extractSection(section, "specs");
+  const review = extractSection(section, "review");
+
+  return {
+    status: scalar(section, "status"),
+    suggested_id: scalar(change, "suggested_id"),
+    title: scalar(change, "title"),
+    objective: scalar(change, "objective"),
+    scope_in: list(scope, "in"),
+    scope_out: list(scope, "out"),
+    affected_or_new_specs: list(specs, "affected_or_new"),
+    proposed_requirements: list(specs, "proposed_requirements"),
+    tasks: parseBlueprintTasks(extractSection(section, "tasks")),
+    recommended_first_task: scalar(section, "recommended_first_task"),
+    reviewers_used: list(review, "reviewers_used"),
+    findings: list(review, "findings"),
+    risks: list(section, "risks"),
+    blockers: list(section, "blockers"),
+    next_action: scalar(section, "next_action"),
+  };
+}
+
+function parseBlueprintTasks(input: string): BlueprintTask[] {
+  const tasks: BlueprintTask[] = [];
+  let current: BlueprintTask | undefined;
+  let activeList:
+    | keyof Pick<BlueprintTask, "acceptance" | "verification" | "dependencies">
+    | null = null;
+
+  for (const line of input.split(/\r?\n/)) {
+    if (line.trim() === "") {
+      continue;
+    }
+
+    const idMatch = line.match(/^- id:\s*(.+)$/);
+    if (idMatch) {
+      current = {
+        id: cleanScalar(idMatch[1]),
+        acceptance: [],
+        dependencies: [],
+        verification: [],
+      };
+      tasks.push(current);
+      activeList = null;
+      continue;
+    }
+
+    if (!current) {
+      continue;
+    }
+
+    const scalarMatch = line.match(/^ {2}(title|deliverable):\s*(.+)$/);
+    if (scalarMatch) {
+      current[scalarMatch[1] as "title" | "deliverable"] = cleanScalar(
+        scalarMatch[2],
+      );
+      activeList = null;
+      continue;
+    }
+
+    const inlineListMatch = line.match(
+      /^ {2}(acceptance|verification|dependencies):\s*\[(.*?)\]\s*$/,
+    );
+    if (inlineListMatch) {
+      const key = inlineListMatch[1] as
+        | "acceptance"
+        | "verification"
+        | "dependencies";
+      const raw = inlineListMatch[2].trim();
+      current[key] = raw ? raw.split(",").map(cleanScalar).filter(Boolean) : [];
+      activeList = null;
+      continue;
+    }
+
+    const listStartMatch = line.match(
+      /^ {2}(acceptance|verification|dependencies):\s*$/,
+    );
+    if (listStartMatch) {
+      activeList = listStartMatch[1] as typeof activeList;
+      continue;
+    }
+
+    const itemMatch = line.match(/^ {4}- (.+)$/);
+    if (itemMatch && activeList) {
+      current[activeList].push(cleanScalar(itemMatch[1]));
+    }
+  }
+
+  return tasks;
 }
 
 function parseSelection(input: string): {
@@ -442,7 +740,7 @@ function legacyErrors(input: string): string[] {
   for (const root of LEGACY_ROOTS) {
     if (hasSection(body, root)) {
       errors.push(
-        `${root} is legacy; rerun plan-ready to produce plan_coordinate_handoff`,
+        `${root} is legacy; rerun plan-ready to produce plan_delivery_handoff or openspec_blueprint`,
       );
     }
   }
@@ -450,7 +748,7 @@ function legacyErrors(input: string): string[] {
   for (const key of LEGACY_KEYS) {
     if (hasKey(body, key)) {
       errors.push(
-        `${key} is legacy; rerun plan-ready to produce plan_coordinate_handoff`,
+        `${key} is legacy; rerun plan-ready to produce plan_delivery_handoff or openspec_blueprint`,
       );
     }
   }
@@ -469,6 +767,8 @@ function isCommand(command: string | undefined): command is Command {
     "validate-selection",
     "handoff-template",
     "validate-handoff",
+    "blueprint-template",
+    "validate-blueprint",
   ].includes(command ?? "");
 }
 
