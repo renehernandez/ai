@@ -1,0 +1,4 @@
+interface:
+  display_name: "OpenSpec Tasks"
+  short_description: "Audit OpenSpec checkbox tasks for delivery fit"
+  default_prompt: "Use $openspec-tasks for <openspec/changes/change-id/tasks.md>. Read tasks.md, parse checkbox tasks in document order, verify each checkbox maps to one minor deliverable, classify manual deployment monitoring and external-prerequisite tasks separately from deliverable tasks, block broad phase tasks, do not add tags or schema extensions, do not create slice_plan_review, and return the first unchecked deliverable task or needs_human_action evidence."

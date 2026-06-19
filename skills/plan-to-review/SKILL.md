@@ -7,13 +7,18 @@ description: Use when a reviewed plan, OpenSpec change, or planning-only branch 
 
 ## Overview
 
-Publish an existing planning artifact as a planning-only hosted review. This skill is parallel to `plan-to-pr`: it creates or updates the PR/MR for plan feedback, waits for routed hosted feedback, and stops before implementation.
+Publish a planning artifact as a planning-only hosted review. This skill is
+parallel to `plan-to-pr`: it creates or updates the PR/MR for plan feedback,
+waits for routed hosted feedback, and stops before implementation.
 
 ## When To Use
 
-Use when the user wants to publish a plan, OpenSpec change, or planning-only branch for Nitro, Codex, or developer review before coding starts.
+Use when the user wants to publish a plan, OpenSpec change, or planning-only
+branch for Nitro, Codex, or developer review before coding starts.
 
-Use `plan-ready` first when the plan still needs scope hardening. Use `plan-to-pr` when the user is ready to implement an approved slice.
+Use `plan-ready` first when the plan still needs scope hardening. Use
+`plan-to-pr` when the user is ready to implement a validated
+`plan_coordinate_handoff`.
 
 ## Required Input
 
@@ -31,9 +36,17 @@ plan_review_request:
   unresolved_blockers: []
 ```
 
-A `plan_ready_handoff` from `plan-ready` is also valid input when `status: ready`, `artifact_type`, `artifact_ref`, `reviewed_slices`, `approved_slice`, `unresolved_blockers: []`, and `scrutiny_verdict: ship` are present. `reviewed_slices` is upfront slice-plan evidence; it is not permission to implement every slice at once.
+A `plan_coordinate_handoff` is also valid when the plan-ready artifact should be
+published for review before implementation.
 
-Run `scripts/plan-to-review.ts validate-request` from this skill directory before publishing anything. If input is missing, ambiguous, stale, or has unresolved blockers, stop and ask for `plan-ready` or a valid `plan_review_request`.
+Legacy `plan_ready_handoff`, `reviewed_slices`, `slice_plan_review`,
+`plan_followthrough_slice_handoff`, and followthrough-ledger inputs are
+unsupported. Return `needs_plan_ready` so the thread reruns `plan-ready`.
+
+Run `scripts/plan-to-review.ts validate-request` from this skill directory
+before publishing anything. If input is missing, ambiguous, stale, or has
+unresolved blockers, stop and ask for `plan-ready` or a valid
+`plan_review_request`.
 
 ## Progress Output
 
@@ -47,54 +60,78 @@ Announce each helper before it starts:
 - `Using the Fullscript GitLab review-request path to request Nitro review for the updated MR head.`
 - `Using $codex-review-feedback to wait for Codex feedback on the latest PR head.`
 
-After each gate, report one line with the gate, artifact or head SHA, verdict, and next action.
+After each gate, report one line with the gate, artifact or head SHA, verdict,
+and next action.
 
 ## Workflow
 
 1. Validate the input with `scripts/plan-to-review.ts validate-request`.
-2. Run `scripts/plan-to-review.ts detect` and start from live state with `session-start`: repo rules, branch/worktree, dirty state, remotes, existing PRs/MRs, CI, and the referenced planning artifact.
-3. Confirm the referenced plan/OpenSpec/Linear planning artifact exists or is reachable. If unavailable, block with evidence.
-4. Inspect the branch diff against the target branch before committing or publishing. The diff must be planning-only: plans, OpenSpec files, docs that explain the plan, skill/rule workflow docs, or review metadata. If implementation files are present, stop and ask whether to split them out.
+2. Run `scripts/plan-to-review.ts detect` and start from live state with
+   `session-start`: repo rules, branch/worktree, dirty state, remotes, existing
+   PRs/MRs, CI, and the referenced planning artifact.
+3. Confirm the referenced plan/OpenSpec/Linear planning artifact exists or is
+   reachable. If unavailable, block with evidence.
+4. Inspect the branch diff against the target branch before committing or
+   publishing. The diff must be planning-only: plans, OpenSpec files, docs that
+   explain the plan, skill/rule workflow docs, or review metadata. If
+   implementation files are present, stop and ask whether to split them out.
 5. Run artifact-specific validation:
    - OpenSpec: `openspec validate <change-id> --strict --no-interactive`.
-   - Markdown plan: check links or render only when the repo has an established doc validation command.
-   - Linear-only plan: verify the linked ticket is reachable; do not mirror ticket text into the repo unless asked.
-6. Run `review-feedback-routing` before PR/MR creation. Detect artifact host from remotes and route reviewer feedback separately from artifact creation.
-7. Commit and push the planning-only branch when the hosted-review creation path requires a clean pushed branch. Do not include implementation changes in the commit.
-8. Create or update the routed draft PR/MR with a title and description that make the planning-only state explicit:
+   - Markdown plan: check links or render only when the repo has an established
+     doc validation command.
+   - Linear-only plan: verify the linked ticket is reachable; do not mirror
+     ticket text into the repo unless asked.
+6. Run `review-feedback-routing` before PR/MR creation. Detect artifact host
+   from remotes and route reviewer feedback separately from artifact creation.
+7. Commit and push the planning-only branch when the hosted-review creation path
+   requires a clean pushed branch. Do not include implementation changes in the
+   commit.
+8. Create or update the routed draft PR/MR with a title and description that
+   makes the planning-only state explicit:
    - state that implementation has not started;
    - name the plan/OpenSpec artifact;
    - name the requested feedback, such as Nitro and developer review;
    - include exact planning validation performed.
-   For Fullscript GitLab MRs, request Nitro review when the MR is created or updated. Use `glab mr note <MR_IID> -m "/request_review @nitro"`; do not use `glab mr update --reviewer`. If pushing changes to an existing MR changes the branch head, do not assume the previous Nitro state still applies.
-9. Run the artifact-host inspection adapter (`gitlab-adapter-review` or `github-adapter-review`) only for host metadata, discussions, and CI/review state. Do not run implementation code review against a planning-only diff unless the plan changes agent/runtime behavior that requires it.
+9. Run the artifact-host inspection adapter (`gitlab-adapter-review` or
+   `github-adapter-review`) only for host metadata, discussions, and CI/review
+   state. Do not run implementation code review against a planning-only diff.
 10. Wait for routed automated feedback on the latest head:
-    - Fullscript GitLab/Nitro: use `nitro-review-feedback` first. If the MR was created or the branch was pushed against an existing MR and latest-head Nitro feedback is missing or stale, post the standard Nitro review request for the current head, then wait again. Routing metadata alone is not enough evidence after a new push until Nitro is requested for the latest head or the host shows a fresh pending Nitro review state.
+    - Fullscript GitLab/Nitro: use `nitro-review-feedback` first. If latest-head
+      Nitro feedback is missing or stale after create/update, post the standard
+      Nitro review request for the current head, then wait again.
     - GitHub/Codex: use `codex-review-feedback` when routing selects Codex.
-    - Developer review: keep the PR/MR open and report pending human review; do not fabricate approval.
-11. Apply only plan/documentation feedback. If feedback asks for implementation, record it as a follow-up or blocker; do not start coding.
-12. If the branch head changes after feedback fixes, rerun artifact validation, push, and wait for latest-head automated feedback again.
-13. Before finishing, generate `scripts/plan-to-review.ts gate-template`, fill it, and validate it with `validate-ledger`.
-14. Finish when the planning-only artifact is published and automated feedback is resolved, pending with evidence, unavailable with evidence, or explicitly waived. Developer review may remain pending when the goal is to publish for review.
+    - Developer review: keep the PR/MR open and report pending human review; do
+      not fabricate approval.
+11. Apply only plan/documentation feedback. If feedback asks for implementation,
+    record it as a follow-up or blocker; do not start coding.
+12. If the branch head changes after feedback fixes, rerun artifact validation,
+    push, and wait for latest-head automated feedback again.
+13. Before finishing, generate `scripts/plan-to-review.ts gate-template`, fill
+    it, and validate it with `validate-ledger`.
+14. Finish when the planning-only artifact is published and automated feedback
+    is resolved, pending with evidence, unavailable with evidence, or explicitly
+    waived. Developer review may remain pending when the goal is to publish for
+    review.
 
 ## Gate Rules
 
 | Gate | Passes when |
 | --- | --- |
-| Request validation | Exactly one valid `plan_review_request` or `plan_ready_handoff` is available |
+| Request validation | Exactly one valid `plan_review_request` or `plan_coordinate_handoff` is available |
 | Session start | Live repo, branch, remotes, existing artifacts, and planning artifact are inspected |
 | Planning-only diff | Diff contains no implementation changes, or implementation changes are explicitly split out |
 | Artifact validation | OpenSpec/doc/ticket validation passes or a precise gap is reported |
 | Review feedback routing | Artifact and feedback adapters are selected, or ambiguity is blocked |
 | Artifact creation/update | Draft PR/MR exists for the latest planning-only branch |
 | Artifact-host inspection | Host metadata, discussions, and check state are inspected |
-| Automated feedback | Routed automated feedback is resolved, pending, unavailable, or waived with evidence; on Fullscript GitLab, missing/stale latest-head Nitro feedback after create/update must include evidence that a fresh Nitro review was requested for that head |
+| Automated feedback | Routed automated feedback is resolved, pending, unavailable, or waived with evidence |
 | Developer review | Human developer review is requested or pending on the hosted artifact |
 | No implementation | No implementation work starts in this workflow |
 
 ## Final Review Ledger
 
-The final response must include every gate. Use `passed` or `blocked`; use `not_applicable` only for conditional gates accepted by `validate-ledger`.
+The final response must include every gate. Use `passed` or `blocked`; use
+`not_applicable` only for conditional gates accepted by `validate-ledger`.
 
 ```yaml
 plan_review_gate_ledger:
@@ -121,7 +158,7 @@ plan_review_gate_ledger:
     evidence: "MR metadata and discussions inspected"
   automated_feedback:
     status: passed
-    evidence: "Nitro latest-head feedback returned no findings, or Nitro was requested for the latest head and remains pending"
+    evidence: "Nitro latest-head feedback resolved or pending with evidence"
   developer_review:
     status: passed
     evidence: "MR published for developer review"
@@ -135,7 +172,7 @@ plan_review_gate_ledger:
 | Mistake | Fix |
 | --- | --- |
 | Implementing after the plan is published | Stop and ask the user to invoke `plan-to-pr` after review |
-| Treating `plan_ready_handoff` as approval to code | Use it only as evidence the artifact is ready to publish |
+| Accepting legacy handoffs | Return `needs_plan_ready` |
 | Publishing implementation files in the review branch | Split them out before creating the planning review |
 | Treating routing metadata as sufficient after pushing a new head to an existing Fullscript MR | Request a fresh Nitro review for the current head, then wait for latest-head feedback or pending state |
 | Requesting Nitro repeatedly when a fresh latest-head Nitro review is already pending | Stop polling after recording the pending review state, MR head, and request evidence |
@@ -144,9 +181,6 @@ plan_review_gate_ledger:
 
 ## Test Evidence
 
-- RED: the existing workflow forced a choice between `plan-ready` stopping locally and `plan-to-pr` starting implementation, leaving no hosted-review lane for planning artifacts.
-- RED: thread `019eb3d7-d078-7d23-ba4e-d6e296a83ffe` pushed an updated Fullscript GitLab planning MR, found Nitro notes only for stale heads, and finished with automatic Nitro pending instead of requesting a fresh review for the new head.
-- GREEN: this skill validates a planning-review request, publishes a planning-only PR/MR, waits for routed automated feedback, and stops before implementation.
-- GREEN: after creating or updating a Fullscript GitLab MR, the workflow must explicitly request Nitro when latest-head Nitro feedback is absent or stale.
-- REFACTOR: the workflow accepts `plan_ready_handoff` as publishable evidence but does not treat it as permission to implement.
-- Validation evidence: `pnpm exec tsx skills/plan-to-review/scripts/plan-to-review.ts validate-request --file /private/tmp/plan-to-review-valid-request.yaml` returned `plan_review_request valid`; a valid `plan_ready_handoff` fixture returned `plan_ready_handoff valid`; unresolved blockers, ambiguous dual input, and non-`ship` scrutiny fixtures were rejected; `validate-ledger` accepted the final ledger fixture.
+- RED: previous workflow accepted `plan_ready_handoff` as hosted-review input.
+- GREEN: the validator now accepts `plan_review_request` and
+  `plan_coordinate_handoff`, and rejects legacy slice/followthrough shapes.

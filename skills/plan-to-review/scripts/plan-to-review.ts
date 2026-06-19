@@ -39,16 +39,18 @@ type Command =
   | "validate-ledger";
 
 type ParsedRequest = {
-  source: "plan_review_request" | "plan_ready_handoff" | "ambiguous";
+  source:
+    | "plan_review_request"
+    | "plan_coordinate_handoff"
+    | "legacy"
+    | "ambiguous";
   status?: string;
   artifact_type?: string;
   artifact_ref?: string;
   review_goal?: string;
   requested_reviewers: string[];
   unresolved_blockers: string[];
-  reviewed_slices: string[];
-  approved_slice?: string;
-  scrutiny_verdict?: string;
+  blockers: string[];
 };
 
 main();
@@ -142,7 +144,14 @@ function validateRequest(input: string): void {
 
   if (request.source === "ambiguous") {
     console.error(
-      "Invalid ambiguous:\n- provide exactly one of plan_review_request or plan_ready_handoff",
+      "Invalid ambiguous:\n- provide exactly one of plan_review_request or plan_coordinate_handoff",
+    );
+    process.exit(1);
+  }
+
+  if (request.source === "legacy") {
+    console.error(
+      "Invalid legacy:\n- legacy handoffs are unsupported; rerun plan-ready",
     );
     process.exit(1);
   }
@@ -169,19 +178,11 @@ function validateRequest(input: string): void {
     }
   } else {
     if (request.status && request.status !== "ready") {
-      errors.push("plan_ready_handoff status must be ready");
+      errors.push("plan_coordinate_handoff status must be ready");
     }
 
-    requireValue(request.approved_slice, "approved_slice", errors);
-    requireValue(request.scrutiny_verdict, "scrutiny_verdict", errors);
-    if (request.reviewed_slices.length === 0) {
-      errors.push(
-        "plan_ready_handoff reviewed_slices must include every upfront-reviewed slice id",
-      );
-    }
-
-    if (request.scrutiny_verdict && request.scrutiny_verdict !== "ship") {
-      errors.push("plan_ready_handoff scrutiny_verdict must be ship");
+    if (request.blockers.length > 0) {
+      errors.push("plan_coordinate_handoff blockers must be empty");
     }
   }
 
@@ -254,13 +255,25 @@ function validateLedger(input: string): void {
 function parseRequest(input: string): ParsedRequest {
   const body = extractYaml(input);
   const reviewSection = findSection(body, "plan_review_request");
-  const handoffSection = findSection(body, "plan_ready_handoff");
+  const handoffSection = findSection(body, "plan_coordinate_handoff");
+  const legacySection = findSection(body, "plan_ready_handoff");
+  const legacyReviewedSlices = /^\s*reviewed_slices:\s*/m.test(body);
 
   if (reviewSection && handoffSection) {
     return {
       source: "ambiguous",
       requested_reviewers: [],
       unresolved_blockers: [],
+      blockers: [],
+    };
+  }
+
+  if (legacySection || legacyReviewedSlices) {
+    return {
+      source: "legacy",
+      requested_reviewers: [],
+      unresolved_blockers: [],
+      blockers: [],
     };
   }
 
@@ -273,22 +286,21 @@ function parseRequest(input: string): ParsedRequest {
       review_goal: scalar(reviewSection, "review_goal"),
       requested_reviewers: list(reviewSection, "requested_reviewers"),
       unresolved_blockers: list(reviewSection, "unresolved_blockers"),
-      reviewed_slices: [],
+      blockers: [],
     };
   }
 
   const handoffBody = handoffSection ?? body;
+  const artifact = findSection(handoffBody, "artifact") ?? "";
   return {
-    source: "plan_ready_handoff",
+    source: "plan_coordinate_handoff",
     status: scalar(handoffBody, "status"),
-    artifact_type: scalar(handoffBody, "artifact_type"),
-    artifact_ref: scalar(handoffBody, "artifact_ref"),
+    artifact_type: scalar(artifact, "type"),
+    artifact_ref: scalar(artifact, "ref"),
     review_goal: scalar(handoffBody, "review_goal"),
     requested_reviewers: list(handoffBody, "requested_reviewers"),
     unresolved_blockers: list(handoffBody, "unresolved_blockers"),
-    reviewed_slices: list(handoffBody, "reviewed_slices"),
-    approved_slice: scalar(handoffBody, "approved_slice"),
-    scrutiny_verdict: scalar(handoffBody, "scrutiny_verdict"),
+    blockers: list(handoffBody, "blockers"),
   };
 }
 

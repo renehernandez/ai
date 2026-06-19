@@ -87,25 +87,6 @@ const REVIEW_OUTCOME_STATUSES = [
   "blocked",
   "not_applicable",
 ] as const;
-const FOLLOWTHROUGH_DELIVERY_STATUSES = [
-  "shipped",
-  "stacked_pending_merge",
-  "blocked",
-  "needs_replan",
-] as const;
-const FOLLOWTHROUGH_ADVANCEMENT_MODES = [
-  "ship_then_continue",
-  "stack_then_continue",
-] as const;
-const REVIEW_FEEDBACK_STATUSES = ["passed", "blocked"] as const;
-const MERGE_STATES = [
-  "draft",
-  "open",
-  "mergeable",
-  "merged",
-  "direct_published",
-] as const;
-
 type Command =
   | "detect"
   | "validate-handoff"
@@ -113,21 +94,26 @@ type Command =
   | "validate-launch-report"
   | "validate-review-report"
   | "refactoring-template"
-  | "followthrough-delivery-template"
-  | "validate-followthrough-delivery"
   | "gate-template"
   | "validate-ledger";
 
 type ParsedHandoff = {
   status?: string;
+  route?: string;
   artifact_type?: string;
   artifact_ref?: string;
-  reviewed_slices: string[];
-  approved_slice?: string;
+  artifact_fingerprint?: string;
+  approved_unit_id?: string;
+  approved_unit_title?: string;
+  approved_unit_scope?: string;
+  acceptance: string[];
+  verification: string[];
+  files_or_areas: string[];
+  expected_host?: string;
+  completion_updates: string[];
   required_reviewers: string[];
-  optional_reviewers_selected: string[];
-  unresolved_blockers: string[];
-  scrutiny_verdict?: string;
+  optional_reviewers: string[];
+  blockers: string[];
 };
 
 function main(): void {
@@ -135,7 +121,7 @@ function main(): void {
 
   if (!isCommand(command)) {
     fail(
-      "Usage: plan-to-pr.ts <detect|validate-handoff|reviewer-template|validate-launch-report|validate-review-report|refactoring-template|followthrough-delivery-template|validate-followthrough-delivery|gate-template|validate-ledger> [--file path]",
+      "Usage: plan-to-pr.ts <detect|validate-handoff|reviewer-template|validate-launch-report|validate-review-report|refactoring-template|gate-template|validate-ledger> [--file path]",
     );
   }
 
@@ -159,11 +145,6 @@ function main(): void {
     return;
   }
 
-  if (command === "followthrough-delivery-template") {
-    printFollowthroughDeliveryTemplate();
-    return;
-  }
-
   const input = readInput(args);
   if (command === "validate-handoff") {
     validateHandoff(input);
@@ -177,11 +158,6 @@ function main(): void {
 
   if (command === "validate-review-report") {
     validateReviewReport(input);
-    return;
-  }
-
-  if (command === "validate-followthrough-delivery") {
-    validateFollowthroughDelivery(input);
     return;
   }
 
@@ -291,54 +267,29 @@ function printRefactoringExecutionTemplate(): void {
 `);
 }
 
-function printFollowthroughDeliveryTemplate(): void {
-  console.log(`plan_followthrough_delivery:
-  slice_id: slice-01
-  slice_name: <slice title>
-  slice_advancement_mode: ship_then_continue | stack_then_continue
-  status: shipped
-  artifact:
-    pr_or_mr:
-      url: <url or none>
-      draft: false
-      latest_head: <sha>
-      merge_state: merged | direct_published
-    commit:
-    branch:
-  delivery_ledger_ref:
-  verification:
-    passed: []
-    gaps: []
-  review_feedback:
-    status: passed
-    reviewed_head: <sha>
-    resolved: []
-    carried_forward: []
-  refactoring_reuse:
-    implemented: []
-    deferred: []
-    must_consume_later: []
-  significant_refactor_suggestions: []
-  changed_assumptions: []
-  recommended_next_action:
-`);
-}
-
 function validateHandoff(input: string): void {
   const handoff = parseHandoff(input);
-  const errors: string[] = [];
+  const errors = legacyErrors(input);
 
   requireValue(handoff.status, "status", errors);
+  requireValue(handoff.route, "route", errors);
   requireValue(handoff.artifact_type, "artifact_type", errors);
   requireValue(handoff.artifact_ref, "artifact_ref", errors);
-  if (handoff.reviewed_slices.length === 0) {
-    errors.push("reviewed_slices must include every upfront-reviewed slice id");
-  }
-  requireValue(handoff.approved_slice, "approved_slice", errors);
-  requireValue(handoff.scrutiny_verdict, "scrutiny_verdict", errors);
+  requireValue(handoff.artifact_fingerprint, "artifact_fingerprint", errors);
+  requireValue(handoff.approved_unit_id, "approved_unit.id", errors);
+  requireValue(handoff.approved_unit_title, "approved_unit.title", errors);
+  requireValue(handoff.approved_unit_scope, "approved_unit.scope", errors);
+  requireValue(handoff.expected_host, "delivery.expected_host", errors);
 
   if (handoff.status && handoff.status !== "ready") {
     errors.push("status must be ready");
+  }
+
+  if (
+    handoff.route &&
+    !["atomic_plan", "openspec_task"].includes(handoff.route)
+  ) {
+    errors.push("route must be one of: atomic_plan, openspec_task");
   }
 
   if (
@@ -348,8 +299,27 @@ function validateHandoff(input: string): void {
     errors.push(`artifact_type must be one of: ${ARTIFACT_TYPES.join(", ")}`);
   }
 
-  if (handoff.scrutiny_verdict && handoff.scrutiny_verdict !== "ship") {
-    errors.push("scrutiny_verdict must be ship");
+  if (
+    handoff.expected_host &&
+    !["github_pr", "gitlab_mr", "direct_publish"].includes(
+      handoff.expected_host,
+    )
+  ) {
+    errors.push(
+      "delivery.expected_host must be one of: github_pr, gitlab_mr, direct_publish",
+    );
+  }
+
+  if (handoff.acceptance.length === 0) {
+    errors.push("approved_unit.acceptance must include at least one item");
+  }
+
+  if (handoff.verification.length === 0) {
+    errors.push("approved_unit.verification must include at least one item");
+  }
+
+  if (handoff.files_or_areas.length === 0) {
+    errors.push("constraints.files_or_areas must include at least one item");
   }
 
   for (const reviewer of BASELINE_REVIEWERS) {
@@ -360,33 +330,49 @@ function validateHandoff(input: string): void {
 
   for (const reviewer of [
     ...handoff.required_reviewers,
-    ...handoff.optional_reviewers_selected,
+    ...handoff.optional_reviewers,
   ]) {
     if (!isKnownReviewer(reviewer)) {
       errors.push(`unknown reviewer: ${reviewer}`);
     }
   }
 
-  for (const reviewer of handoff.optional_reviewers_selected) {
+  for (const reviewer of handoff.optional_reviewers) {
     if (!includes(OPTIONAL_REVIEWERS, reviewer)) {
       errors.push(
-        `optional_reviewers_selected can include only optional reviewers: ${reviewer}`,
+        `optional_reviewers can include only optional reviewers: ${reviewer}`,
       );
     }
   }
 
-  if (handoff.unresolved_blockers.length > 0) {
-    errors.push("unresolved_blockers must be empty before implementation");
+  if (handoff.blockers.length > 0) {
+    errors.push("blockers must be empty before implementation");
+  }
+
+  if (
+    handoff.route === "atomic_plan" &&
+    handoff.approved_unit_id !== "atomic"
+  ) {
+    errors.push("atomic_plan route requires approved_unit.id atomic");
+  }
+
+  if (handoff.route === "openspec_task") {
+    if (handoff.artifact_type !== "openspec") {
+      errors.push("openspec_task route requires artifact_type openspec");
+    }
+    if (handoff.completion_updates.length === 0) {
+      errors.push("openspec_task route requires delivery.completion_updates");
+    }
   }
 
   if (errors.length > 0) {
     console.error(
-      `Invalid plan_ready_handoff:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+      `Invalid plan_coordinate_handoff:\n${errors.map((error) => `- ${error}`).join("\n")}`,
     );
     process.exit(1);
   }
 
-  console.log("plan_ready_handoff valid");
+  console.log("plan_coordinate_handoff valid");
 }
 
 function validateLedger(input: string): void {
@@ -430,133 +416,6 @@ function validateLedger(input: string): void {
   }
 
   console.log("delivery_gate_ledger valid");
-}
-
-function validateFollowthroughDelivery(input: string): void {
-  const errors: string[] = [];
-
-  requireSection(input, "plan_followthrough_delivery", errors);
-  requireValue(scalar(input, "slice_id"), "slice_id", errors);
-  requireValue(scalar(input, "slice_name"), "slice_name", errors);
-  requireValue(
-    scalar(input, "slice_advancement_mode"),
-    "slice_advancement_mode",
-    errors,
-  );
-  requireValue(scalar(input, "status"), "status", errors);
-  requireSection(input, "artifact", errors);
-  requireSection(input, "pr_or_mr", errors);
-  requireValue(scalar(input, "url"), "artifact.pr_or_mr.url", errors);
-  requireValue(scalar(input, "draft"), "artifact.pr_or_mr.draft", errors);
-  requireValue(
-    scalar(input, "latest_head"),
-    "artifact.pr_or_mr.latest_head",
-    errors,
-  );
-  requireValue(
-    scalar(input, "merge_state"),
-    "artifact.pr_or_mr.merge_state",
-    errors,
-  );
-  requireSection(input, "verification", errors);
-  requireSection(input, "review_feedback", errors);
-  requireValue(
-    scalar(input, "reviewed_head"),
-    "review_feedback.reviewed_head",
-    errors,
-  );
-  requireValue(
-    scalar(input, "status", "review_feedback"),
-    "review_feedback.status",
-    errors,
-  );
-  requireSection(input, "refactoring_reuse", errors);
-  requireKey(input, "significant_refactor_suggestions", errors);
-
-  const status = scalar(input, "status");
-  const mode = scalar(input, "slice_advancement_mode");
-  const draft = scalar(input, "draft");
-  const latestHead = scalar(input, "latest_head");
-  const mergeState = scalar(input, "merge_state");
-  const reviewedHead = scalar(input, "reviewed_head");
-  const reviewFeedbackStatus = scalar(input, "status", "review_feedback");
-
-  if (status && !includes(FOLLOWTHROUGH_DELIVERY_STATUSES, status)) {
-    errors.push(
-      `status must be one of: ${FOLLOWTHROUGH_DELIVERY_STATUSES.join(", ")}`,
-    );
-  }
-
-  if (mode && !includes(FOLLOWTHROUGH_ADVANCEMENT_MODES, mode)) {
-    errors.push(
-      `slice_advancement_mode must be one of: ${FOLLOWTHROUGH_ADVANCEMENT_MODES.join(", ")}`,
-    );
-  }
-
-  if (draft && !["true", "false"].includes(draft)) {
-    errors.push("artifact.pr_or_mr.draft must be true or false");
-  }
-
-  if (mergeState && !includes(MERGE_STATES, mergeState)) {
-    errors.push(
-      `artifact.pr_or_mr.merge_state must be one of: ${MERGE_STATES.join(", ")}`,
-    );
-  }
-
-  if (
-    reviewFeedbackStatus &&
-    !includes(REVIEW_FEEDBACK_STATUSES, reviewFeedbackStatus)
-  ) {
-    errors.push(
-      `review_feedback.status must be one of: ${REVIEW_FEEDBACK_STATUSES.join(", ")}`,
-    );
-  }
-
-  if (latestHead && reviewedHead && latestHead !== reviewedHead) {
-    errors.push(
-      "review_feedback.reviewed_head must match artifact.pr_or_mr.latest_head",
-    );
-  }
-
-  if (reviewFeedbackStatus === "blocked" && status !== "blocked") {
-    errors.push(
-      "review_feedback.status blocked requires delivery status blocked",
-    );
-  }
-
-  if (
-    (status === "shipped" || status === "stacked_pending_merge") &&
-    reviewFeedbackStatus !== "passed"
-  ) {
-    errors.push(`${status} requires review_feedback.status passed`);
-  }
-
-  if (status === "shipped" && draft === "true") {
-    errors.push("shipped delivery cannot reference a draft PR/MR");
-  }
-
-  if (
-    status === "shipped" &&
-    mergeState &&
-    !["merged", "direct_published"].includes(mergeState)
-  ) {
-    errors.push(
-      "shipped delivery requires merge_state merged or direct_published",
-    );
-  }
-
-  if (status === "stacked_pending_merge" && mode === "ship_then_continue") {
-    errors.push("stacked_pending_merge is not valid for ship_then_continue");
-  }
-
-  if (errors.length > 0) {
-    console.error(
-      `Invalid plan_followthrough_delivery:\n${errors.map((error) => `- ${error}`).join("\n")}`,
-    );
-    process.exit(1);
-  }
-
-  console.log("plan_followthrough_delivery valid");
 }
 
 function validateLaunchReport(input: string): void {
@@ -809,19 +668,50 @@ function parseSkippedReviewers(
 
 function parseHandoff(input: string): ParsedHandoff {
   const body = extractYaml(input);
-  const section = extractSection(body, "plan_ready_handoff");
+  const section = findSection(body, "plan_coordinate_handoff") ?? "";
+  const artifact = findSection(section, "artifact") ?? "";
+  const approvedUnit = findSection(section, "approved_unit") ?? "";
+  const constraints = findSection(section, "constraints") ?? "";
+  const delivery = findSection(section, "delivery") ?? "";
+  const review = findSection(section, "review") ?? "";
 
   return {
     status: scalar(section, "status"),
-    artifact_type: scalar(section, "artifact_type"),
-    artifact_ref: scalar(section, "artifact_ref"),
-    reviewed_slices: list(section, "reviewed_slices"),
-    approved_slice: scalar(section, "approved_slice"),
-    required_reviewers: list(section, "required_reviewers"),
-    optional_reviewers_selected: list(section, "optional_reviewers_selected"),
-    unresolved_blockers: list(section, "unresolved_blockers"),
-    scrutiny_verdict: scalar(section, "scrutiny_verdict"),
+    route: scalar(section, "route"),
+    artifact_type: scalar(artifact, "type"),
+    artifact_ref: scalar(artifact, "ref"),
+    artifact_fingerprint: scalar(artifact, "fingerprint"),
+    approved_unit_id: scalar(approvedUnit, "id"),
+    approved_unit_title: scalar(approvedUnit, "title"),
+    approved_unit_scope: scalar(approvedUnit, "scope"),
+    acceptance: list(approvedUnit, "acceptance"),
+    verification: list(approvedUnit, "verification"),
+    files_or_areas: list(constraints, "files_or_areas"),
+    expected_host: scalar(delivery, "expected_host"),
+    completion_updates: list(delivery, "completion_updates"),
+    required_reviewers: list(review, "required_reviewers"),
+    optional_reviewers: list(review, "optional_reviewers"),
+    blockers: list(section, "blockers"),
   };
+}
+
+function legacyErrors(input: string): string[] {
+  const body = extractYaml(input);
+  const errors: string[] = [];
+  for (const legacy of [
+    "slice_plan_review",
+    "plan_ready_handoff",
+    "plan_followthrough_slice_handoff",
+    "plan_followthrough_ledger",
+  ]) {
+    if (new RegExp(`^\\s*${escapeRegExp(legacy)}:\\s*$`, "m").test(body)) {
+      errors.push(`${legacy} is legacy; rerun plan-ready`);
+    }
+  }
+  if (/^\s*reviewed_slices:\s*/m.test(body)) {
+    errors.push("reviewed_slices is legacy; rerun plan-ready");
+  }
+  return errors;
 }
 
 function extractYaml(input: string): string {
@@ -845,22 +735,6 @@ function findSection(input: string, sectionName: string): string | null {
     .filter((line) => line.startsWith(" ") || line.trim() === "")
     .map((line) => line.replace(/^ {2}/, ""))
     .join("\n");
-}
-
-function requireSection(
-  input: string,
-  sectionName: string,
-  errors: string[],
-): void {
-  if (!new RegExp(`^\\s*${escapeRegExp(sectionName)}:\\s*$`, "m").test(input)) {
-    errors.push(`${sectionName} section is required`);
-  }
-}
-
-function requireKey(input: string, key: string, errors: string[]): void {
-  if (!new RegExp(`^\\s*${escapeRegExp(key)}:\\s*`, "m").test(input)) {
-    errors.push(`${key} is required`);
-  }
 }
 
 function scalar(
@@ -956,8 +830,6 @@ function isCommand(command: string | undefined): command is Command {
     "validate-launch-report",
     "validate-review-report",
     "refactoring-template",
-    "followthrough-delivery-template",
-    "validate-followthrough-delivery",
     "gate-template",
     "validate-ledger",
   ].includes(command ?? "");

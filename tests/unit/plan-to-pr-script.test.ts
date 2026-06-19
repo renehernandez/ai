@@ -18,26 +18,37 @@ function withTempFile(content: string, callback: (path: string) => void): void {
 
 function runPlanToPr(
   command: string,
-  content: string,
+  content = "",
 ): { status: number | null; stderr: string; stdout: string } {
   let result: ReturnType<typeof spawnSync> | undefined;
-  withTempFile(content, (path) => {
+  if (content) {
+    withTempFile(content, (path) => {
+      result = spawnSync(
+        "pnpm",
+        [
+          "exec",
+          "tsx",
+          "skills/plan-to-pr/scripts/plan-to-pr.ts",
+          command,
+          "--file",
+          path,
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8",
+        },
+      );
+    });
+  } else {
     result = spawnSync(
       "pnpm",
-      [
-        "exec",
-        "tsx",
-        "skills/plan-to-pr/scripts/plan-to-pr.ts",
-        command,
-        "--file",
-        path,
-      ],
+      ["exec", "tsx", "skills/plan-to-pr/scripts/plan-to-pr.ts", command],
       {
         cwd: process.cwd(),
         encoding: "utf8",
       },
     );
-  });
+  }
 
   assert.ok(result);
   return {
@@ -46,6 +57,39 @@ function runPlanToPr(
     stdout: result.stdout,
   };
 }
+
+const validHandoff = `plan_coordinate_handoff:
+  status: ready
+  route: openspec_task
+  artifact:
+    type: openspec
+    ref: openspec/changes/example-change
+    fingerprint: abc123
+  approved_unit:
+    id: "1.1"
+    title: Add the coordinator
+    scope: Implement one OpenSpec checkbox task.
+    acceptance:
+      - The coordinator validates the handoff.
+    verification:
+      - pnpm test:unit
+  constraints:
+    files_or_areas:
+      - skills/plan-to-pr
+    out_of_scope: []
+  delivery:
+    expected_host: github_pr
+    completion_updates:
+      - Mark OpenSpec task checkbox complete in the same PR/MR.
+  review:
+    required_reviewers:
+      - implementation-readiness
+      - edge-cases-and-risks
+      - simplification-and-scope-control
+      - refactoring-opportunities
+    optional_reviewers: []
+  blockers: []
+`;
 
 const launchedReport = `reviewer_subagent_launch:
   status: launched
@@ -68,218 +112,115 @@ const launchedReport = `reviewer_subagent_launch:
     - docs-alignment-review-agent: 019-f
 `;
 
-const validHandoff = `plan_ready_handoff:
-  status: ready
-  artifact_type: plan
-  artifact_ref: docs/plans/example.md
-  reviewed_slices:
-    - slice-01
-  approved_slice: Implement the first reviewed slice.
-  required_reviewers:
-    - implementation-readiness
-    - edge-cases-and-risks
-    - simplification-and-scope-control
-    - refactoring-opportunities
-  optional_reviewers_selected: []
-  unresolved_blockers: []
-  scrutiny_verdict: ship
-`;
-
-const validFollowthroughDelivery = `plan_followthrough_delivery:
-  slice_id: slice-01
-  slice_name: Upload foundation
-  slice_advancement_mode: ship_then_continue
-  status: shipped
-  artifact:
-    pr_or_mr:
-      url: https://example.test/pr/1
-      draft: false
-      latest_head: abc123
-      merge_state: merged
-    commit: abc123
-    branch: qms-upload
-  delivery_ledger_ref: final response
-  verification:
-    passed:
-      - pnpm test
-    gaps: []
+const deliveryLedger = `delivery_gate_ledger:
+  handoff_validation:
+    status: passed
+    evidence: plan_coordinate_handoff validated
+  session_start:
+    status: passed
+    evidence: repo inspected
+  slice_status:
+    status: passed
+    evidence: approved unit status recorded
+  implementation:
+    status: passed
+    evidence: approved unit implemented
+  local_verification:
+    status: passed
+    evidence: pnpm run test:unit
+  refactoring_execution:
+    status: passed
+    evidence: required refactors implemented or deferred
+  reviewer_subagents:
+    status: passed
+    evidence: reviewer reports validated
+  implementation_review:
+    status: passed
+    evidence: no findings
+  implementation_scrutiny:
+    status: passed
+    evidence: ship
+  code_quality_review:
+    status: passed
+    evidence: no structural findings
+  code_simplifier:
+    status: passed
+    evidence: complete
+  deslop:
+    status: passed
+    evidence: complete
+  security_review:
+    status: not_applicable
+    evidence: no security surface
+  ai_readiness_upkeep:
+    status: not_applicable
+    evidence: no AI readiness surface
+  docs_alignment:
+    status: passed
+    evidence: clean
+  review_feedback_routing:
+    status: passed
+    evidence: github selected
+  artifact_creation_update:
+    status: passed
+    evidence: PR URL
+  artifact_host_review:
+    status: passed
+    evidence: PR inspected
   review_feedback:
     status: passed
-    reviewed_head: abc123
-    resolved: []
-    carried_forward: []
-  refactoring_reuse:
-    implemented: []
-    deferred: []
-    must_consume_later: []
-  significant_refactor_suggestions: []
-  changed_assumptions: []
-  recommended_next_action: continue
+    evidence: latest-head feedback resolved
+  ci:
+    status: passed
+    evidence: checks green
 `;
 
-test("validate-handoff requires refactoring-opportunities from plan-ready", () => {
-  const valid = runPlanToPr("validate-handoff", validHandoff);
+test("validate-handoff accepts the coordinator handoff", () => {
+  const result = runPlanToPr("validate-handoff", validHandoff);
 
-  assert.equal(valid.status, 0);
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /plan_coordinate_handoff valid/);
+});
 
-  const invalid = runPlanToPr(
+test("validate-handoff rejects legacy handoffs", () => {
+  const result = runPlanToPr(
     "validate-handoff",
-    validHandoff.replace("    - refactoring-opportunities\n", ""),
+    `plan_ready_handoff:
+  status: ready
+  reviewed_slices:
+    - slice-01
+`,
   );
 
-  assert.notEqual(invalid.status, 0);
-  assert.match(
-    invalid.stderr,
-    /required_reviewers must include refactoring-opportunities/,
-  );
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /plan_ready_handoff is legacy; rerun plan-ready/);
+  assert.match(result.stderr, /reviewed_slices is legacy; rerun plan-ready/);
 });
 
-test("validate-handoff requires upfront reviewed slice ids", () => {
-  const invalid = runPlanToPr(
+test("validate-handoff requires completion updates for OpenSpec tasks", () => {
+  const result = runPlanToPr(
     "validate-handoff",
-    validHandoff.replace("  reviewed_slices:\n    - slice-01\n", ""),
-  );
-
-  assert.notEqual(invalid.status, 0);
-  assert.match(
-    invalid.stderr,
-    /reviewed_slices must include every upfront-reviewed slice id/,
-  );
-});
-
-test("validate-followthrough-delivery accepts reconciliation contract", () => {
-  const valid = runPlanToPr(
-    "validate-followthrough-delivery",
-    validFollowthroughDelivery,
-  );
-
-  assert.equal(valid.status, 0);
-
-  const invalid = runPlanToPr(
-    "validate-followthrough-delivery",
-    validFollowthroughDelivery.replace(
-      "  status: shipped\n",
-      "  status: done\n",
-    ),
-  );
-
-  assert.notEqual(invalid.status, 0);
-  assert.match(
-    invalid.stderr,
-    /status must be one of: shipped, stacked_pending_merge, blocked, needs_replan/,
-  );
-});
-
-test("validate-followthrough-delivery rejects shipped draft PRs", () => {
-  const invalid = runPlanToPr(
-    "validate-followthrough-delivery",
-    validFollowthroughDelivery.replace(
-      "      draft: false\n",
-      "      draft: true\n",
-    ),
-  );
-
-  assert.notEqual(invalid.status, 0);
-  assert.match(invalid.stderr, /shipped delivery cannot reference a draft PR/);
-});
-
-test("validate-followthrough-delivery rejects shipped delivery with blocked review feedback", () => {
-  const invalid = runPlanToPr(
-    "validate-followthrough-delivery",
-    validFollowthroughDelivery.replace(
-      "    status: passed\n",
-      "    status: blocked\n",
-    ),
-  );
-
-  assert.notEqual(invalid.status, 0);
-  assert.match(
-    invalid.stderr,
-    /review_feedback.status blocked requires delivery status blocked/,
-  );
-});
-
-test("validate-followthrough-delivery rejects stale hosted review head", () => {
-  const invalid = runPlanToPr(
-    "validate-followthrough-delivery",
-    validFollowthroughDelivery.replace(
-      "    reviewed_head: abc123\n",
-      "    reviewed_head: def456\n",
-    ),
-  );
-
-  assert.notEqual(invalid.status, 0);
-  assert.match(
-    invalid.stderr,
-    /review_feedback.reviewed_head must match artifact.pr_or_mr.latest_head/,
-  );
-});
-
-test("validate-followthrough-delivery rejects stacked delivery under ship_then_continue", () => {
-  const stacked = validFollowthroughDelivery
-    .replace("  status: shipped\n", "  status: stacked_pending_merge\n")
-    .replace("      merge_state: merged\n", "      merge_state: mergeable\n");
-
-  const invalid = runPlanToPr("validate-followthrough-delivery", stacked);
-
-  assert.notEqual(invalid.status, 0);
-  assert.match(
-    invalid.stderr,
-    /stacked_pending_merge is not valid for ship_then_continue/,
-  );
-});
-
-test("validate-followthrough-delivery accepts stacked delivery with passed review under stack_then_continue", () => {
-  const stacked = validFollowthroughDelivery
-    .replace(
-      "  slice_advancement_mode: ship_then_continue\n",
-      "  slice_advancement_mode: stack_then_continue\n",
-    )
-    .replace("  status: shipped\n", "  status: stacked_pending_merge\n")
-    .replace("      draft: false\n", "      draft: true\n")
-    .replace("      merge_state: merged\n", "      merge_state: draft\n")
-    .replace(
-      "  recommended_next_action: continue\n",
-      "  recommended_next_action: continue_stack\n",
-    );
-
-  const valid = runPlanToPr("validate-followthrough-delivery", stacked);
-
-  assert.equal(valid.status, 0);
-});
-
-test("validate-followthrough-delivery requires significant refactor suggestions key", () => {
-  const invalid = runPlanToPr(
-    "validate-followthrough-delivery",
-    validFollowthroughDelivery.replace(
-      "  significant_refactor_suggestions: []\n",
+    validHandoff.replace(
+      "    completion_updates:\n      - Mark OpenSpec task checkbox complete in the same PR/MR.\n",
       "",
     ),
   );
 
-  assert.notEqual(invalid.status, 0);
-  assert.match(invalid.stderr, /significant_refactor_suggestions is required/);
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /openspec_task route requires delivery.completion_updates/,
+  );
 });
 
-test("refactoring-template records significant refactor suggestions", () => {
-  const result = spawnSync(
-    "pnpm",
-    [
-      "exec",
-      "tsx",
-      "skills/plan-to-pr/scripts/plan-to-pr.ts",
-      "refactoring-template",
-    ],
-    {
-      cwd: process.cwd(),
-      encoding: "utf8",
-    },
+test("old followthrough delivery commands are not supported", () => {
+  const result = runPlanToPr(
+    "validate-followthrough-delivery",
+    "plan_followthrough_delivery: {}",
   );
 
-  assert.equal(result.status, 0);
-  assert.match(result.stdout, /minor_in_slice:/);
-  assert.match(result.stdout, /significant_refactor_suggestions:/);
-  assert.match(result.stdout, /suggested_planning_action/);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Usage: plan-to-pr\.ts/);
 });
 
 test("validate-launch-report requires AI readiness accounting", () => {
@@ -302,237 +243,21 @@ test("validate-launch-report requires AI readiness accounting", () => {
   );
 });
 
-test("validate-review-report requires AI readiness accounting", () => {
-  const report = `reviewer_subagent_report:
-  status: complete
-  launched_reviewers:
-    - implementation-review-agent
-    - implementation-scrutiny-agent
-    - code-quality-review-agent
-    - code-simplifier-agent
-    - deslop-agent
-    - docs-alignment-review-agent
-  skipped_reviewers:
-    - ai-readiness-upkeep-agent: not_applicable - no AI readiness verification or agent-surface contract changed
-    - security-review-agent: not_applicable - no security-sensitive surface changed
-  outcomes:
-    - implementation-review-agent: passed - no actionable correctness or regression findings
-    - implementation-scrutiny-agent: passed - scrutiny verdict ship
-    - code-quality-review-agent: passed - no critical or warning maintainability findings
-    - code-simplifier-agent: passed - simplification applied or not needed
-    - deslop-agent: passed - AI-shaped clutter removed or not present
-    - docs-alignment-review-agent: passed - docs alignment clean or updated
-`;
-
-  const valid = runPlanToPr("validate-review-report", report);
-
-  assert.equal(valid.status, 0);
-
-  const invalid = runPlanToPr(
-    "validate-review-report",
-    report.replace(
-      "    - ai-readiness-upkeep-agent: not_applicable - no AI readiness verification or agent-surface contract changed\n",
-      "",
-    ),
-  );
-
-  assert.notEqual(invalid.status, 0);
-  assert.match(
-    invalid.stderr,
-    /ai-readiness-upkeep-agent must be launched or listed/,
-  );
-});
-
-test("validate-review-report requires launched AI readiness evidence to validate the report", () => {
-  const report = `reviewer_subagent_report:
-  status: complete
-  launched_reviewers:
-    - implementation-review-agent
-    - implementation-scrutiny-agent
-    - code-quality-review-agent
-    - code-simplifier-agent
-    - deslop-agent
-    - ai-readiness-upkeep-agent
-    - docs-alignment-review-agent
-  skipped_reviewers:
-    - security-review-agent: not_applicable - no security-sensitive surface changed
-  outcomes:
-    - implementation-review-agent: passed - no actionable correctness or regression findings
-    - implementation-scrutiny-agent: passed - scrutiny verdict ship
-    - code-quality-review-agent: passed - no critical or warning maintainability findings
-    - code-simplifier-agent: passed - simplification applied or not needed
-    - deslop-agent: passed - AI-shaped clutter removed or not present
-    - ai-readiness-upkeep-agent: passed - validated ai_readiness_upkeep_report with verdict passed
-    - docs-alignment-review-agent: passed - docs alignment clean or updated
-`;
-
-  const valid = runPlanToPr("validate-review-report", report);
-
-  assert.equal(valid.status, 0);
-
-  const invalid = runPlanToPr(
-    "validate-review-report",
-    report.replace(
-      "validated ai_readiness_upkeep_report with verdict passed",
-      "no AI readiness findings",
-    ),
-  );
-
-  assert.notEqual(invalid.status, 0);
-  assert.match(
-    invalid.stderr,
-    /ai-readiness-upkeep-agent outcome evidence must mention validate-report/,
-  );
-});
-
-test("validate-ledger accepts not applicable AI readiness gate", () => {
-  const ledger = `delivery_gate_ledger:
-  handoff_validation:
-    status: passed
-    evidence: plan_ready_handoff validated
-  session_start:
-    status: passed
-    evidence: repo inspected
-  slice_status:
-    status: passed
-    evidence: branch and PR head recorded
-  implementation:
-    status: passed
-    evidence: approved slice implemented
-  local_verification:
-    status: passed
-    evidence: pnpm run test:unit
-  refactoring_execution:
-    status: passed
-    evidence: required refactors implemented or deferred
-  reviewer_subagents:
-    status: passed
-    evidence: reviewer reports validated
-  implementation_review:
-    status: passed
-    evidence: no findings
-  implementation_scrutiny:
-    status: passed
-    evidence: ship
-  code_quality_review:
-    status: passed
-    evidence: no structural findings
-  code_simplifier:
-    status: passed
-    evidence: complete
-  deslop:
-    status: passed
-    evidence: complete
-  security_review:
-    status: not_applicable
-    evidence: no security surface
-  ai_readiness_upkeep:
-    status: not_applicable
-    evidence: no AI readiness surface
-  docs_alignment:
-    status: passed
-    evidence: clean
-  review_feedback_routing:
-    status: passed
-    evidence: github selected
-  artifact_creation_update:
-    status: passed
-    evidence: PR URL
-  artifact_host_review:
-    status: passed
-    evidence: PR inspected
-  review_feedback:
-    status: passed
-    evidence: latest-head feedback resolved
-  ci:
-    status: passed
-    evidence: checks green
-`;
-
-  const result = runPlanToPr("validate-ledger", ledger);
+test("validate-ledger accepts delivery gate evidence", () => {
+  const result = runPlanToPr("validate-ledger", deliveryLedger);
 
   assert.equal(result.status, 0);
 });
 
-test("validate-ledger requires slice and refactoring execution gates", () => {
-  const ledger = `delivery_gate_ledger:
-  handoff_validation:
-    status: passed
-    evidence: plan_ready_handoff validated
-  session_start:
-    status: passed
-    evidence: repo inspected
-  slice_status:
-    status: passed
-    evidence: branch and PR head recorded
-  implementation:
-    status: passed
-    evidence: approved slice implemented
-  local_verification:
-    status: passed
-    evidence: pnpm run test:unit
-  refactoring_execution:
-    status: passed
-    evidence: required refactors implemented or deferred
-  reviewer_subagents:
-    status: passed
-    evidence: reviewer reports validated
-  implementation_review:
-    status: passed
-    evidence: no findings
-  implementation_scrutiny:
-    status: passed
-    evidence: ship
-  code_quality_review:
-    status: passed
-    evidence: no structural findings
-  code_simplifier:
-    status: passed
-    evidence: complete
-  deslop:
-    status: passed
-    evidence: complete
-  security_review:
-    status: not_applicable
-    evidence: no security surface
-  ai_readiness_upkeep:
-    status: not_applicable
-    evidence: no AI readiness surface
-  docs_alignment:
-    status: passed
-    evidence: clean
-  review_feedback_routing:
-    status: passed
-    evidence: github selected
-  artifact_creation_update:
-    status: passed
-    evidence: PR URL
-  artifact_host_review:
-    status: passed
-    evidence: PR inspected
-  review_feedback:
-    status: passed
-    evidence: latest-head feedback resolved
-  ci:
-    status: passed
-    evidence: checks green
-`;
-
-  const valid = runPlanToPr("validate-ledger", ledger);
-
-  assert.equal(valid.status, 0);
-
-  const missingRefactoringGate = runPlanToPr(
+test("validate-ledger requires refactoring execution evidence", () => {
+  const result = runPlanToPr(
     "validate-ledger",
-    ledger.replace(
+    deliveryLedger.replace(
       "  refactoring_execution:\n    status: passed\n    evidence: required refactors implemented or deferred\n",
       "",
     ),
   );
 
-  assert.notEqual(missingRefactoringGate.status, 0);
-  assert.match(
-    missingRefactoringGate.stderr,
-    /refactoring_execution is required/,
-  );
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /refactoring_execution is required/);
 });

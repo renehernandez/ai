@@ -17,6 +17,23 @@ function withTempFile(content: string, callback: (path: string) => void): void {
   }
 }
 
+function withTempPlan(
+  callback: (context: { artifactRef: string; fingerprint: string }) => void,
+): void {
+  const directory = mkdtempSync(join(tmpdir(), "plan-ready-artifact-"));
+  const artifactRef = join(directory, "plan.md");
+  const content = "# Example Plan\n\nOne atomic implementation unit.\n";
+  try {
+    writeFileSync(artifactRef, content, "utf8");
+    callback({
+      artifactRef,
+      fingerprint: createHash("sha256").update(content).digest("hex"),
+    });
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+}
+
 function runPlanReady(
   command: string,
   content: string,
@@ -48,337 +65,102 @@ function runPlanReady(
   };
 }
 
-function withTempPlan(
-  callback: (context: { artifactRef: string; fingerprint: string }) => void,
-): void {
-  const directory = mkdtempSync(join(tmpdir(), "plan-ready-artifact-"));
-  const artifactRef = join(directory, "plan.md");
-  const content = "# Example Plan\n\n## Implementation Slices\n\n- Slice 1.\n";
-  try {
-    writeFileSync(artifactRef, content, "utf8");
-    callback({
-      artifactRef,
-      fingerprint: createHash("sha256").update(content).digest("hex"),
-    });
-  } finally {
-    rmSync(directory, { force: true, recursive: true });
-  }
-}
-
-type HandoffSliceFixture = {
-  id: string;
-  title: string;
-};
-
-const DEFAULT_HANDOFF_SLICE_GATES = `      observable_outcome: pass
-      bounded_scope: pass
-      sequencing: pass
-      verification: pass
-      refactoring_reuse: pass
-      delivery_fit: pass`;
-
 function validHandoff(artifactRef: string, fingerprint: string): string {
-  return handoffYaml({
-    artifactRef,
-    approvedSlice: "Implement the first reviewed slice.",
-    fingerprint,
-    mode: "audit",
-    reason: "Existing plan already has one concrete implementation slice.",
-    slices: [{ id: "slice-01", title: "Example slice" }],
-    source: "existing_sliced_plan",
-  });
-}
-
-function validMultiSliceHandoff(
-  artifactRef: string,
-  fingerprint: string,
-): string {
-  return handoffYaml({
-    artifactRef,
-    approvedSlice: "slice-01: Implement the first reviewed slice.",
-    fingerprint,
-    mode: "create",
-    reason: "New plan needed a multi-slice implementation breakdown.",
-    slices: [
-      { id: "slice-01", title: "Example slice" },
-      { id: "slice-02", title: "Second slice" },
-      { id: "slice-03", title: "Third slice" },
-    ],
-    source: "created_from_unsliced_artifact",
-  });
-}
-
-function handoffYaml({
-  approvedSlice,
-  artifactRef,
-  fingerprint,
-  mode,
-  reason,
-  slices,
-  source,
-}: {
-  approvedSlice: string;
-  artifactRef: string;
-  fingerprint: string;
-  mode: "audit" | "create";
-  reason: string;
-  slices: HandoffSliceFixture[];
-  source:
-    | "atomic_change"
-    | "created_from_unsliced_artifact"
-    | "existing_sliced_plan";
-}): string {
-  return `slice_plan_review:
-  status: pass
-  artifact_ref: ${artifactRef}
-  artifact_fingerprint: ${fingerprint}
-  mode: ${mode}
-  review_mode_rationale:
-    source: ${source}
-    reason: ${reason}
-  slices:
-${slices.map(handoffSliceYaml).join("\n")}
-  blocking_findings: []
-  warnings: []
-
-plan_ready_handoff:
+  return `plan_coordinate_handoff:
   status: ready
-  artifact_type: plan
-  artifact_ref: ${artifactRef}
-  reviewed_slices:
-${slices.map((slice) => `    - ${slice.id}`).join("\n")}
-  approved_slice: ${approvedSlice}
-  required_reviewers:
-    - implementation-readiness
-    - edge-cases-and-risks
-    - simplification-and-scope-control
-    - refactoring-opportunities
-  optional_reviewers_selected: []
-  unresolved_blockers: []
-  scrutiny_verdict: ship
+  route: atomic_plan
+  artifact:
+    type: plan
+    ref: ${artifactRef}
+    fingerprint: ${fingerprint}
+  approved_unit:
+    id: atomic
+    title: Example atomic unit
+    scope: Implement the one approved change.
+    acceptance:
+      - The requested behavior is observable.
+    verification:
+      - pnpm test
+  constraints:
+    files_or_areas:
+      - skills/plan-ready
+    out_of_scope: []
+  delivery:
+    expected_host: github_pr
+  review:
+    required_reviewers:
+      - implementation-readiness
+      - edge-cases-and-risks
+      - simplification-and-scope-control
+      - refactoring-opportunities
+    optional_reviewers: []
+  blockers: []
 `;
 }
 
-function handoffSliceYaml(slice: HandoffSliceFixture): string {
-  return `    - id: ${slice.id}
-      title: ${slice.title}
-${DEFAULT_HANDOFF_SLICE_GATES}`;
-}
-
-test("validate-handoff requires refactoring-opportunities as a baseline reviewer", () => {
-  withTempPlan(({ artifactRef, fingerprint }) => {
-    const handoff = validHandoff(artifactRef, fingerprint);
-    const valid = runPlanReady("validate-handoff", handoff);
-
-    assert.equal(valid.status, 0);
-
-    const invalid = runPlanReady(
-      "validate-handoff",
-      handoff.replace("    - refactoring-opportunities\n", ""),
-    );
-
-    assert.notEqual(invalid.status, 0);
-    assert.match(
-      invalid.stderr,
-      /required_reviewers must include refactoring-opportunities/,
-    );
-  });
-});
-
-test("validate-handoff requires a passing slice_plan_review", () => {
-  withTempPlan(({ artifactRef, fingerprint }) => {
-    const missing = runPlanReady(
-      "validate-handoff",
-      validHandoff(artifactRef, fingerprint).replace(
-        /slice_plan_review:[\s\S]*?\n\nplan_ready_handoff:/,
-        "plan_ready_handoff:",
-      ),
-    );
-
-    assert.notEqual(missing.status, 0);
-    assert.match(missing.stderr, /slice_plan_review\.status is required/);
-
-    const blocked = runPlanReady(
-      "validate-handoff",
-      validHandoff(artifactRef, fingerprint).replace(
-        "  status: pass",
-        "  status: blocked",
-      ),
-    );
-
-    assert.notEqual(blocked.status, 0);
-    assert.match(
-      blocked.stderr,
-      /slice_plan_review\.status must be pass before status ready/,
-    );
-  });
-});
-
-test("validate-handoff requires reviewed_slices to match the slice review", () => {
-  withTempPlan(({ artifactRef, fingerprint }) => {
-    const missing = runPlanReady(
-      "validate-handoff",
-      validHandoff(artifactRef, fingerprint).replace(
-        "  reviewed_slices:\n    - slice-01\n",
-        "",
-      ),
-    );
-
-    assert.notEqual(missing.status, 0);
-    assert.match(
-      missing.stderr,
-      /reviewed_slices must include every reviewed slice id/,
-    );
-
-    const mismatched = runPlanReady(
-      "validate-handoff",
-      validHandoff(artifactRef, fingerprint).replace(
-        "    - slice-01",
-        "    - slice-02",
-      ),
-    );
-
-    assert.notEqual(mismatched.status, 0);
-    assert.match(
-      mismatched.stderr,
-      /reviewed_slices must include slice_plan_review slices: slice-01/,
-    );
-    assert.match(
-      mismatched.stderr,
-      /reviewed_slices must not include slices missing from slice_plan_review: slice-02/,
-    );
-  });
-});
-
-test("validate-handoff accepts multiple reviewed slices with one approved slice", () => {
+test("validate-handoff accepts an atomic plan coordinate handoff", () => {
   withTempPlan(({ artifactRef, fingerprint }) => {
     const result = runPlanReady(
       "validate-handoff",
-      validMultiSliceHandoff(artifactRef, fingerprint),
+      validHandoff(artifactRef, fingerprint),
     );
 
     assert.equal(result.status, 0);
-    assert.match(result.stdout, /plan_ready_handoff valid/);
+    assert.match(result.stdout, /plan_coordinate_handoff valid/);
   });
 });
 
-test("validate-handoff rejects stale or mismatched slice reviews", () => {
-  withTempPlan(({ artifactRef, fingerprint }) => {
-    const stale = runPlanReady(
-      "validate-handoff",
-      validHandoff(artifactRef, "0".repeat(64)),
-    );
+test("validate-handoff rejects legacy slice handoff shapes", () => {
+  const legacy = `slice_plan_review:
+  status: pass
 
-    assert.notEqual(stale.status, 0);
-    assert.match(
-      stale.stderr,
-      /slice_plan_review\.artifact_fingerprint must match current artifact_ref content/,
-    );
-
-    const mismatchedArtifact = runPlanReady(
-      "validate-handoff",
-      validHandoff(artifactRef, fingerprint).replace(
-        `  artifact_ref: ${artifactRef}\n  artifact_fingerprint`,
-        `  artifact_ref: ${join(artifactRef, "other.md")}\n  artifact_fingerprint`,
-      ),
-    );
-
-    assert.notEqual(mismatchedArtifact.status, 0);
-    assert.match(
-      mismatchedArtifact.stderr,
-      /slice_plan_review\.artifact_ref must match artifact_ref/,
-    );
-  });
-});
-
-test("validate-handoff rejects fresh but incomplete slice reviews", () => {
-  withTempPlan(({ artifactRef, fingerprint }) => {
-    const incomplete = runPlanReady(
-      "validate-handoff",
-      validHandoff(artifactRef, fingerprint).replace(
-        / {2}mode: audit[\s\S]*? {2}blocking_findings: \[\]/,
-        "  blocking_findings: []",
-      ),
-    );
-
-    assert.notEqual(incomplete.status, 0);
-    assert.match(incomplete.stderr, /slice_plan_review\.mode is required/);
-    assert.match(
-      incomplete.stderr,
-      /slice_plan_review\.slices must include at least one slice/,
-    );
-  });
-});
-
-test("validate-handoff currently requires local plan file artifacts", () => {
-  withTempPlan(({ artifactRef, fingerprint }) => {
-    const linear = runPlanReady(
-      "validate-handoff",
-      validHandoff(artifactRef, fingerprint).replace(
-        "  artifact_type: plan",
-        "  artifact_type: linear",
-      ),
-    );
-
-    assert.notEqual(linear.status, 0);
-    assert.match(
-      linear.stderr,
-      /slice_plan_review currently supports local plan file artifacts only/,
-    );
-  });
-});
-
-test("validate-selection requires refactoring-opportunities in baseline reviewers", () => {
-  const validSelection = `reviewer_selection_judge:
-  verdict: baseline_sufficient
-  baseline_reviewers:
-    - implementation-readiness
-    - edge-cases-and-risks
-    - simplification-and-scope-control
-    - refactoring-opportunities
-  selected_optional_reviewers: []
-  rationale:
-    default: baseline reviewers cover this plan
+plan_ready_handoff:
+  status: ready
+  reviewed_slices:
+    - slice-01
 `;
 
-  const valid = runPlanReady("validate-selection", validSelection);
+  const result = runPlanReady("validate-handoff", legacy);
 
-  assert.equal(valid.status, 0);
-
-  const invalid = runPlanReady(
-    "validate-selection",
-    validSelection.replace("    - refactoring-opportunities\n", ""),
-  );
-
-  assert.notEqual(invalid.status, 0);
-  assert.match(
-    invalid.stderr,
-    /baseline_reviewers must include refactoring-opportunities/,
-  );
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /slice_plan_review is legacy; rerun plan-ready/);
+  assert.match(result.stderr, /plan_ready_handoff is legacy; rerun plan-ready/);
+  assert.match(result.stderr, /reviewed_slices is legacy; rerun plan-ready/);
 });
 
-test("reviewer-template includes significant refactor scope gate", () => {
-  const result = spawnSync(
-    "pnpm",
-    [
-      "exec",
-      "tsx",
-      "skills/plan-ready/scripts/plan-ready.ts",
-      "reviewer-template",
-    ],
-    {
-      cwd: process.cwd(),
-      encoding: "utf8",
-    },
-  );
+test("validate-handoff requires openspec completion updates for openspec tasks", () => {
+  withTempPlan(({ artifactRef, fingerprint }) => {
+    const handoff = validHandoff(artifactRef, fingerprint)
+      .replace("  route: atomic_plan\n", "  route: openspec_task\n")
+      .replace("    type: plan\n", "    type: openspec\n")
+      .replace("    id: atomic\n", '    id: "1.1"\n');
 
-  assert.equal(result.status, 0);
-  assert.match(result.stdout, /refactor_scope_gate:/);
-  assert.match(result.stdout, /significant_refactor_suggestions:/);
-  assert.match(result.stdout, /blocks_plan_ready/);
+    const result = runPlanReady("validate-handoff", handoff);
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /openspec_task route requires delivery.completion_updates/,
+    );
+  });
 });
 
-test("handoff-template includes mandatory slice plan review", () => {
+test("validate-handoff rejects stale artifact fingerprints", () => {
+  withTempPlan(({ artifactRef }) => {
+    const result = runPlanReady(
+      "validate-handoff",
+      validHandoff(artifactRef, "bad"),
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /artifact.fingerprint must match current artifact.ref content/,
+    );
+  });
+});
+
+test("handoff-template emits the new coordinator contract", () => {
   const result = spawnSync(
     "pnpm",
     [
@@ -394,16 +176,6 @@ test("handoff-template includes mandatory slice plan review", () => {
   );
 
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /slice_plan_review:/);
-  assert.match(result.stdout, /mode: create/);
-  assert.match(result.stdout, /review_mode_rationale:/);
-  assert.match(result.stdout, /created_from_unsliced_artifact/);
-  assert.match(result.stdout, /slice-03/);
-  assert.match(result.stdout, /first end-to-end sliver/);
-  assert.match(result.stdout, /artifact_fingerprint:/);
-  assert.match(result.stdout, /reviewed_slices:/);
-  assert.match(result.stdout, /- slice-03/);
-  assert.match(result.stdout, /plan_ready_handoff:/);
-  assert.doesNotMatch(result.stdout, /choose create/i);
-  assert.doesNotMatch(result.stdout, /choose audit/i);
+  assert.match(result.stdout, /plan_coordinate_handoff:/);
+  assert.doesNotMatch(result.stdout, /reviewed_slices/);
 });

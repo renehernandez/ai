@@ -1,11 +1,8 @@
 #!/usr/bin/env tsx
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { basename, join, relative, resolve } from "node:path";
-import {
-  sliceIdsFromReviewInput,
-  validateSliceReviewInput,
-} from "../../plan-slices/scripts/plan-slices.ts";
+import { join, relative, resolve } from "node:path";
 
 const BASELINE_REVIEWERS = [
   "implementation-readiness",
@@ -36,8 +33,16 @@ const OPTIONAL_REVIEWER_DESCRIPTIONS = {
 const OPTIONAL_REVIEWERS = Object.keys(OPTIONAL_REVIEWER_DESCRIPTIONS) as Array<
   keyof typeof OPTIONAL_REVIEWER_DESCRIPTIONS
 >;
-
 const ARTIFACT_TYPES = ["plan", "openspec", "linear"] as const;
+const ROUTES = ["atomic_plan", "openspec_task"] as const;
+const EXPECTED_HOSTS = ["github_pr", "gitlab_mr", "direct_publish"] as const;
+const LEGACY_ROOTS = [
+  "slice_plan_review",
+  "plan_ready_handoff",
+  "plan_followthrough_slice_handoff",
+  "plan_followthrough_ledger",
+] as const;
+const LEGACY_KEYS = ["reviewed_slices"] as const;
 
 type Command =
   | "detect"
@@ -48,20 +53,22 @@ type Command =
 
 type ParsedHandoff = {
   status?: string;
+  route?: string;
   artifact_type?: string;
   artifact_ref?: string;
-  approved_slice?: string;
-  reviewed_slices: string[];
-  required_reviewers: string[];
-  optional_reviewers_selected: string[];
-  unresolved_blockers: string[];
-  scrutiny_verdict?: string;
-};
-
-type ParsedSliceReview = {
-  status?: string;
-  artifact_ref?: string;
   artifact_fingerprint?: string;
+  approved_unit_id?: string;
+  approved_unit_title?: string;
+  approved_unit_scope?: string;
+  acceptance: string[];
+  verification: string[];
+  files_or_areas: string[];
+  out_of_scope: string[];
+  expected_host?: string;
+  completion_updates: string[];
+  required_reviewers: string[];
+  optional_reviewers: string[];
+  blockers: string[];
 };
 
 function main(): void {
@@ -131,131 +138,96 @@ ${BASELINE_REVIEWERS.map((reviewer) => `    - ${reviewer}`).join("\n")}
 ${OPTIONAL_REVIEWERS.map((reviewer) => `    - ${reviewer}: ${OPTIONAL_REVIEWER_DESCRIPTIONS[reviewer]}`).join("\n")}
   selected_optional_reviewers: []
   rationale:
-    <optional-reviewer-name>: <why this reviewer is needed>
-
-refactoring_opportunities_contract:
-  make_change_easy:
-    - opportunity: <preparatory refactor>
-      why_now: <current slice risk or later-slice dependency>
-      first_consumer: <current slice or named later slice>
-      later_consumers: []
-      verification: <fastest behavior-preserving verification>
-  reuse_across_slices:
-    - reusable_surface: <component, helper, service, policy, schema helper, or test utility>
-      extract_in_slice: <slice name>
-      consumed_by: []
-      avoid_if: <condition where this becomes premature>
-  refactor_scope_gate:
-    minor_in_slice_allowed:
-      - <local behavior-preserving refactor that does not change slice scope>
-    significant_refactor_suggestions:
-      - title: <separate refactoring slice or none>
-        placement: before_slice | after_slice | later_backlog
-        relative_to_slice: <slice id or title>
-        why_significant: <boundary, contract, data model, broad caller, or sequencing impact>
-        readiness_effect: blocks_plan_ready
-        required_next_step: rerun_brainstorming_and_plan_review
-  blocking_rules:
-    - Block when the current slice is harder or riskier because a small preparatory refactor is missing.
-    - Block when a named later slice clearly needs the same surface and extraction is cheaper because the current slice already touches the boundary.
-    - Block when a reusable abstraction lacks a named current or later consumer.
-    - Block when a required extraction lacks behavior-preserving verification.
-    - Block when a significant refactor should become a new or reordered slice; rerun brainstorming and plan review before readiness.
+    default: <why the selected reviewers are sufficient>
 
 selection_rules:
   - Select docs-and-agent-alignment for reusable workflow, docs, skills, rules, automation prompt, background review, or PR/MR description contract changes.
   - Select agent-runtime-and-skill-compatibility for skill folder structure, skill metadata, bundled script, Codex adapter, same-harness subagent routing, install/update, or agent runtime changes.
   - Select only from optional_reviewer_catalog; do not invent reviewer names.
   - Use baseline_sufficient only after explaining why no optional catalog reviewer is needed.
-
-review_execution_rules:
-  - In Codex, run reviewer agents with the internal Codex subagent tool exposed by the current harness.
-  - Do not use the dispatch skill, Claude Code Task, or external Claude harness for Codex plan-ready reviewers.
-  - Omit model overrides unless the user explicitly asks for one.
 `);
 }
 
 function printHandoffTemplate(): void {
-  console.log(`slice_plan_review:
-  status: pass
-  artifact_ref: <local plan file path>
-  artifact_fingerprint: <sha256 of artifact_ref>
-  mode: create
-  review_mode_rationale:
-    source: created_from_unsliced_artifact
-    reason: <why this artifact needed a multi-slice implementation breakdown>
-  slices:
-    - id: slice-01
-      title: <first end-to-end sliver>
-      observable_outcome: pass
-      bounded_scope: pass
-      sequencing: pass
-      verification: pass
-      refactoring_reuse: pass
-      delivery_fit: pass
-    - id: slice-02
-      title: <next bounded capability>
-      observable_outcome: pass
-      bounded_scope: pass
-      sequencing: pass
-      verification: pass
-      refactoring_reuse: pass
-      delivery_fit: pass
-    - id: slice-03
-      title: <third bounded capability>
-      observable_outcome: pass
-      bounded_scope: pass
-      sequencing: pass
-      verification: pass
-      refactoring_reuse: pass
-      delivery_fit: pass
-  blocking_findings: []
-  warnings: []
-
-plan_ready_handoff:
+  console.log(`plan_coordinate_handoff:
   status: ready
-  artifact_type: plan
-  artifact_ref: <local plan file path>
-  reviewed_slices:
-    - slice-01
-    - slice-02
-    - slice-03
-  approved_slice: <first end-to-end sliver>
-  required_reviewers:
-${BASELINE_REVIEWERS.map((reviewer) => `    - ${reviewer}`).join("\n")}
-  optional_reviewers_selected: []
-  unresolved_blockers: []
-  scrutiny_verdict: ship
+  route: atomic_plan
+  artifact:
+    type: plan
+    ref: docs/plans/example.md
+    fingerprint: <sha256 of artifact ref or current commit sha>
+  approved_unit:
+    id: atomic
+    title: <short title>
+    scope: <one paragraph>
+    acceptance:
+      - <observable result>
+    verification:
+      - <required command, check, or manual proof>
+  constraints:
+    files_or_areas:
+      - <expected ownership area>
+    out_of_scope:
+      - <explicit non-goal>
+  delivery:
+    expected_host: github_pr | gitlab_mr | direct_publish
+    completion_updates: []
+  review:
+    required_reviewers:
+${BASELINE_REVIEWERS.map((reviewer) => `      - ${reviewer}`).join("\n")}
+    optional_reviewers: []
+  blockers: []
 `);
 }
 
 function validateHandoff(input: string): void {
+  const errors = legacyErrors(input);
   const handoff = parseHandoff(input);
-  const sliceReview = parseSliceReview(input);
-  const errors: string[] = [];
 
   requireValue(handoff.status, "status", errors);
-  requireValue(handoff.artifact_type, "artifact_type", errors);
-  requireValue(handoff.artifact_ref, "artifact_ref", errors);
-  if (handoff.reviewed_slices.length === 0) {
-    errors.push("reviewed_slices must include every reviewed slice id");
-  }
-  requireValue(handoff.approved_slice, "approved_slice", errors);
-  requireValue(handoff.scrutiny_verdict, "scrutiny_verdict", errors);
+  requireValue(handoff.route, "route", errors);
+  requireValue(handoff.artifact_type, "artifact.type", errors);
+  requireValue(handoff.artifact_ref, "artifact.ref", errors);
+  requireValue(handoff.artifact_fingerprint, "artifact.fingerprint", errors);
+  requireValue(handoff.approved_unit_id, "approved_unit.id", errors);
+  requireValue(handoff.approved_unit_title, "approved_unit.title", errors);
+  requireValue(handoff.approved_unit_scope, "approved_unit.scope", errors);
+  requireValue(handoff.expected_host, "delivery.expected_host", errors);
 
   if (handoff.status && handoff.status !== "ready") {
     errors.push("status must be ready");
+  }
+
+  if (handoff.route && !includes(ROUTES, handoff.route)) {
+    errors.push(`route must be one of: ${ROUTES.join(", ")}`);
   }
 
   if (
     handoff.artifact_type &&
     !includes(ARTIFACT_TYPES, handoff.artifact_type)
   ) {
-    errors.push(`artifact_type must be one of: ${ARTIFACT_TYPES.join(", ")}`);
+    errors.push(`artifact.type must be one of: ${ARTIFACT_TYPES.join(", ")}`);
   }
 
-  if (handoff.scrutiny_verdict && handoff.scrutiny_verdict !== "ship") {
-    errors.push("scrutiny_verdict must be ship");
+  if (
+    handoff.expected_host &&
+    !includes(EXPECTED_HOSTS, handoff.expected_host)
+  ) {
+    errors.push(
+      `delivery.expected_host must be one of: ${EXPECTED_HOSTS.join(", ")}`,
+    );
+  }
+
+  if (handoff.acceptance.length === 0) {
+    errors.push("approved_unit.acceptance must include at least one item");
+  }
+
+  if (handoff.verification.length === 0) {
+    errors.push("approved_unit.verification must include at least one item");
+  }
+
+  if (handoff.files_or_areas.length === 0) {
+    errors.push("constraints.files_or_areas must include at least one item");
   }
 
   for (const reviewer of BASELINE_REVIEWERS) {
@@ -266,86 +238,63 @@ function validateHandoff(input: string): void {
 
   for (const reviewer of [
     ...handoff.required_reviewers,
-    ...handoff.optional_reviewers_selected,
+    ...handoff.optional_reviewers,
   ]) {
     if (!isKnownReviewer(reviewer)) {
       errors.push(`unknown reviewer: ${reviewer}`);
     }
   }
 
-  for (const reviewer of handoff.optional_reviewers_selected) {
+  for (const reviewer of handoff.optional_reviewers) {
     if (!includes(OPTIONAL_REVIEWERS, reviewer)) {
       errors.push(
-        `optional_reviewers_selected can include only optional reviewers: ${reviewer}`,
+        `optional_reviewers can include only optional reviewers: ${reviewer}`,
       );
     }
   }
 
-  if (handoff.unresolved_blockers.length > 0) {
-    errors.push("unresolved_blockers must be empty before status ready");
+  if (handoff.blockers.length > 0) {
+    errors.push("blockers must be empty before status ready");
   }
 
-  validateSliceReviewForHandoff(input, sliceReview, handoff, errors);
+  if (
+    handoff.route === "atomic_plan" &&
+    handoff.approved_unit_id !== "atomic"
+  ) {
+    errors.push("atomic_plan route requires approved_unit.id atomic");
+  }
+
+  if (handoff.route === "openspec_task") {
+    if (handoff.artifact_type !== "openspec") {
+      errors.push("openspec_task route requires artifact.type openspec");
+    }
+    if (handoff.completion_updates.length === 0) {
+      errors.push(
+        "openspec_task route requires delivery.completion_updates to mark the task checkbox complete in the same PR/MR",
+      );
+    }
+  }
+
+  if (handoff.artifact_ref && existsSync(handoff.artifact_ref)) {
+    const expected = fingerprint(handoff.artifact_ref);
+    if (
+      handoff.artifact_fingerprint &&
+      handoff.artifact_fingerprint !== expected
+    ) {
+      errors.push(
+        "artifact.fingerprint must match current artifact.ref content",
+      );
+    }
+  }
 
   if (errors.length > 0) {
     console.error(
-      `Invalid plan_ready_handoff:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+      `Invalid plan_coordinate_handoff:\n${errors.map((error) => `- ${error}`).join("\n")}`,
     );
     process.exit(1);
   }
 
-  console.log("plan_ready_handoff valid");
-}
-
-function validateSliceReviewForHandoff(
-  input: string,
-  sliceReview: ParsedSliceReview,
-  handoff: ParsedHandoff,
-  errors: string[],
-): void {
-  errors.push(
-    ...validateSliceReviewInput(input).map(
-      (error) => `slice_plan_review.${error}`,
-    ),
-  );
-
-  if (sliceReview.status && sliceReview.status !== "pass") {
-    errors.push("slice_plan_review.status must be pass before status ready");
-  }
-
-  if (
-    handoff.artifact_ref &&
-    sliceReview.artifact_ref &&
-    handoff.artifact_ref !== sliceReview.artifact_ref
-  ) {
-    errors.push("slice_plan_review.artifact_ref must match artifact_ref");
-  }
-
-  if (handoff.artifact_type && handoff.artifact_type !== "plan") {
-    errors.push(
-      "slice_plan_review currently supports local plan file artifacts only",
-    );
-  }
-
-  const sliceReviewIds = sliceIdsFromReviewInput(input);
-  const missingReviewedSlices = sliceReviewIds.filter(
-    (sliceId) => !handoff.reviewed_slices.includes(sliceId),
-  );
-  const extraReviewedSlices = handoff.reviewed_slices.filter(
-    (sliceId) => !sliceReviewIds.includes(sliceId),
-  );
-
-  if (missingReviewedSlices.length > 0) {
-    errors.push(
-      `reviewed_slices must include slice_plan_review slices: ${missingReviewedSlices.join(", ")}`,
-    );
-  }
-
-  if (extraReviewedSlices.length > 0) {
-    errors.push(
-      `reviewed_slices must not include slices missing from slice_plan_review: ${extraReviewedSlices.join(", ")}`,
-    );
-  }
+  console.log("plan_coordinate_handoff valid");
 }
 
 function validateSelection(input: string): void {
@@ -439,29 +388,31 @@ function validateSelection(input: string): void {
 
 function parseHandoff(input: string): ParsedHandoff {
   const body = extractYaml(input);
-  const section = extractSection(body, "plan_ready_handoff");
+  const section = extractSection(body, "plan_coordinate_handoff");
+  const artifact = extractSection(section, "artifact");
+  const approvedUnit = extractSection(section, "approved_unit");
+  const constraints = extractSection(section, "constraints");
+  const delivery = extractSection(section, "delivery");
+  const review = extractSection(section, "review");
 
   return {
     status: scalar(section, "status"),
-    artifact_type: scalar(section, "artifact_type"),
-    artifact_ref: scalar(section, "artifact_ref"),
-    reviewed_slices: list(section, "reviewed_slices"),
-    approved_slice: scalar(section, "approved_slice"),
-    required_reviewers: list(section, "required_reviewers"),
-    optional_reviewers_selected: list(section, "optional_reviewers_selected"),
-    unresolved_blockers: list(section, "unresolved_blockers"),
-    scrutiny_verdict: scalar(section, "scrutiny_verdict"),
-  };
-}
-
-function parseSliceReview(input: string): ParsedSliceReview {
-  const body = extractYaml(input);
-  const section = extractSection(body, "slice_plan_review");
-
-  return {
-    status: scalar(section, "status"),
-    artifact_ref: scalar(section, "artifact_ref"),
-    artifact_fingerprint: scalar(section, "artifact_fingerprint"),
+    route: scalar(section, "route"),
+    artifact_type: scalar(artifact, "type"),
+    artifact_ref: scalar(artifact, "ref"),
+    artifact_fingerprint: scalar(artifact, "fingerprint"),
+    approved_unit_id: scalar(approvedUnit, "id"),
+    approved_unit_title: scalar(approvedUnit, "title"),
+    approved_unit_scope: scalar(approvedUnit, "scope"),
+    acceptance: list(approvedUnit, "acceptance"),
+    verification: list(approvedUnit, "verification"),
+    files_or_areas: list(constraints, "files_or_areas"),
+    out_of_scope: list(constraints, "out_of_scope"),
+    expected_host: scalar(delivery, "expected_host"),
+    completion_updates: list(delivery, "completion_updates"),
+    required_reviewers: list(review, "required_reviewers"),
+    optional_reviewers: list(review, "optional_reviewers"),
+    blockers: list(section, "blockers"),
   };
 }
 
@@ -484,107 +435,48 @@ function parseSelection(input: string): {
   };
 }
 
-function extractYaml(input: string): string {
-  const fenced = input.match(/```(?:ya?ml)?\s*\n([\s\S]*?)\n```/);
-  return (fenced?.[1] ?? input).trim();
-}
+function legacyErrors(input: string): string[] {
+  const body = extractYaml(input);
+  const errors: string[] = [];
 
-function extractSection(input: string, sectionName: string): string {
-  const lines = input.split(/\r?\n/);
-  const start = lines.findIndex((line) => line.trim() === `${sectionName}:`);
-  if (start === -1) {
-    return input;
+  for (const root of LEGACY_ROOTS) {
+    if (hasSection(body, root)) {
+      errors.push(
+        `${root} is legacy; rerun plan-ready to produce plan_coordinate_handoff`,
+      );
+    }
   }
 
-  return lines
-    .slice(start + 1)
-    .filter((line) => line.startsWith(" ") || line.trim() === "")
-    .map((line) => line.replace(/^ {2}/, ""))
-    .join("\n");
+  for (const key of LEGACY_KEYS) {
+    if (hasKey(body, key)) {
+      errors.push(
+        `${key} is legacy; rerun plan-ready to produce plan_coordinate_handoff`,
+      );
+    }
+  }
+
+  return errors;
 }
 
-function scalar(input: string, key: string): string | undefined {
-  const match = input.match(
-    new RegExp(`^${escapeRegExp(key)}:\\s*(.+?)\\s*$`, "m"),
+function fingerprint(path: string): string {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+function isCommand(command: string | undefined): command is Command {
+  return [
+    "detect",
+    "reviewer-template",
+    "validate-selection",
+    "handoff-template",
+    "validate-handoff",
+  ].includes(command ?? "");
+}
+
+function isKnownReviewer(reviewer: string): boolean {
+  return (
+    includes(BASELINE_REVIEWERS, reviewer) ||
+    includes(OPTIONAL_REVIEWERS, reviewer)
   );
-  if (!match) {
-    return undefined;
-  }
-
-  return cleanScalar(match[1]);
-}
-
-function list(input: string, key: string): string[] {
-  const inline = input.match(
-    new RegExp(`^${escapeRegExp(key)}:\\s*\\[(.*?)\\]\\s*$`, "m"),
-  );
-  if (inline) {
-    const raw = inline[1].trim();
-    return raw ? raw.split(",").map(cleanScalar).filter(Boolean) : [];
-  }
-
-  const lines = input.split(/\r?\n/);
-  const keyIndex = lines.findIndex((line) =>
-    line.match(new RegExp(`^${escapeRegExp(key)}:\\s*$`)),
-  );
-  if (keyIndex === -1) {
-    return [];
-  }
-
-  const values: string[] = [];
-  for (const line of lines.slice(keyIndex + 1)) {
-    if (!line.startsWith("  ")) {
-      break;
-    }
-
-    const item = line.trim().match(/^- (.+)$/);
-    if (item) {
-      values.push(cleanScalar(item[1]));
-    }
-  }
-
-  return values.filter(Boolean);
-}
-
-function map(input: string, key: string): Record<string, string> {
-  const lines = input.split(/\r?\n/);
-  const keyIndex = lines.findIndex((line) =>
-    line.match(new RegExp(`^${escapeRegExp(key)}:\\s*$`)),
-  );
-  if (keyIndex === -1) {
-    return {};
-  }
-
-  const values: Record<string, string> = {};
-  for (const line of lines.slice(keyIndex + 1)) {
-    if (!line.startsWith("  ")) {
-      break;
-    }
-
-    const item = line.trim().match(/^([^:]+):\s*(.+)$/);
-    if (item) {
-      values[cleanScalar(item[1])] = cleanScalar(item[2]);
-    }
-  }
-
-  return values;
-}
-
-function hasRationale(input: string): boolean {
-  return Object.keys(map(input, "rationale")).length > 0;
-}
-
-function readInput(args: string[]): string {
-  const fileIndex = args.indexOf("--file");
-  if (fileIndex !== -1) {
-    const file = args[fileIndex + 1];
-    if (!file) {
-      fail("--file requires a path");
-    }
-    return readFileSync(file, "utf8");
-  }
-
-  return readFileSync(0, "utf8");
 }
 
 function inferArtifactType(artifactRef: string): string | null {
@@ -619,44 +511,144 @@ function inferArtifactType(artifactRef: string): string | null {
 
 function toRepoRelative(repoRoot: string, artifactRef: string): string {
   const absolute = resolve(artifactRef);
-  if (!absolute.startsWith(repoRoot)) {
-    return artifactRef;
+  const relativePath = relative(repoRoot, absolute);
+  return relativePath.startsWith("..") ? artifactRef : relativePath;
+}
+
+function git(args: string[]): string | null {
+  const result = spawnSync("git", args, { encoding: "utf8" });
+  if (result.status !== 0) {
+    return null;
   }
-  return relative(repoRoot, absolute) || basename(absolute);
+  return result.stdout.trim();
+}
+
+function extractYaml(input: string): string {
+  const fenced = input.match(/```(?:ya?ml)?\s*\n([\s\S]*?)\n```/);
+  return (fenced?.[1] ?? input).trim();
+}
+
+function extractSection(input: string, sectionName: string): string {
+  const lines = input.split(/\r?\n/);
+  const start = lines.findIndex((line) => line.trim() === `${sectionName}:`);
+  if (start === -1) {
+    return "";
+  }
+
+  return lines
+    .slice(start + 1)
+    .filter((line) => line.startsWith(" ") || line.trim() === "")
+    .map((line) => line.replace(/^ {2}/, ""))
+    .join("\n");
+}
+
+function hasSection(input: string, sectionName: string): boolean {
+  return new RegExp(`^\\s*${escapeRegExp(sectionName)}:\\s*$`, "m").test(input);
+}
+
+function hasKey(input: string, key: string): boolean {
+  return new RegExp(`^\\s*${escapeRegExp(key)}:\\s*`, "m").test(input);
+}
+
+function scalar(input: string, key: string): string | undefined {
+  const match = input.match(
+    new RegExp(`^\\s*${escapeRegExp(key)}:\\s*(.+?)\\s*$`, "m"),
+  );
+  if (!match) {
+    return undefined;
+  }
+  return cleanScalar(match[1]);
+}
+
+function list(input: string, key: string): string[] {
+  const inline = input.match(
+    new RegExp(`^\\s*${escapeRegExp(key)}:\\s*\\[(.*?)\\]\\s*$`, "m"),
+  );
+  if (inline) {
+    const raw = inline[1].trim();
+    return raw ? raw.split(",").map(cleanScalar).filter(Boolean) : [];
+  }
+
+  const lines = input.split(/\r?\n/);
+  const keyIndex = lines.findIndex((line) =>
+    line.match(new RegExp(`^\\s*${escapeRegExp(key)}:\\s*$`)),
+  );
+  if (keyIndex === -1) {
+    return [];
+  }
+
+  const keyIndent = lines[keyIndex].match(/^(\s*)/)?.[1].length ?? 0;
+  const values: string[] = [];
+  for (const line of lines.slice(keyIndex + 1)) {
+    if (line.trim() === "") {
+      continue;
+    }
+    const indent = line.match(/^(\s*)/)?.[1].length ?? 0;
+    if (indent <= keyIndent) {
+      break;
+    }
+    const item = line.trim().match(/^- (.+)$/);
+    if (item) {
+      values.push(cleanScalar(item[1]));
+    }
+  }
+
+  return values.filter(Boolean);
+}
+
+function map(input: string, key: string): Record<string, string> {
+  const lines = input.split(/\r?\n/);
+  const keyIndex = lines.findIndex((line) =>
+    line.match(new RegExp(`^\\s*${escapeRegExp(key)}:\\s*$`)),
+  );
+  if (keyIndex === -1) {
+    return {};
+  }
+
+  const keyIndent = lines[keyIndex].match(/^(\s*)/)?.[1].length ?? 0;
+  const values: Record<string, string> = {};
+  for (const line of lines.slice(keyIndex + 1)) {
+    if (line.trim() === "") {
+      continue;
+    }
+    const indent = line.match(/^(\s*)/)?.[1].length ?? 0;
+    if (indent <= keyIndent) {
+      break;
+    }
+    const item = line.trim().match(/^([^:]+):\s*(.+)$/);
+    if (item) {
+      values[cleanScalar(item[1])] = cleanScalar(item[2]);
+    }
+  }
+
+  return values;
+}
+
+function hasRationale(input: string): boolean {
+  return Object.keys(map(input, "rationale")).length > 0;
+}
+
+function readInput(args: string[]): string {
+  const fileIndex = args.indexOf("--file");
+  if (fileIndex !== -1) {
+    const file = args[fileIndex + 1];
+    if (!file) {
+      fail("--file requires a path");
+    }
+    return readFileSync(file, "utf8");
+  }
+
+  return readFileSync(0, "utf8");
 }
 
 function requireValue(
   value: string | undefined,
-  key: string,
+  label: string,
   errors: string[],
 ): void {
   if (!value || value.startsWith("<")) {
-    errors.push(`${key} is required`);
+    errors.push(`${label} is required`);
   }
-}
-
-function isKnownReviewer(reviewer: string): boolean {
-  return (
-    includes(BASELINE_REVIEWERS, reviewer) ||
-    includes(OPTIONAL_REVIEWERS, reviewer)
-  );
-}
-
-function includes<const T extends readonly string[]>(
-  values: T,
-  value: string,
-): value is T[number] {
-  return values.includes(value as T[number]);
-}
-
-function isCommand(command: string | undefined): command is Command {
-  return [
-    "detect",
-    "reviewer-template",
-    "validate-selection",
-    "handoff-template",
-    "validate-handoff",
-  ].includes(command ?? "");
 }
 
 function cleanScalar(value: string): string {
@@ -667,12 +659,11 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function git(args: string[]): string | null {
-  const result = spawnSync("git", args, { encoding: "utf8" });
-  if (result.status !== 0) {
-    return null;
-  }
-  return result.stdout.trim();
+function includes<T extends readonly string[]>(
+  values: T,
+  value: string,
+): value is T[number] {
+  return values.includes(value as T[number]);
 }
 
 function fail(message: string): never {

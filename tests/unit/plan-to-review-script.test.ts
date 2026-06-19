@@ -47,33 +47,84 @@ function runPlanToReview(
   };
 }
 
-const validHandoff = `plan_ready_handoff:
-  status: ready
-  artifact_type: plan
-  artifact_ref: docs/plans/example.md
-  reviewed_slices:
-    - slice-01
-  approved_slice: Implement the first reviewed slice.
+const planReviewRequest = `plan_review_request:
+  status: ready_for_review
+  artifact_type: openspec
+  artifact_ref: openspec/changes/example-change
+  review_goal: "Validate the plan before implementation."
+  requested_reviewers:
+    - nitro
+    - developers
   unresolved_blockers: []
-  scrutiny_verdict: ship
 `;
 
-test("validate-request accepts plan-ready handoffs with reviewed slices", () => {
-  const valid = runPlanToReview("validate-request", validHandoff);
+const coordinateHandoff = `plan_coordinate_handoff:
+  status: ready
+  route: atomic_plan
+  artifact:
+    type: plan
+    ref: docs/plans/example.md
+    fingerprint: abc123
+  approved_unit:
+    id: atomic
+    title: Example atomic unit
+    scope: Implement one approved change.
+    acceptance:
+      - The behavior is observable.
+    verification:
+      - pnpm test
+  constraints:
+    files_or_areas:
+      - skills/plan-to-review
+  delivery:
+    expected_host: github_pr
+  review:
+    required_reviewers: []
+    optional_reviewers: []
+  blockers: []
+`;
 
-  assert.equal(valid.status, 0);
-  assert.match(valid.stdout, /plan_ready_handoff valid/);
+test("validate-request accepts plan review requests", () => {
+  const result = runPlanToReview("validate-request", planReviewRequest);
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /plan_review_request valid/);
 });
 
-test("validate-request requires reviewed slices in plan-ready handoffs", () => {
-  const invalid = runPlanToReview(
+test("validate-request accepts coordinator handoffs for planning review", () => {
+  const result = runPlanToReview("validate-request", coordinateHandoff);
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /plan_coordinate_handoff valid/);
+});
+
+test("validate-request rejects legacy plan-ready handoffs", () => {
+  const result = runPlanToReview(
     "validate-request",
-    validHandoff.replace("  reviewed_slices:\n    - slice-01\n", ""),
+    `plan_ready_handoff:
+  status: ready
+  reviewed_slices:
+    - slice-01
+`,
   );
 
-  assert.notEqual(invalid.status, 0);
+  assert.notEqual(result.status, 0);
   assert.match(
-    invalid.stderr,
-    /plan_ready_handoff reviewed_slices must include every upfront-reviewed slice id/,
+    result.stderr,
+    /legacy handoffs are unsupported; rerun plan-ready/,
+  );
+});
+
+test("validate-request rejects ambiguous review and coordinate inputs", () => {
+  const result = runPlanToReview(
+    "validate-request",
+    `${planReviewRequest}
+${coordinateHandoff}`,
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /provide exactly one of plan_review_request or plan_coordinate_handoff/,
   );
 });
