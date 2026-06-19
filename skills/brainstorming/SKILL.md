@@ -48,8 +48,8 @@ Use this structure unless the user asks for a different format:
 1. [Decision that needs user judgment]
 2. [Decision that changes scope, safety, architecture, or visible behavior]
 
-**Defaultable**
-- [Decision]: [recommended default unless the user objects]
+**Recommended Defaults**
+- [Decision]: [recommended path I'll use unless you object]
 
 **First question**
 [Ask only the highest-leverage unresolved question.]
