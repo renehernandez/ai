@@ -135,7 +135,7 @@ When the design is complete, detect what documentation patterns exist in the pro
 ls -d openspec/ openspec/specs/ 2>/dev/null
 
 # Check for plan/spec directories
-ls -d docs/plans docs/specs specs/ plans/ design/ 2>/dev/null
+ls -d .agencies/plans docs/specs specs/ plans/ design/ 2>/dev/null
 
 # Look at recent markdown files for patterns
 find . -name "*.md" -path "*/docs/*" -mtime -30 2>/dev/null | head -10
@@ -148,7 +148,8 @@ Also check if Linear MCP tools are available (e.g., `mcp__linear-server__create_
 | If you find... | Recommend |
 |----------------|-----------|
 | `openspec/` directory with `specs/` | OpenSpec proposal - formal spec workflow is set up |
-| `docs/plans/` or `specs/` | Plan document in that directory |
+| `.agencies/plans/` | Plan document in `.agencies/plans/` |
+| `specs/` | Plan/spec document in that directory |
 | Linear MCP available | Linear issue or project doc for team visibility |
 | Nothing specific | Ask user preference, suggest plan file in project |
 
@@ -164,7 +165,8 @@ Ask: "The design looks complete. I see this project uses [detected pattern]. Wan
 | **End session** | User wants to think more or hand off |
 
 **If creating a document:**
-- Use the project's established location and format
+- Write implementation plans under `.agencies/plans/`
+- Use the project's established format
 - Capture all design decisions, requirements, and trade-offs
 - Include enough context for someone unfamiliar to understand
 

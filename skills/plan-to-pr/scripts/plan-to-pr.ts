@@ -68,8 +68,8 @@ const LEDGER_GATES = [
   "review_feedback_routing",
   "artifact_creation_update",
   "artifact_host_review",
-  "review_feedback",
-  "ci",
+  "pipeline_monitoring",
+  "automatic_review_feedback_wait",
 ] as const;
 
 const LEDGER_NOT_APPLICABLE_GATES = [
@@ -408,6 +408,8 @@ function validateLedger(input: string): void {
     }
   }
 
+  validateDeliveryGateSemantics(section, errors);
+
   if (errors.length > 0) {
     console.error(
       `Invalid delivery_gate_ledger:\n${errors.map((error) => `- ${error}`).join("\n")}`,
@@ -416,6 +418,29 @@ function validateLedger(input: string): void {
   }
 
   console.log("delivery_gate_ledger valid");
+}
+
+function validateDeliveryGateSemantics(
+  section: string,
+  errors: string[],
+): void {
+  const automaticReviewGate = findSection(
+    section,
+    "automatic_review_feedback_wait",
+  );
+  const evidence = automaticReviewGate
+    ? scalar(automaticReviewGate, "evidence")
+    : undefined;
+  if (
+    evidence &&
+    !evidence.match(
+      /\b(resolved|no automatic review feedback|none posted|timeout|timed out|unavailable)\b/i,
+    )
+  ) {
+    errors.push(
+      "automatic_review_feedback_wait.evidence must show resolved feedback, no posted feedback after timeout, or unavailable review system evidence",
+    );
+  }
 }
 
 function validateLaunchReport(input: string): void {

@@ -177,5 +177,7 @@ test("handoff-template emits the new coordinator contract", () => {
 
   assert.equal(result.status, 0);
   assert.match(result.stdout, /plan_coordinate_handoff:/);
+  assert.match(result.stdout, /\.agencies\/plans\/example\.md/);
   assert.doesNotMatch(result.stdout, /reviewed_slices/);
+  assert.doesNotMatch(result.stdout, /docs\/plans\/example\.md/);
 });

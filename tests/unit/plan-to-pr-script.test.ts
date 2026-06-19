@@ -167,12 +167,12 @@ const deliveryLedger = `delivery_gate_ledger:
   artifact_host_review:
     status: passed
     evidence: PR inspected
-  review_feedback:
+  pipeline_monitoring:
     status: passed
-    evidence: latest-head feedback resolved
-  ci:
+    evidence: latest-head pipeline passed
+  automatic_review_feedback_wait:
     status: passed
-    evidence: checks green
+    evidence: latest-head automatic review feedback resolved
 `;
 
 test("validate-handoff accepts the coordinator handoff", () => {
@@ -260,4 +260,20 @@ test("validate-ledger requires refactoring execution evidence", () => {
 
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /refactoring_execution is required/);
+});
+
+test("validate-ledger requires automatic review feedback wait evidence", () => {
+  const result = runPlanToPr(
+    "validate-ledger",
+    deliveryLedger.replace(
+      "    evidence: latest-head automatic review feedback resolved\n",
+      "    evidence: latest-head review checked\n",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /automatic_review_feedback_wait\.evidence must show resolved feedback/,
+  );
 });

@@ -107,7 +107,7 @@ function detect(): void {
           ? "github"
           : null,
     openspec_present: existsSync(join(repoRoot, "openspec")),
-    plan_dirs_present: ["docs/plans", "plans", "docs"].filter((path) =>
+    plan_dirs_present: [".agencies/plans", "plans", "docs"].filter((path) =>
       existsSync(join(repoRoot, path)),
     ),
   };

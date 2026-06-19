@@ -20,6 +20,11 @@ delivery, Linear tickets, and any request that needs readiness validation before
 Do not use after implementation has started. Do not create synthetic slices,
 slice reviews, or followthrough ledgers.
 
+## Plan Artifacts
+
+When `plan-ready` or the user asks to write a plan artifact, write it under
+`.agencies/plans/`. Do not create new planning files under `docs/plans/`.
+
 ## Workflow
 
 1. Run `scripts/plan-ready.ts detect <artifact-ref-if-known>`.
@@ -67,7 +72,7 @@ plan_coordinate_handoff:
   route: atomic_plan
   artifact:
     type: plan
-    ref: docs/plans/example.md
+    ref: .agencies/plans/example.md
     fingerprint: <sha256 of artifact ref or current commit sha>
   approved_unit:
     id: atomic

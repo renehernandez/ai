@@ -47,8 +47,15 @@ follow-up bookkeeping commit for task completion.
 8. Run review-feedback routing.
 9. Open or update the routed PR/MR, or direct publish only when repo policy
    explicitly allows it.
-10. Run artifact-host review and CI follow-through.
-11. Finish only when landed/direct-published, or blocked with evidence.
+10. Run artifact-host review.
+11. Monitor artifact-host pipelines for the latest head until they pass, fail,
+    block, or are unavailable with evidence. Include child or downstream
+    pipeline state when the host exposes it.
+12. Wait for routed automatic review feedback on the latest head until feedback
+    is resolved, no automatic feedback is present after the chosen timeout, or
+    the review system is unavailable with evidence. The timeout window must be
+    explicit in the delivery gate evidence.
+13. Finish only when landed/direct-published, or blocked with evidence.
 
 Block with `implementation_scope_escape` when the selected unit requires
 unrelated task edits, new OpenSpec tasks, or broadening the approved scope.
@@ -74,6 +81,8 @@ scripts/plan-to-pr.ts validate-ledger --file <ledger>
 | Checking OpenSpec tasks in a follow-up commit | Check the task in the implementation PR/MR |
 | Implementing multiple OpenSpec tasks at once | Return to OpenSpec or `plan-coordinate` |
 | Treating delivery gate evidence as durable state | Keep sequence state in OpenSpec |
+| Treating an open PR/MR as done before pipelines settle | Keep monitoring latest-head pipelines |
+| Assuming automatic review feedback is absent immediately after push | Wait until feedback resolves or the timeout proves nothing posted |
 
 ## Test Evidence
 

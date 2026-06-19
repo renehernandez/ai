@@ -144,7 +144,7 @@ plan_coordinate_handoff:
   route: atomic_plan | openspec_task
   artifact:
     type: plan | openspec
-    ref: docs/plans/example.md | openspec/changes/change-id
+    ref: .agencies/plans/example.md | openspec/changes/change-id
     fingerprint: <sha256 or current commit sha>
   approved_unit:
     id: atomic | "1.2"
@@ -315,7 +315,7 @@ workflow it should route to OpenSpec before implementation.
 plan_ready_result:
   status: needs_openspec
   artifact_type: plan
-  artifact_ref: docs/plans/openspec-delivery-coordinate.md
+  artifact_ref: .agencies/plans/openspec-delivery-coordinate.md
   reason: The change contains multiple independently reviewable deliverables and
     must be represented as an OpenSpec change before delivery.
   recommended_next_action: Create an OpenSpec change whose tasks.md uses the
