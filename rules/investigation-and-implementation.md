@@ -14,6 +14,10 @@ These rules govern when to diagnose, when to edit, and how to route implementati
 - When the user wants to brainstorm, design, or think through a problem, always use the `/brainstorm` skill.
 - Do not load the lower-level `brainstorming` skill directly for these requests.
 - This applies in plan mode and normal mode.
+- When the user says they dislike a proposed name, structure, taxonomy, folder
+  layout, API shape, or other design choice, treat it as a request for
+  alternatives and tradeoffs. Do not rename, restructure, or otherwise apply
+  the change unless the user explicitly asks for implementation.
 
 ## Code Implementation
 
