@@ -43,6 +43,12 @@ scripts/plan-unit-delivery.ts validate-task-delta --base <base-tasks.md> --head 
 The delta is valid only when exactly one expected deliverable task changes from
 unchecked to checked relative to the base branch.
 
+Reviewer execution is a required delivery gate. A valid handoff authorizes
+launching implementation reviewers as internal subagents in the current
+harness; do not ask for separate confirmation. If internal subagents are
+unavailable, block with evidence instead of substituting a different review
+path.
+
 ## Workflow
 
 1. Validate the `plan_delivery_handoff`.
@@ -53,7 +59,7 @@ unchecked to checked relative to the base branch.
 5. Run local verification named in the handoff, plus the narrowest useful tests
    for touched code.
 6. For OpenSpec tasks, validate the one-checkbox delta against the unit base.
-7. Launch implementation reviewers through internal Codex subagents.
+7. Launch implementation reviewers through internal subagents.
 8. Reconcile reviewer outcomes.
 9. Run review-feedback routing.
 10. Open or update the routed PR/MR, or direct publish only when repo policy

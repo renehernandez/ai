@@ -24,6 +24,10 @@ use for fuzzy ideas, unreviewed plans, or plan authoring.
 Validate `plan_delivery_handoff`, pass the single approved unit to
 `plan-unit-delivery`, report the result, and stop.
 
+`plan-unit-delivery` owns the implementation reviewer gate for each unit,
+including launching internal subagents. Plan Orchestrator only sequences units
+and reports their delivery state.
+
 ### OpenSpec Change
 
 Normalize the delivery goal before selecting work:

@@ -27,7 +27,7 @@ const OPTIONAL_REVIEWER_DESCRIPTIONS = {
   "performance-and-scale":
     "hot paths, concurrency, caching, queues, rate limits, batch behavior, operational limits",
   "agent-runtime-and-skill-compatibility":
-    "Codex skill structure, SKILL.md conventions, agents/openai.yaml, install/update paths, bundled scripts, same-harness subagent routing, runtime compatibility",
+    "skill structure, SKILL.md conventions, adapter prompts, install/update paths, bundled scripts, internal subagent routing, runtime compatibility",
 } as const;
 
 const OPTIONAL_REVIEWERS = Object.keys(OPTIONAL_REVIEWER_DESCRIPTIONS) as Array<
@@ -182,7 +182,7 @@ ${OPTIONAL_REVIEWERS.map((reviewer) => `    - ${reviewer}: ${OPTIONAL_REVIEWER_D
 
 selection_rules:
   - Select docs-and-agent-alignment for reusable workflow, docs, skills, rules, automation prompt, background review, or PR/MR description contract changes.
-  - Select agent-runtime-and-skill-compatibility for skill folder structure, skill metadata, bundled script, Codex adapter, same-harness subagent routing, install/update, or agent runtime changes.
+  - Select agent-runtime-and-skill-compatibility for skill folder structure, skill metadata, bundled script, adapter prompt, internal subagent routing, install/update, or agent runtime changes.
   - Select only from optional_reviewer_catalog; do not invent reviewer names.
   - Use baseline_sufficient only after explaining why no optional catalog reviewer is needed.
 `);

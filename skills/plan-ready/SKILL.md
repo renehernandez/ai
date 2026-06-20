@@ -61,6 +61,11 @@ prompts, install/update behavior, or runtime compatibility changes.
 Use `scripts/plan-ready.ts reviewer-template` and validate the judge output with
 `scripts/plan-ready.ts validate-selection`.
 
+Reviewer execution is part of the `plan-ready` workflow. Once this skill is
+invoked, launch the selected reviewers as internal subagents in the current
+harness; do not ask for separate confirmation. If internal subagents are
+unavailable, emit `blocked_readiness` with the specific missing capability.
+
 ## Atomic Handoff Contract
 
 Use `scripts/plan-ready.ts handoff-template` and validate with

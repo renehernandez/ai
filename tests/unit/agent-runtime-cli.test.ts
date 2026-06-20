@@ -47,7 +47,7 @@ function configureProgramForTest(command: Command): void {
   }
 }
 
-test("Commander dispatches scoped skills commands", () => {
+test("Commander routes scoped skills commands", () => {
   const [parsed] = parseCommand([
     "skills",
     "validate",
@@ -63,7 +63,7 @@ test("Commander dispatches scoped skills commands", () => {
   assert.equal(parsed.configPath, "custom.json");
 });
 
-test("Commander dispatches scoped agent filters", () => {
+test("Commander routes scoped agent filters", () => {
   const [parsed] = parseCommand([
     "agents",
     "status",
@@ -76,7 +76,7 @@ test("Commander dispatches scoped agent filters", () => {
   assert.equal(parsed.agentName, "implementation-review-agent");
 });
 
-test("Commander dispatches top-level wrapper commands", () => {
+test("Commander routes top-level wrapper commands", () => {
   const [parsed] = parseCommand([
     "status",
     "--agent",
@@ -91,7 +91,7 @@ test("Commander dispatches top-level wrapper commands", () => {
   assert.deepEqual(parsed.profileNames, ["personal"]);
 });
 
-test("Commander dispatches scoped OpenSpec commands", () => {
+test("Commander routes scoped OpenSpec commands", () => {
   const [parsed] = parseCommand([
     "openspec",
     "install",
@@ -104,7 +104,7 @@ test("Commander dispatches scoped OpenSpec commands", () => {
   assert.equal(parsed.configPath, "custom.json");
 });
 
-test("Commander dispatches all selection flags", () => {
+test("Commander routes all selection flags", () => {
   const [parsed] = parseCommand(["install", "--all-profiles"]);
 
   assert.equal(parsed.command, "install");

@@ -79,7 +79,7 @@ What goes wrong + fixes.
 
 ```yaml
 # BAD: Summarizes workflow - Claude may follow this instead of reading skill
-description: Use when executing plans - dispatches subagent per task with code review
+description: Use when executing plans - runs subagent per task with code review
 
 # GOOD: Just triggering conditions
 description: Use when executing implementation plans with independent tasks

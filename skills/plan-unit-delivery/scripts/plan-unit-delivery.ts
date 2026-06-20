@@ -250,8 +250,8 @@ reviewer_subagent_report:
     - docs-alignment-review-agent: passed - docs alignment clean or updated
 
 review_execution_rules:
-  - In Codex, run reviewer agents with the internal Codex subagent tool exposed by the current harness.
-  - Do not use the dispatch skill, Claude Code Task, or external Claude harness for Codex plan-unit-delivery reviewers.
+  - Run reviewer agents with the internal subagent tool exposed by the current harness.
+  - If internal subagents are unavailable, block with evidence instead of substituting another review path.
   - Omit model overrides unless the user explicitly asks for one.
   - Print and validate reviewer_subagent_launch immediately after spawning reviewers and before waiting for outcomes.
   - Validate reviewer_subagent_report before PR/MR creation or final delivery.

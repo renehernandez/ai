@@ -41,7 +41,7 @@ If `main` is unavailable, use the project's active base branch. Broaden scope on
 
 | Pattern | Prefer |
 | --- | --- |
-| Nested conditionals or ternaries | Early returns, named predicates, or a simple dispatcher |
+| Nested conditionals or ternaries | Early returns, named predicates, or a simple lookup |
 | Duplicate branches | Shared helper, common setup, or a single clearer flow |
 | Thin wrappers and pass-through helpers | Direct calls unless the wrapper names a real concept |
 | Cast-heavy or optional-heavy code | Explicit type boundaries and narrowing |
