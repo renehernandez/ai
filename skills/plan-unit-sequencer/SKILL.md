@@ -64,7 +64,7 @@ Normalize the landing mode for PR/MR sequences:
 7. Select the first unchecked deliverable task in document order.
 8. Pass that task to `plan-unit-delivery`.
 9. Require `plan-unit-delivery` to mark exactly one additional selected task
-   checkbox complete in one separate implementation commit for that task.
+   checkbox complete in one separate implementation PR/MR for that task.
 10. Advance according to `landing_mode`.
 
 For `next_task`, stop after one successful delivery unit. For
@@ -121,7 +121,7 @@ Before selecting another task in `stack_when_ready`, verify:
 - no future task is checked early.
 
 Every new stacked unit must add exactly one checked deliverable task relative to
-its base branch, and each selected task must remain its own commit in the stack.
+its base branch, and each selected task must remain its own PR/MR in the stack.
 
 ## Failure Routing
 
@@ -167,7 +167,7 @@ followthrough-ledger inputs are unsupported. Return `needs_plan_ready`.
 | Treating a full-change request as one task | Set `delivery_goal: complete_change` and loop until no unchecked deliverable tasks remain |
 | Saying done without rereading `tasks.md` | Base completion only on target-branch state after final merge or direct publish |
 | Batching tasks inside `plan-unit-delivery` | Keep `plan-unit-delivery` to one unit; sequence units here |
-| Combining multiple OpenSpec tasks in one commit | Split delivery so each task has its own commit |
+| Combining multiple OpenSpec tasks in one PR/MR | Split delivery so each task has its own PR/MR |
 | Selecting from a detached or stale checkout | Refresh target branch and record the target commit |
 | Advancing from an open PR branch checkbox in `ship_then_continue` | Wait for merge or direct publish |
 | Treating stacked work as landed | Report stack-ready state until the stack lands on target |

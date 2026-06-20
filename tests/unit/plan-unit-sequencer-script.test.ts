@@ -126,7 +126,7 @@ const validHandoff = `plan_delivery_handoff:
   delivery:
     expected_host: github_pr
     completion_updates:
-      - Mark OpenSpec task checkbox complete in one separate implementation commit.
+      - Mark OpenSpec task checkbox complete in one separate implementation PR/MR.
   review:
     required_reviewers:
       - implementation-readiness

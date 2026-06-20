@@ -111,7 +111,7 @@ function printHandoffTemplate(): void {
 - Route: OpenSpec task.
 - Artifact: openspec/changes/example-change.
 - Selected task: 1.1.
-- Delivery: mark only that task complete in one separate implementation commit.
+- Delivery: mark only that task complete in one separate implementation PR/MR.
 
 \`\`\`yaml
 plan_delivery_handoff:
@@ -137,7 +137,7 @@ plan_delivery_handoff:
   delivery:
     expected_host: github_pr | gitlab_mr | direct_publish
     completion_updates:
-      - Mark OpenSpec task checkbox complete in one separate implementation commit.
+      - Mark OpenSpec task checkbox complete in one separate implementation PR/MR.
   review:
     required_reviewers:
 ${BASELINE_REVIEWERS.map((reviewer) => `      - ${reviewer}`).join("\n")}

@@ -34,10 +34,9 @@ change the selected checkbox from `[ ]` to `[x]` in the same branch that
 implements the task. Do not create a follow-up bookkeeping commit for task
 completion.
 
-Each OpenSpec task must be delivered in its own commit. A stacked PR/MR may
-contain multiple task commits by the time the stack tip is inspected, but each
-commit must correspond to exactly one selected task. Do not combine multiple
-OpenSpec tasks in one commit.
+Each OpenSpec task must be delivered in its own PR/MR. A task may require
+multiple commits inside that PR/MR. Do not combine multiple OpenSpec tasks in
+one PR/MR.
 
 Before finishing an OpenSpec task unit, validate the task delta:
 
@@ -61,9 +60,10 @@ path.
 3. Implement only `approved_unit`.
 4. If the approved unit is an OpenSpec task, check off only that task in
    `tasks.md` in the same commit as the implementation for that task.
-5. Confirm the approved task is delivered as one separate commit. If the diff
-   includes another task's implementation or checkbox update, split it before
-   continuing.
+5. Confirm the approved task is delivered as one separate PR/MR. If the diff
+   includes another task's implementation or checkbox update, split it into a
+   separate PR/MR before continuing. Multiple commits inside the selected
+   task's PR/MR are allowed.
 6. Run local verification named in the handoff, plus the narrowest useful tests
    for touched code.
 7. For OpenSpec tasks, validate the one-checkbox delta against the unit base.
@@ -114,7 +114,7 @@ scripts/plan-unit-delivery.ts validate-ledger --file <ledger>
 | --- | --- |
 | Implementing without `plan_delivery_handoff` | Return `needs_plan_ready` |
 | Accepting legacy slice/followthrough handoffs | Return `needs_plan_ready` |
-| Combining multiple OpenSpec tasks in one commit | Split into one commit per task |
+| Combining multiple OpenSpec tasks in one PR/MR | Split into one PR/MR per task |
 | Checking OpenSpec tasks in a follow-up commit | Check the task in the implementation PR/MR or direct-publish commit |
 | Reusing the planning-review PR/MR for implementation | Create a separate implementation artifact and record separation evidence |
 | Implementing multiple OpenSpec tasks at once | Return to OpenSpec or `plan-unit-sequencer` |

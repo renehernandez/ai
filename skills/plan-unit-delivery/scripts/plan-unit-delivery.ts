@@ -70,7 +70,7 @@ const LEDGER_GATES = [
   "session_start",
   "slice_status",
   "implementation",
-  "unit_commit_boundary",
+  "unit_artifact_boundary",
   "local_verification",
   "refactoring_execution",
   "reviewer_subagents",
@@ -216,7 +216,7 @@ function printGateTemplate(): void {
   console.log(`## Readable Summary
 
 - Delivery state: all required gates have evidence.
-- Verification: one-task commit boundary, local checks, reviewer outcomes, artifact separation, hosted review, pipelines, and automatic feedback wait are accounted for.
+- Verification: one-task PR/MR boundary, local checks, reviewer outcomes, artifact separation, hosted review, pipelines, and automatic feedback wait are accounted for.
 - Finish condition: landed, direct-published, stack-ready, or blocked with evidence.
 
 \`\`\`yaml
@@ -588,16 +588,18 @@ function validateDeliveryGateSemantics(
   section: string,
   errors: string[],
 ): void {
-  const commitBoundaryGate = findSection(section, "unit_commit_boundary");
-  const commitBoundaryEvidence = commitBoundaryGate
-    ? scalar(commitBoundaryGate, "evidence")
+  const artifactBoundaryGate = findSection(section, "unit_artifact_boundary");
+  const artifactBoundaryEvidence = artifactBoundaryGate
+    ? scalar(artifactBoundaryGate, "evidence")
     : undefined;
   if (
-    commitBoundaryEvidence &&
-    !commitBoundaryEvidence.match(/\b(one|single|separate)\b.*\bcommit\b/i)
+    artifactBoundaryEvidence &&
+    !artifactBoundaryEvidence.match(
+      /\b(one|single|separate)\b.*\b(PR|MR|pull request|merge request|artifact)\b/i,
+    )
   ) {
     errors.push(
-      "unit_commit_boundary.evidence must prove the approved task is delivered in one separate commit",
+      "unit_artifact_boundary.evidence must prove the approved task is delivered in one separate PR/MR or implementation artifact",
     );
   }
 

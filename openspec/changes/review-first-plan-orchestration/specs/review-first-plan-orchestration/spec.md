@@ -80,7 +80,7 @@ skill after reviewed planning evidence exists.
 - **THEN** `plan-unit-sequencer` selects one unchecked deliverable task at a time
 - **AND** each selected task maps to one `plan-unit-delivery` run and one
   implementation artifact
-- **AND** each selected task maps to one separate implementation commit
+- **AND** each selected task maps to one separate implementation PR or MR
 
 ### Requirement: Plan readiness remains pre-delivery
 The system SHALL keep `plan-ready` as a readiness gate that stops before
@@ -110,7 +110,7 @@ review artifacts.
 - **WHEN** an implementation unit delivers an OpenSpec task
 - **THEN** the selected task checkbox is marked complete in the same
   implementation PR or MR as the code change
-- **AND** the selected task is delivered in one separate implementation commit
+- **AND** the selected task is delivered in one separate implementation PR or MR
 
 ### Requirement: Shared planning contract validation
 The system SHALL share planning-contract parsing and validation helpers across
