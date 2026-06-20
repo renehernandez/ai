@@ -16,6 +16,24 @@ function withTempFile(content: string, callback: (path: string) => void): void {
   }
 }
 
+function withTempFiles(
+  files: Record<string, string>,
+  callback: (paths: Record<string, string>) => void,
+): void {
+  const directory = mkdtempSync(join(tmpdir(), "plan-unit-delivery-script-"));
+  const paths: Record<string, string> = {};
+  try {
+    for (const [name, content] of Object.entries(files)) {
+      const path = join(directory, name);
+      writeFileSync(path, content, "utf8");
+      paths[name] = path;
+    }
+    callback(paths);
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+}
+
 function runPlanUnitDelivery(
   command: string,
   content = "",
@@ -54,6 +72,42 @@ function runPlanUnitDelivery(
       },
     );
   }
+
+  assert.ok(result);
+  return {
+    status: result.status,
+    stderr: result.stderr,
+    stdout: result.stdout,
+  };
+}
+
+function runTaskDelta(
+  base: string,
+  head: string,
+  taskId: string,
+): { status: number | null; stderr: string; stdout: string } {
+  let result: ReturnType<typeof spawnSync> | undefined;
+  withTempFiles({ "base.md": base, "head.md": head }, (paths) => {
+    result = spawnSync(
+      "pnpm",
+      [
+        "exec",
+        "tsx",
+        "skills/plan-unit-delivery/scripts/plan-unit-delivery.ts",
+        "validate-task-delta",
+        "--base",
+        paths["base.md"],
+        "--head",
+        paths["head.md"],
+        "--task",
+        taskId,
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8",
+      },
+    );
+  });
 
   assert.ok(result);
   return {
@@ -226,6 +280,101 @@ test("old followthrough delivery commands are not supported", () => {
 
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /Usage: plan-unit-delivery\.ts/);
+});
+
+test("validate-task-delta accepts exactly one expected checked deliverable", () => {
+  const result = runTaskDelta(
+    `# Tasks
+
+## 1. Delivery
+
+- [x] 1.1 Complete base task
+- [ ] 1.2 Add stacked task
+- [ ] 1.3 Add later task
+`,
+    `# Tasks
+
+## 1. Delivery
+
+- [x] 1.1 Complete base task
+- [x] 1.2 Add stacked task
+- [ ] 1.3 Add later task
+`,
+    "1.2",
+  );
+
+  assert.equal(result.status, 0);
+  const parsed = JSON.parse(result.stdout);
+
+  assert.equal(parsed.status, "unit_task_delta_valid");
+  assert.equal(parsed.added_task.id, "1.2");
+});
+
+test("validate-task-delta rejects missing selected task checkbox", () => {
+  const result = runTaskDelta(
+    `# Tasks
+
+## 1. Delivery
+
+- [ ] 1.1 Add first task
+`,
+    `# Tasks
+
+## 1. Delivery
+
+- [ ] 1.1 Add first task
+`,
+    "1.1",
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /unit_task_delta_missing/);
+});
+
+test("validate-task-delta rejects multiple newly checked deliverables", () => {
+  const result = runTaskDelta(
+    `# Tasks
+
+## 1. Delivery
+
+- [ ] 1.1 Add first task
+- [ ] 1.2 Add second task
+`,
+    `# Tasks
+
+## 1. Delivery
+
+- [x] 1.1 Add first task
+- [x] 1.2 Add second task
+`,
+    "1.1",
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /unit_task_delta_multiple/);
+});
+
+test("validate-task-delta rejects an unexpected checked task", () => {
+  const result = runTaskDelta(
+    `# Tasks
+
+## 1. Delivery
+
+- [ ] 1.1 Add first task
+- [ ] 1.2 Add second task
+`,
+    `# Tasks
+
+## 1. Delivery
+
+- [ ] 1.1 Add first task
+- [x] 1.2 Add second task
+`,
+    "1.1",
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /unit_task_delta_unexpected/);
 });
 
 test("validate-launch-report requires AI readiness accounting", () => {

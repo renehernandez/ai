@@ -2,6 +2,10 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import {
+  parseTasks,
+  validateTasks,
+} from "../../openspec-tasks/scripts/openspec-tasks.ts";
 
 const BASELINE_REVIEWERS = [
   "implementation-readiness",
@@ -95,7 +99,8 @@ type Command =
   | "validate-review-report"
   | "refactoring-template"
   | "gate-template"
-  | "validate-ledger";
+  | "validate-ledger"
+  | "validate-task-delta";
 
 type ParsedHandoff = {
   status?: string;
@@ -121,7 +126,7 @@ function main(): void {
 
   if (!isCommand(command)) {
     fail(
-      "Usage: plan-unit-delivery.ts <detect|validate-handoff|reviewer-template|validate-launch-report|validate-review-report|refactoring-template|gate-template|validate-ledger> [--file path]",
+      "Usage: plan-unit-delivery.ts <detect|validate-handoff|reviewer-template|validate-launch-report|validate-review-report|refactoring-template|gate-template|validate-ledger|validate-task-delta> [--file path|--base path --head path --task id]",
     );
   }
 
@@ -142,6 +147,11 @@ function main(): void {
 
   if (command === "refactoring-template") {
     printRefactoringExecutionTemplate();
+    return;
+  }
+
+  if (command === "validate-task-delta") {
+    validateTaskDelta(args);
     return;
   }
 
@@ -373,6 +383,122 @@ function validateHandoff(input: string): void {
   }
 
   console.log("plan_delivery_handoff valid");
+}
+
+function validateTaskDelta(args: string[]): void {
+  const basePath = requiredArg(args, "--base");
+  const headPath = requiredArg(args, "--head");
+  const expectedTaskId = requiredArg(args, "--task");
+  const errors: string[] = [];
+  const baseTasks = parseTasks(readFileSync(basePath, "utf8"));
+  const headTasks = parseTasks(readFileSync(headPath, "utf8"));
+  const baseErrors = validateTasks(baseTasks);
+  const headErrors = validateTasks(headTasks);
+
+  errors.push(
+    ...baseErrors.map((error) => `base tasks.md: ${error}`),
+    ...headErrors.map((error) => `head tasks.md: ${error}`),
+  );
+
+  const baseById = new Map(baseTasks.map((task) => [task.id, task]));
+  const headById = new Map(headTasks.map((task) => [task.id, task]));
+  const expectedBaseTask = baseById.get(expectedTaskId);
+  const expectedHeadTask = headById.get(expectedTaskId);
+
+  if (!expectedBaseTask || !expectedHeadTask) {
+    errors.push(
+      `unit_task_delta_unexpected: expected task ${expectedTaskId} must exist in both base and head tasks.md`,
+    );
+  }
+
+  for (const baseTask of baseTasks) {
+    if (!headById.has(baseTask.id)) {
+      errors.push(
+        `unit_task_delta_invalid_tasks: task ${baseTask.id} missing from head tasks.md`,
+      );
+    }
+  }
+
+  for (const headTask of headTasks) {
+    if (!baseById.has(headTask.id)) {
+      errors.push(
+        `unit_task_delta_invalid_tasks: task ${headTask.id} missing from base tasks.md`,
+      );
+    }
+  }
+
+  const newlyChecked = headTasks.filter((headTask) => {
+    const baseTask = baseById.get(headTask.id);
+    return baseTask && !baseTask.checked && headTask.checked;
+  });
+  const newlyCheckedDeliverables = newlyChecked.filter(
+    (task) => task.kind === "deliverable",
+  );
+  const uncheckedPreviouslyChecked = baseTasks.filter((baseTask) => {
+    const headTask = headById.get(baseTask.id);
+    return baseTask.checked && headTask && !headTask.checked;
+  });
+
+  for (const task of uncheckedPreviouslyChecked) {
+    errors.push(
+      `unit_task_delta_invalid_tasks: task ${task.id} was unchecked relative to base`,
+    );
+  }
+
+  if (expectedBaseTask?.checked && expectedHeadTask?.checked) {
+    errors.push(
+      `unit_task_delta_unexpected: expected task ${expectedTaskId} was already checked in base`,
+    );
+  } else if (expectedHeadTask && !expectedHeadTask.checked) {
+    errors.push(
+      `unit_task_delta_missing: expected task ${expectedTaskId} was not checked`,
+    );
+  }
+
+  if (newlyCheckedDeliverables.length > 1) {
+    errors.push(
+      `unit_task_delta_multiple: checked deliverable tasks ${newlyCheckedDeliverables.map((task) => task.id).join(", ")}`,
+    );
+  }
+
+  if (
+    newlyCheckedDeliverables.length === 1 &&
+    newlyCheckedDeliverables[0].id !== expectedTaskId
+  ) {
+    errors.push(
+      `unit_task_delta_unexpected: checked ${newlyCheckedDeliverables[0].id} instead of ${expectedTaskId}`,
+    );
+  }
+
+  const unexpectedNewlyChecked = newlyChecked.filter(
+    (task) => task.id !== expectedTaskId,
+  );
+  if (
+    unexpectedNewlyChecked.length > 0 &&
+    newlyCheckedDeliverables.length <= 1
+  ) {
+    errors.push(
+      `unit_task_delta_unexpected: checked extra tasks ${unexpectedNewlyChecked.map((task) => task.id).join(", ")}`,
+    );
+  }
+
+  if (errors.length > 0) {
+    console.error(
+      `Invalid unit_task_delta:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+    );
+    process.exit(1);
+  }
+
+  console.log(
+    JSON.stringify(
+      {
+        status: "unit_task_delta_valid",
+        added_task: expectedHeadTask,
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 function validateLedger(input: string): void {
@@ -824,6 +950,18 @@ function readInput(args: string[]): string {
   return readFileSync(0, "utf8");
 }
 
+function requiredArg(args: string[], flag: string): string {
+  const index = args.indexOf(flag);
+  if (index === -1) {
+    fail(`validate-task-delta requires ${flag}`);
+  }
+  const value = args[index + 1];
+  if (!value) {
+    fail(`${flag} requires a value`);
+  }
+  return value;
+}
+
 function requireValue(
   value: string | undefined,
   key: string,
@@ -858,6 +996,7 @@ function isCommand(command: string | undefined): command is Command {
     "refactoring-template",
     "gate-template",
     "validate-ledger",
+    "validate-task-delta",
   ].includes(command ?? "");
 }
 

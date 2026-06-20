@@ -34,6 +34,15 @@ change the selected checkbox from `[ ]` to `[x]` in the same branch that
 implements the task. Do not create a follow-up bookkeeping commit for task
 completion.
 
+Before finishing an OpenSpec task unit, validate the task delta:
+
+```bash
+scripts/plan-unit-delivery.ts validate-task-delta --base <base-tasks.md> --head <unit-tasks.md> --task <task-id>
+```
+
+The delta is valid only when exactly one expected deliverable task changes from
+unchecked to checked relative to the base branch.
+
 ## Workflow
 
 1. Validate the `plan_delivery_handoff`.
@@ -43,20 +52,22 @@ completion.
    `tasks.md`.
 5. Run local verification named in the handoff, plus the narrowest useful tests
    for touched code.
-6. Launch implementation reviewers through internal Codex subagents.
-7. Reconcile reviewer outcomes.
-8. Run review-feedback routing.
-9. Open or update the routed PR/MR, or direct publish only when repo policy
+6. For OpenSpec tasks, validate the one-checkbox delta against the unit base.
+7. Launch implementation reviewers through internal Codex subagents.
+8. Reconcile reviewer outcomes.
+9. Run review-feedback routing.
+10. Open or update the routed PR/MR, or direct publish only when repo policy
    explicitly allows it.
-10. Run artifact-host review.
-11. Monitor artifact-host pipelines for the latest head until they pass, fail,
+11. Run artifact-host review.
+12. Monitor artifact-host pipelines for the latest head until they pass, fail,
     block, or are unavailable with evidence. Include child or downstream
     pipeline state when the host exposes it.
-12. Wait for routed automatic review feedback on the latest head until feedback
+13. Wait for routed automatic review feedback on the latest head until feedback
     is resolved, no automatic feedback is present after the chosen timeout, or
     the review system is unavailable with evidence. The timeout window must be
     explicit in the delivery gate evidence.
-13. Finish only when landed/direct-published, or blocked with evidence.
+14. Finish only when landed, direct-published, stack-ready, or blocked with
+    evidence.
 
 Block with `implementation_scope_escape` when the selected unit requires
 unrelated task edits, new OpenSpec tasks, or broadening the approved scope.
@@ -81,6 +92,7 @@ scripts/plan-unit-delivery.ts validate-ledger --file <ledger>
 | Accepting legacy slice/followthrough handoffs | Return `needs_plan_ready` |
 | Checking OpenSpec tasks in a follow-up commit | Check the task in the implementation PR/MR or direct-publish commit |
 | Implementing multiple OpenSpec tasks at once | Return to OpenSpec or `plan-orchestrator` |
+| Finishing without proving the task delta | Run `validate-task-delta` against base and unit `tasks.md` |
 | Treating delivery gate evidence as durable state | Keep sequence state in OpenSpec |
 | Treating an open PR/MR as done before pipelines settle | Keep monitoring latest-head pipelines |
 | Assuming automatic review feedback is absent immediately after push | Wait until feedback resolves or the timeout proves nothing posted |

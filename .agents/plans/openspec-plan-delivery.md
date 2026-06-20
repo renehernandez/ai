@@ -1,4 +1,4 @@
-# OpenSpec Plan Delivery
+# OpenSpec Plan Orchestrator
 
 ## Goal
 
@@ -6,8 +6,8 @@ Replace the current slice-ledger planning workflow with a simpler delivery model
 
 - `plan-ready` decides whether work is atomic or needs an OpenSpec Blueprint.
 - `openspec-tasks` audits OpenSpec checkbox tasks as minor deliverables.
-- `plan-delivery` becomes the single delivery entry point.
-- `plan-to-pr` implements exactly one approved unit.
+- `plan-orchestrator` becomes the single delivery entry point.
+- `plan-unit-delivery` implements exactly one approved unit.
 - OpenSpec `tasks.md` is the only durable multi-step ledger.
 
 The implementation should remove the old `slice_plan_review`,
@@ -37,13 +37,13 @@ progress after `plan-ready` emits a reviewed `openspec_blueprint`.
 ```mermaid
 flowchart LR
   input[Idea, plan, ticket, or OpenSpec change] --> ready[plan-ready]
-  ready -->|atomic plan| delivery[plan-delivery]
+  ready -->|atomic plan| delivery[plan-orchestrator]
   ready -->|multi-deliverable| blueprint[openspec_blueprint]
   blueprint --> openspec[OpenSpec change]
   openspec --> audit[openspec-tasks]
   audit --> delivery
   delivery --> unit[Selected approved unit]
-  unit --> pr[plan-to-pr]
+  unit --> pr[plan-unit-delivery]
   pr --> done[PR/MR or direct publish]
   done -->|OpenSpec task| checkbox[Task checked in same PR/MR]
 ```
@@ -64,7 +64,7 @@ atomic plan must have:
 - no hidden migration, deployment, or manual prerequisite chain.
 
 If the plan is atomic, `plan-ready` emits a ready handoff for
-`plan-delivery`. If the plan is multi-deliverable, `plan-ready` emits a
+`plan-orchestrator`. If the plan is multi-deliverable, `plan-ready` emits a
 reviewed `openspec_blueprint` and stops before writing OpenSpec files. It must
 not create synthetic slices or emit `slice_plan_review`.
 
@@ -89,12 +89,12 @@ The audit checks:
 `openspec-tasks` may recommend edits to `tasks.md`, but it does not maintain
 separate state.
 
-### `plan-delivery`
+### `plan-orchestrator`
 
-`plan-delivery` is the single delivery entry point.
+`plan-orchestrator` is the single delivery entry point.
 
 For an atomic plan, it validates the new `plan_delivery_handoff`, calls
-`plan-to-pr` for one delivery, reports the delivery result, and stops.
+`plan-unit-delivery` for one delivery, reports the delivery result, and stops.
 
 For an OpenSpec change, it validates OpenSpec with:
 
@@ -105,31 +105,31 @@ openspec validate <change-id> --strict --no-interactive
 Then it resolves the repo's delivery target branch and publishing remote,
 refreshes that target, records the target commit used for task selection, reads
 `tasks.md` from that refreshed target state, selects the first unchecked
-deliverable task in document order, and calls `plan-to-pr` for that task.
+deliverable task in document order, and calls `plan-unit-delivery` for that task.
 
-`plan-delivery` does not keep a ledger. It advances from target-branch
+`plan-orchestrator` does not keep a ledger. It advances from target-branch
 OpenSpec state only. An open PR/MR branch can have a task checked, but Plan
 Delivery does not treat that task as complete until the branch is merged or
 directly published according to repo policy.
 
 If the target branch cannot be identified, cannot be refreshed, or changes
-between task selection and delivery start, `plan-delivery` must stop with
+between task selection and delivery start, `plan-orchestrator` must stop with
 `selected_task_stale` or `needs_plan_ready`. It must not select work from a
 detached checkout, stale local branch, or in-progress PR/MR branch without
 comparing that state to the recorded target commit.
 
-### `plan-to-pr`
+### `plan-unit-delivery`
 
-`plan-to-pr` implements exactly one approved unit:
+`plan-unit-delivery` implements exactly one approved unit:
 
 - one atomic plan;
 - or one OpenSpec checkbox task.
 
-For OpenSpec tasks, `plan-to-pr` must check the task from `[ ]` to `[x]` in the
+For OpenSpec tasks, `plan-unit-delivery` must check the task from `[ ]` to `[x]` in the
 same PR/MR that implements the task. It must not create a follow-up bookkeeping
 commit for task completion.
 
-`plan-to-pr` blocks if implementation requires broadening the approved unit,
+`plan-unit-delivery` blocks if implementation requires broadening the approved unit,
 editing unrelated OpenSpec tasks, or adding new OpenSpec tasks.
 
 ## New Readiness Contracts
@@ -137,7 +137,7 @@ editing unrelated OpenSpec tasks, or adding new OpenSpec tasks.
 The old `slice_plan_review`, `reviewed_slices`, and
 `plan_followthrough_slice_handoff` shapes are removed.
 
-`plan-ready` and `plan-delivery` exchange one route-specific handoff:
+`plan-ready` and `plan-orchestrator` exchange one route-specific handoff:
 
 ```yaml
 plan_delivery_handoff:
@@ -230,12 +230,12 @@ Every skill returns a mechanical failure route:
 | `needs_plan_ready` | Input is stale, fuzzy, or legacy-shaped | Rerun `plan-ready` |
 | `blocked_readiness` | PlanReady lacks required decisions | Answer the specific blockers |
 | `ready_for_openspec` | Blueprint is ready | Create or update OpenSpec from the blueprint |
-| `needs_openspec` | Plan Delivery was invoked before OpenSpec exists | Run `plan-ready` and create OpenSpec from the blueprint |
+| `needs_openspec` | Plan Orchestrator was invoked before OpenSpec exists | Run `plan-ready` and create OpenSpec from the blueprint |
 | `openspec_invalid` | OpenSpec validation fails | Repair OpenSpec |
 | `needs_openspec_tasks` | `tasks.md` is not deliverable | Run `openspec-tasks` and edit tasks |
-| `selected_task_stale` | Target branch changed task state | Rerun `plan-delivery` |
+| `selected_task_stale` | Target branch changed task state | Rerun `plan-orchestrator` |
 | `implementation_scope_escape` | Approved unit is too small or wrong | Return to OpenSpec or `plan-ready` |
-| `delivery_blocked` | Execution failed inside approved scope | Stay in `plan-to-pr` |
+| `delivery_blocked` | Execution failed inside approved scope | Stay in `plan-unit-delivery` |
 | `needs_human_action` | Manual or external prerequisite blocks progress | Pause with evidence |
 
 Planning failures move backward. Delivery failures stay local unless they prove
@@ -250,11 +250,11 @@ before implementation. The task list below describes the expected OpenSpec
 ## 1. Rename and Contract Surface
 
 - [ ] 1.1 Replace `plan-followthrough` skill documentation with
-  `plan-delivery` responsibilities.
+  `plan-orchestrator` responsibilities.
 - [ ] 1.2 Replace `plan-followthrough` adapter prompt metadata with
-  `plan-delivery` invocation guidance.
+  `plan-orchestrator` invocation guidance.
 - [ ] 1.3 Rename or replace the `plan-followthrough` helper script entry points
-  with `plan-delivery` route validation commands.
+  with `plan-orchestrator` route validation commands.
 - [ ] 1.4 Replace `plan-slices` skill documentation with `openspec-tasks`
   responsibilities.
 - [ ] 1.5 Replace `plan-slices` adapter prompt metadata with `openspec-tasks`
@@ -262,7 +262,7 @@ before implementation. The task list below describes the expected OpenSpec
 - [ ] 1.6 Rename or replace the `plan-slices` helper script entry points with
   `openspec-tasks` task-audit commands.
 - [ ] 1.7 Update discoverability surfaces so the available skill list exposes
-  `plan-delivery` and `openspec-tasks`: skill folder names, `SKILL.md`
+  `plan-orchestrator` and `openspec-tasks`: skill folder names, `SKILL.md`
   `name` fields, `agents/openai.yaml` display metadata, adapter prompts, and
   installed runtime skill listings.
 
@@ -283,17 +283,17 @@ before implementation. The task list below describes the expected OpenSpec
 - [ ] 3.2 Validate that each OpenSpec checkbox task maps to one minor
   deliverable and that broad phase tasks block delivery.
 - [ ] 3.3 Classify manual, deployment, monitoring, and external-prerequisite
-  tasks so Plan Delivery pauses with `needs_human_action` instead of sending
-  them to `plan-to-pr`.
+  tasks so Plan Orchestrator pauses with `needs_human_action` instead of sending
+  them to `plan-unit-delivery`.
 
-## 4. Plan Delivery Route
+## 4. Plan Orchestrator Route
 
-- [ ] 4.1 Teach `plan-delivery` to consume atomic `plan_delivery_handoff`
+- [ ] 4.1 Teach `plan-orchestrator` to consume atomic `plan_delivery_handoff`
   inputs and invoke the one-unit delivery path.
-- [ ] 4.2 Teach `plan-delivery` to resolve the repo policy target branch and
+- [ ] 4.2 Teach `plan-orchestrator` to resolve the repo policy target branch and
   publishing remote, refresh the target branch, and record the target commit
   used for OpenSpec task selection.
-- [ ] 4.3 Teach `plan-delivery` to validate OpenSpec changes, read
+- [ ] 4.3 Teach `plan-orchestrator` to validate OpenSpec changes, read
   target-branch `tasks.md` from the recorded target commit, and select the first
   unchecked deliverable task.
 - [ ] 4.4 Ensure delivery completion is based on target-branch state after
@@ -302,11 +302,11 @@ before implementation. The task list below describes the expected OpenSpec
   missing, or changed on the refreshed target branch before delivery starts.
 - [ ] 4.6 Reject legacy `plan_ready_handoff`,
   `plan_followthrough_slice_handoff`, `reviewed_slices`, and
-  followthrough-ledger inputs in `plan-delivery` with `needs_plan_ready`.
+  followthrough-ledger inputs in `plan-orchestrator` with `needs_plan_ready`.
 
 ## 5. Plan-To-PR Unit Execution
 
-- [ ] 5.1 Update `plan-to-pr` to accept one approved atomic unit or one
+- [ ] 5.1 Update `plan-unit-delivery` to accept one approved atomic unit or one
   OpenSpec checkbox task.
 - [ ] 5.2 Require OpenSpec task checkbox completion in the same PR/MR as the
   implementation.
@@ -314,7 +314,7 @@ before implementation. The task list below describes the expected OpenSpec
   edits, new tasks, or broadening the approved scope.
 - [ ] 5.4 Reject legacy direct `plan_ready_handoff`,
   `plan_followthrough_slice_handoff`, `reviewed_slices`, and delivery-ledger
-  inputs in `plan-to-pr` with `needs_plan_ready`.
+  inputs in `plan-unit-delivery` with `needs_plan_ready`.
 
 ## 6. Plan-To-Review Alignment
 
@@ -350,7 +350,7 @@ before implementation. The task list below describes the expected OpenSpec
 - Do not add task tags or schema extensions to OpenSpec.
 - Do not create a separate ledger file.
 - Do not mark OpenSpec tasks complete in follow-up bookkeeping commits.
-- Do not teach `plan-to-pr` to manage the full OpenSpec sequence.
+- Do not teach `plan-unit-delivery` to manage the full OpenSpec sequence.
 - Do not implement delivery behavior while this plan is only being reviewed.
 
 ## Readiness Assessment
@@ -366,7 +366,7 @@ files are created.
 openspec_blueprint:
   status: ready_for_openspec
   change:
-    suggested_id: update-openspec-plan-delivery
+    suggested_id: update-openspec-plan-orchestrator
     title: Update OpenSpec plan delivery workflow
     objective: Make complex PlanReady output a reviewed OpenSpec Blueprint.
   next_action: create_openspec_change
