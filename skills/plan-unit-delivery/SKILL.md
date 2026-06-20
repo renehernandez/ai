@@ -8,7 +8,7 @@ description: Use when one validated plan_delivery_handoff approved unit should b
 ## Overview
 
 Implement exactly one approved unit. The unit is either an atomic plan or one
-OpenSpec checkbox task selected by `plan-orchestrator`.
+OpenSpec checkbox task selected by `plan-unit-sequencer`.
 
 This skill does not brainstorm, author plans, manage OpenSpec sequences, or keep
 a followthrough ledger.
@@ -16,7 +16,7 @@ a followthrough ledger.
 ## When To Use
 
 Use when the user provides a valid `plan_delivery_handoff`, or when
-`plan-orchestrator` passes one approved atomic unit or OpenSpec task.
+`plan-unit-sequencer` passes one approved atomic unit or OpenSpec task.
 
 Do not use for fuzzy ideas, unreviewed plans, OpenSpec proposal creation, Linear
 tickets that still need planning, or legacy handoff shapes.
@@ -64,15 +64,18 @@ path.
 9. Run review-feedback routing.
 10. Open or update the routed PR/MR, or direct publish only when repo policy
    explicitly allows it.
-11. Run artifact-host review.
-12. Monitor artifact-host pipelines for the latest head until they pass, fail,
+11. Prove the implementation artifact is separate from the planning-review
+    PR/MR. If the same hosted artifact would be reused, block and split the
+    implementation to a separate PR/MR or direct-publish unit.
+12. Run artifact-host review.
+13. Monitor artifact-host pipelines for the latest head until they pass, fail,
     block, or are unavailable with evidence. Include child or downstream
     pipeline state when the host exposes it.
-13. Wait for routed automatic review feedback on the latest head until feedback
+14. Wait for routed automatic review feedback on the latest head until feedback
     is resolved, no automatic feedback is present after the chosen timeout, or
     the review system is unavailable with evidence. The timeout window must be
     explicit in the delivery gate evidence.
-14. Finish only when landed, direct-published, stack-ready, or blocked with
+15. Finish only when landed, direct-published, stack-ready, or blocked with
     evidence.
 
 Block with `implementation_scope_escape` when the selected unit requires
@@ -104,7 +107,8 @@ scripts/plan-unit-delivery.ts validate-ledger --file <ledger>
 | Implementing without `plan_delivery_handoff` | Return `needs_plan_ready` |
 | Accepting legacy slice/followthrough handoffs | Return `needs_plan_ready` |
 | Checking OpenSpec tasks in a follow-up commit | Check the task in the implementation PR/MR or direct-publish commit |
-| Implementing multiple OpenSpec tasks at once | Return to OpenSpec or `plan-orchestrator` |
+| Reusing the planning-review PR/MR for implementation | Create a separate implementation artifact and record separation evidence |
+| Implementing multiple OpenSpec tasks at once | Return to OpenSpec or `plan-unit-sequencer` |
 | Finishing without proving the task delta | Run `validate-task-delta` against base and unit `tasks.md` |
 | Treating delivery gate evidence as durable state | Keep sequence state in OpenSpec |
 | Treating an open PR/MR as done before pipelines settle | Keep monitoring latest-head pipelines |

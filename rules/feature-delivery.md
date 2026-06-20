@@ -35,6 +35,12 @@ The default workflow is:
 10. For CI failures caused by the branch, fix them, rerun local verification,
    update the branch, and continue monitoring.
 
+Review-first plan workflows are the exception to ordinary direct-publish or
+implementation-first handling. When `plan-orchestrator`, `plan-review`, or an
+approved plan workflow requires planning review, create the planning-only PR/MR
+first, wait for the required planning-review gate, and only then continue to
+implementation sequencing.
+
 When review feedback, CI, or browser checks expose missing coverage, apply the
 Fastest Durable Regression rule in `rules/testing-and-verification.md` before
 rerunning the broader gate.
@@ -151,6 +157,9 @@ given merge-after-green instructions for that PR/MR.
 ## Safety Boundaries
 
 - Never push directly to `main` or `master` without explicit confirmation.
+- Repo-local instructions may explicitly authorize direct-main publication. A
+  review-first plan workflow may still require a planning-only PR/MR before
+  implementation, even in repos that otherwise publish directly to `main`.
 - Never bypass hooks with `--no-verify`.
 - Never overwrite unrelated user changes.
 - Do not install dependencies unless the user asked for it or the approved plan

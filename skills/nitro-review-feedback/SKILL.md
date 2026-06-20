@@ -12,7 +12,7 @@ Collect Nitro feedback from Fullscript GitLab MRs and normalize it for `diff-rev
 
 - `review-feedback-routing` selects reviewer `nitro`.
 - A Fullscript GitLab MR needs Nitro feedback requested through the configured routing policy.
-- `plan-unit-delivery` or `plan-to-review` needs to wait for Nitro before treating review feedback as complete.
+- `plan-unit-delivery` or `plan-review` needs to wait for Nitro before treating review feedback as complete.
 
 ## Workflow
 

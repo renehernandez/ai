@@ -12,7 +12,7 @@ parallel slice plan, maintain a ledger, or implement code.
 
 ## When To Use
 
-Use after an OpenSpec change exists and before `plan-orchestrator` delivers the
+Use after an OpenSpec change exists and before `plan-unit-sequencer` delivers the
 next task. Use for broad OpenSpec tasks, unclear dependency order, manual or
 external tasks, stale task lists, or any change where the next checkbox may not
 fit one delivery loop.
@@ -43,7 +43,7 @@ No tags, schema extensions, or hidden state are added.
 4. Block when a checkbox is too broad, lacks a heading, duplicates an ID, or
    hides multiple reviewable deliverables.
 5. Classify manual, deployment, monitoring, and external-prerequisite tasks so
-   `plan-orchestrator` pauses with `needs_human_action` instead of sending them
+   `plan-unit-sequencer` pauses with `needs_human_action` instead of sending them
    to `plan-unit-delivery`.
 
 ## Output
@@ -79,4 +79,4 @@ The audit command emits:
 - RED: previous `plan-slices` workflow created `slice_plan_review` as duplicate
   planning state.
 - GREEN: OpenSpec checkbox parsing now provides the task identity, line,
-  heading, and manual/deliverable classification needed by `plan-orchestrator`.
+  heading, and manual/deliverable classification needed by `plan-unit-sequencer`.

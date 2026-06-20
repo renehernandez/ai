@@ -220,6 +220,9 @@ const deliveryLedger = `delivery_gate_ledger:
   review_feedback_routing:
     status: passed
     evidence: github selected
+  implementation_artifact_separation:
+    status: passed
+    evidence: implementation PR is separate from planning review PR
   artifact_creation_update:
     status: passed
     evidence: PR URL
@@ -465,5 +468,21 @@ test("validate-ledger requires automatic review feedback wait evidence", () => {
   assert.match(
     result.stderr,
     /automatic_review_feedback_wait\.evidence must show resolved feedback/,
+  );
+});
+
+test("validate-ledger requires implementation artifact separation evidence", () => {
+  const result = runPlanUnitDelivery(
+    "validate-ledger",
+    deliveryLedger.replace(
+      "implementation PR is separate from planning review PR",
+      "same PR reused",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /implementation_artifact_separation.evidence must prove/,
   );
 });

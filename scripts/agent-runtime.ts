@@ -150,6 +150,11 @@ const CONFIG_FILE = "agent-runtime.config.json";
 const LOCK_FILE = "agent-runtime.lock.json";
 const CACHE_DIR = ".agent-runtime/cache";
 const OPENSPEC_INSTALL_COMMAND = "npm install -g @fission-ai/openspec@latest";
+const RETIRED_MANAGED_SKILL_NAMES = [
+  "plan-to-review",
+  "plan-coordinate",
+  "plan-delivery",
+] as const;
 
 export function main(): void {
   const program = createProgram();
@@ -1137,6 +1142,10 @@ function runSkills(
     canonicalSkillsDir,
     symlinkTargets,
   });
+  pruneRetiredManagedSkills(lock, profileNames, [
+    canonicalSkillsDir,
+    ...symlinkTargets,
+  ]);
 
   writeJson(lockFile, lock);
 }
@@ -1242,6 +1251,40 @@ function installSkillUnion(input: {
     input.lock.skillsets[profileName] = {
       skills: sortRecord(installedSkills),
     };
+  }
+}
+
+function pruneRetiredManagedSkills(
+  lock: LockFile,
+  profileNames: string[],
+  skillDirs: string[],
+): void {
+  for (const profileName of profileNames) {
+    for (const retiredName of RETIRED_MANAGED_SKILL_NAMES) {
+      delete lock.skillsets[profileName]?.skills[retiredName];
+    }
+  }
+
+  for (const directory of skillDirs) {
+    for (const retiredName of RETIRED_MANAGED_SKILL_NAMES) {
+      removeRetiredManagedSkill(join(directory, retiredName));
+    }
+  }
+}
+
+function removeRetiredManagedSkill(path: string): void {
+  if (!existsSync(path)) {
+    return;
+  }
+
+  const stat = lstatSync(path);
+  if (stat.isSymbolicLink()) {
+    rmSync(path, { force: true });
+    return;
+  }
+
+  if (stat.isDirectory() && existsSync(join(path, "SKILL.md"))) {
+    rmSync(path, { force: true, recursive: true });
   }
 }
 

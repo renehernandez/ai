@@ -6,7 +6,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 function withTempFile(content: string, callback: (path: string) => void): void {
-  const directory = mkdtempSync(join(tmpdir(), "plan-to-review-script-"));
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-script-"));
   const path = join(directory, "input.yaml");
   try {
     writeFileSync(path, content, "utf8");
@@ -16,7 +16,7 @@ function withTempFile(content: string, callback: (path: string) => void): void {
   }
 }
 
-function runPlanToReview(
+function runPlanReview(
   command: string,
   content: string,
 ): { status: number | null; stderr: string; stdout: string } {
@@ -27,7 +27,7 @@ function runPlanToReview(
       [
         "exec",
         "tsx",
-        "skills/plan-to-review/scripts/plan-to-review.ts",
+        "skills/plan-review/scripts/plan-review.ts",
         command,
         "--file",
         path,
@@ -47,14 +47,14 @@ function runPlanToReview(
   };
 }
 
-function runPlanToReviewCommand(command: string): {
+function runPlanReviewCommand(command: string): {
   status: number | null;
   stderr: string;
   stdout: string;
 } {
   const result = spawnSync(
     "pnpm",
-    ["exec", "tsx", "skills/plan-to-review/scripts/plan-to-review.ts", command],
+    ["exec", "tsx", "skills/plan-review/scripts/plan-review.ts", command],
     {
       cwd: process.cwd(),
       encoding: "utf8",
@@ -96,7 +96,7 @@ const deliveryHandoff = `plan_delivery_handoff:
       - pnpm test
   constraints:
     files_or_areas:
-      - skills/plan-to-review
+      - skills/plan-review
   delivery:
     expected_host: github_pr
   review:
@@ -105,15 +105,38 @@ const deliveryHandoff = `plan_delivery_handoff:
   blockers: []
 `;
 
+const planningReview = `planning_review:
+  status: reviewed
+  artifact_type: openspec
+  artifact_ref: openspec/changes/example-change
+  review_artifact: https://example.test/review/1
+  mode: ship_then_continue
+  gate_outcome: approved
+  target_branch: main
+  target_base_sha: abc123
+  planning_branch: plan/example
+  reviewed_head: def456
+  stack_base_ref:
+  stack_base_evidence:
+  task_state_fingerprint: feedface
+  validation:
+    evidence:
+      - openspec validate example-change --strict --no-interactive
+  review:
+    evidence:
+      - planning MR merged after feedback was addressed
+  blockers: []
+`;
+
 test("validate-request accepts plan review requests", () => {
-  const result = runPlanToReview("validate-request", planReviewRequest);
+  const result = runPlanReview("validate-request", planReviewRequest);
 
   assert.equal(result.status, 0);
   assert.match(result.stdout, /plan_review_request valid/);
 });
 
 test("request-template emits a readable summary before YAML", () => {
-  const result = runPlanToReviewCommand("request-template");
+  const result = runPlanReviewCommand("request-template");
 
   assert.equal(result.status, 0);
   assert.match(result.stdout, /## Readable Summary/);
@@ -125,7 +148,7 @@ test("request-template emits a readable summary before YAML", () => {
 });
 
 test("gate-template emits a readable summary before YAML", () => {
-  const result = runPlanToReviewCommand("gate-template");
+  const result = runPlanReviewCommand("gate-template");
 
   assert.equal(result.status, 0);
   assert.match(result.stdout, /## Readable Summary/);
@@ -136,15 +159,50 @@ test("gate-template emits a readable summary before YAML", () => {
   assert.match(result.stdout, /plan_review_gate_ledger:/);
 });
 
+test("planning-review-template emits a readable summary before YAML", () => {
+  const result = runPlanReviewCommand("planning-review-template");
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /## Readable Summary/);
+  assert.ok(
+    result.stdout.indexOf("## Readable Summary") <
+      result.stdout.indexOf("planning_review:"),
+  );
+  assert.match(result.stdout, /planning_review:/);
+});
+
+test("validate-planning-review accepts reviewed planning handoffs", () => {
+  const result = runPlanReview("validate-planning-review", planningReview);
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /planning_review valid/);
+});
+
+test("validate-planning-review rejects pending blockers", () => {
+  const result = runPlanReview(
+    "validate-planning-review",
+    planningReview.replace(
+      "  blockers: []",
+      "  blockers:\n    - pending review",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /planning_review.blockers must be empty before sequencing/,
+  );
+});
+
 test("validate-request accepts delivery handoffs for planning review", () => {
-  const result = runPlanToReview("validate-request", deliveryHandoff);
+  const result = runPlanReview("validate-request", deliveryHandoff);
 
   assert.equal(result.status, 0);
   assert.match(result.stdout, /plan_delivery_handoff valid/);
 });
 
 test("validate-request rejects legacy plan-ready handoffs", () => {
-  const result = runPlanToReview(
+  const result = runPlanReview(
     "validate-request",
     `plan_ready_handoff:
   status: ready
@@ -161,7 +219,7 @@ test("validate-request rejects legacy plan-ready handoffs", () => {
 });
 
 test("validate-request rejects ambiguous review and delivery inputs", () => {
-  const result = runPlanToReview(
+  const result = runPlanReview(
     "validate-request",
     `${planReviewRequest}
 ${deliveryHandoff}`,

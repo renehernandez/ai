@@ -1,0 +1,4 @@
+interface:
+  display_name: "Plan Review"
+  short_description: "Publish a plan for hosted review before implementation"
+  default_prompt: "Use $plan-review with this plan_review_request or plan_delivery_handoff: <artifact>. Validate the request, inspect live repo and routing state, ensure the diff is planning-only, run artifact validation, run $review-feedback-routing, open or update the routed draft PR/MR for Nitro/Codex and developer feedback, wait for routed latest-head automated feedback, apply only plan/documentation feedback, do not start implementation, and include a concise Readable Summary before the validated final planning_review handoff. Reject legacy plan_coordinate_handoff, plan_ready_handoff, reviewed_slices, slice_plan_review, and plan_followthrough_slice_handoff inputs with needs_plan_ready."

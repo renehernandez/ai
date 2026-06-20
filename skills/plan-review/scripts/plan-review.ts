@@ -1,7 +1,20 @@
 #!/usr/bin/env tsx
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
+import {
+  extractSection,
+  extractYaml,
+  fail,
+  findSection,
+  includes,
+  legacyPlanContractErrors,
+  list,
+  readInput,
+  requireValue,
+  scalar,
+  validatePlanningReviewContract,
+} from "../../../scripts/planning-contracts.ts";
 
 const ARTIFACT_TYPES = ["plan", "openspec", "linear"] as const;
 const REQUEST_STATUSES = ["ready_for_review"] as const;
@@ -35,6 +48,8 @@ type Command =
   | "detect"
   | "request-template"
   | "validate-request"
+  | "planning-review-template"
+  | "validate-planning-review"
   | "gate-template"
   | "validate-ledger";
 
@@ -60,7 +75,7 @@ function main(): void {
 
   if (!isCommand(command)) {
     fail(
-      "Usage: plan-to-review.ts <detect|request-template|validate-request|gate-template|validate-ledger> [--file path]",
+      "Usage: plan-review.ts <detect|request-template|validate-request|gate-template|validate-ledger> [--file path]",
     );
   }
 
@@ -79,9 +94,19 @@ function main(): void {
     return;
   }
 
+  if (command === "planning-review-template") {
+    printPlanningReviewTemplate();
+    return;
+  }
+
   const input = readInput(args);
   if (command === "validate-request") {
     validateRequest(input);
+    return;
+  }
+
+  if (command === "validate-planning-review") {
+    validatePlanningReview(input);
     return;
   }
 
@@ -151,6 +176,40 @@ ${LEDGER_GATES.map(
     status: passed
     evidence: <evidence>`,
 ).join("\n")}
+\`\`\`
+`);
+}
+
+function printPlanningReviewTemplate(): void {
+  console.log(`## Readable Summary
+
+- Status: reviewed planning is ready for implementation sequencing.
+- Artifact: openspec/changes/example-change.
+- Mode: ship then continue after the planning PR or MR merges.
+- Gate: hosted planning review is complete and implementation may start.
+
+\`\`\`yaml
+planning_review:
+  status: reviewed
+  artifact_type: openspec
+  artifact_ref: openspec/changes/example-change
+  review_artifact: <planning PR or MR URL>
+  mode: ship_then_continue
+  gate_outcome: approved
+  target_branch: main
+  target_base_sha: <target branch sha reviewed by planning artifact>
+  planning_branch: <planning branch name>
+  reviewed_head: <planning artifact head sha>
+  stack_base_ref:
+  stack_base_evidence:
+  task_state_fingerprint: <sha256 of reviewed plan or OpenSpec task state>
+  validation:
+    evidence:
+      - openspec validate example-change --strict --no-interactive
+  review:
+    evidence:
+      - planning PR or MR merged after feedback was addressed
+  blockers: []
 \`\`\`
 `);
 }
@@ -273,9 +332,7 @@ function parseRequest(input: string): ParsedRequest {
   const body = extractYaml(input);
   const reviewSection = findSection(body, "plan_review_request");
   const handoffSection = findSection(body, "plan_delivery_handoff");
-  const legacySection = findSection(body, "plan_ready_handoff");
-  const legacyCoordinateHandoff = findSection(body, "plan_coordinate_handoff");
-  const legacyReviewedSlices = /^\s*reviewed_slices:\s*/m.test(body);
+  const legacyErrors = legacyPlanContractErrors(input);
 
   if (reviewSection && handoffSection) {
     return {
@@ -286,7 +343,7 @@ function parseRequest(input: string): ParsedRequest {
     };
   }
 
-  if (legacySection || legacyCoordinateHandoff || legacyReviewedSlices) {
+  if (legacyErrors.length > 0) {
     return {
       source: "legacy",
       requested_reviewers: [],
@@ -322,100 +379,18 @@ function parseRequest(input: string): ParsedRequest {
   };
 }
 
-function extractYaml(input: string): string {
-  const fenced = input.match(/```(?:ya?ml)?\s*\n([\s\S]*?)\n```/);
-  return (fenced?.[1] ?? input).trim();
-}
+function validatePlanningReview(input: string): void {
+  const errors = legacyPlanContractErrors(input);
+  validatePlanningReviewContract(input, errors);
 
-function extractSection(input: string, sectionName: string): string {
-  return findSection(input, sectionName) ?? input;
-}
-
-function findSection(input: string, sectionName: string): string | null {
-  const lines = input.split(/\r?\n/);
-  const start = lines.findIndex((line) => line.trim() === `${sectionName}:`);
-  if (start === -1) {
-    return null;
+  if (errors.length > 0) {
+    console.error(
+      `Invalid planning_review:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+    );
+    process.exit(1);
   }
 
-  return lines
-    .slice(start + 1)
-    .filter((line) => line.startsWith(" ") || line.trim() === "")
-    .map((line) => line.replace(/^ {2}/, ""))
-    .join("\n");
-}
-
-function scalar(input: string, key: string): string | undefined {
-  const match = input.match(
-    new RegExp(`^${escapeRegExp(key)}:\\s*(.+?)\\s*$`, "m"),
-  );
-  if (!match) {
-    return undefined;
-  }
-
-  return cleanScalar(match[1]);
-}
-
-function list(input: string, key: string): string[] {
-  const inline = input.match(
-    new RegExp(`^${escapeRegExp(key)}:\\s*\\[(.*?)\\]\\s*$`, "m"),
-  );
-  if (inline) {
-    const raw = inline[1].trim();
-    return raw ? raw.split(",").map(cleanScalar).filter(Boolean) : [];
-  }
-
-  const lines = input.split(/\r?\n/);
-  const keyIndex = lines.findIndex((line) =>
-    line.match(new RegExp(`^${escapeRegExp(key)}:\\s*$`)),
-  );
-  if (keyIndex === -1) {
-    return [];
-  }
-
-  const values: string[] = [];
-  for (const line of lines.slice(keyIndex + 1)) {
-    if (!line.startsWith("  ")) {
-      break;
-    }
-
-    const item = line.trim().match(/^- (.+)$/);
-    if (item) {
-      values.push(cleanScalar(item[1]));
-    }
-  }
-
-  return values.filter(Boolean);
-}
-
-function readInput(args: string[]): string {
-  const fileIndex = args.indexOf("--file");
-  if (fileIndex !== -1) {
-    const file = args[fileIndex + 1];
-    if (!file) {
-      fail("--file requires a path");
-    }
-    return readFileSync(file, "utf8");
-  }
-
-  return readFileSync(0, "utf8");
-}
-
-function requireValue(
-  value: string | undefined,
-  key: string,
-  errors: string[],
-): void {
-  if (!value || value.startsWith("<")) {
-    errors.push(`${key} is required`);
-  }
-}
-
-function includes<const T extends readonly string[]>(
-  values: T,
-  value: string,
-): value is T[number] {
-  return values.includes(value as T[number]);
+  console.log("planning_review valid");
 }
 
 function isCommand(command: string | undefined): command is Command {
@@ -423,17 +398,11 @@ function isCommand(command: string | undefined): command is Command {
     "detect",
     "request-template",
     "validate-request",
+    "planning-review-template",
+    "validate-planning-review",
     "gate-template",
     "validate-ledger",
   ].includes(command ?? "");
-}
-
-function cleanScalar(value: string): string {
-  return value.trim().replace(/^["']|["']$/g, "");
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function git(args: string[]): string | null {
@@ -442,9 +411,4 @@ function git(args: string[]): string | null {
     return null;
   }
   return result.stdout.trim();
-}
-
-function fail(message: string): never {
-  console.error(message);
-  process.exit(1);
 }

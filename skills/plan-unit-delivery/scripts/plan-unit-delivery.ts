@@ -3,6 +3,18 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  extractSection,
+  extractYaml,
+  fail,
+  findSection,
+  includes,
+  legacyPlanContractErrors,
+  list,
+  readInput,
+  requireValue,
+  scalar,
+} from "../../../scripts/planning-contracts.ts";
+import {
   parseTasks,
   validateTasks,
 } from "../../openspec-tasks/scripts/openspec-tasks.ts";
@@ -70,6 +82,7 @@ const LEDGER_GATES = [
   "ai_readiness_upkeep",
   "docs_alignment",
   "review_feedback_routing",
+  "implementation_artifact_separation",
   "artifact_creation_update",
   "artifact_host_review",
   "pipeline_monitoring",
@@ -202,7 +215,7 @@ function printGateTemplate(): void {
   console.log(`## Readable Summary
 
 - Delivery state: all required gates have evidence.
-- Verification: local checks, reviewer outcomes, hosted review, pipelines, and automatic feedback wait are accounted for.
+- Verification: local checks, reviewer outcomes, artifact separation, hosted review, pipelines, and automatic feedback wait are accounted for.
 - Finish condition: landed, direct-published, stack-ready, or blocked with evidence.
 
 \`\`\`yaml
@@ -574,6 +587,22 @@ function validateDeliveryGateSemantics(
   section: string,
   errors: string[],
 ): void {
+  const separationGate = findSection(
+    section,
+    "implementation_artifact_separation",
+  );
+  const separationEvidence = separationGate
+    ? scalar(separationGate, "evidence")
+    : undefined;
+  if (
+    separationEvidence &&
+    !separationEvidence.match(/\b(separate|different|distinct)\b/i)
+  ) {
+    errors.push(
+      "implementation_artifact_separation.evidence must prove the implementation artifact is separate from the planning review artifact",
+    );
+  }
+
   const automaticReviewGate = findSection(
     section,
     "automatic_review_feedback_wait",
@@ -870,109 +899,7 @@ function parseHandoff(input: string): ParsedHandoff {
   };
 }
 
-function legacyErrors(input: string): string[] {
-  const body = extractYaml(input);
-  const errors: string[] = [];
-  for (const legacy of [
-    "slice_plan_review",
-    "plan_coordinate_handoff",
-    "plan_ready_handoff",
-    "plan_followthrough_slice_handoff",
-    "plan_followthrough_ledger",
-  ]) {
-    if (new RegExp(`^\\s*${escapeRegExp(legacy)}:\\s*$`, "m").test(body)) {
-      errors.push(`${legacy} is legacy; rerun plan-ready`);
-    }
-  }
-  if (/^\s*reviewed_slices:\s*/m.test(body)) {
-    errors.push("reviewed_slices is legacy; rerun plan-ready");
-  }
-  return errors;
-}
-
-function extractYaml(input: string): string {
-  const fenced = input.match(/```(?:ya?ml)?\s*\n([\s\S]*?)\n```/);
-  return (fenced?.[1] ?? input).trim();
-}
-
-function extractSection(input: string, sectionName: string): string {
-  return findSection(input, sectionName) ?? input;
-}
-
-function findSection(input: string, sectionName: string): string | null {
-  const lines = input.split(/\r?\n/);
-  const start = lines.findIndex((line) => line.trim() === `${sectionName}:`);
-  if (start === -1) {
-    return null;
-  }
-
-  return lines
-    .slice(start + 1)
-    .filter((line) => line.startsWith(" ") || line.trim() === "")
-    .map((line) => line.replace(/^ {2}/, ""))
-    .join("\n");
-}
-
-function scalar(
-  input: string,
-  key: string,
-  sectionName?: string,
-): string | undefined {
-  const source = sectionName ? extractSection(input, sectionName) : input;
-  const match = source.match(
-    new RegExp(`^\\s*${escapeRegExp(key)}:\\s*(.+?)\\s*$`, "m"),
-  );
-  if (!match) {
-    return undefined;
-  }
-
-  return cleanScalar(match[1]);
-}
-
-function list(input: string, key: string): string[] {
-  const inline = input.match(
-    new RegExp(`^\\s*${escapeRegExp(key)}:\\s*\\[(.*?)\\]\\s*$`, "m"),
-  );
-  if (inline) {
-    const raw = inline[1].trim();
-    return raw ? raw.split(",").map(cleanScalar).filter(Boolean) : [];
-  }
-
-  const lines = input.split(/\r?\n/);
-  const keyIndex = lines.findIndex((line) =>
-    line.match(new RegExp(`^\\s*${escapeRegExp(key)}:\\s*$`)),
-  );
-  if (keyIndex === -1) {
-    return [];
-  }
-
-  const values: string[] = [];
-  for (const line of lines.slice(keyIndex + 1)) {
-    if (!line.startsWith("  ")) {
-      break;
-    }
-
-    const item = line.trim().match(/^- (.+)$/);
-    if (item) {
-      values.push(cleanScalar(item[1]));
-    }
-  }
-
-  return values.filter(Boolean);
-}
-
-function readInput(args: string[]): string {
-  const fileIndex = args.indexOf("--file");
-  if (fileIndex !== -1) {
-    const file = args[fileIndex + 1];
-    if (!file) {
-      fail("--file requires a path");
-    }
-    return readFileSync(file, "utf8");
-  }
-
-  return readFileSync(0, "utf8");
-}
+const legacyErrors = legacyPlanContractErrors;
 
 function requiredArg(args: string[], flag: string): string {
   const index = args.indexOf(flag);
@@ -986,28 +913,11 @@ function requiredArg(args: string[], flag: string): string {
   return value;
 }
 
-function requireValue(
-  value: string | undefined,
-  key: string,
-  errors: string[],
-): void {
-  if (!value || value.startsWith("<")) {
-    errors.push(`${key} is required`);
-  }
-}
-
 function isKnownReviewer(reviewer: string): boolean {
   return (
     includes(BASELINE_REVIEWERS, reviewer) ||
     includes(OPTIONAL_REVIEWERS, reviewer)
   );
-}
-
-function includes<const T extends readonly string[]>(
-  values: T,
-  value: string,
-): value is T[number] {
-  return values.includes(value as T[number]);
 }
 
 function isCommand(command: string | undefined): command is Command {
@@ -1024,25 +934,12 @@ function isCommand(command: string | undefined): command is Command {
   ].includes(command ?? "");
 }
 
-function cleanScalar(value: string): string {
-  return value.trim().replace(/^["']|["']$/g, "");
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 function git(args: string[]): string | null {
   const result = spawnSync("git", args, { encoding: "utf8" });
   if (result.status !== 0) {
     return null;
   }
   return result.stdout.trim();
-}
-
-function fail(message: string): never {
-  console.error(message);
-  process.exit(1);
 }
 
 main();

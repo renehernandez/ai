@@ -10,6 +10,7 @@ import {
   readFileSync,
   readlinkSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -518,6 +519,105 @@ test("CLI installs discovered local skills from wildcard sources", () => {
         "---\nname: second-local\n---\n",
         "utf-8",
       );
+
+      config.blocks = {
+        local: {
+          skills: [{ localPath: localSkillsDir, names: ["*"] }],
+        },
+      };
+      config.profiles = {
+        personal: { include: ["local"], paths: ["AGENTS.md"] },
+      };
+    },
+  );
+});
+
+test("CLI prunes stale installed retired skill names", () => {
+  withFixture(
+    ({ configPath, runtimeDir }) => {
+      const staleCanonical = join(runtimeDir, "skills", "plan-to-review");
+      const staleSymlink = join(
+        runtimeDir,
+        "claude",
+        "skills",
+        "plan-to-review",
+      );
+      mkdirSync(staleCanonical, { recursive: true });
+      mkdirSync(join(runtimeDir, "claude", "skills"), { recursive: true });
+      writeFileSync(
+        join(staleCanonical, "SKILL.md"),
+        "---\nname: plan-to-review\n---\n",
+        "utf-8",
+      );
+      symlinkSync(staleCanonical, staleSymlink);
+      writeFileSync(
+        join(runtimeDir, "lock.json"),
+        JSON.stringify(
+          {
+            version: 1,
+            skillsets: {
+              personal: {
+                skills: {
+                  "plan-to-review": {
+                    sourceType: "local",
+                    localPath: "skills",
+                    skillPath: "skills/plan-to-review",
+                    contentHash: "stale",
+                  },
+                },
+              },
+            },
+          },
+          null,
+          2,
+        ),
+        "utf-8",
+      );
+
+      const update = runAgentRuntime([
+        "skills",
+        "update",
+        "--profile",
+        "personal",
+        "--config",
+        configPath,
+      ]);
+      assert.equal(update.status, 0, update.stderr || update.stdout);
+
+      assert.equal(existsSync(staleCanonical), false);
+      assert.equal(existsSync(staleSymlink), false);
+      assert.equal(existsSync(join(runtimeDir, "skills", "plan-review")), true);
+      assert.equal(
+        existsSync(join(runtimeDir, "skills", "plan-unit-sequencer")),
+        true,
+      );
+
+      const lock = JSON.parse(
+        readFileSync(join(runtimeDir, "lock.json"), "utf-8"),
+      ) as {
+        skillsets: Record<string, { skills: Record<string, unknown> }>;
+      };
+      assert.equal("plan-to-review" in lock.skillsets.personal.skills, false);
+      assert.equal("plan-review" in lock.skillsets.personal.skills, true);
+      assert.equal(
+        "plan-unit-sequencer" in lock.skillsets.personal.skills,
+        true,
+      );
+    },
+    (config, runtimeDir) => {
+      const localSkillsDir = join(runtimeDir, "local-skills");
+      for (const skillName of [
+        "plan-review",
+        "plan-orchestrator",
+        "plan-unit-sequencer",
+      ]) {
+        mkdirSync(join(localSkillsDir, skillName), { recursive: true });
+        writeFileSync(
+          join(localSkillsDir, skillName, "SKILL.md"),
+          `---\nname: ${skillName}\n---\n`,
+          "utf-8",
+        );
+      }
 
       config.blocks = {
         local: {

@@ -10,7 +10,7 @@ Route PR/MR artifact handling separately from AI review feedback. Machine policy
 
 ## When to Use
 
-- `plan-unit-delivery` or `plan-to-review` needs to decide which artifact host and review feedback adapter to use.
+- `plan-unit-delivery` or `plan-review` needs to decide which artifact host and review feedback adapter to use.
 - A repo has GitHub and GitLab remotes, mirrored repositories, or ambiguous review workflows.
 - The user asks how Nitro, Codex, or hosted review feedback should be requested or consumed.
 

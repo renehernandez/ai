@@ -16,7 +16,7 @@ For general GitLab CLI commands, use `glab-cli`.
 
 - Feature work or a bug fix is ready for GitLab review.
 - The user asks to create, open, draft, or prepare a GitLab MR.
-- `plan-unit-delivery` or `plan-to-review` detects a GitLab remote and needs the MR creation step.
+- `plan-unit-delivery` or `plan-review` detects a GitLab remote and needs the MR creation step.
 - The repo is hosted in the Fullscript Lab GitLab instance.
 
 Do not use for GitHub pull requests; use the GitHub PR creation skill instead.

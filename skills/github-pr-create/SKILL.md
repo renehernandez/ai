@@ -12,7 +12,7 @@ Create GitHub pull requests with `gh` after verifying branch, remote, and duplic
 
 - Feature work or a bug fix is ready for GitHub review.
 - The user asks to create, open, draft, or prepare a GitHub PR.
-- `plan-unit-delivery` or `plan-to-review` detects a GitHub remote and needs the PR creation step.
+- `plan-unit-delivery` or `plan-review` detects a GitHub remote and needs the PR creation step.
 
 Do not use for GitLab merge requests; use the GitLab MR creation skill instead.
 

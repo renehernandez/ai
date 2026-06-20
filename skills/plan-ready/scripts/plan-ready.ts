@@ -3,6 +3,22 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
+import {
+  cleanScalar,
+  escapeRegExp,
+  extractSection,
+  extractYaml,
+  fail,
+  hasKey,
+  hasSection,
+  includes,
+  LEGACY_PLAN_KEYS,
+  LEGACY_PLAN_ROOTS,
+  list,
+  readInput,
+  requireValue,
+  scalar,
+} from "../../../scripts/planning-contracts.ts";
 
 const BASELINE_REVIEWERS = [
   "implementation-readiness",
@@ -36,15 +52,6 @@ const OPTIONAL_REVIEWERS = Object.keys(OPTIONAL_REVIEWER_DESCRIPTIONS) as Array<
 const ARTIFACT_TYPES = ["plan", "openspec", "linear"] as const;
 const ROUTES = ["atomic_plan", "openspec_task"] as const;
 const EXPECTED_HOSTS = ["github_pr", "gitlab_mr", "direct_publish"] as const;
-const LEGACY_ROOTS = [
-  "slice_plan_review",
-  "plan_coordinate_handoff",
-  "plan_ready_handoff",
-  "plan_followthrough_slice_handoff",
-  "plan_followthrough_ledger",
-] as const;
-const LEGACY_KEYS = ["reviewed_slices"] as const;
-
 type Command =
   | "detect"
   | "reviewer-template"
@@ -757,7 +764,7 @@ function legacyErrors(input: string): string[] {
   const body = extractYaml(input);
   const errors: string[] = [];
 
-  for (const root of LEGACY_ROOTS) {
+  for (const root of LEGACY_PLAN_ROOTS) {
     if (hasSection(body, root)) {
       errors.push(
         `${root} is legacy; rerun plan-ready to produce plan_delivery_handoff or openspec_blueprint`,
@@ -765,7 +772,7 @@ function legacyErrors(input: string): string[] {
     }
   }
 
-  for (const key of LEGACY_KEYS) {
+  for (const key of LEGACY_PLAN_KEYS) {
     if (hasKey(body, key)) {
       errors.push(
         `${key} is legacy; rerun plan-ready to produce plan_delivery_handoff or openspec_blueprint`,
@@ -843,79 +850,6 @@ function git(args: string[]): string | null {
   return result.stdout.trim();
 }
 
-function extractYaml(input: string): string {
-  const fenced = input.match(/```(?:ya?ml)?\s*\n([\s\S]*?)\n```/);
-  return (fenced?.[1] ?? input).trim();
-}
-
-function extractSection(input: string, sectionName: string): string {
-  const lines = input.split(/\r?\n/);
-  const start = lines.findIndex((line) => line.trim() === `${sectionName}:`);
-  if (start === -1) {
-    return "";
-  }
-
-  return lines
-    .slice(start + 1)
-    .filter((line) => line.startsWith(" ") || line.trim() === "")
-    .map((line) => line.replace(/^ {2}/, ""))
-    .join("\n");
-}
-
-function hasSection(input: string, sectionName: string): boolean {
-  return new RegExp(`^\\s*${escapeRegExp(sectionName)}:\\s*$`, "m").test(input);
-}
-
-function hasKey(input: string, key: string): boolean {
-  return new RegExp(`^\\s*${escapeRegExp(key)}:\\s*`, "m").test(input);
-}
-
-function scalar(input: string, key: string): string | undefined {
-  const match = input.match(
-    new RegExp(`^\\s*${escapeRegExp(key)}:\\s*(.+?)\\s*$`, "m"),
-  );
-  if (!match) {
-    return undefined;
-  }
-  return cleanScalar(match[1]);
-}
-
-function list(input: string, key: string): string[] {
-  const inline = input.match(
-    new RegExp(`^\\s*${escapeRegExp(key)}:\\s*\\[(.*?)\\]\\s*$`, "m"),
-  );
-  if (inline) {
-    const raw = inline[1].trim();
-    return raw ? raw.split(",").map(cleanScalar).filter(Boolean) : [];
-  }
-
-  const lines = input.split(/\r?\n/);
-  const keyIndex = lines.findIndex((line) =>
-    line.match(new RegExp(`^\\s*${escapeRegExp(key)}:\\s*$`)),
-  );
-  if (keyIndex === -1) {
-    return [];
-  }
-
-  const keyIndent = lines[keyIndex].match(/^(\s*)/)?.[1].length ?? 0;
-  const values: string[] = [];
-  for (const line of lines.slice(keyIndex + 1)) {
-    if (line.trim() === "") {
-      continue;
-    }
-    const indent = line.match(/^(\s*)/)?.[1].length ?? 0;
-    if (indent <= keyIndent) {
-      break;
-    }
-    const item = line.trim().match(/^- (.+)$/);
-    if (item) {
-      values.push(cleanScalar(item[1]));
-    }
-  }
-
-  return values.filter(Boolean);
-}
-
 function map(input: string, key: string): Record<string, string> {
   const lines = input.split(/\r?\n/);
   const keyIndex = lines.findIndex((line) =>
@@ -946,49 +880,6 @@ function map(input: string, key: string): Record<string, string> {
 
 function hasRationale(input: string): boolean {
   return Object.keys(map(input, "rationale")).length > 0;
-}
-
-function readInput(args: string[]): string {
-  const fileIndex = args.indexOf("--file");
-  if (fileIndex !== -1) {
-    const file = args[fileIndex + 1];
-    if (!file) {
-      fail("--file requires a path");
-    }
-    return readFileSync(file, "utf8");
-  }
-
-  return readFileSync(0, "utf8");
-}
-
-function requireValue(
-  value: string | undefined,
-  label: string,
-  errors: string[],
-): void {
-  if (!value || value.startsWith("<")) {
-    errors.push(`${label} is required`);
-  }
-}
-
-function cleanScalar(value: string): string {
-  return value.trim().replace(/^["']|["']$/g, "");
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function includes<T extends readonly string[]>(
-  values: T,
-  value: string,
-): value is T[number] {
-  return values.includes(value as T[number]);
-}
-
-function fail(message: string): never {
-  console.error(message);
-  process.exit(1);
 }
 
 main();

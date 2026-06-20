@@ -1,15 +1,16 @@
 ---
-name: plan-to-review
+name: plan-review
 description: Use when a reviewed plan, OpenSpec change, or planning-only branch should be published as a PR or MR for Nitro, Codex, and developer feedback before implementation.
 ---
 
-# Plan To Review
+# Plan Review
 
 ## Overview
 
-Publish a planning artifact as a planning-only hosted review. This skill is
-parallel to `plan-unit-delivery`: it creates or updates the PR/MR for plan feedback,
-waits for routed hosted feedback, and stops before implementation.
+Publish a planning artifact as a planning-only hosted review. This skill
+creates or updates the PR/MR for plan feedback, waits for routed hosted
+feedback, and emits the `planning_review` handoff consumed before
+implementation.
 
 ## When To Use
 
@@ -17,8 +18,8 @@ Use when the user wants to publish a plan, OpenSpec change, or planning-only
 branch for Nitro, Codex, or developer review before coding starts.
 
 Use `plan-ready` first when the plan still needs scope hardening. Use
-`plan-unit-delivery` when the user is ready to implement a validated
-`plan_delivery_handoff`.
+`plan-unit-sequencer` only after this skill emits a validated
+`planning_review`.
 
 ## Required Input
 
@@ -43,7 +44,7 @@ Legacy `plan_ready_handoff`, `reviewed_slices`, `slice_plan_review`,
 `plan_followthrough_slice_handoff`, and followthrough-ledger inputs are
 unsupported. Return `needs_plan_ready` so the thread reruns `plan-ready`.
 
-Run `scripts/plan-to-review.ts validate-request` from this skill directory
+Run `scripts/plan-review.ts validate-request` from this skill directory
 before publishing anything. If input is missing, ambiguous, stale, or has
 unresolved blockers, stop and ask for `plan-ready` or a valid
 `plan_review_request`.
@@ -65,8 +66,8 @@ and next action.
 
 ## Workflow
 
-1. Validate the input with `scripts/plan-to-review.ts validate-request`.
-2. Run `scripts/plan-to-review.ts detect` and start from live state with
+1. Validate the input with `scripts/plan-review.ts validate-request`.
+2. Run `scripts/plan-review.ts detect` and start from live state with
    `session-start`: repo rules, branch/worktree, dirty state, remotes, existing
    PRs/MRs, CI, and the referenced planning artifact.
 3. Confirm the referenced plan/OpenSpec/Linear planning artifact exists or is
@@ -106,12 +107,15 @@ and next action.
     record it as a follow-up or blocker; do not start coding.
 12. If the branch head changes after feedback fixes, rerun artifact validation,
     push, and wait for latest-head automated feedback again.
-13. Before finishing, generate `scripts/plan-to-review.ts gate-template`, fill
-    it, and validate it with `validate-ledger`.
-14. Finish when the planning-only artifact is published and automated feedback
-    is resolved, pending with evidence, unavailable with evidence, or explicitly
-    waived. Developer review may remain pending when the goal is to publish for
-    review.
+13. Before finishing, generate `scripts/plan-review.ts gate-template`, fill
+    it, and validate it with `validate-ledger` as internal evidence.
+14. Emit `planning_review` with `scripts/plan-review.ts
+    planning-review-template`, fill it with the hosted review evidence, and
+    validate it with `validate-planning-review`.
+15. Finish only when the planning-only artifact is reviewed enough for the
+    selected mode. In `ship_then_continue`, the planning PR/MR must be merged.
+    In `stack_when_ready`, feedback must be addressed and the reviewed head
+    must be usable as the stack base.
 
 ## Gate Rules
 
@@ -128,11 +132,12 @@ and next action.
 | Developer review | Human developer review is requested or pending on the hosted artifact |
 | No implementation | No implementation work starts in this workflow |
 
-## Final Review Ledger
+## Final Planning Review Handoff
 
 The final response must include a concise `## Readable Summary` followed by
-every gate in YAML. Use `passed` or `blocked`; use `not_applicable` only for
-conditional gates accepted by `validate-ledger`.
+`planning_review` YAML. The detailed gate ledger may be included as supporting
+evidence, but downstream skills must not infer readiness from
+`plan_review_gate_ledger`.
 
 The readable summary is for thread scanning, especially on mobile. Keep it to
 3-6 bullets with artifact, review route, validation state, automatic feedback
@@ -140,54 +145,47 @@ state, blockers, and next action. Do not replace the YAML; the YAML remains the
 machine-readable review ledger.
 
 ```yaml
-plan_review_gate_ledger:
-  request_validation:
-    status: passed
-    evidence: "plan_review_request validated"
-  session_start:
-    status: passed
-    evidence: "repo, branch, remotes, and artifact inspected"
-  planning_only_diff:
-    status: passed
-    evidence: "diff limited to OpenSpec files"
-  artifact_validation:
-    status: passed
-    evidence: "openspec validate example-change --strict --no-interactive"
-  review_feedback_routing:
-    status: passed
-    evidence: "GitLab artifact with Nitro feedback route selected"
-  artifact_creation_update:
-    status: passed
-    evidence: "MR URL"
-  artifact_host_inspection:
-    status: passed
-    evidence: "MR metadata and discussions inspected"
-  automated_feedback:
-    status: passed
-    evidence: "Nitro latest-head feedback resolved or pending with evidence"
-  developer_review:
-    status: passed
-    evidence: "MR published for developer review"
-  no_implementation:
-    status: passed
-    evidence: "no implementation files changed"
+planning_review:
+  status: reviewed
+  artifact_type: openspec
+  artifact_ref: openspec/changes/example-change
+  review_artifact: <planning PR or MR URL>
+  mode: ship_then_continue
+  gate_outcome: approved
+  target_branch: main
+  target_base_sha: <target branch sha reviewed by planning artifact>
+  planning_branch: <planning branch name>
+  reviewed_head: <planning artifact head sha>
+  stack_base_ref:
+  stack_base_evidence:
+  task_state_fingerprint: <sha256 of reviewed plan or task state>
+  validation:
+    evidence:
+      - openspec validate example-change --strict --no-interactive
+  review:
+    evidence:
+      - planning PR or MR merged after feedback was addressed
+  blockers: []
 ```
 
 ## Mistakes
 
 | Mistake | Fix |
 | --- | --- |
-| Implementing after the plan is published | Stop and ask the user to invoke `plan-unit-delivery` after review |
+| Implementing after the plan is published | Stop and emit `planning_review` for `plan-unit-sequencer` |
 | Accepting legacy handoffs | Return `needs_plan_ready` |
 | Publishing implementation files in the review branch | Split them out before creating the planning review |
 | Treating routing metadata as sufficient after pushing a new head to an existing Fullscript MR | Request a fresh Nitro review for the current head, then wait for latest-head feedback or pending state |
 | Requesting Nitro repeatedly when a fresh latest-head Nitro review is already pending | Stop polling after recording the pending review state, MR head, and request evidence |
 | Calling pending developer review a pass | Report it as published and pending with the PR/MR URL |
 | Applying code changes from review feedback | Convert implementation requests into plan changes or follow-ups |
-| Returning gate YAML without a readable thread summary | Add `## Readable Summary` before the YAML |
+| Returning gate YAML instead of `planning_review` | Emit and validate `planning_review` before handing off |
+| Returning YAML without a readable thread summary | Add `## Readable Summary` before the YAML |
 
 ## Test Evidence
 
 - RED: previous workflow accepted `plan_ready_handoff` as hosted-review input.
 - GREEN: the validator now accepts `plan_review_request` and
   `plan_delivery_handoff`, and rejects legacy slice/followthrough shapes.
+- GREEN: `planning_review` validates as the only review-to-implementation
+  handoff.

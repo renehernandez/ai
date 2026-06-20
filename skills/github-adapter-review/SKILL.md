@@ -12,7 +12,7 @@ Use GitHub as the artifact-host adapter, then apply `diff-review` to the verifie
 
 - The user asks to review a GitHub pull request or PR URL.
 - The current branch has an open GitHub PR.
-- `plan-unit-delivery` or `plan-to-review` detects a GitHub remote and needs the hosted review gate.
+- `plan-unit-delivery` or `plan-review` detects a GitHub remote and needs the hosted review gate.
 - The user asks to inspect GitHub reviews, comments, or Actions checks for a PR.
 
 Use `diff-review` directly for local-only diffs. Use `gitlab-adapter-review` for GitLab MRs.
@@ -93,7 +93,7 @@ Use `diff-review` directly for local-only diffs. Use `gitlab-adapter-review` for
 
 ## Output Contract
 
-Return this shape so `plan-unit-delivery` or `plan-to-review` can consume the gate consistently:
+Return this shape so `plan-unit-delivery` or `plan-review` can consume the gate consistently:
 
 ```markdown
 Artifact host: GitHub
