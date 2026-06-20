@@ -52,6 +52,18 @@ Portable user-level instructions that are installed into runtime profiles live i
 - Do not assume this user-level instruction file defines a universal setup
   command. Project-specific commands belong in project-specific instructions.
 
+### OpenSpec Runtime
+
+- Use `pnpm agent-runtime openspec install|update|validate|status` to manage
+  repo-local OpenSpec scaffolding.
+- OpenSpec-generated skills are canonical under `.agents/skills/openspec-*` for
+  this repo, with `.codex/skills/openspec-*` and
+  `.claude/skills/openspec-*` pointing back by relative symlink.
+- OpenSpec-generated Claude commands are canonical under `.agents/commands/opsx`
+  with `.claude/commands/opsx/*` pointing back by relative symlink.
+- Do not install OpenSpec-generated skills into global `~/.agents/skills` or
+  move them into the shared repo `skills/` folder.
+
 ### Shared Automations
 
 - Store reusable Codex automation definitions under [automations/](automations/).

@@ -13,6 +13,18 @@
       "agents": "~/.agents",
       "claude": "~/.claude",
       "codex": "~/.codex"
+    },
+    "openspec": {
+      "tools": ["codex", "claude"],
+      "canonicalSkillsDir": ".agents/skills",
+      "canonicalCommandsDir": ".agents/commands",
+      "skillTargets": {
+        "codex": ".codex/skills",
+        "claude": ".claude/skills"
+      },
+      "commandTargets": {
+        "claude": ".claude/commands"
+      }
     }
   },
   "profiles": {

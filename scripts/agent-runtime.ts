@@ -8,6 +8,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   readSync,
   realpathSync,
   renameSync,
@@ -68,6 +69,7 @@ type Config = {
     agentSymlinkTargets?: Record<string, string>;
     instructionSymlinkTargets?: Record<string, string>;
     lockFile?: string;
+    openspec?: OpenSpecConfig;
   };
   instructions?: {
     paths: InstructionPathConfig[];
@@ -86,6 +88,22 @@ type InstructionProfileConfig = {
 type AgentTargetConfig = {
   model: string;
   reasoning?: string;
+};
+
+type OpenSpecConfig = {
+  tools?: string[];
+  canonicalSkillsDir?: string;
+  canonicalCommandsDir?: string;
+  skillTargets?: Record<string, string>;
+  commandTargets?: Record<string, string>;
+};
+
+type ResolvedOpenSpecConfig = {
+  tools: string[];
+  canonicalSkillsDir: string;
+  canonicalCommandsDir: string;
+  skillTargets: Record<string, string>;
+  commandTargets: Record<string, string>;
 };
 
 type ParsedArgs = {
@@ -131,6 +149,7 @@ type LockFile = {
 const CONFIG_FILE = "agent-runtime.config.json";
 const LOCK_FILE = "agent-runtime.lock.json";
 const CACHE_DIR = ".agent-runtime/cache";
+const OPENSPEC_INSTALL_COMMAND = "npm install -g @fission-ai/openspec@latest";
 
 export function main(): void {
   const program = createProgram();
@@ -674,7 +693,7 @@ function runScope(
     if (input.agentName) {
       throw new Error("--agent can only be used with the agents scope");
     }
-    runOpenSpec(input.command);
+    runOpenSpec(input.command, input.config);
     return;
   }
   if (input.agentName) {
@@ -683,9 +702,399 @@ function runScope(
   runInstructions(input.command, input.config, input.profileSelection);
 }
 
-function runOpenSpec(command: RuntimeCommand): void {
-  throw new Error(
-    `${labelForCommand(command)} repo-local OpenSpec scaffolding is not implemented yet`,
+function runOpenSpec(command: RuntimeCommand, config: Config): void {
+  const openspec = resolvedOpenSpecConfig(config);
+
+  if (command === "status") {
+    statusOpenSpec(openspec);
+    return;
+  }
+
+  ensureOpenSpecCli();
+
+  if (command === "validate") {
+    validateOpenSpec(openspec);
+    console.log("Validated repo-local OpenSpec scaffolding.");
+    return;
+  }
+
+  if (command === "install") {
+    runOpenSpecCli(["init", ".", "--tools", openspec.tools.join(",")]);
+    normalizeOpenSpecScaffolding(openspec);
+    console.log("Installed repo-local OpenSpec scaffolding.");
+    return;
+  }
+
+  if (isOpenSpecInitialized()) {
+    runOpenSpecCli(["update", "."]);
+  } else {
+    runOpenSpecCli(["init", ".", "--tools", openspec.tools.join(",")]);
+  }
+  normalizeOpenSpecScaffolding(openspec);
+  console.log("Updated repo-local OpenSpec scaffolding.");
+}
+
+function resolvedOpenSpecConfig(config: Config): ResolvedOpenSpecConfig {
+  const input = config.runtime.openspec ?? {};
+  return {
+    tools: nonEmptyStrings(input.tools, ["codex", "claude"]),
+    canonicalSkillsDir: input.canonicalSkillsDir ?? ".agents/skills",
+    canonicalCommandsDir: input.canonicalCommandsDir ?? ".agents/commands",
+    skillTargets: nonEmptyRecord(input.skillTargets, {
+      codex: ".codex/skills",
+      claude: ".claude/skills",
+    }),
+    commandTargets: nonEmptyRecord(input.commandTargets, {
+      claude: ".claude/commands",
+    }),
+  };
+}
+
+function nonEmptyStrings(
+  values: string[] | undefined,
+  defaults: string[],
+): string[] {
+  if (!values) {
+    return defaults;
+  }
+  const selected = values.filter((value) => value.trim().length > 0);
+  if (selected.length === 0) {
+    throw new Error("runtime.openspec.tools must include at least one tool");
+  }
+  return selected;
+}
+
+function nonEmptyRecord(
+  value: Record<string, string> | undefined,
+  defaults: Record<string, string>,
+): Record<string, string> {
+  if (!value) {
+    return defaults;
+  }
+  const entries = Object.entries(value).filter(
+    ([, target]) => target.trim().length > 0,
+  );
+  if (entries.length === 0) {
+    throw new Error("runtime.openspec target maps must not be empty");
+  }
+  return Object.fromEntries(entries);
+}
+
+function ensureOpenSpecCli(): void {
+  if (!openSpecCli()) {
+    throw new Error(
+      `OpenSpec CLI is not available. Install it with: ${OPENSPEC_INSTALL_COMMAND}`,
+    );
+  }
+}
+
+function openSpecCli(): { path: string; version: string } | undefined {
+  const which = spawnSync("which", ["openspec"], {
+    encoding: "utf-8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (which.status !== 0) {
+    return undefined;
+  }
+
+  const version = spawnSync("openspec", ["--version"], {
+    encoding: "utf-8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (version.status !== 0) {
+    return undefined;
+  }
+
+  return {
+    path: which.stdout.trim(),
+    version: version.stdout.trim(),
+  };
+}
+
+function runOpenSpecCli(args: string[]): void {
+  run("openspec", args);
+}
+
+function isOpenSpecInitialized(): boolean {
+  return existsSync(join("openspec", "config.yaml"));
+}
+
+function normalizeOpenSpecScaffolding(config: ResolvedOpenSpecConfig): void {
+  normalizeOpenSpecSkills(config);
+  normalizeOpenSpecCommands(config);
+}
+
+function normalizeOpenSpecSkills(config: ResolvedOpenSpecConfig): void {
+  const canonicalSkillsDir = resolve(config.canonicalSkillsDir);
+  const targetDirs = Object.values(config.skillTargets).map((target) =>
+    resolve(target),
+  );
+  const skillNames = openSpecSkillNames([canonicalSkillsDir, ...targetDirs]);
+
+  for (const skillName of skillNames) {
+    const canonicalPath = join(canonicalSkillsDir, skillName);
+    const sourcePath = firstExistingPath(
+      targetDirs.map((targetDir) => join(targetDir, skillName)),
+    );
+    if (
+      sourcePath &&
+      realPathIfExists(sourcePath) !== realPathIfExists(canonicalPath)
+    ) {
+      replaceDirectory(sourcePath, canonicalPath);
+    }
+
+    for (const targetDir of targetDirs) {
+      replaceRelativeSymlink(canonicalPath, join(targetDir, skillName));
+    }
+  }
+}
+
+function normalizeOpenSpecCommands(config: ResolvedOpenSpecConfig): void {
+  const canonicalCommandsRoot = resolve(config.canonicalCommandsDir);
+  for (const [targetName, targetRoot] of Object.entries(
+    config.commandTargets,
+  )) {
+    const targetOpsxDir = join(resolve(targetRoot), "opsx");
+    const canonicalOpsxDir = join(canonicalCommandsRoot, "opsx");
+    const commandNames = openSpecCommandNames([
+      canonicalOpsxDir,
+      targetOpsxDir,
+    ]);
+
+    for (const commandName of commandNames) {
+      const canonicalPath = join(canonicalOpsxDir, commandName);
+      const sourcePath = firstExistingPath([join(targetOpsxDir, commandName)]);
+      if (
+        sourcePath &&
+        realPathIfExists(sourcePath) !== realPathIfExists(canonicalPath)
+      ) {
+        replaceFile(sourcePath, canonicalPath);
+      }
+      replaceRelativeSymlink(canonicalPath, join(targetOpsxDir, commandName));
+    }
+
+    if (commandNames.length > 0) {
+      console.log(`Normalized OpenSpec commands for ${targetName}`);
+    }
+  }
+}
+
+function validateOpenSpec(config: ResolvedOpenSpecConfig): void {
+  const errors: string[] = [];
+  const canonicalSkillsDir = resolve(config.canonicalSkillsDir);
+  const skillTargetDirs = Object.values(config.skillTargets).map((target) =>
+    resolve(target),
+  );
+  const skillNames = openSpecSkillNames([
+    canonicalSkillsDir,
+    ...skillTargetDirs,
+  ]);
+
+  if (skillNames.length === 0) {
+    errors.push("No repo-local OpenSpec skills found");
+  }
+
+  for (const skillName of skillNames) {
+    const canonicalPath = join(canonicalSkillsDir, skillName);
+    if (!lstatIfExists(canonicalPath)?.isDirectory()) {
+      errors.push(`Missing canonical OpenSpec skill: ${canonicalPath}`);
+    }
+    for (const targetDir of skillTargetDirs) {
+      validateSymlink({
+        linkPath: join(targetDir, skillName),
+        expectedTarget: canonicalPath,
+        label: `OpenSpec skill ${skillName}`,
+        errors,
+      });
+    }
+  }
+
+  for (const targetRoot of Object.values(config.commandTargets)) {
+    const targetOpsxDir = join(resolve(targetRoot), "opsx");
+    const canonicalOpsxDir = join(resolve(config.canonicalCommandsDir), "opsx");
+    const commandNames = openSpecCommandNames([
+      canonicalOpsxDir,
+      targetOpsxDir,
+    ]);
+    for (const commandName of commandNames) {
+      const canonicalPath = join(canonicalOpsxDir, commandName);
+      if (!lstatIfExists(canonicalPath)?.isFile()) {
+        errors.push(`Missing canonical OpenSpec command: ${canonicalPath}`);
+      }
+      validateSymlink({
+        linkPath: join(targetOpsxDir, commandName),
+        expectedTarget: canonicalPath,
+        label: `OpenSpec command ${commandName}`,
+        errors,
+      });
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new Error(
+      `Invalid repo-local OpenSpec scaffolding:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+    );
+  }
+}
+
+function statusOpenSpec(config: ResolvedOpenSpecConfig): void {
+  const cli = openSpecCli();
+  if (!cli) {
+    throw new Error(
+      `OpenSpec CLI is not available. Install it with: ${OPENSPEC_INSTALL_COMMAND}`,
+    );
+  }
+
+  console.log(`OpenSpec CLI: ${cli.path} (${cli.version})`);
+  printPathStatus("OpenSpec config", join("openspec", "config.yaml"));
+  statusOpenSpecSkills(config);
+  statusOpenSpecCommands(config);
+}
+
+function statusOpenSpecSkills(config: ResolvedOpenSpecConfig): void {
+  const canonicalSkillsDir = resolve(config.canonicalSkillsDir);
+  const targetEntries = Object.entries(config.skillTargets).map(
+    ([targetName, targetPath]) => ({
+      targetName,
+      targetDir: resolve(targetPath),
+    }),
+  );
+  const skillNames = openSpecSkillNames([
+    canonicalSkillsDir,
+    ...targetEntries.map((entry) => entry.targetDir),
+  ]);
+
+  for (const skillName of skillNames) {
+    const canonicalPath = join(canonicalSkillsDir, skillName);
+    printPathStatus(`OpenSpec skill ${skillName}`, canonicalPath);
+    for (const entry of targetEntries) {
+      printSymlinkStatus(
+        `  ${entry.targetName}: ${join(entry.targetDir, skillName)}`,
+        join(entry.targetDir, skillName),
+        canonicalPath,
+      );
+    }
+  }
+}
+
+function statusOpenSpecCommands(config: ResolvedOpenSpecConfig): void {
+  const canonicalOpsxDir = join(resolve(config.canonicalCommandsDir), "opsx");
+  for (const [targetName, targetRoot] of Object.entries(
+    config.commandTargets,
+  )) {
+    const targetOpsxDir = join(resolve(targetRoot), "opsx");
+    const commandNames = openSpecCommandNames([
+      canonicalOpsxDir,
+      targetOpsxDir,
+    ]);
+    for (const commandName of commandNames) {
+      const canonicalPath = join(canonicalOpsxDir, commandName);
+      printPathStatus(`OpenSpec command ${commandName}`, canonicalPath);
+      printSymlinkStatus(
+        `  ${targetName}: ${join(targetOpsxDir, commandName)}`,
+        join(targetOpsxDir, commandName),
+        canonicalPath,
+      );
+    }
+  }
+}
+
+function validateSymlink(input: {
+  linkPath: string;
+  expectedTarget: string;
+  label: string;
+  errors: string[];
+}): void {
+  const stats = lstatIfExists(input.linkPath);
+  if (!stats) {
+    input.errors.push(`Missing ${input.label} symlink: ${input.linkPath}`);
+    return;
+  }
+  if (!stats.isSymbolicLink()) {
+    input.errors.push(`Expected symlink for ${input.label}: ${input.linkPath}`);
+    return;
+  }
+  if (
+    realPathIfExists(input.linkPath) !== realPathIfExists(input.expectedTarget)
+  ) {
+    input.errors.push(
+      `Wrong target for ${input.label}: ${input.linkPath} -> ${readlinkSync(input.linkPath)}`,
+    );
+  }
+}
+
+function openSpecSkillNames(directories: string[]): string[] {
+  return discoverNames(directories, (entry) => {
+    if (!entry.name.startsWith("openspec-")) {
+      return false;
+    }
+    const path = entry.path;
+    const stats = lstatIfExists(path);
+    if (!stats) {
+      return false;
+    }
+    if (stats.isDirectory() || stats.isSymbolicLink()) {
+      return true;
+    }
+    return false;
+  });
+}
+
+function openSpecCommandNames(directories: string[]): string[] {
+  return discoverNames(
+    directories,
+    (entry) => entry.name.endsWith(".md") && Boolean(lstatIfExists(entry.path)),
+  );
+}
+
+function discoverNames(
+  directories: string[],
+  include: (entry: { name: string; path: string }) => boolean,
+): string[] {
+  const names = new Set<string>();
+  for (const directory of directories) {
+    if (!existsSync(directory)) {
+      continue;
+    }
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      if (include({ name: entry.name, path })) {
+        names.add(entry.name);
+      }
+    }
+  }
+  return [...names].sort();
+}
+
+function firstExistingPath(paths: string[]): string | undefined {
+  return paths.find((path) => existsSync(path));
+}
+
+function replaceFile(source: string, destination: string): void {
+  const temporaryDestination = `${destination}.tmp-${process.pid}`;
+  rmSync(temporaryDestination, { force: true });
+  mkdirSync(dirname(destination), { recursive: true });
+  cpSync(source, temporaryDestination);
+  rmSync(destination, { force: true });
+  renameSync(temporaryDestination, destination);
+}
+
+function replaceRelativeSymlink(target: string, linkPath: string): void {
+  const stats = lstatIfExists(linkPath);
+  if (stats) {
+    if (
+      stats.isSymbolicLink() &&
+      realPathIfExists(linkPath) === realPathIfExists(target)
+    ) {
+      return;
+    }
+    rmSync(linkPath, { force: true, recursive: true });
+  }
+  mkdirSync(dirname(linkPath), { recursive: true });
+  symlinkSync(
+    relative(dirname(linkPath), target),
+    linkPath,
+    symlinkType(target),
   );
 }
 

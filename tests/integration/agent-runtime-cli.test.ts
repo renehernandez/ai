@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -119,6 +120,52 @@ function cachePathForUrl(directory: string, url: string): string {
   return join(directory, ".agent-runtime", "cache", `skills-${hash}`);
 }
 
+function addOpenSpecStub(runtimeDir: string): Record<string, string> {
+  const binDir = join(runtimeDir, "bin");
+  const openspecPath = join(binDir, "openspec");
+  mkdirSync(binDir, { recursive: true });
+  writeFileSync(
+    openspecPath,
+    `#!/usr/bin/env node
+const fs = require("node:fs");
+const path = require("node:path");
+
+function write(file, content) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, content);
+}
+
+if (process.argv.includes("--version")) {
+  process.stdout.write("1.4.1\\n");
+  process.exit(0);
+}
+
+const command = process.argv[2];
+if (command === "init" || command === "update") {
+  fs.mkdirSync("openspec", { recursive: true });
+  write("openspec/config.yaml", "defaultSchema: spec-driven\\n");
+  for (const tool of ["codex", "claude"]) {
+    for (const skill of ["openspec-propose", "openspec-apply-change"]) {
+      write(path.join("." + tool, "skills", skill, "SKILL.md"), "---\\nname: " + skill + "\\n---\\n");
+    }
+  }
+  for (const commandName of ["propose", "apply"]) {
+    write(path.join(".claude", "commands", "opsx", commandName + ".md"), "---\\nname: " + commandName + "\\n---\\n");
+  }
+  process.exit(0);
+}
+
+process.stderr.write("unexpected openspec command: " + process.argv.slice(2).join(" ") + "\\n");
+process.exit(1);
+`,
+    "utf-8",
+  );
+  chmodSync(openspecPath, 0o755);
+  return {
+    PATH: `${binDir}:${process.env.PATH ?? ""}`,
+  };
+}
+
 test("CLI validates all runtime scopes", () => {
   withFixture(({ configPath }) => {
     const result = runAgentRuntime([
@@ -172,6 +219,88 @@ test("CLI shows OpenSpec scope help", () => {
   assert.match(result.stdout, /status/);
   assert.match(result.stdout, /update/);
   assert.match(result.stdout, /validate/);
+});
+
+test("CLI installs and normalizes repo-local OpenSpec scaffolding", () => {
+  withFixture(({ configPath, runtimeDir }) => {
+    const env = addOpenSpecStub(runtimeDir);
+    const install = runAgentRuntime(
+      ["openspec", "install", "--config", configPath],
+      {
+        cwd: runtimeDir,
+        env,
+      },
+    );
+
+    assert.equal(install.status, 0, install.stderr || install.stdout);
+    assert.equal(
+      lstatSync(
+        join(runtimeDir, ".agents", "skills", "openspec-propose"),
+      ).isDirectory(),
+      true,
+    );
+    assert.equal(
+      lstatSync(
+        join(runtimeDir, ".codex", "skills", "openspec-propose"),
+      ).isSymbolicLink(),
+      true,
+    );
+    assert.equal(
+      readlinkSync(join(runtimeDir, ".codex", "skills", "openspec-propose")),
+      "../../.agents/skills/openspec-propose",
+    );
+    assert.equal(
+      lstatSync(
+        join(runtimeDir, ".claude", "skills", "openspec-propose"),
+      ).isSymbolicLink(),
+      true,
+    );
+    assert.equal(
+      lstatSync(
+        join(runtimeDir, ".agents", "commands", "opsx", "propose.md"),
+      ).isFile(),
+      true,
+    );
+    assert.equal(
+      readlinkSync(
+        join(runtimeDir, ".claude", "commands", "opsx", "propose.md"),
+      ),
+      "../../../.agents/commands/opsx/propose.md",
+    );
+
+    const validate = runAgentRuntime(
+      ["openspec", "validate", "--config", configPath],
+      { cwd: runtimeDir, env },
+    );
+    assert.equal(validate.status, 0, validate.stderr || validate.stdout);
+
+    const status = runAgentRuntime(
+      ["openspec", "status", "--config", configPath],
+      {
+        cwd: runtimeDir,
+        env,
+      },
+    );
+    assert.equal(status.status, 0, status.stderr || status.stdout);
+    assert.match(status.stdout, /OpenSpec CLI:/);
+    assert.match(status.stdout, /openspec-propose/);
+    assert.match(status.stdout, /propose\.md/);
+  });
+});
+
+test("CLI reports missing OpenSpec CLI", () => {
+  withFixture(({ configPath, runtimeDir }) => {
+    const result = runAgentRuntime(
+      ["openspec", "install", "--config", configPath],
+      {
+        cwd: runtimeDir,
+        env: { PATH: join(runtimeDir, "missing-bin") },
+      },
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /npm install -g @fission-ai\/openspec@latest/);
+  });
 });
 
 test("CLI shows command-specific help", () => {
