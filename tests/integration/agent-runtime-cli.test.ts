@@ -60,6 +60,12 @@ function withFixture(
   const runtime = config.runtime as Record<string, unknown>;
   runtime.canonicalSkillsDir = join(runtimeDir, "skills");
   runtime.skillSymlinkTargets = [join(runtimeDir, "claude", "skills")];
+  runtime.reusableScripts = [
+    {
+      sourcePath: join(repoRoot, "scripts/planning-contracts.ts"),
+      targetPath: "scripts/planning-contracts.ts",
+    },
+  ];
   runtime.canonicalAgentsDir = join(runtimeDir, "agents");
   runtime.lockFile = join(runtimeDir, "lock.json");
   runtime.agentSymlinkTargets = {
@@ -622,6 +628,98 @@ test("CLI prunes stale installed retired skill names", () => {
       config.blocks = {
         local: {
           skills: [{ localPath: localSkillsDir, names: ["*"] }],
+        },
+      };
+      config.profiles = {
+        personal: { include: ["local"], paths: ["AGENTS.md"] },
+      };
+    },
+  );
+});
+
+test("CLI installs reusable scripts beside skill runtime roots", () => {
+  withFixture(
+    ({ configPath, runtimeDir }) => {
+      const install = runAgentRuntime([
+        "skills",
+        "install",
+        "--profile",
+        "personal",
+        "--config",
+        configPath,
+      ]);
+      assert.equal(install.status, 0, install.stderr || install.stdout);
+
+      const canonicalScript = join(
+        runtimeDir,
+        "scripts",
+        "planning-contracts.ts",
+      );
+      const targetScript = join(
+        runtimeDir,
+        "claude",
+        "scripts",
+        "planning-contracts.ts",
+      );
+      assert.equal(existsSync(canonicalScript), true);
+      assert.equal(lstatSync(targetScript).isSymbolicLink(), true);
+
+      const installedEntrypoint = join(
+        runtimeDir,
+        "skills",
+        "needs-script",
+        "scripts",
+        "entry.ts",
+      );
+      const result = spawnSync(
+        process.execPath,
+        ["--import", tsxLoader, installedEntrypoint],
+        {
+          cwd: runtimeDir,
+          encoding: "utf-8",
+          env: withoutGitRepositoryEnv(),
+        },
+      );
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.equal(result.stdout, "runtime-script-ok");
+    },
+    (config, runtimeDir) => {
+      const localSkillsDir = join(runtimeDir, "local-skills");
+      const sourceScriptsDir = join(runtimeDir, "source-scripts");
+      mkdirSync(join(localSkillsDir, "needs-script", "scripts"), {
+        recursive: true,
+      });
+      mkdirSync(sourceScriptsDir, { recursive: true });
+
+      writeFileSync(
+        join(localSkillsDir, "needs-script", "SKILL.md"),
+        "---\nname: needs-script\n---\n",
+        "utf-8",
+      );
+      writeFileSync(
+        join(localSkillsDir, "needs-script", "scripts", "entry.ts"),
+        `import { marker } from "../../../scripts/planning-contracts.ts";
+process.stdout.write(marker);
+`,
+        "utf-8",
+      );
+      writeFileSync(
+        join(sourceScriptsDir, "planning-contracts.ts"),
+        `export const marker = "runtime-script-ok";
+`,
+        "utf-8",
+      );
+
+      const runtime = config.runtime as Record<string, unknown>;
+      runtime.reusableScripts = [
+        {
+          sourcePath: join(sourceScriptsDir, "planning-contracts.ts"),
+          targetPath: "scripts/planning-contracts.ts",
+        },
+      ];
+      config.blocks = {
+        local: {
+          skills: [{ localPath: localSkillsDir, names: ["needs-script"] }],
         },
       };
       config.profiles = {

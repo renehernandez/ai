@@ -18,7 +18,16 @@ import {
   writeSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, extname, join, relative, resolve } from "node:path";
+import {
+  basename,
+  dirname,
+  extname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import { pathToFileURL } from "node:url";
 import { Command } from "commander";
 
@@ -60,11 +69,14 @@ type InstructionPathConfig =
       targetPath: string;
     };
 
+type RuntimeFileConfig = InstructionPathConfig;
+
 type Config = {
   version: 1;
   runtime: {
     canonicalSkillsDir: string;
     skillSymlinkTargets: string[];
+    reusableScripts?: RuntimeFileConfig[];
     canonicalAgentsDir?: string;
     agentSymlinkTargets?: Record<string, string>;
     instructionSymlinkTargets?: Record<string, string>;
@@ -504,6 +516,22 @@ function instructionTargetPath(instructionPath: InstructionPathConfig): string {
 function instructionLabel(instructionPath: InstructionPathConfig): string {
   const sourcePath = instructionSourcePath(instructionPath);
   const targetPath = instructionTargetPath(instructionPath);
+  return sourcePath === targetPath
+    ? sourcePath
+    : `${sourcePath} -> ${targetPath}`;
+}
+
+function runtimeFileSourcePath(runtimeFile: RuntimeFileConfig): string {
+  return instructionSourcePath(runtimeFile);
+}
+
+function runtimeFileTargetPath(runtimeFile: RuntimeFileConfig): string {
+  return instructionTargetPath(runtimeFile);
+}
+
+function runtimeFileLabel(runtimeFile: RuntimeFileConfig): string {
+  const sourcePath = runtimeFileSourcePath(runtimeFile);
+  const targetPath = runtimeFileTargetPath(runtimeFile);
   return sourcePath === targetPath
     ? sourcePath
     : `${sourcePath} -> ${targetPath}`;
@@ -1142,6 +1170,7 @@ function runSkills(
     canonicalSkillsDir,
     symlinkTargets,
   });
+  installReusableScripts(config, [canonicalSkillsDir, ...symlinkTargets]);
   pruneRetiredManagedSkills(lock, profileNames, [
     canonicalSkillsDir,
     ...symlinkTargets,
@@ -1454,6 +1483,7 @@ function validateSkillConfig(config: Config, profileNames: string[]): void {
       "runtime.skillSymlinkTargets must be a non-empty string array",
     );
   }
+  validateReusableScriptConfig(config.runtime.reusableScripts ?? []);
 
   let skillCount = 0;
   const blockNames = new Set<string>();
@@ -1512,6 +1542,106 @@ function statusSkills(config: Config, profileNames: string[]): void {
       }
     }
   }
+  statusReusableScripts(config, [canonicalSkillsDir, ...symlinkTargets]);
+}
+
+function validateReusableScriptConfig(
+  reusableScripts: RuntimeFileConfig[],
+): void {
+  for (const runtimeFile of reusableScripts) {
+    const sourcePath = runtimeFileSourcePath(runtimeFile);
+    const targetPath = runtimeFileTargetPath(runtimeFile);
+    if (typeof sourcePath !== "string" || sourcePath.length === 0) {
+      throw new Error("runtime.reusableScripts sourcePath must be configured");
+    }
+    if (typeof targetPath !== "string" || targetPath.length === 0) {
+      throw new Error("runtime.reusableScripts targetPath must be configured");
+    }
+    const relativeTarget = relative(".", targetPath);
+    if (
+      isAbsolute(targetPath) ||
+      relativeTarget === ".." ||
+      relativeTarget.startsWith(`..${sep}`)
+    ) {
+      throw new Error(
+        `runtime.reusableScripts targetPath must stay within the runtime root: ${targetPath}`,
+      );
+    }
+    const source = resolve(sourcePath);
+    if (!lstatIfExists(source)?.isFile()) {
+      throw new Error(`Missing reusable runtime script: ${sourcePath}`);
+    }
+  }
+}
+
+function installReusableScripts(config: Config, skillDirs: string[]): void {
+  const reusableScripts = config.runtime.reusableScripts ?? [];
+  if (reusableScripts.length === 0) {
+    return;
+  }
+
+  const runtimeRoots = runtimeRootsForSkillDirs(skillDirs);
+  const canonicalRoot = runtimeRoots[0];
+  for (const runtimeFile of reusableScripts) {
+    const source = resolve(runtimeFileSourcePath(runtimeFile));
+    const targetPath = runtimeFileTargetPath(runtimeFile);
+    const canonicalTarget = runtimeTargetPath(canonicalRoot, targetPath);
+    replaceFile(source, canonicalTarget);
+
+    for (const runtimeRoot of runtimeRoots.slice(1)) {
+      replaceRelativeSymlink(
+        canonicalTarget,
+        runtimeTargetPath(runtimeRoot, targetPath),
+      );
+    }
+  }
+}
+
+function statusReusableScripts(config: Config, skillDirs: string[]): void {
+  const reusableScripts = config.runtime.reusableScripts ?? [];
+  if (reusableScripts.length === 0) {
+    return;
+  }
+
+  const runtimeRoots = runtimeRootsForSkillDirs(skillDirs);
+  const canonicalRoot = runtimeRoots[0];
+  for (const runtimeFile of reusableScripts) {
+    const targetPath = runtimeFileTargetPath(runtimeFile);
+    const canonicalTarget = runtimeTargetPath(canonicalRoot, targetPath);
+    printPathStatus(
+      `Reusable script ${runtimeFileLabel(runtimeFile)}`,
+      canonicalTarget,
+    );
+    for (const runtimeRoot of runtimeRoots.slice(1)) {
+      const linkPath = runtimeTargetPath(runtimeRoot, targetPath);
+      printSymlinkStatus(`  ${linkPath}`, linkPath, canonicalTarget);
+    }
+  }
+}
+
+function runtimeRootsForSkillDirs(skillDirs: string[]): string[] {
+  const roots: string[] = [];
+  const seen = new Set<string>();
+  for (const skillDir of skillDirs) {
+    const root = dirname(skillDir);
+    if (seen.has(root)) {
+      continue;
+    }
+    seen.add(root);
+    roots.push(root);
+  }
+  return roots;
+}
+
+function runtimeTargetPath(runtimeRoot: string, targetPath: string): string {
+  const target = resolve(runtimeRoot, targetPath);
+  const relativeTarget = relative(runtimeRoot, target);
+  if (relativeTarget === ".." || relativeTarget.startsWith(`..${sep}`)) {
+    throw new Error(
+      `Reusable runtime target escapes runtime root: ${targetPath}`,
+    );
+  }
+  return target;
 }
 
 function runAgents(
