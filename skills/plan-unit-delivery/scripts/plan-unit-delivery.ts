@@ -121,7 +121,7 @@ function main(): void {
 
   if (!isCommand(command)) {
     fail(
-      "Usage: plan-to-pr.ts <detect|validate-handoff|reviewer-template|validate-launch-report|validate-review-report|refactoring-template|gate-template|validate-ledger> [--file path]",
+      "Usage: plan-unit-delivery.ts <detect|validate-handoff|reviewer-template|validate-launch-report|validate-review-report|refactoring-template|gate-template|validate-ledger> [--file path]",
     );
   }
 
@@ -241,7 +241,7 @@ reviewer_subagent_report:
 
 review_execution_rules:
   - In Codex, run reviewer agents with the internal Codex subagent tool exposed by the current harness.
-  - Do not use the dispatch skill, Claude Code Task, or external Claude harness for Codex plan-to-pr reviewers.
+  - Do not use the dispatch skill, Claude Code Task, or external Claude harness for Codex plan-unit-delivery reviewers.
   - Omit model overrides unless the user explicitly asks for one.
   - Print and validate reviewer_subagent_launch immediately after spawning reviewers and before waiting for outcomes.
   - Validate reviewer_subagent_report before PR/MR creation or final delivery.

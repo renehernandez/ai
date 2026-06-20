@@ -1,9 +1,9 @@
 ---
-name: plan-to-pr
-description: Use when one validated plan_delivery_handoff approved unit should be implemented through local verification, review gates, hosted PR/MR feedback, and CI.
+name: plan-unit-delivery
+description: Use when one validated plan_delivery_handoff approved unit should be implemented through local verification, review gates, automatic feedback, CI, and PR, MR, or direct-publish delivery.
 ---
 
-# Plan To PR
+# Plan Unit Delivery
 
 ## Overview
 
@@ -23,15 +23,16 @@ tickets that still need planning, or legacy handoff shapes.
 
 ## Handoff Rules
 
-Run `scripts/plan-to-pr.ts validate-handoff --file <handoff>` before editing.
+Run `scripts/plan-unit-delivery.ts validate-handoff --file <handoff>` before editing.
 
 Legacy `plan_ready_handoff`, `plan_followthrough_slice_handoff`,
 `reviewed_slices`, `slice_plan_review`, and followthrough-ledger inputs are
 unsupported. Return `needs_plan_ready`.
 
-For OpenSpec tasks, the implementation PR/MR must change the selected checkbox
-from `[ ]` to `[x]` in the same branch that implements the task. Do not create a
-follow-up bookkeeping commit for task completion.
+For OpenSpec tasks, the implementation PR/MR or direct-publish commit must
+change the selected checkbox from `[ ]` to `[x]` in the same branch that
+implements the task. Do not create a follow-up bookkeeping commit for task
+completion.
 
 ## Workflow
 
@@ -68,8 +69,8 @@ loop. It is not durable sequence state and must not replace OpenSpec `tasks.md`.
 Use:
 
 ```bash
-scripts/plan-to-pr.ts gate-template
-scripts/plan-to-pr.ts validate-ledger --file <ledger>
+scripts/plan-unit-delivery.ts gate-template
+scripts/plan-unit-delivery.ts validate-ledger --file <ledger>
 ```
 
 ## Mistakes
@@ -78,7 +79,7 @@ scripts/plan-to-pr.ts validate-ledger --file <ledger>
 | --- | --- |
 | Implementing without `plan_delivery_handoff` | Return `needs_plan_ready` |
 | Accepting legacy slice/followthrough handoffs | Return `needs_plan_ready` |
-| Checking OpenSpec tasks in a follow-up commit | Check the task in the implementation PR/MR |
+| Checking OpenSpec tasks in a follow-up commit | Check the task in the implementation PR/MR or direct-publish commit |
 | Implementing multiple OpenSpec tasks at once | Return to OpenSpec or `plan-orchestrator` |
 | Treating delivery gate evidence as durable state | Keep sequence state in OpenSpec |
 | Treating an open PR/MR as done before pipelines settle | Keep monitoring latest-head pipelines |

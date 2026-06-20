@@ -22,7 +22,7 @@ use for fuzzy ideas, unreviewed plans, or plan authoring.
 ### Atomic Plan
 
 Validate `plan_delivery_handoff`, pass the single approved unit to
-`plan-to-pr`, report the result, and stop.
+`plan-unit-delivery`, report the result, and stop.
 
 ### OpenSpec Change
 
@@ -46,15 +46,15 @@ Normalize the delivery goal before selecting work:
 5. Read `openspec/changes/<change-id>/tasks.md` from the refreshed target state.
 6. Run `openspec-tasks` if task deliverability is uncertain.
 7. Select the first unchecked deliverable task in document order.
-8. Pass that task to `plan-to-pr`.
-9. Require `plan-to-pr` to mark the selected task checkbox complete in the
+8. Pass that task to `plan-unit-delivery`.
+9. Require `plan-unit-delivery` to mark the selected task checkbox complete in the
    same commit, PR, or MR as the implementation.
 10. After merge or direct publish, refresh the target branch and reread
     `tasks.md` before selecting more work.
 
 For `next_task`, stop after one successful delivery unit. For
 `complete_change` and `bounded_sequence`, repeat the selection and
-`plan-to-pr` handoff loop until the completion target is reached or a blocking
+`plan-unit-delivery` handoff loop until the completion target is reached or a blocking
 condition is found.
 
 Plan Orchestrator advances only from target-branch state. A checked task on an
@@ -65,7 +65,7 @@ to repo policy.
 
 Plan Orchestrator may coordinate multiple commits, PRs, or MRs when the user
 asks for a full OpenSpec change or bounded sequence. Each selected unit still
-uses `plan-to-pr`; the orchestrator owns sequencing, target-branch refreshes,
+uses `plan-unit-delivery`; the orchestrator owns sequencing, target-branch refreshes,
 and final state reporting.
 
 Before starting a multi-unit sequence, report the normalized delivery goal and
@@ -111,10 +111,10 @@ followthrough-ledger inputs are unsupported. Return `needs_plan_ready`.
 | Creating a followthrough ledger | Read OpenSpec `tasks.md` from target branch |
 | Treating a full-change request as one task | Set `delivery_goal: complete_change` and loop until no unchecked deliverable tasks remain |
 | Saying done without rereading `tasks.md` | Base completion only on target-branch state after final merge or direct publish |
-| Batching tasks inside `plan-to-pr` | Keep `plan-to-pr` to one unit; sequence units here |
+| Batching tasks inside `plan-unit-delivery` | Keep `plan-unit-delivery` to one unit; sequence units here |
 | Selecting from a detached or stale checkout | Refresh target branch and record the target commit |
 | Advancing from an open PR branch checkbox | Wait for merge or direct publish |
-| Implementing directly | Pass each approved unit to `plan-to-pr` |
+| Implementing directly | Pass each approved unit to `plan-unit-delivery` |
 
 ## Test Evidence
 

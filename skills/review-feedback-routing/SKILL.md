@@ -10,7 +10,7 @@ Route PR/MR artifact handling separately from AI review feedback. Machine policy
 
 ## When to Use
 
-- `plan-to-pr` or `plan-to-review` needs to decide which artifact host and review feedback adapter to use.
+- `plan-unit-delivery` or `plan-to-review` needs to decide which artifact host and review feedback adapter to use.
 - A repo has GitHub and GitLab remotes, mirrored repositories, or ambiguous review workflows.
 - The user asks how Nitro, Codex, or hosted review feedback should be requested or consumed.
 
@@ -66,7 +66,7 @@ Review feedback must name the artifact head SHA to satisfy a review gate. Feedba
 ## Delivery Gate Outcome
 
 For required review feedback, normalize the final gate outcome before returning
-to `plan-to-pr`:
+to `plan-unit-delivery`:
 
 ```yaml
 review_feedback:

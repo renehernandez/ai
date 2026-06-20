@@ -13,7 +13,7 @@ Implement the first slice in this branch:
 - `skills/scrutinize/SKILL.md`
 - `skills/scrutinize/agents/openai.yaml`
 - workflow wiring in `rules/feature-delivery.md`
-- workflow wiring in `skills/plan-to-pr/SKILL.md`
+- workflow wiring in `skills/plan-unit-delivery/SKILL.md`
 - a quick trigger rule in `AGENTS.md`
 
 No runtime automation, install script, or extra helper program is needed for the first slice.
@@ -76,7 +76,7 @@ Clean runs may be one paragraph if they include:
 
 `feature-delivery.md` should run `scrutinize` as the first pre-commit quality gate before maintainability, simplification, deslop, and docs alignment.
 
-`plan-to-pr/SKILL.md` should run `scrutinize` twice:
+`plan-unit-delivery/SKILL.md` should run `scrutinize` twice:
 
 - after plan review and before implementation
 - after local implementation review and before hosted or background review and CI completion
@@ -101,7 +101,7 @@ Pressure scenarios should cover:
 
 RED baseline:
 
-- Current documented feature-delivery and plan-to-pr workflows fail the proposed requirement because they do not require an adversarial scrutiny gate in either workflow.
+- Current documented feature-delivery and plan-unit-delivery workflows fail the proposed requirement because they do not require an adversarial scrutiny gate in either workflow.
 - Reasoning-only pressure prompts often selected the desired behavior without the skill, so the useful failing baseline is the documented workflow gap: agents can follow current instructions and skip scrutiny.
 
 GREEN/REFACTOR:

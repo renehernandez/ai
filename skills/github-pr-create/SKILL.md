@@ -12,7 +12,7 @@ Create GitHub pull requests with `gh` after verifying branch, remote, and duplic
 
 - Feature work or a bug fix is ready for GitHub review.
 - The user asks to create, open, draft, or prepare a GitHub PR.
-- `plan-to-pr` or `plan-to-review` detects a GitHub remote and needs the PR creation step.
+- `plan-unit-delivery` or `plan-to-review` detects a GitHub remote and needs the PR creation step.
 
 Do not use for GitLab merge requests; use the GitLab MR creation skill instead.
 
@@ -128,4 +128,4 @@ Do not use for GitLab merge requests; use the GitLab MR creation skill instead.
 - GREEN: skill requires auth/remote/clean-branch checks, duplicate detection, explicit push/head handling, and draft-by-default behavior.
 - GREEN: skill now requires reviewer-facing bodies that keep necessary evidence self-contained, omit excluded/local process artifacts, and use actual links for reviewer-needed upstream resources.
 - GREEN: sub-agent `019eae16-e856-7ef1-bc27-9d739aeaf5ba` passed the PR creation pressure test and recommended adding explicit upstream inspection before push.
-- REFACTOR: GitHub-specific PR creation is separated from `plan-to-pr`, which only schedules the provider creation gate.
+- REFACTOR: GitHub-specific PR creation is separated from `plan-unit-delivery`, which only schedules the provider creation gate.

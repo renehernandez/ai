@@ -40,7 +40,7 @@ When `plan-ready` or the user asks to write a plan artifact, write it under
 6. If the work is atomic, emit a validated `plan_delivery_handoff`.
 7. If the work is multi-deliverable, emit a validated `openspec_blueprint`.
 8. If missing decisions make either output unsafe, emit `blocked_readiness`.
-9. Stop. Do not invoke `plan-orchestrator`, `plan-to-pr`, create branches, push,
+9. Stop. Do not invoke `plan-orchestrator`, `plan-unit-delivery`, create branches, push,
    open PRs/MRs, request hosted review, or write OpenSpec files directly.
 
 ## Reviewer Selection

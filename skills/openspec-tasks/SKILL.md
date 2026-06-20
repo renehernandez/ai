@@ -44,7 +44,7 @@ No tags, schema extensions, or hidden state are added.
    hides multiple reviewable deliverables.
 5. Classify manual, deployment, monitoring, and external-prerequisite tasks so
    `plan-orchestrator` pauses with `needs_human_action` instead of sending them
-   to `plan-to-pr`.
+   to `plan-unit-delivery`.
 
 ## Output
 
@@ -72,7 +72,7 @@ The audit command emits:
 | Adding tags to tasks | Use checkbox order and task text |
 | Creating a parallel slice review | Edit or audit OpenSpec tasks instead |
 | Treating a whole phase as one task | Split the phase into minor deliverables |
-| Sending manual tasks to `plan-to-pr` | Return `needs_human_action` |
+| Sending manual tasks to `plan-unit-delivery` | Return `needs_human_action` |
 
 ## Test Evidence
 

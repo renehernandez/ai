@@ -1,6 +1,6 @@
 ---
 name: docs-alignment-review
-description: Use when a branch, pull request, implementation, plan-to-PR workflow, or code review may require updates to docs, plans, agent docs, rules, skills, automation prompts, or PR descriptions.
+description: Use when a branch, pull request, implementation, plan-unit-delivery workflow, or code review may require updates to docs, plans, agent docs, rules, skills, automation prompts, or PR descriptions.
 ---
 
 # Docs Alignment Review
@@ -13,7 +13,7 @@ This is separate from `ai-readiness-upkeep`: docs alignment decides whether the 
 
 ## When To Use
 
-Use during plan-to-PR workflows, feature-delivery quality gates, PR reviews, background review rubrics, and before opening or updating a PR. Skip for pure formatting changes or mechanical generated-file churn unless the generated change affects documented behavior.
+Use during plan-unit-delivery workflows, feature-delivery quality gates, PR reviews, background review rubrics, and before opening or updating a PR. Skip for pure formatting changes or mechanical generated-file churn unless the generated change affects documented behavior.
 
 ## Workflow
 

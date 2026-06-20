@@ -8,7 +8,7 @@ description: Use when a reviewed plan, OpenSpec change, or planning-only branch 
 ## Overview
 
 Publish a planning artifact as a planning-only hosted review. This skill is
-parallel to `plan-to-pr`: it creates or updates the PR/MR for plan feedback,
+parallel to `plan-unit-delivery`: it creates or updates the PR/MR for plan feedback,
 waits for routed hosted feedback, and stops before implementation.
 
 ## When To Use
@@ -17,7 +17,7 @@ Use when the user wants to publish a plan, OpenSpec change, or planning-only
 branch for Nitro, Codex, or developer review before coding starts.
 
 Use `plan-ready` first when the plan still needs scope hardening. Use
-`plan-to-pr` when the user is ready to implement a validated
+`plan-unit-delivery` when the user is ready to implement a validated
 `plan_delivery_handoff`.
 
 ## Required Input
@@ -171,7 +171,7 @@ plan_review_gate_ledger:
 
 | Mistake | Fix |
 | --- | --- |
-| Implementing after the plan is published | Stop and ask the user to invoke `plan-to-pr` after review |
+| Implementing after the plan is published | Stop and ask the user to invoke `plan-unit-delivery` after review |
 | Accepting legacy handoffs | Return `needs_plan_ready` |
 | Publishing implementation files in the review branch | Split them out before creating the planning review |
 | Treating routing metadata as sufficient after pushing a new head to an existing Fullscript MR | Request a fresh Nitro review for the current head, then wait for latest-head feedback or pending state |

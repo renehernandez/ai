@@ -12,7 +12,7 @@ Use GitLab as the artifact-host adapter, then apply `diff-review` to the verifie
 
 - The user asks to review a GitLab merge request or MR URL.
 - The current branch has an open GitLab MR.
-- `plan-to-pr` or `plan-to-review` detects a GitLab remote and needs the hosted review gate.
+- `plan-unit-delivery` or `plan-to-review` detects a GitLab remote and needs the hosted review gate.
 - The user says `glab-review`; treat that as the legacy name for this skill.
 
 Use `diff-review` directly for local-only diffs. Use `github-adapter-review` for GitHub PRs.
@@ -92,7 +92,7 @@ Use `diff-review` directly for local-only diffs. Use `github-adapter-review` for
 
 ## Output Contract
 
-Return this shape so `plan-to-pr` or `plan-to-review` can consume the gate consistently:
+Return this shape so `plan-unit-delivery` or `plan-to-review` can consume the gate consistently:
 
 ```markdown
 artifact_host: GitLab
@@ -161,5 +161,5 @@ merge_readiness: <ready | blocked | not ready | unknown, with reasons>
 - GREEN retest: sub-agent `019eae18-1a4f-7dc0-bc51-3e2ca42f9495` found the same loophole persisted because the output contract did not force dirty-worktree guard, MR pipeline id, failed traces, downstream uncertainty, docs/test state, verification performed, and merge readiness fields.
 - GREEN retest: sub-agent `019eae19-9333-7aa0-bf8f-cc39785c2ee1` still found the contract too easy to satisfy without hard keyed fields for worktree guard, MR metadata, diff scope, CI state, child/downstream state, docs/test state, verification, and merge readiness.
 - GREEN: sub-agent `019eae1a-f361-7ef1-a740-02be95f46a43` passed after the keyed output contract forced worktree guard, MR/head pipeline metadata, failed traces, child/downstream state, docs/test state, verification gaps, findings, and merge readiness.
-- REFACTOR: adapter output contract keeps artifact-host context separate from `diff-review` findings so `plan-to-pr` can consume the gate.
+- REFACTOR: adapter output contract keeps artifact-host context separate from `diff-review` findings so `plan-unit-delivery` can consume the gate.
 - REFACTOR: the output contract now uses explicit keyed fields for worktree guard, MR metadata, diff scope, unresolved discussions, stale resolved threads, CI state, failed jobs, failing traces, child/downstream pipelines, docs alignment, test coverage, verification performed, verification gaps, findings, and merge readiness.

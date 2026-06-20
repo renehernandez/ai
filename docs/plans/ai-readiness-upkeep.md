@@ -28,10 +28,10 @@ Implement the first slice:
 - Add `skills/ai-readiness-upkeep/SKILL.md`.
 - Add `skills/ai-readiness-upkeep/agents/openai.yaml`.
 - Add `skills/ai-readiness-upkeep/scripts/ai-readiness-upkeep.ts`.
-- Wire `ai-readiness-upkeep` into feature delivery, plan-to-pr, local diff review, and the background review rubric as a findings-producing gate.
-- Update `skills/plan-to-pr/scripts/plan-to-pr.ts` so the conditional reviewer is represented in launch templates, launch validation, review-report validation, gate templates, and ledger validation.
+- Wire `ai-readiness-upkeep` into feature delivery, plan-unit-delivery, local diff review, and the background review rubric as a findings-producing gate.
+- Update `skills/plan-unit-delivery/scripts/plan-unit-delivery.ts` so the conditional reviewer is represented in launch templates, launch validation, review-report validation, gate templates, and ledger validation.
 - Update docs alignment guidance only enough to clarify the boundary between documentation drift and AI readiness enforcement.
-- Add focused tests for the new helper script and the `plan-to-pr` validator/template changes.
+- Add focused tests for the new helper script and the `plan-unit-delivery` validator/template changes.
 
 The first slice should be tooling-neutral. Examples may mention package scripts, Make, Rails, Terraform, GitHub Actions, GitLab CI, LeftHook, generated artifacts, schema validators, and Cloudflare Workers, but the skill must not center any one ecosystem.
 
@@ -283,16 +283,16 @@ Update these files in the first slice:
 | File | Required Change |
 | --- | --- |
 | `rules/feature-delivery.md` | Add AI readiness upkeep to the pre-commit quality gate as a conditional pass for verification, hook, CI, generated-artifact, contract, infra/deploy, agent-instruction, skill, prompt, or review-rubric changes. Run it before the final `docs-alignment-review` whenever readiness findings can cause docs or agent-doc changes. Rerun docs alignment after implementer-applied readiness changes. |
-| `skills/plan-to-pr/SKILL.md` | Add `ai-readiness-upkeep-agent` as a conditional implementation reviewer. Define trigger predicates, skipped-reviewer evidence, report validation, outcome mapping, and the `ai_readiness_upkeep` ledger gate. |
-| `skills/plan-to-pr/agents/openai.yaml` | Update the default prompt so plan-to-pr launches or skips the AI readiness reviewer with evidence and validates the report before PR/MR creation or final delivery. |
-| `skills/plan-to-pr/scripts/plan-to-pr.ts` | Add `ai-readiness-upkeep-agent` to known review subagents, update reviewer templates, launch validation, review-report validation, gate templates, ledger validation, and tests. The reviewer remains conditional, not part of the always-required baseline. |
+| `skills/plan-unit-delivery/SKILL.md` | Add `ai-readiness-upkeep-agent` as a conditional implementation reviewer. Define trigger predicates, skipped-reviewer evidence, report validation, outcome mapping, and the `ai_readiness_upkeep` ledger gate. |
+| `skills/plan-unit-delivery/agents/openai.yaml` | Update the default prompt so plan-unit-delivery launches or skips the AI readiness reviewer with evidence and validates the report before PR/MR creation or final delivery. |
+| `skills/plan-unit-delivery/scripts/plan-unit-delivery.ts` | Add `ai-readiness-upkeep-agent` to known review subagents, update reviewer templates, launch validation, review-report validation, gate templates, ledger validation, and tests. The reviewer remains conditional, not part of the always-required baseline. |
 | `skills/diff-review/SKILL.md` | Add a review lens for missing enforceable verification when a diff changes contracts or agent workflows. It should point to `ai-readiness-upkeep` rather than duplicating the skill. |
 | `templates/background-agent-pr-review-rubric.md` | Add a rubric check for missing enforceable verification before accepting prose-only AGENTS/rules/docs updates. |
 | `skills/docs-alignment-review/SKILL.md` | Clarify that docs alignment checks whether documentation is stale, while AI readiness upkeep checks whether newly exposed contracts should be enforced mechanically. |
 
 Do not update `skills/github-adapter-review/SKILL.md` or `skills/gitlab-adapter-review/SKILL.md` in the first slice unless implementation proves the hosted adapter output cannot surface the new `diff-review` rubric or background review rubric without a direct adapter change.
 
-`plan-to-pr` should include `ai-readiness-upkeep-agent` as a conditional reviewer when the diff touches:
+`plan-unit-delivery` should include `ai-readiness-upkeep-agent` as a conditional reviewer when the diff touches:
 
 - task commands;
 - hooks;
@@ -303,7 +303,7 @@ Do not update `skills/github-adapter-review/SKILL.md` or `skills/gitlab-adapter-
 - agent instructions, rules, skills, prompts, or review rubrics;
 - review feedback that says future agents should avoid or repeat something.
 
-For `plan-to-pr` report mapping:
+For `plan-unit-delivery` report mapping:
 
 - If the AI readiness reviewer is not triggered, list `ai-readiness-upkeep-agent` under `skipped_reviewers` with `not_applicable` evidence and set the `ai_readiness_upkeep` ledger gate to `not_applicable`.
 - If launched, record its subagent id in `reviewer_subagent_launch`.
@@ -341,13 +341,13 @@ Helper script tests:
 Concrete test targets:
 
 - Add `tests/unit/ai-readiness-upkeep-script.test.ts` for the new helper script.
-- Update `tests/unit/plan-to-pr-script.test.ts` or add the nearest matching unit test file for `plan-to-pr` template, launch-report, review-report, and ledger validation changes.
+- Update `tests/unit/plan-unit-delivery-script.test.ts` or add the nearest matching unit test file for `plan-unit-delivery` template, launch-report, review-report, and ledger validation changes.
 - Add integration coverage only if the implementation changes cross-command behavior rather than validator-only behavior.
 
 Required local verification:
 
 - `pnpm run test:unit`
-- `pnpm test` when `plan-to-pr` integration or runtime wiring changes more than unit-level validator behavior.
+- `pnpm test` when `plan-unit-delivery` integration or runtime wiring changes more than unit-level validator behavior.
 
 Runtime compatibility verification:
 
@@ -359,9 +359,9 @@ Runtime compatibility verification:
 
 - The skill is discoverable for AI readiness, agent readiness, verification upkeep, hooks, CI, automation, and project upkeep.
 - The skill is tooling-neutral and does not privilege one stack.
-- The output is structured enough for unattended `plan-to-pr` and PR review workflows.
+- The output is structured enough for unattended `plan-unit-delivery` and PR review workflows.
 - The first outcome is implementer-applied verification deltas, not direct mutation by the reviewer.
 - The helper script validates the report shape.
 - Workflow docs make the gate conditional enough to avoid noise and strict enough to catch missing cheap enforcement.
-- `plan-to-pr` templates, validators, and delivery ledger can launch, skip, validate, and report the conditional AI readiness reviewer mechanically.
+- `plan-unit-delivery` templates, validators, and delivery ledger can launch, skip, validate, and report the conditional AI readiness reviewer mechanically.
 - Runtime validation confirms the new skill is compatible with managed skill installation/update paths.

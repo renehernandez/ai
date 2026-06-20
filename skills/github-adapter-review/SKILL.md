@@ -12,7 +12,7 @@ Use GitHub as the artifact-host adapter, then apply `diff-review` to the verifie
 
 - The user asks to review a GitHub pull request or PR URL.
 - The current branch has an open GitHub PR.
-- `plan-to-pr` or `plan-to-review` detects a GitHub remote and needs the hosted review gate.
+- `plan-unit-delivery` or `plan-to-review` detects a GitHub remote and needs the hosted review gate.
 - The user asks to inspect GitHub reviews, comments, or Actions checks for a PR.
 
 Use `diff-review` directly for local-only diffs. Use `gitlab-adapter-review` for GitLab MRs.
@@ -93,7 +93,7 @@ Use `diff-review` directly for local-only diffs. Use `gitlab-adapter-review` for
 
 ## Output Contract
 
-Return this shape so `plan-to-pr` or `plan-to-review` can consume the gate consistently:
+Return this shape so `plan-unit-delivery` or `plan-to-review` can consume the gate consistently:
 
 ```markdown
 Artifact host: GitHub
@@ -143,4 +143,4 @@ Verification gaps: <none | list>
 - RED: sub-agent `019eae14-2d96-7831-b165-48b04425c034` listed standard `gh pr view`, `gh pr diff`, `gh pr checks`, REST comments, and a GraphQL review-thread query under pressure, but still named stale comments, hidden comments, external checks, and local reproduction as residual unknowns.
 - GREEN: this skill makes REST comments, GraphQL review threads, pending checks, and verification gaps mandatory parts of the adapter workflow and output contract.
 - GREEN: sub-agent `019eae16-5bfa-75b2-8e9d-cfa8468b855f` passed the GitHub PR pressure test with REST comments, GraphQL review threads, pending-check handling, stale-review awareness, docs alignment, and verification gaps.
-- REFACTOR: adapter output contract keeps artifact-host context separate from `diff-review` findings so `plan-to-pr` can consume the gate.
+- REFACTOR: adapter output contract keeps artifact-host context separate from `diff-review` findings so `plan-unit-delivery` can consume the gate.

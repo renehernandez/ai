@@ -6,7 +6,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 function withTempFile(content: string, callback: (path: string) => void): void {
-  const directory = mkdtempSync(join(tmpdir(), "plan-to-pr-script-"));
+  const directory = mkdtempSync(join(tmpdir(), "plan-unit-delivery-script-"));
   const path = join(directory, "input.yaml");
   try {
     writeFileSync(path, content, "utf8");
@@ -16,7 +16,7 @@ function withTempFile(content: string, callback: (path: string) => void): void {
   }
 }
 
-function runPlanToPr(
+function runPlanUnitDelivery(
   command: string,
   content = "",
 ): { status: number | null; stderr: string; stdout: string } {
@@ -28,7 +28,7 @@ function runPlanToPr(
         [
           "exec",
           "tsx",
-          "skills/plan-to-pr/scripts/plan-to-pr.ts",
+          "skills/plan-unit-delivery/scripts/plan-unit-delivery.ts",
           command,
           "--file",
           path,
@@ -42,7 +42,12 @@ function runPlanToPr(
   } else {
     result = spawnSync(
       "pnpm",
-      ["exec", "tsx", "skills/plan-to-pr/scripts/plan-to-pr.ts", command],
+      [
+        "exec",
+        "tsx",
+        "skills/plan-unit-delivery/scripts/plan-unit-delivery.ts",
+        command,
+      ],
       {
         cwd: process.cwd(),
         encoding: "utf8",
@@ -75,7 +80,7 @@ const validHandoff = `plan_delivery_handoff:
       - pnpm test:unit
   constraints:
     files_or_areas:
-      - skills/plan-to-pr
+      - skills/plan-unit-delivery
     out_of_scope: []
   delivery:
     expected_host: github_pr
@@ -176,14 +181,14 @@ const deliveryLedger = `delivery_gate_ledger:
 `;
 
 test("validate-handoff accepts the delivery handoff", () => {
-  const result = runPlanToPr("validate-handoff", validHandoff);
+  const result = runPlanUnitDelivery("validate-handoff", validHandoff);
 
   assert.equal(result.status, 0);
   assert.match(result.stdout, /plan_delivery_handoff valid/);
 });
 
 test("validate-handoff rejects legacy handoffs", () => {
-  const result = runPlanToPr(
+  const result = runPlanUnitDelivery(
     "validate-handoff",
     `plan_ready_handoff:
   status: ready
@@ -198,7 +203,7 @@ test("validate-handoff rejects legacy handoffs", () => {
 });
 
 test("validate-handoff requires completion updates for OpenSpec tasks", () => {
-  const result = runPlanToPr(
+  const result = runPlanUnitDelivery(
     "validate-handoff",
     validHandoff.replace(
       "    completion_updates:\n      - Mark OpenSpec task checkbox complete in the same PR/MR.\n",
@@ -214,21 +219,21 @@ test("validate-handoff requires completion updates for OpenSpec tasks", () => {
 });
 
 test("old followthrough delivery commands are not supported", () => {
-  const result = runPlanToPr(
+  const result = runPlanUnitDelivery(
     "validate-followthrough-delivery",
     "plan_followthrough_delivery: {}",
   );
 
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /Usage: plan-to-pr\.ts/);
+  assert.match(result.stderr, /Usage: plan-unit-delivery\.ts/);
 });
 
 test("validate-launch-report requires AI readiness accounting", () => {
-  const valid = runPlanToPr("validate-launch-report", launchedReport);
+  const valid = runPlanUnitDelivery("validate-launch-report", launchedReport);
 
   assert.equal(valid.status, 0);
 
-  const invalid = runPlanToPr(
+  const invalid = runPlanUnitDelivery(
     "validate-launch-report",
     launchedReport.replace(
       "    - ai-readiness-upkeep-agent: not_applicable - no AI readiness verification or agent-surface contract changed\n",
@@ -244,13 +249,13 @@ test("validate-launch-report requires AI readiness accounting", () => {
 });
 
 test("validate-ledger accepts delivery gate evidence", () => {
-  const result = runPlanToPr("validate-ledger", deliveryLedger);
+  const result = runPlanUnitDelivery("validate-ledger", deliveryLedger);
 
   assert.equal(result.status, 0);
 });
 
 test("validate-ledger requires refactoring execution evidence", () => {
-  const result = runPlanToPr(
+  const result = runPlanUnitDelivery(
     "validate-ledger",
     deliveryLedger.replace(
       "  refactoring_execution:\n    status: passed\n    evidence: required refactors implemented or deferred\n",
@@ -263,7 +268,7 @@ test("validate-ledger requires refactoring execution evidence", () => {
 });
 
 test("validate-ledger requires automatic review feedback wait evidence", () => {
-  const result = runPlanToPr(
+  const result = runPlanUnitDelivery(
     "validate-ledger",
     deliveryLedger.replace(
       "    evidence: latest-head automatic review feedback resolved\n",

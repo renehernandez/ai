@@ -1,19 +1,19 @@
-# Plan Ready And Plan To PR Split
+# Plan Ready And Plan Unit Delivery Split
 
 ## Goal
 
-Split the current `plan-to-pr` workflow into two focused skills:
+Split the current `plan-unit-delivery` workflow into two focused skills:
 
 - `plan-ready`: turn an idea, plan file, OpenSpec change, or Linear ticket into an implementation-ready plan with reviewed scope and a validated handoff.
-- `plan-to-pr`: consume a ready handoff and carry the approved slice through implementation, local gates, hosted review feedback, PR/MR, and CI.
+- `plan-unit-delivery`: consume a ready handoff and carry the approved slice through implementation, local gates, hosted review feedback, PR/MR, and CI.
 
-The split should make the implementation workflow more deterministic by moving brainstorming and plan hardening out of `plan-to-pr`.
+The split should make the implementation workflow more deterministic by moving brainstorming and plan hardening out of `plan-unit-delivery`.
 
 Follow-up lane: `plan-to-review` now covers publishing a reviewed plan or OpenSpec change as a planning-only PR/MR for Nitro, Codex, and developer feedback before implementation. It consumes a `plan_review_request` or `plan_ready_handoff`, requires a planning-only diff, waits for routed automated feedback, and stops before coding.
 
 ## Motivation
 
-The current `plan-to-pr` skill covers both exploratory planning and delivery. That makes it too easy for an agent to blur phases, skip review gates, keep brainstorming during implementation, or finish early after PR creation or review request.
+The current `plan-unit-delivery` skill covers both exploratory planning and delivery. That makes it too easy for an agent to blur phases, skip review gates, keep brainstorming during implementation, or finish early after PR creation or review request.
 
 The first iteration should stay minimal. It should add a clear handoff contract and small helper scripts, without persistent workflow state, committed readiness blocks, or a full state machine.
 
@@ -24,9 +24,9 @@ Implement the first slice:
 - Add `skills/plan-ready/SKILL.md`.
 - Add `skills/plan-ready/agents/openai.yaml`.
 - Add `skills/plan-ready/scripts/plan-ready.ts`.
-- Refactor `skills/plan-to-pr/SKILL.md` so it requires a `plan_ready_handoff` before implementation.
-- Update `skills/plan-to-pr/agents/openai.yaml` with the new invocation shape.
-- Add `skills/plan-to-pr/scripts/plan-to-pr.ts`.
+- Refactor `skills/plan-unit-delivery/SKILL.md` so it requires a `plan_ready_handoff` before implementation.
+- Update `skills/plan-unit-delivery/agents/openai.yaml` with the new invocation shape.
+- Add `skills/plan-unit-delivery/scripts/plan-unit-delivery.ts`.
 - Update shared rules or `AGENTS.md` only if needed for discoverability.
 
 Do not add persistent state under the repo or under `~/.agents/delivery-gates` in the first slice.
@@ -54,11 +54,11 @@ Responsibilities:
 8. Emit a `plan_ready_handoff` block.
 9. Stop for user verification.
 
-`plan-ready` must not start implementation, invoke `plan-to-pr`, create branches, push, open PRs/MRs, or request hosted review.
+`plan-ready` must not start implementation, invoke `plan-unit-delivery`, create branches, push, open PRs/MRs, or request hosted review.
 
-### `plan-to-pr`
+### `plan-unit-delivery`
 
-Use `plan-to-pr` only when a valid `plan_ready_handoff` is available from the current session or the user prompt.
+Use `plan-unit-delivery` only when a valid `plan_ready_handoff` is available from the current session or the user prompt.
 
 Responsibilities:
 
@@ -75,7 +75,7 @@ Responsibilities:
 11. Iterate on actionable review or CI failures.
 12. Finish only when CI is green or blocked with evidence.
 
-`plan-to-pr` must not brainstorm or expand scope. If the handoff is missing, invalid, stale enough to require planning review, or has unresolved blockers, it must stop and ask the user to run `plan-ready`.
+`plan-unit-delivery` must not brainstorm or expand scope. If the handoff is missing, invalid, stale enough to require planning review, or has unresolved blockers, it must stop and ask the user to run `plan-ready`.
 
 ## Planning Artifact Modes
 
@@ -185,7 +185,7 @@ plan_ready_handoff:
   scrutiny_verdict: ship
 ```
 
-`plan-to-pr` accepts only:
+`plan-unit-delivery` accepts only:
 
 - `status: ready`;
 - supported `artifact_type`;
@@ -195,7 +195,7 @@ plan_ready_handoff:
 - `unresolved_blockers: []`;
 - `scrutiny_verdict: ship`.
 
-If any required field is missing or invalid, `plan-to-pr` blocks before implementation.
+If any required field is missing or invalid, `plan-unit-delivery` blocks before implementation.
 
 ## Helper Scripts
 
@@ -215,7 +215,7 @@ The skill should refer to this as the bundled `scripts/plan-ready.ts` script so 
 
 The script must not mutate repo files, post Linear comments, create OpenSpec artifacts, or write persistent state in v1.
 
-### `skills/plan-to-pr/scripts/plan-to-pr.ts`
+### `skills/plan-unit-delivery/scripts/plan-unit-delivery.ts`
 
 Initial commands:
 
@@ -227,13 +227,13 @@ Initial commands:
 - `gate-template`: print the final delivery gate ledger shape.
 - `validate-ledger`: validate the final delivery ledger before the agent finishes.
 
-The skill should refer to this as the bundled `scripts/plan-to-pr.ts` script so installed skills do not assume the target project has a `skills/` directory.
+The skill should refer to this as the bundled `scripts/plan-unit-delivery.ts` script so installed skills do not assume the target project has a `skills/` directory.
 
 The script must not create branches, push, open PRs/MRs, request review, or modify files in v1.
 
-## `plan-to-pr` Final Gate Ledger
+## `plan-unit-delivery` Final Gate Ledger
 
-`plan-to-pr` should keep the existing final ledger requirement, but treat it as implementation-delivery evidence rather than planning evidence.
+`plan-unit-delivery` should keep the existing final ledger requirement, but treat it as implementation-delivery evidence rather than planning evidence.
 
 Required gates:
 
@@ -263,40 +263,40 @@ Use `writing-skills` validation before shipping.
 
 Pressure scenarios:
 
-1. Missing handoff: invoke `plan-to-pr` with only a fuzzy feature request. It must stop and ask for `plan-ready`.
+1. Missing handoff: invoke `plan-unit-delivery` with only a fuzzy feature request. It must stop and ask for `plan-ready`.
 2. Optional reviewer needed: plan changes skill/runtime behavior. The reviewer-selection judge should add `agent-runtime-and-skill-compatibility` and `docs-and-agent-alignment`.
 3. Unresolved blocker: a plan reviewer returns `user_decision`. `plan-ready` must ask the user and must not emit `status: ready` until resolved.
 4. Plan-to-implementation boundary: after `plan-ready` emits a valid handoff, it must stop for user verification and must not start coding.
-5. Handoff validation: `plan-to-pr` receives a handoff with `scrutiny_verdict: fix-then-ship`. It must block before implementation.
+5. Handoff validation: `plan-unit-delivery` receives a handoff with `scrutiny_verdict: fix-then-ship`. It must block before implementation.
 
 ## Pressure Test Evidence
 
 - RED: baseline plan-ready subagent `019eb39e-5890-76c0-a967-f287d449de7a` inspected committed pre-edit files and failed as expected. It cited `Using dispatch to run required plan reviewers.`, `Dispatch all baseline reviewers plus judge-selected optional reviewers as subagents.`, and adapter text `run required dispatch plan reviewers`; its rationalization was that explicit `dispatch` would route Codex reviewer execution away from internal Codex subagents.
-- RED: baseline plan-to-pr subagent `019eb39e-7a2b-7453-81b0-37fb35df9005` inspected committed pre-edit files and failed as expected. It cited `Run local PR/diff review with diff-review`, `Run scrutinize on the implementation diff`, `Run the pre-commit quality gate`, and adapter text `run local verification, implementation review, $scrutinize...`; its rationalization was: `inline helper-skill review satisfies the workflow; nothing says I must launch internal Codex reviewer subagents or report each reviewer's final outcome`.
-- GREEN: missing handoff pressure passed. A subagent found that `plan-to-pr` requires exactly one valid `plan_ready_handoff`, rejects fuzzy ideas, and tells the user to run `plan-ready` or paste a handoff before implementation.
+- RED: baseline plan-unit-delivery subagent `019eb39e-7a2b-7453-81b0-37fb35df9005` inspected committed pre-edit files and failed as expected. It cited `Run local PR/diff review with diff-review`, `Run scrutinize on the implementation diff`, `Run the pre-commit quality gate`, and adapter text `run local verification, implementation review, $scrutinize...`; its rationalization was: `inline helper-skill review satisfies the workflow; nothing says I must launch internal Codex reviewer subagents or report each reviewer's final outcome`.
+- GREEN: missing handoff pressure passed. A subagent found that `plan-unit-delivery` requires exactly one valid `plan_ready_handoff`, rejects fuzzy ideas, and tells the user to run `plan-ready` or paste a handoff before implementation.
 - RED/GREEN: optional reviewer pressure initially failed because `plan-ready` listed the optional catalog but did not make `docs-and-agent-alignment` and `agent-runtime-and-skill-compatibility` likely enough for skill/runtime changes. The skill and script now include selection rules for reusable workflow/docs/skills/rules changes and skill metadata/script/runtime changes.
 - GREEN: reviewer-selection validation now accepts `docs-and-agent-alignment` plus `agent-runtime-and-skill-compatibility`, rejects invented optional reviewer names, and rejects invented baseline reviewer names.
 - GREEN: unresolved blocker pressure passed. `plan-ready` requires `user_decision` blockers to ask the user, and both scripts reject handoffs with non-empty `unresolved_blockers`.
-- GREEN: phase boundary pressure passed. `plan-ready` stops after handoff and does not invoke `plan-to-pr`, start implementation, create branches, push, open PRs/MRs, or request hosted review.
-- GREEN: invalid scrutiny pressure passed. `plan-to-pr` and its script reject handoffs where `scrutiny_verdict` is not `ship`.
+- GREEN: phase boundary pressure passed. `plan-ready` stops after handoff and does not invoke `plan-unit-delivery`, start implementation, create branches, push, open PRs/MRs, or request hosted review.
+- GREEN: invalid scrutiny pressure passed. `plan-unit-delivery` and its script reject handoffs where `scrutiny_verdict` is not `ship`.
 - GREEN: plan-ready routing subagent `019eb361-1adb-7771-a77a-388b11dc4b8b` passed after the routing patch and found Codex should use internal Codex subagents, not dispatch or Claude.
-- GREEN/REFACTOR: plan-to-pr routing subagent `019eb370-7dce-75d3-97ff-6c80d6406aab` passed the routing intent but found validator loopholes for one-reviewer reports, unresolved `findings`/`blocked`, missing security accounting, one-reviewer examples, and post-feedback inline reruns. The workflow and script now close those gaps.
-- GREEN: final plan-to-pr subagent `019eb391-6f16-7e03-8744-1e73e0daa807` passed after refactor with `Remaining actionable ambiguity: None.`
+- GREEN/REFACTOR: plan-unit-delivery routing subagent `019eb370-7dce-75d3-97ff-6c80d6406aab` passed the routing intent but found validator loopholes for one-reviewer reports, unresolved `findings`/`blocked`, missing security accounting, one-reviewer examples, and post-feedback inline reruns. The workflow and script now close those gaps.
+- GREEN: final plan-unit-delivery subagent `019eb391-6f16-7e03-8744-1e73e0daa807` passed after refactor with `Remaining actionable ambiguity: None.`
 
 Validation outputs:
 
 - `bun skills/plan-ready/scripts/plan-ready.ts validate-selection --file /private/tmp/plan-ready-valid-selection.yaml` -> `reviewer_selection_judge valid`
 - `bun skills/plan-ready/scripts/plan-ready.ts validate-handoff --file /private/tmp/plan-ready-valid-handoff.yaml` -> `plan_ready_handoff valid`
-- `bun skills/plan-to-pr/scripts/plan-to-pr.ts validate-launch-report --file /private/tmp/plan-to-pr-valid-launch-report.yaml` -> `reviewer_subagent_launch valid`
-- `bun skills/plan-to-pr/scripts/plan-to-pr.ts validate-review-report --file /private/tmp/plan-to-pr-valid-review-report.yaml` -> `reviewer_subagent_report valid`
-- `bun skills/plan-to-pr/scripts/plan-to-pr.ts validate-ledger --file /private/tmp/plan-to-pr-valid-ledger.yaml` -> `delivery_gate_ledger valid`
+- `bun skills/plan-unit-delivery/scripts/plan-unit-delivery.ts validate-launch-report --file /private/tmp/plan-unit-delivery-valid-launch-report.yaml` -> `reviewer_subagent_launch valid`
+- `bun skills/plan-unit-delivery/scripts/plan-unit-delivery.ts validate-review-report --file /private/tmp/plan-unit-delivery-valid-review-report.yaml` -> `reviewer_subagent_report valid`
+- `bun skills/plan-unit-delivery/scripts/plan-unit-delivery.ts validate-ledger --file /private/tmp/plan-unit-delivery-valid-ledger.yaml` -> `delivery_gate_ledger valid`
 - Negative fixtures were rejected for bare reviewer-selection rationale, missing optional-reviewer rationale, missing launch IDs, under-launched reviewer reports, unresolved findings, `implementation-review-agent: not_applicable`, and mandatory ledger gates marked `not_applicable`.
-- `bun build skills/plan-ready/scripts/plan-ready.ts --outfile /private/tmp/plan-ready-check.js` and `bun build skills/plan-to-pr/scripts/plan-to-pr.ts --outfile /private/tmp/plan-to-pr-check.js` both bundled successfully.
+- `bun build skills/plan-ready/scripts/plan-ready.ts --outfile /private/tmp/plan-ready-check.js` and `bun build skills/plan-unit-delivery/scripts/plan-unit-delivery.ts --outfile /private/tmp/plan-unit-delivery-check.js` both bundled successfully.
 
 ## Success Criteria
 
 - `plan-ready` produces a concise, valid handoff and stops for user verification.
-- `plan-to-pr` refuses to implement without a valid handoff.
+- `plan-unit-delivery` refuses to implement without a valid handoff.
 - Plan review always uses baseline same-harness subagent reviewers.
 - Implementation review in Codex uses internal Codex subagents, reports launched reviewers and returned subagent IDs in-session, validates the launch report, and includes validated reviewer outcomes.
 - Optional reviewers are selected by LLM judge from the fixed catalog only.
@@ -308,7 +308,7 @@ Validation outputs:
 
 - `validate-handoff` should accept both raw YAML and a Markdown fenced code block containing the handoff. The final response from `plan-ready` will usually include a fenced block, so the receiving skill should handle that shape.
 - Scripts should use plain TypeScript and Node built-ins in the first slice. Avoid adding parser dependencies unless validation becomes too brittle.
-- `plan-to-pr` should accept a handoff from the current session or from the user prompt. If it cannot locate exactly one handoff, it should ask the user to paste the handoff explicitly.
+- `plan-unit-delivery` should accept a handoff from the current session or from the user prompt. If it cannot locate exactly one handoff, it should ask the user to paste the handoff explicitly.
 - Security review should be conditional in v1. Run it when the implementation changes auth, authorization, secrets, token handling, sensitive data, dependency trust, webhooks, or externally reachable surfaces.
 
 ## Residual Risks

@@ -168,7 +168,7 @@ Verification:
   rationale checks.
 - Reusable surface: existing `validateSliceReviewInput` export.
 - First consumer: `plan-ready` handoff validation.
-- Later consumers: `plan-followthrough` and `plan-to-pr` validation can rely on
+- Later consumers: `plan-followthrough` and `plan-unit-delivery` validation can rely on
   reviewed slice IDs remaining precise.
 - Behavior-preserving verification: existing stale-fingerprint and gate-status
   tests continue to pass.

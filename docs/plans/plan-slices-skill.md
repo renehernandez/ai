@@ -16,7 +16,7 @@ The current workflow has strong boundaries after a plan is ready:
 
 - `plan-ready` hardens the planning artifact and emits a reviewed handoff.
 - `plan-followthrough` tracks slice continuity and ledger state.
-- `plan-to-pr` delivers one approved slice through local verification, reviewer
+- `plan-unit-delivery` delivers one approved slice through local verification, reviewer
   gates, hosted feedback, and CI.
 
 The weak point sits before `plan-ready` hands off to delivery. A large plan can
@@ -45,7 +45,7 @@ flowchart LR
   revise --> slices
   ready --> handoff[plan_ready_handoff]
   handoff --> followthrough[plan-followthrough]
-  followthrough --> delivery[plan-to-pr]
+  followthrough --> delivery[plan-unit-delivery]
 ```
 
 `plan-slices` does not replace `plan-ready`. It produces a slice-quality gate
@@ -99,7 +99,7 @@ The skill must check every implementation slice against six gates:
 | Sequencing | Prerequisites, dependencies, and later consumers are explicit. |
 | Verification | The slice names the fastest durable verification layer and accepted gaps. |
 | Refactoring / Reuse | The slice includes the `plan-ready` refactoring subsection or says `None`. |
-| Delivery fit | The slice fits one `plan-to-pr` delivery loop without absorbing follow-up work. |
+| Delivery fit | The slice fits one `plan-unit-delivery` delivery loop without absorbing follow-up work. |
 
 The skill can edit or propose edits to the plan artifact, depending on the
 surrounding workflow and user instruction. When used by `plan-ready`, it should
@@ -359,6 +359,6 @@ first implementation feedback is reconciled.
 
 ## See Also
 
-- [Plan Ready And Plan To PR Split](./plan-ready-plan-to-pr-split.md)
+- [Plan Ready And Plan Unit Delivery Split](./plan-ready-plan-unit-delivery-split.md)
 - [Scrutinize Skill Plan](./scrutinize-skill.md)
 - [AI Readiness Upkeep Plan](./ai-readiness-upkeep.md)
