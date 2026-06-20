@@ -163,8 +163,16 @@ the user to rerun `plan-ready`.
 
 ## Result Shape
 
-For atomic work, emit `plan_delivery_handoff` only in the final response. For
-complex work, emit `openspec_blueprint` only in the final response.
+For atomic work, emit a concise `## Readable Summary` followed by the
+validated `plan_delivery_handoff` YAML. For complex work, emit a concise
+`## Readable Summary` followed by the validated `openspec_blueprint` YAML.
+For blocked work, emit a concise `## Readable Summary` followed by
+`blocked_readiness` YAML.
+
+The readable summary is for thread scanning, especially on mobile. Keep it to
+3-6 bullets with status, route, artifact, approved unit or first task, next
+action, and blockers if any. Do not replace the YAML; the YAML remains the
+machine-readable contract.
 
 ```yaml
 blocked_readiness:
@@ -187,6 +195,7 @@ Linear comments by default.
 | Accepting old handoff shapes | Return `needs_plan_ready` |
 | Starting implementation after readiness | Stop and wait for `plan-orchestrator` |
 | Skipping baseline reviewers | Run all baseline reviewers before ready |
+| Returning YAML without a readable thread summary | Add `## Readable Summary` before the YAML |
 
 ## Test Evidence
 

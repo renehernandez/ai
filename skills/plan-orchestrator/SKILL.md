@@ -82,6 +82,12 @@ Before starting a multi-unit sequence, report the normalized delivery goal,
 landing mode, selection base, and current `tasks.md` state: checked tasks,
 unchecked deliverable tasks, and manual or external tasks.
 
+When reporting selected work, handoffs, blocked states, stack-ready states, or
+completion, include a concise `## Readable Summary` before any YAML or JSON
+contract. Keep it to 3-6 bullets with delivery goal, landing mode, selection
+base, selected task or completion state, artifact, and blocker or next action.
+Do not replace machine-readable handoffs or validation output.
+
 In `ship_then_continue`, refresh from the target branch after each unit lands
 and select from the refreshed `tasks.md`.
 
@@ -157,6 +163,7 @@ followthrough-ledger inputs are unsupported. Return `needs_plan_ready`.
 | Advancing from an open PR branch checkbox in `ship_then_continue` | Wait for merge or direct publish |
 | Treating stacked work as landed | Report stack-ready state until the stack lands on target |
 | Implementing directly | Pass each approved unit to `plan-unit-delivery` |
+| Reporting YAML or JSON without a readable thread summary | Add `## Readable Summary` first |
 
 ## Test Evidence
 

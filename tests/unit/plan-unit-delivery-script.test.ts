@@ -282,6 +282,42 @@ test("old followthrough delivery commands are not supported", () => {
   assert.match(result.stderr, /Usage: plan-unit-delivery\.ts/);
 });
 
+test("gate-template emits a readable summary before YAML", () => {
+  const result = runPlanUnitDelivery("gate-template");
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /## Readable Summary/);
+  assert.ok(
+    result.stdout.indexOf("## Readable Summary") <
+      result.stdout.indexOf("delivery_gate_ledger:"),
+  );
+  assert.match(result.stdout, /delivery_gate_ledger:/);
+});
+
+test("reviewer-template emits a readable summary before YAML", () => {
+  const result = runPlanUnitDelivery("reviewer-template");
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /## Readable Summary/);
+  assert.ok(
+    result.stdout.indexOf("## Readable Summary") <
+      result.stdout.indexOf("reviewer_subagent_launch:"),
+  );
+  assert.match(result.stdout, /reviewer_subagent_report:/);
+});
+
+test("refactoring-template emits a readable summary before YAML", () => {
+  const result = runPlanUnitDelivery("refactoring-template");
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /## Readable Summary/);
+  assert.ok(
+    result.stdout.indexOf("## Readable Summary") <
+      result.stdout.indexOf("refactoring_execution:"),
+  );
+  assert.match(result.stdout, /refactoring_execution:/);
+});
+
 test("validate-task-delta accepts exactly one expected checked deliverable", () => {
   const result = runTaskDelta(
     `# Tasks

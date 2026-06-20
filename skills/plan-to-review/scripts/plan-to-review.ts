@@ -116,7 +116,15 @@ function detect(): void {
 }
 
 function printRequestTemplate(): void {
-  console.log(`plan_review_request:
+  console.log(`## Readable Summary
+
+- Status: ready for hosted plan review.
+- Artifact: openspec/changes/example-change.
+- Review goal: validate the plan before implementation.
+- Requested reviewers: Nitro and developers.
+
+\`\`\`yaml
+plan_review_request:
   status: ready_for_review
   artifact_type: openspec
   artifact_ref: openspec/changes/example-change
@@ -125,16 +133,25 @@ function printRequestTemplate(): void {
     - nitro
     - developers
   unresolved_blockers: []
+\`\`\`
 `);
 }
 
 function printGateTemplate(): void {
-  console.log(`plan_review_gate_ledger:
+  console.log(`## Readable Summary
+
+- Review state: every plan-review gate has a verdict and evidence.
+- Hosted artifact: PR or MR is planning-only.
+- Finish condition: developer review is pending, feedback is incorporated, or the plan review is blocked with evidence.
+
+\`\`\`yaml
+plan_review_gate_ledger:
 ${LEDGER_GATES.map(
   (gate) => `  ${gate}:
     status: passed
     evidence: <evidence>`,
 ).join("\n")}
+\`\`\`
 `);
 }
 

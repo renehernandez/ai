@@ -89,7 +89,16 @@ function detect(): void {
 }
 
 function printHandoffTemplate(): void {
-  console.log(`plan_delivery_handoff:
+  console.log(`## Readable Summary
+
+- Status: ready for one selected OpenSpec task.
+- Route: OpenSpec task.
+- Artifact: openspec/changes/example-change.
+- Selected task: 1.1.
+- Delivery: mark only that task complete in the same PR, MR, or direct-publish commit.
+
+\`\`\`yaml
+plan_delivery_handoff:
   status: ready
   route: openspec_task
   artifact:
@@ -118,6 +127,7 @@ function printHandoffTemplate(): void {
 ${BASELINE_REVIEWERS.map((reviewer) => `      - ${reviewer}`).join("\n")}
     optional_reviewers: []
   blockers: []
+\`\`\`
 `);
 }
 

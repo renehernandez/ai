@@ -83,6 +83,13 @@ unrelated task edits, new OpenSpec tasks, or broadening the approved scope.
 `delivery_gate_ledger` remains a session-only evidence ledger for this delivery
 loop. It is not durable sequence state and must not replace OpenSpec `tasks.md`.
 
+When writing `delivery_gate_ledger`, `reviewer_subagent_launch`,
+`reviewer_subagent_report`, `refactoring_execution`, or the final delivery
+state back to the thread, include a concise `## Readable Summary` first. Keep
+it to 3-6 bullets with approved unit, artifact, verification result, reviewer
+state, pipeline or feedback state, and finish state. Do not replace the YAML;
+the YAML remains the auditable delivery contract.
+
 Use:
 
 ```bash
@@ -102,6 +109,7 @@ scripts/plan-unit-delivery.ts validate-ledger --file <ledger>
 | Treating delivery gate evidence as durable state | Keep sequence state in OpenSpec |
 | Treating an open PR/MR as done before pipelines settle | Keep monitoring latest-head pipelines |
 | Assuming automatic review feedback is absent immediately after push | Wait until feedback resolves or the timeout proves nothing posted |
+| Returning gate YAML without a readable thread summary | Add `## Readable Summary` before the YAML |
 
 ## Test Evidence
 

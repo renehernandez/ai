@@ -47,6 +47,32 @@ function runPlanOrchestrator(
   };
 }
 
+function runPlanOrchestratorCommand(command: string): {
+  status: number | null;
+  stderr: string;
+  stdout: string;
+} {
+  const result = spawnSync(
+    "pnpm",
+    [
+      "exec",
+      "tsx",
+      "skills/plan-orchestrator/scripts/plan-orchestrator.ts",
+      command,
+    ],
+    {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    },
+  );
+
+  return {
+    status: result.status,
+    stderr: result.stderr,
+    stdout: result.stdout,
+  };
+}
+
 function runSelectNextTask(content: string): {
   status: number | null;
   stderr: string;
@@ -116,6 +142,18 @@ test("validate-handoff accepts a ready OpenSpec task handoff", () => {
 
   assert.equal(result.status, 0);
   assert.match(result.stdout, /plan_delivery_handoff valid/);
+});
+
+test("handoff-template emits a readable summary before YAML", () => {
+  const result = runPlanOrchestratorCommand("handoff-template");
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /## Readable Summary/);
+  assert.ok(
+    result.stdout.indexOf("## Readable Summary") <
+      result.stdout.indexOf("plan_delivery_handoff:"),
+  );
+  assert.match(result.stdout, /plan_delivery_handoff:/);
 });
 
 test("validate-handoff rejects legacy followthrough ledgers", () => {

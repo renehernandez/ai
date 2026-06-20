@@ -189,7 +189,16 @@ selection_rules:
 }
 
 function printHandoffTemplate(): void {
-  console.log(`plan_delivery_handoff:
+  console.log(`## Readable Summary
+
+- Status: ready for one atomic delivery unit.
+- Route: atomic plan.
+- Artifact: .agents/plans/example.md.
+- Delivery: create one PR, MR, or direct-publish commit for the approved unit.
+- Verification: run the listed checks before delivery.
+
+\`\`\`yaml
+plan_delivery_handoff:
   status: ready
   route: atomic_plan
   artifact:
@@ -217,11 +226,21 @@ function printHandoffTemplate(): void {
 ${BASELINE_REVIEWERS.map((reviewer) => `      - ${reviewer}`).join("\n")}
     optional_reviewers: []
   blockers: []
+\`\`\`
 `);
 }
 
 function printBlueprintTemplate(): void {
-  console.log(`openspec_blueprint:
+  console.log(`## Readable Summary
+
+- Status: ready to create an OpenSpec change.
+- Change: <OpenSpec change title>.
+- Scope: reviewed multi-deliverable work with explicit in/out boundaries.
+- First task: 1.1.
+- Next action: create the OpenSpec change files mechanically from this blueprint.
+
+\`\`\`yaml
+openspec_blueprint:
   status: ready_for_openspec
   change:
     suggested_id: <verb-noun-change-id>
@@ -256,6 +275,7 @@ ${BASELINE_REVIEWERS.map((reviewer) => `      - ${reviewer}`).join("\n")}
     - <risk or rollout concern>
   blockers: []
   next_action: create_openspec_change
+\`\`\`
 `);
 }
 

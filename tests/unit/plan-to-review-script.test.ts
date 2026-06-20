@@ -47,6 +47,27 @@ function runPlanToReview(
   };
 }
 
+function runPlanToReviewCommand(command: string): {
+  status: number | null;
+  stderr: string;
+  stdout: string;
+} {
+  const result = spawnSync(
+    "pnpm",
+    ["exec", "tsx", "skills/plan-to-review/scripts/plan-to-review.ts", command],
+    {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    },
+  );
+
+  return {
+    status: result.status,
+    stderr: result.stderr,
+    stdout: result.stdout,
+  };
+}
+
 const planReviewRequest = `plan_review_request:
   status: ready_for_review
   artifact_type: openspec
@@ -89,6 +110,30 @@ test("validate-request accepts plan review requests", () => {
 
   assert.equal(result.status, 0);
   assert.match(result.stdout, /plan_review_request valid/);
+});
+
+test("request-template emits a readable summary before YAML", () => {
+  const result = runPlanToReviewCommand("request-template");
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /## Readable Summary/);
+  assert.ok(
+    result.stdout.indexOf("## Readable Summary") <
+      result.stdout.indexOf("plan_review_request:"),
+  );
+  assert.match(result.stdout, /plan_review_request:/);
+});
+
+test("gate-template emits a readable summary before YAML", () => {
+  const result = runPlanToReviewCommand("gate-template");
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /## Readable Summary/);
+  assert.ok(
+    result.stdout.indexOf("## Readable Summary") <
+      result.stdout.indexOf("plan_review_gate_ledger:"),
+  );
+  assert.match(result.stdout, /plan_review_gate_ledger:/);
 });
 
 test("validate-request accepts delivery handoffs for planning review", () => {

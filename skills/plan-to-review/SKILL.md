@@ -130,8 +130,14 @@ and next action.
 
 ## Final Review Ledger
 
-The final response must include every gate. Use `passed` or `blocked`; use
-`not_applicable` only for conditional gates accepted by `validate-ledger`.
+The final response must include a concise `## Readable Summary` followed by
+every gate in YAML. Use `passed` or `blocked`; use `not_applicable` only for
+conditional gates accepted by `validate-ledger`.
+
+The readable summary is for thread scanning, especially on mobile. Keep it to
+3-6 bullets with artifact, review route, validation state, automatic feedback
+state, blockers, and next action. Do not replace the YAML; the YAML remains the
+machine-readable review ledger.
 
 ```yaml
 plan_review_gate_ledger:
@@ -178,6 +184,7 @@ plan_review_gate_ledger:
 | Requesting Nitro repeatedly when a fresh latest-head Nitro review is already pending | Stop polling after recording the pending review state, MR head, and request evidence |
 | Calling pending developer review a pass | Report it as published and pending with the PR/MR URL |
 | Applying code changes from review feedback | Convert implementation requests into plan changes or follow-ups |
+| Returning gate YAML without a readable thread summary | Add `## Readable Summary` before the YAML |
 
 ## Test Evidence
 

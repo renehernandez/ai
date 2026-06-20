@@ -199,17 +199,32 @@ function detect(): void {
 }
 
 function printGateTemplate(): void {
-  console.log(`delivery_gate_ledger:
+  console.log(`## Readable Summary
+
+- Delivery state: all required gates have evidence.
+- Verification: local checks, reviewer outcomes, hosted review, pipelines, and automatic feedback wait are accounted for.
+- Finish condition: landed, direct-published, stack-ready, or blocked with evidence.
+
+\`\`\`yaml
+delivery_gate_ledger:
 ${LEDGER_GATES.map(
   (gate) => `  ${gate}:
     status: passed
     evidence: <evidence>`,
 ).join("\n")}
+\`\`\`
 `);
 }
 
 function printReviewerTemplate(): void {
-  console.log(`reviewer_subagent_launch:
+  console.log(`## Readable Summary
+
+- Reviewer launch: required implementation reviewers have been launched or explicitly skipped with reason.
+- Reviewer outcome: every launched reviewer has a reconciled result.
+- Blocking rule: unresolved findings or blocked reviewer outcomes stop delivery.
+
+\`\`\`yaml
+reviewer_subagent_launch:
   status: launched
   launched_reviewers:
     - implementation-review-agent
@@ -255,11 +270,19 @@ review_execution_rules:
   - Omit model overrides unless the user explicitly asks for one.
   - Print and validate reviewer_subagent_launch immediately after spawning reviewers and before waiting for outcomes.
   - Validate reviewer_subagent_report before PR/MR creation or final delivery.
+\`\`\`
 `);
 }
 
 function printRefactoringExecutionTemplate(): void {
-  console.log(`refactoring_execution:
+  console.log(`## Readable Summary
+
+- Refactoring state: local cleanup stayed inside the approved unit.
+- Deferred work: broader refactors are recorded as carry-forward, not mixed into this unit.
+- Verification: run the narrowest behavior-preserving check.
+
+\`\`\`yaml
+refactoring_execution:
   minor_in_slice:
     - <local behavior-preserving refactor inside the approved slice boundary>
   deferred_minor:
@@ -274,6 +297,7 @@ function printRefactoringExecutionTemplate(): void {
       affected_slices: []
   verification:
     - <fastest behavior-preserving verification>
+\`\`\`
 `);
 }
 

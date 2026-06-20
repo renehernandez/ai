@@ -218,6 +218,11 @@ test("handoff-template emits the plan delivery contract", () => {
   );
 
   assert.equal(result.status, 0);
+  assert.match(result.stdout, /## Readable Summary/);
+  assert.ok(
+    result.stdout.indexOf("## Readable Summary") <
+      result.stdout.indexOf("plan_delivery_handoff:"),
+  );
   assert.match(result.stdout, /plan_delivery_handoff:/);
   assert.match(result.stdout, /\.agents\/plans\/example\.md/);
   assert.doesNotMatch(result.stdout, /reviewed_slices/);
@@ -240,6 +245,11 @@ test("blueprint-template emits the OpenSpec blueprint contract", () => {
   );
 
   assert.equal(result.status, 0);
+  assert.match(result.stdout, /## Readable Summary/);
+  assert.ok(
+    result.stdout.indexOf("## Readable Summary") <
+      result.stdout.indexOf("openspec_blueprint:"),
+  );
   assert.match(result.stdout, /openspec_blueprint:/);
   assert.match(result.stdout, /status: ready_for_openspec/);
   assert.match(result.stdout, /next_action: create_openspec_change/);
