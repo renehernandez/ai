@@ -35,7 +35,7 @@ These rules apply to command execution, network access, and tool installation ac
 - Use `pnpm agent-runtime skills status --profile <name>` to inspect installed skill copies and symlinks.
 - Add `--profile <name>` to scope skills work to one machine profile; repeat it to select multiple profiles.
 - Use either `--all-profiles` or one or more `--profile <name>` flags for non-interactive skills commands.
-- After changing any managed skill source under `skills/`, run `pnpm agent-runtime skills update --profile <name>` before treating the change as live. Repo source files and installed runtime copies can drift until the update runs.
+- After changing any managed skill source under `skills/`, run `writing-skills` against the changed skill before committing, then run `pnpm agent-runtime skills update --profile <name>` before treating the change as live. Repo source files and installed runtime copies can drift until the update runs.
 - After refreshing a changed skill, verify the active runtime surface with `pnpm agent-runtime skills status --profile <name>`. Use `pnpm agent-runtime skills validate --profile <name>` or `pnpm agent-runtime validate --all-profiles` when the change affects shared workflow contracts, agent prompts, or cross-profile behavior.
 - Do not manually create skill symlinks or hand-copy managed skills into runtime folders.
 - Do not use `npx skills`; this repo manages skills through the internal `pnpm agent-runtime` CLI.
