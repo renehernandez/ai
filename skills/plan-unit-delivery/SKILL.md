@@ -34,6 +34,11 @@ change the selected checkbox from `[ ]` to `[x]` in the same branch that
 implements the task. Do not create a follow-up bookkeeping commit for task
 completion.
 
+Each OpenSpec task must be delivered in its own commit. A stacked PR/MR may
+contain multiple task commits by the time the stack tip is inspected, but each
+commit must correspond to exactly one selected task. Do not combine multiple
+OpenSpec tasks in one commit.
+
 Before finishing an OpenSpec task unit, validate the task delta:
 
 ```bash
@@ -55,27 +60,30 @@ path.
 2. Inspect live repo, branch, remotes, and artifact-host routing.
 3. Implement only `approved_unit`.
 4. If the approved unit is an OpenSpec task, check off only that task in
-   `tasks.md`.
-5. Run local verification named in the handoff, plus the narrowest useful tests
+   `tasks.md` in the same commit as the implementation for that task.
+5. Confirm the approved task is delivered as one separate commit. If the diff
+   includes another task's implementation or checkbox update, split it before
+   continuing.
+6. Run local verification named in the handoff, plus the narrowest useful tests
    for touched code.
-6. For OpenSpec tasks, validate the one-checkbox delta against the unit base.
-7. Launch implementation reviewers through internal subagents.
-8. Reconcile reviewer outcomes.
-9. Run review-feedback routing.
-10. Open or update the routed PR/MR, or direct publish only when repo policy
+7. For OpenSpec tasks, validate the one-checkbox delta against the unit base.
+8. Launch implementation reviewers through internal subagents.
+9. Reconcile reviewer outcomes.
+10. Run review-feedback routing.
+11. Open or update the routed PR/MR, or direct publish only when repo policy
    explicitly allows it.
-11. Prove the implementation artifact is separate from the planning-review
+12. Prove the implementation artifact is separate from the planning-review
     PR/MR. If the same hosted artifact would be reused, block and split the
     implementation to a separate PR/MR or direct-publish unit.
-12. Run artifact-host review.
-13. Monitor artifact-host pipelines for the latest head until they pass, fail,
+13. Run artifact-host review.
+14. Monitor artifact-host pipelines for the latest head until they pass, fail,
     block, or are unavailable with evidence. Include child or downstream
     pipeline state when the host exposes it.
-14. Wait for routed automatic review feedback on the latest head until feedback
+15. Wait for routed automatic review feedback on the latest head until feedback
     is resolved, no automatic feedback is present after the chosen timeout, or
     the review system is unavailable with evidence. The timeout window must be
     explicit in the delivery gate evidence.
-15. Finish only when landed, direct-published, stack-ready, or blocked with
+16. Finish only when landed, direct-published, stack-ready, or blocked with
     evidence.
 
 Block with `implementation_scope_escape` when the selected unit requires
@@ -106,6 +114,7 @@ scripts/plan-unit-delivery.ts validate-ledger --file <ledger>
 | --- | --- |
 | Implementing without `plan_delivery_handoff` | Return `needs_plan_ready` |
 | Accepting legacy slice/followthrough handoffs | Return `needs_plan_ready` |
+| Combining multiple OpenSpec tasks in one commit | Split into one commit per task |
 | Checking OpenSpec tasks in a follow-up commit | Check the task in the implementation PR/MR or direct-publish commit |
 | Reusing the planning-review PR/MR for implementation | Create a separate implementation artifact and record separation evidence |
 | Implementing multiple OpenSpec tasks at once | Return to OpenSpec or `plan-unit-sequencer` |

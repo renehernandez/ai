@@ -184,6 +184,9 @@ const deliveryLedger = `delivery_gate_ledger:
   implementation:
     status: passed
     evidence: approved unit implemented
+  unit_commit_boundary:
+    status: passed
+    evidence: selected task delivered in one separate commit
   local_verification:
     status: passed
     evidence: pnpm run test:unit
@@ -485,4 +488,17 @@ test("validate-ledger requires implementation artifact separation evidence", () 
     result.stderr,
     /implementation_artifact_separation.evidence must prove/,
   );
+});
+
+test("validate-ledger requires one commit per task evidence", () => {
+  const result = runPlanUnitDelivery(
+    "validate-ledger",
+    deliveryLedger.replace(
+      "selected task delivered in one separate commit",
+      "selected task included with another task",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /unit_commit_boundary.evidence must prove/);
 });
