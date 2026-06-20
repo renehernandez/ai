@@ -280,7 +280,7 @@ reviewer_report:
 
 review_execution_rules:
   - Run each review pass with the matching skill or review rubric.
-  - Built-in Codex Explorer or Worker subagents may be used for independent read-only review lanes when available.
+  - Available local, cloud, or custom subagents may be used for independent review lanes when available.
   - Omit model overrides unless the user explicitly asks for one.
   - Print and validate reviewer_launch before waiting for review outcomes.
   - Validate reviewer_report before PR/MR creation or final delivery.

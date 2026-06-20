@@ -14,7 +14,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
 
@@ -185,7 +185,7 @@ test("CLI validates all runtime scopes", () => {
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.match(result.stdout, /Validated 1 profile/);
-    assert.match(result.stdout, /No custom agents configured/);
+    assert.match(result.stdout, /No agents configured/);
     assert.match(result.stdout, /Validated instruction configuration/);
   });
 });
@@ -334,57 +334,8 @@ test("CLI rejects flags outside their command scope", () => {
   assert.match(result.stderr, /unknown option '--agent'/);
 });
 
-test("CLI reports no custom agents and prunes retired generated agents", () => {
-  withFixture(({ configPath, runtimeDir }) => {
-    const generatedPath = join(
-      runtimeDir,
-      "agents",
-      "claude",
-      "implementer-agent.md",
-    );
-    const linkPath = join(
-      runtimeDir,
-      "claude",
-      "agents",
-      "implementer-agent.md",
-    );
-    const codexGeneratedPath = join(
-      runtimeDir,
-      "agents",
-      "codex",
-      "implementer-agent.md",
-    );
-    const codexLinkPath = join(
-      runtimeDir,
-      "codex",
-      "agents",
-      "implementer-agent.md",
-    );
-    const opencodeGeneratedPath = join(
-      runtimeDir,
-      "agents",
-      "opencode",
-      "implementer-agent.md",
-    );
-    const opencodeLinkPath = join(
-      runtimeDir,
-      "opencode",
-      "agents",
-      "implementer-agent.md",
-    );
-
-    for (const filePath of [
-      generatedPath,
-      linkPath,
-      codexGeneratedPath,
-      codexLinkPath,
-      opencodeGeneratedPath,
-      opencodeLinkPath,
-    ]) {
-      mkdirSync(dirname(filePath), { recursive: true });
-      writeFileSync(filePath, "stale\n", "utf-8");
-    }
-
+test("CLI reports no agents when agent mappings are absent", () => {
+  withFixture(({ configPath }) => {
     const update = runAgentRuntime([
       "agents",
       "update",
@@ -392,18 +343,7 @@ test("CLI reports no custom agents and prunes retired generated agents", () => {
       configPath,
     ]);
     assert.equal(update.status, 0, update.stderr || update.stdout);
-    assert.match(update.stdout, /No custom agents configured/);
-
-    for (const filePath of [
-      generatedPath,
-      linkPath,
-      codexGeneratedPath,
-      codexLinkPath,
-      opencodeGeneratedPath,
-      opencodeLinkPath,
-    ]) {
-      assert.equal(existsSync(filePath), false);
-    }
+    assert.match(update.stdout, /No agents configured/);
   });
 });
 

@@ -43,8 +43,8 @@ These rules apply to command execution, network access, and tool installation ac
 
 ## Agent Runtime Sync
 
-- This repo no longer installs custom subagents. Prefer built-in Codex Explorer or Worker subagents for bounded parallel verification when a workflow benefits from them.
-- Do not manually create custom-agent symlinks, hand-copy generated agent files into runtime folders, or add repo-managed model mappings for custom agents without a new workflow decision.
+- This repo currently has no repo-managed subagent mappings. Skills may still delegate to available local, cloud, or custom subagents exposed by the active harness.
+- Do not manually create subagent symlinks or hand-copy generated agent files into runtime folders; use the repo runtime or the owning harness mechanism when adding managed subagents.
 
 ## Instruction Runtime Sync
 

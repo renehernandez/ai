@@ -167,18 +167,6 @@ const RETIRED_MANAGED_SKILL_NAMES = [
   "plan-coordinate",
   "plan-delivery",
 ] as const;
-const RETIRED_MANAGED_AGENT_NAMES = [
-  "implementer-agent",
-  "implementation-review-agent",
-  "github-review-agent",
-  "gitlab-review-agent",
-] as const;
-const DEFAULT_RETIRED_AGENT_CANONICAL_DIR = "~/.agents/agents";
-const DEFAULT_RETIRED_AGENT_TARGETS: Record<string, string> = {
-  codex: "~/.codex/agents",
-  claude: "~/.claude/agents",
-  opencode: "~/.config/opencode/agents",
-};
 
 export function main(): void {
   const program = createProgram();
@@ -1663,18 +1651,17 @@ function runAgents(
 ): void {
   if (!hasConfiguredAgents(config)) {
     if (agentName) {
-      throw new Error(`Custom agent '${agentName}' is not configured`);
+      throw new Error(`Agent '${agentName}' is not configured`);
     }
     if (command === "install") {
-      console.log("No custom agents configured.");
+      console.log("No agents configured.");
       return;
     }
     if (command === "update") {
-      pruneRetiredManagedAgents(config);
-      console.log("No custom agents configured.");
+      console.log("No agents configured.");
       return;
     }
-    console.log("No custom agents configured.");
+    console.log("No agents configured.");
     return;
   }
 
@@ -1768,7 +1755,7 @@ function preflightWrapperCommand(
   if (hasConfiguredAgents(config)) {
     validateAgentConfig(config, agentName);
   } else if (agentName) {
-    throw new Error(`Custom agent '${agentName}' is not configured`);
+    throw new Error(`Agent '${agentName}' is not configured`);
   }
   validateInstructionConfig(
     config,
@@ -1835,41 +1822,6 @@ function validateAgentConfig(config: Config, agentName?: string): void {
 
 function hasConfiguredAgents(config: Config): boolean {
   return Object.keys(config.agentModelMappings ?? {}).length > 0;
-}
-
-function pruneRetiredManagedAgents(config: Config): void {
-  const canonicalAgentsDir = expandHome(
-    config.runtime.canonicalAgentsDir ?? DEFAULT_RETIRED_AGENT_CANONICAL_DIR,
-  );
-  const targets =
-    config.runtime.agentSymlinkTargets ?? DEFAULT_RETIRED_AGENT_TARGETS;
-
-  for (const agentName of RETIRED_MANAGED_AGENT_NAMES) {
-    for (const targetName of Object.keys(targets)) {
-      removePathIfPresent(
-        join(canonicalAgentsDir, targetName, `${agentName}.md`),
-      );
-      removePathIfPresent(
-        join(expandHome(targets[targetName]), `${agentName}.md`),
-      );
-    }
-  }
-}
-
-function removePathIfPresent(path: string): void {
-  try {
-    lstatSync(path);
-    rmSync(path, { force: true, recursive: true });
-  } catch (error) {
-    if (
-      !error ||
-      typeof error !== "object" ||
-      !("code" in error) ||
-      error.code !== "ENOENT"
-    ) {
-      throw error;
-    }
-  }
 }
 
 function validateInstructionConfig(

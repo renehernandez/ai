@@ -112,8 +112,8 @@ Include the `scrutinize` verdict and whether any `MINOR` findings were fixed or
 left as residual risk.
 
 Use review skills for these passes. In Codex, read each named `SKILL.md` before
-applying it. Built-in Explorer or Worker subagents may be used for parallel
-read-only verification lanes when the diff is broad or high-risk; reconcile any
+applying it. Skills may use available local, cloud, or custom subagents for
+parallel verification lanes when the diff is broad or high-risk; reconcile any
 findings in the parent thread before final delivery.
 
 ## PR/MR and CI Follow-Through

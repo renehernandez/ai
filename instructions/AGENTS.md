@@ -25,8 +25,8 @@ The linked rule files are normative and preserve the detailed policies.
 - After changing shared skill, agent, instruction, or rule sources in this repo, run `writing-skills` against the changed agent behavior before committing. For shared skill changes, refresh the installed runtime copies before treating the change as live with `pnpm agent-runtime skills update --profile <name>`, and confirm the active runtime surface with `pnpm agent-runtime skills status --profile <name>` or `pnpm agent-runtime validate --profile <name>`.
 - Write agent and Codex hooks in TypeScript unless there is a specific runtime requirement that makes another language a better fit.
 - In troubleshooting mode, diagnose and report before editing or fixing anything.
-- For multi-file implementation requests, work in the current agent session unless the user explicitly asks to use a subagent or the active workflow launches built-in Codex subagents for bounded verification.
-- For review work, use the relevant review skill or adapter in the current session. Built-in Codex Explorer or Worker subagents may be used for parallel, read-only verification when the task benefits from independent review lanes.
+- For multi-file implementation requests, work in the current agent session unless the user explicitly asks to use a subagent or the active workflow launches available subagents for bounded work or verification.
+- For review work, use the relevant review skill or adapter in the current session. Skills may delegate to available local, cloud, or custom subagents when the workflow benefits from independent review lanes.
 - Use confidence scores on actionable statements as defined in [rules/confidence.md](../rules/confidence.md).
 - Use `/doc-smith` for non-trivial documentation work and Mermaid for Markdown diagrams.
 - Use `/scrutinize` for adversarial validation of plans, implementation diffs, PRs, hosted review feedback, proposed approaches, sanity checks, and second opinions.
@@ -72,7 +72,7 @@ Load the rule files installed under [rules/](../rules/). Runtime profiles may in
 - Map `Bash` instructions to the shell command tool available in Codex.
 - Read the relevant skill `SKILL.md` before applying a named skill.
 - Use `apply_patch` for manual file edits and read files before editing them.
-- If a rule or skill uses built-in Codex subagents, keep their prompts bounded, read-only unless explicitly approved, and reconcile their findings in the parent thread.
+- If a rule or skill uses subagents, keep prompts bounded, avoid write access unless explicitly approved by the workflow or user, and reconcile findings in the parent thread.
 
 ### Fullscript Workflows
 

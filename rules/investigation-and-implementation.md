@@ -22,16 +22,16 @@ These rules govern when to diagnose, when to edit, and how to route implementati
 ## Code Implementation
 
 - When the user asks to implement, fix, build, or apply changes, work in the current agent session by default.
-- Use built-in Codex subagents only when the active workflow explicitly launches bounded verification lanes or the user explicitly asks for subagent help.
-- Do not require or invoke custom implementation agents.
+- Skills and workflows may delegate to available local, cloud, or custom subagents when they define a bounded implementation, exploration, or verification lane.
+- Do not refer to retired agent names or require a subagent that is not available in the current harness.
 - For feature implementation work, follow [feature-delivery.md](feature-delivery.md) through PR creation and CI follow-through unless the user explicitly asks to stop earlier.
 - Do not commit or push non-feature implementation work unless the user explicitly asks or the approved plan requires it.
 
 ## Local Code Review
 
 - When the user asks to review local changes, review their changes, review the working tree, or self-review, use the relevant review skill in the current session.
-- For broad or high-risk reviews, built-in Codex Explorer or Worker subagents may be launched for independent read-only review lanes, then reconciled in the parent thread.
-- Do not require or invoke custom review agents.
+- For broad or high-risk reviews, skills may launch available local, cloud, or custom subagents for independent review lanes, then reconcile findings in the parent thread.
+- Do not refer to retired agent names or require a subagent that is not available in the current harness.
 
 ## Compound Step
 

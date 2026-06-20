@@ -60,7 +60,7 @@ These rules cover Git, GitHub, GitLab, Linear, review routing, and external comm
 
 - When the user asks to review local changes, review their changes, review the working tree, or self-review, use the relevant local review skill in the current session.
 - Implementation review of local changes is distinct from hosted PR/MR review.
-- Built-in Codex Explorer or Worker subagents may be used for independent read-only review lanes when the diff is broad or high-risk.
+- Skills may use available local, cloud, or custom subagents for independent review lanes when the diff is broad or high-risk.
 
 ## Hosted Provider Reviews
 
