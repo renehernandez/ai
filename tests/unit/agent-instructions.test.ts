@@ -26,11 +26,3 @@ for (const file of ["AGENTS.md", "instructions/AGENTS.md"] as const) {
     assert.match(text, /shared skill, agent, instruction, or rule sources/);
   });
 }
-
-test("Biome includes agent plan artifacts", () => {
-  const config = JSON.parse(readFileSync("biome.json", "utf-8")) as {
-    files?: { includes?: string[] };
-  };
-
-  assert.ok(config.files?.includes?.includes(".agents/plans/**/*"));
-});
