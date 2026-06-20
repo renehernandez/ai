@@ -7,7 +7,6 @@ import { createProgram } from "../../scripts/agent-runtime.ts";
 type ParsedCommand = {
   scope?: string;
   command: string;
-  agentName?: string;
   profileNames?: string[];
   allProfiles?: boolean;
   configPath: string;
@@ -63,31 +62,11 @@ test("Commander routes scoped skills commands", () => {
   assert.equal(parsed.configPath, "custom.json");
 });
 
-test("Commander routes scoped agent filters", () => {
-  const [parsed] = parseCommand([
-    "agents",
-    "status",
-    "--agent",
-    "example-agent",
-  ]);
-
-  assert.equal(parsed.scope, "agents");
-  assert.equal(parsed.command, "status");
-  assert.equal(parsed.agentName, "example-agent");
-});
-
 test("Commander routes top-level wrapper commands", () => {
-  const [parsed] = parseCommand([
-    "status",
-    "--agent",
-    "example-agent",
-    "--profile",
-    "personal",
-  ]);
+  const [parsed] = parseCommand(["status", "--profile", "personal"]);
 
   assert.equal(parsed.scope, undefined);
   assert.equal(parsed.command, "status");
-  assert.equal(parsed.agentName, "example-agent");
   assert.deepEqual(parsed.profileNames, ["personal"]);
 });
 
@@ -139,13 +118,8 @@ test("Commander rejects removed skillset flags", () => {
   assert.match(error.message, /unknown option '--skillset'/);
 });
 
-test("Commander rejects removed harness flags", () => {
-  const error = parseInvalidCommand([
-    "agents",
-    "status",
-    "--harness",
-    "claude",
-  ]);
+test("Commander rejects removed agents commands", () => {
+  const error = parseInvalidCommand(["agents", "status"]);
 
-  assert.match(error.message, /unknown option '--harness'/);
+  assert.match(error.message, /unknown command 'agents'/);
 });

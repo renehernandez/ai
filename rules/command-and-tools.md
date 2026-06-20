@@ -58,5 +58,5 @@ These rules apply to command execution, network access, and tool installation ac
 
 ## Runtime Wrapper Commands
 
-- Use `pnpm agent-runtime install --profile <name>`, `pnpm agent-runtime update --profile <name>`, `pnpm agent-runtime validate --profile <name>`, or `pnpm agent-runtime status --profile <name>` to run the corresponding command across skills, agents, and instructions.
+- Use `pnpm agent-runtime install --profile <name>`, `pnpm agent-runtime update --profile <name>`, `pnpm agent-runtime validate --profile <name>`, or `pnpm agent-runtime status --profile <name>` to run the corresponding command across skills and instructions.
 - Add `--help` to the root command, wrapper commands, scoped commands, or scoped subcommands to inspect available options before running a command.

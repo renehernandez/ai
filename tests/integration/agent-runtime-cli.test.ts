@@ -66,13 +66,7 @@ function withFixture(
       targetPath: "scripts/planning-contracts.ts",
     },
   ];
-  runtime.canonicalAgentsDir = join(runtimeDir, "agents");
   runtime.lockFile = join(runtimeDir, "lock.json");
-  runtime.agentSymlinkTargets = {
-    codex: join(runtimeDir, "codex", "agents"),
-    claude: join(runtimeDir, "claude", "agents"),
-    opencode: join(runtimeDir, "opencode", "agents"),
-  };
   runtime.instructionSymlinkTargets = {
     agents: join(runtimeDir, "root"),
     claude: join(runtimeDir, "claude"),
@@ -185,7 +179,6 @@ test("CLI validates all runtime scopes", () => {
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.match(result.stdout, /Validated 1 profile/);
-    assert.match(result.stdout, /No agents configured/);
     assert.match(result.stdout, /Validated instruction configuration/);
   });
 });
@@ -211,7 +204,7 @@ test("CLI shows global help", () => {
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /Usage: agent-runtime/);
   assert.match(result.stdout, /Commands:/);
-  assert.match(result.stdout, /agents/);
+  assert.doesNotMatch(result.stdout, /\bagents\b/);
   assert.match(result.stdout, /instructions/);
   assert.match(result.stdout, /openspec/);
   assert.match(result.stdout, /skills/);
@@ -315,7 +308,7 @@ test("CLI shows command-specific help", () => {
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /Usage: agent-runtime status/);
-  assert.match(result.stdout, /--agent <name>/);
+  assert.doesNotMatch(result.stdout, /--agent <name>/);
   assert.match(result.stdout, /--all-profiles/);
   assert.match(result.stdout, /--profile <name>/);
   assert.doesNotMatch(result.stdout, /--all-skillsets/);
@@ -334,17 +327,11 @@ test("CLI rejects flags outside their command scope", () => {
   assert.match(result.stderr, /unknown option '--agent'/);
 });
 
-test("CLI reports no agents when agent mappings are absent", () => {
-  withFixture(({ configPath }) => {
-    const update = runAgentRuntime([
-      "agents",
-      "update",
-      "--config",
-      configPath,
-    ]);
-    assert.equal(update.status, 0, update.stderr || update.stdout);
-    assert.match(update.stdout, /No agents configured/);
-  });
+test("CLI rejects removed agents subcommand", () => {
+  const result = runAgentRuntime(["agents", "status"]);
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /unknown command 'agents'/);
 });
 
 test("CLI installs overlapping profile skills once", () => {

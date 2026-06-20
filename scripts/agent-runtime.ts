@@ -31,7 +31,7 @@ import {
 import { pathToFileURL } from "node:url";
 import { Command } from "commander";
 
-type Scope = "skills" | "agents" | "instructions" | "openspec";
+type Scope = "skills" | "instructions" | "openspec";
 type RuntimeCommand = "install" | "update" | "validate" | "status";
 type SkillCommand = Extract<RuntimeCommand, "install" | "update" | "validate">;
 
@@ -77,8 +77,6 @@ type Config = {
     canonicalSkillsDir: string;
     skillSymlinkTargets: string[];
     reusableScripts?: RuntimeFileConfig[];
-    canonicalAgentsDir?: string;
-    agentSymlinkTargets?: Record<string, string>;
     instructionSymlinkTargets?: Record<string, string>;
     lockFile?: string;
     openspec?: OpenSpecConfig;
@@ -88,18 +86,12 @@ type Config = {
   };
   instructionProfiles?: Record<string, InstructionProfileConfig>;
   profiles?: Record<string, ProfileConfig>;
-  agentModelMappings?: Record<string, Record<string, AgentTargetConfig>>;
   blocks: Record<string, BlockConfig>;
   skillsets?: Record<string, SkillsetConfig>;
 };
 
 type InstructionProfileConfig = {
   paths: InstructionPathConfig[];
-};
-
-type AgentTargetConfig = {
-  model: string;
-  reasoning?: string;
 };
 
 type OpenSpecConfig = {
@@ -121,7 +113,6 @@ type ResolvedOpenSpecConfig = {
 type ParsedArgs = {
   scope?: Scope;
   command: RuntimeCommand;
-  agentName?: string;
   profileNames?: string[];
   allProfiles?: boolean;
   configPath: string;
@@ -178,8 +169,7 @@ export function main(): void {
 }
 
 export function executeParsedCommand(input: ParsedArgs): void {
-  const { scope, command, agentName, profileNames, allProfiles, configPath } =
-    input;
+  const { scope, command, profileNames, allProfiles, configPath } = input;
   const config = readJson<Config>(configPath);
 
   if (!scope) {
@@ -187,9 +177,8 @@ export function executeParsedCommand(input: ParsedArgs): void {
       profileNames,
       allProfiles,
     });
-    preflightWrapperCommand(command, config, agentName, profileSelection);
+    preflightWrapperCommand(command, config, profileSelection);
     runSkills(command, config, profileSelection);
-    runAgents(command, config, agentName);
     runInstructions(command, config, profileSelection);
     return;
   }
@@ -201,7 +190,6 @@ export function executeParsedCommand(input: ParsedArgs): void {
   runScope(scope, {
     command,
     config,
-    agentName,
     profileSelection,
   });
 }
@@ -224,7 +212,6 @@ export function createProgram(
   }
 
   addSkillsCommands(program, execute);
-  addAgentsCommands(program, execute);
   addInstructionsCommands(program, execute);
   addOpenSpecCommands(program, execute);
 
@@ -239,7 +226,6 @@ function addWrapperCommand(
   program
     .command(command)
     .description(`${labelForCommand(command)} all runtime assets`)
-    .option("--agent <name>", "Only apply agent work to one agent")
     .option(
       "--profile <name>",
       "Apply work to one profile; repeat for multiple",
@@ -251,7 +237,6 @@ function addWrapperCommand(
       const { options, commandObject } = actionContext(first, second);
       execute({
         command,
-        agentName: options.agent,
         profileNames: options.profile,
         allProfiles: options.allProfiles,
         configPath: configPathFor(commandObject, options),
@@ -281,28 +266,6 @@ function addSkillsCommands(program: Command, execute: CommandExecutor): void {
           command,
           profileNames: options.profile,
           allProfiles: options.allProfiles,
-          configPath: configPathFor(commandObject, options),
-        });
-      });
-  }
-}
-
-function addAgentsCommands(program: Command, execute: CommandExecutor): void {
-  const agents = program
-    .command("agents")
-    .description("Manage sub-agent generation and symlinks");
-  for (const command of runtimeCommands()) {
-    agents
-      .command(command)
-      .description(`${labelForCommand(command)} generated sub-agents`)
-      .option("--agent <name>", "Only apply the command to one agent")
-      .option("--config <path>", "Path to agent runtime config", CONFIG_FILE)
-      .action((first: CommandOptions | Command, second?: Command) => {
-        const { options, commandObject } = actionContext(first, second);
-        execute({
-          scope: "agents",
-          command,
-          agentName: options.agent,
           configPath: configPathFor(commandObject, options),
         });
       });
@@ -364,7 +327,6 @@ function addOpenSpecCommands(program: Command, execute: CommandExecutor): void {
 
 type CommandOptions = {
   config?: string;
-  agent?: string;
   profile?: string[];
   allProfiles?: boolean;
 };
@@ -422,15 +384,6 @@ function resolveProfileSelectionForScope(
   config: Config,
   input: { profileNames?: string[]; allProfiles?: boolean },
 ): ProfileSelection {
-  if (scope === "agents") {
-    if ((input.profileNames?.length ?? 0) > 0 || input.allProfiles) {
-      return {
-        profileNames: uniqueNames(input.profileNames ?? []),
-        interactive: false,
-      };
-    }
-    return { profileNames: [], interactive: false };
-  }
   if (scope === "openspec") {
     if ((input.profileNames?.length ?? 0) > 0 || input.allProfiles) {
       throw new Error(
@@ -699,38 +652,16 @@ function runScope(
   input: {
     command: RuntimeCommand;
     config: Config;
-    agentName?: string;
     profileSelection: ProfileSelection;
   },
 ): void {
   if (scope === "skills") {
-    if (input.agentName) {
-      throw new Error("--agent can only be used with the agents scope");
-    }
     runSkills(input.command, input.config, input.profileSelection);
     return;
   }
-  if (scope === "agents") {
-    if (
-      input.profileSelection.interactive ||
-      (input.profileSelection.profileNames?.length ?? 0) > 0
-    ) {
-      throw new Error(
-        "--profile can only be used with skills, instructions, or wrapper commands",
-      );
-    }
-    runAgents(input.command, input.config, input.agentName);
-    return;
-  }
   if (scope === "openspec") {
-    if (input.agentName) {
-      throw new Error("--agent can only be used with the agents scope");
-    }
     runOpenSpec(input.command, input.config);
     return;
-  }
-  if (input.agentName) {
-    throw new Error("--agent can only be used with the agents scope");
   }
   runInstructions(input.command, input.config, input.profileSelection);
 }
@@ -1644,65 +1575,6 @@ function runtimeTargetPath(runtimeRoot: string, targetPath: string): string {
   return target;
 }
 
-function runAgents(
-  command: RuntimeCommand,
-  config: Config,
-  agentName?: string,
-): void {
-  if (!hasConfiguredAgents(config)) {
-    if (agentName) {
-      throw new Error(`Agent '${agentName}' is not configured`);
-    }
-    if (command === "install") {
-      console.log("No agents configured.");
-      return;
-    }
-    if (command === "update") {
-      console.log("No agents configured.");
-      return;
-    }
-    console.log("No agents configured.");
-    return;
-  }
-
-  validateAgentConfig(config, agentName);
-  if (command === "validate") {
-    console.log("Validated agent configuration.");
-    return;
-  }
-
-  const operations = agentOperations(config, agentName);
-  if (command === "status") {
-    for (const operation of operations) {
-      const rendered = renderAgent(operation.sourcePath, operation.mapping);
-      console.log(`Agent ${operation.agentName} (${operation.targetName})`);
-      printGeneratedStatus(`  generated`, operation.generatedPath, rendered);
-      printSymlinkStatus(
-        `  ${operation.linkPath}`,
-        operation.linkPath,
-        operation.generatedPath,
-      );
-    }
-    return;
-  }
-
-  validateSafeSymlinkTargets(
-    operations.map((operation) => ({
-      linkPath: operation.linkPath,
-      target: operation.generatedPath,
-    })),
-  );
-  for (const operation of operations) {
-    const rendered = renderAgent(operation.sourcePath, operation.mapping);
-    mkdirSync(dirname(operation.generatedPath), { recursive: true });
-    writeFileSync(operation.generatedPath, rendered, "utf-8");
-    replaceSafeSymlink(operation.generatedPath, operation.linkPath);
-    console.log(
-      `${command === "install" ? "Installed" : "Updated"} ${operation.agentName} for ${operation.targetName}`,
-    );
-  }
-}
-
 function runInstructions(
   command: RuntimeCommand,
   config: Config,
@@ -1746,28 +1618,14 @@ function runInstructions(
 function preflightWrapperCommand(
   command: RuntimeCommand,
   config: Config,
-  agentName?: string,
   profileSelection?: ProfileSelection,
 ): void {
   if (command !== "install" && command !== "update") {
     return;
   }
-  if (hasConfiguredAgents(config)) {
-    validateAgentConfig(config, agentName);
-  } else if (agentName) {
-    throw new Error(`Agent '${agentName}' is not configured`);
-  }
   validateInstructionConfig(
     config,
     profileSelection ?? { profileNames: [], interactive: false },
-  );
-  validateSafeSymlinkTargets(
-    hasConfiguredAgents(config)
-      ? agentOperations(config, agentName).map((operation) => ({
-          linkPath: operation.linkPath,
-          target: operation.generatedPath,
-        }))
-      : [],
   );
   validateSafeSymlinkTargets(
     instructionOperations(
@@ -1778,50 +1636,6 @@ function preflightWrapperCommand(
       target: operation.sourcePath,
     })),
   );
-}
-
-function validateAgentConfig(config: Config, agentName?: string): void {
-  const mappings = config.agentModelMappings;
-  if (!mappings || Object.keys(mappings).length === 0) {
-    throw new Error("agentModelMappings must configure at least one agent");
-  }
-  if (!config.runtime.canonicalAgentsDir) {
-    throw new Error("runtime.canonicalAgentsDir must be configured for agents");
-  }
-  if (
-    !config.runtime.agentSymlinkTargets ||
-    Object.keys(config.runtime.agentSymlinkTargets).length === 0
-  ) {
-    throw new Error(
-      "runtime.agentSymlinkTargets must configure at least one target",
-    );
-  }
-
-  const agentNames = selectedAgentNames(mappings, agentName);
-  for (const selectedAgentName of agentNames) {
-    const sourcePath = join("agents", `${selectedAgentName}.md`);
-    if (!existsSync(sourcePath)) {
-      throw new Error(
-        `Missing agent source for '${selectedAgentName}' at ${sourcePath}`,
-      );
-    }
-    const targets = selectedTargetNames(
-      mappings[selectedAgentName],
-      config.runtime.agentSymlinkTargets,
-    );
-    for (const selectedTargetName of targets) {
-      const mapping = mappings[selectedAgentName][selectedTargetName];
-      if (!mapping?.model) {
-        throw new Error(
-          `Agent '${selectedAgentName}' is missing a model mapping for target '${selectedTargetName}'`,
-        );
-      }
-    }
-  }
-}
-
-function hasConfiguredAgents(config: Config): boolean {
-  return Object.keys(config.agentModelMappings ?? {}).length > 0;
 }
 
 function validateInstructionConfig(
@@ -1849,56 +1663,6 @@ function validateInstructionConfig(
       throw new Error(`Missing instruction path: ${sourcePath}`);
     }
   }
-}
-
-function agentOperations(
-  config: Config,
-  agentName?: string,
-): Array<{
-  agentName: string;
-  targetName: string;
-  mapping: AgentTargetConfig;
-  sourcePath: string;
-  generatedPath: string;
-  linkPath: string;
-}> {
-  const mappings = config.agentModelMappings ?? {};
-  const targets = config.runtime.agentSymlinkTargets ?? {};
-  const canonicalAgentsDir = expandHome(
-    config.runtime.canonicalAgentsDir ?? "",
-  );
-  const operations: Array<{
-    agentName: string;
-    targetName: string;
-    mapping: AgentTargetConfig;
-    sourcePath: string;
-    generatedPath: string;
-    linkPath: string;
-  }> = [];
-
-  for (const selectedAgentName of selectedAgentNames(mappings, agentName)) {
-    for (const selectedTargetName of selectedTargetNames(
-      mappings[selectedAgentName],
-      targets,
-    )) {
-      operations.push({
-        agentName: selectedAgentName,
-        targetName: selectedTargetName,
-        mapping: mappings[selectedAgentName][selectedTargetName],
-        sourcePath: join("agents", `${selectedAgentName}.md`),
-        generatedPath: join(
-          canonicalAgentsDir,
-          selectedTargetName,
-          `${selectedAgentName}.md`,
-        ),
-        linkPath: join(
-          expandHome(targets[selectedTargetName]),
-          `${selectedAgentName}.md`,
-        ),
-      });
-    }
-  }
-  return operations;
 }
 
 function instructionOperations(
@@ -1983,83 +1747,6 @@ function allConfiguredInstructionPaths(
     );
   }
   return config.instructions?.paths ?? [];
-}
-
-function selectedAgentNames(
-  mappings: Record<string, Record<string, AgentTargetConfig>>,
-  agentName?: string,
-): string[] {
-  if (agentName) {
-    if (!mappings[agentName]) {
-      throw new Error(`Unknown agent '${agentName}'`);
-    }
-    return [agentName];
-  }
-  return Object.keys(mappings).sort();
-}
-
-function selectedTargetNames(
-  mappings: Record<string, AgentTargetConfig>,
-  targets: Record<string, string>,
-): string[] {
-  return Object.keys(targets)
-    .filter((targetName) => mappings[targetName])
-    .sort();
-}
-
-export function renderAgent(
-  sourcePath: string,
-  mapping: AgentTargetConfig,
-): string {
-  const source = readFileSync(sourcePath, "utf-8");
-  const frontmatter = parseFrontmatter(sourcePath, source);
-  let header = setFrontmatterValue(frontmatter.header, "model", mapping.model);
-  if (mapping.reasoning) {
-    header = setFrontmatterValue(header, "reasoning", mapping.reasoning);
-  } else {
-    header = removeFrontmatterValue(header, "reasoning");
-  }
-  return `---\n${header.trimEnd()}\n---\n${frontmatter.body}`;
-}
-
-function parseFrontmatter(
-  path: string,
-  content: string,
-): { header: string; body: string } {
-  if (!content.startsWith("---\n")) {
-    throw new Error(`Agent source is missing frontmatter: ${path}`);
-  }
-  const endIndex = content.indexOf("\n---\n", 4);
-  if (endIndex === -1) {
-    throw new Error(`Agent source has unterminated frontmatter: ${path}`);
-  }
-  return {
-    header: content.slice(4, endIndex),
-    body: content.slice(endIndex + "\n---\n".length),
-  };
-}
-
-function setFrontmatterValue(
-  header: string,
-  key: string,
-  value: string,
-): string {
-  const lines = header.split("\n");
-  const index = lines.findIndex((line) => line.startsWith(`${key}:`));
-  const newLine = `${key}: ${value}`;
-  if (index === -1) {
-    return `${header.trimEnd()}\n${newLine}\n`;
-  }
-  lines[index] = newLine;
-  return `${lines.join("\n").trimEnd()}\n`;
-}
-
-function removeFrontmatterValue(header: string, key: string): string {
-  return `${header
-    .split("\n")
-    .filter((line) => !line.startsWith(`${key}:`))
-    .join("\n")
-    .trimEnd()}\n`;
 }
 
 function expandSkillSources(
@@ -2316,21 +2003,6 @@ function symlinkType(target: string): "dir" | "file" {
 
 function printPathStatus(label: string, path: string): void {
   console.log(`${pathExists(path) ? "[ok]" : "[missing]"} ${label}: ${path}`);
-}
-
-function printGeneratedStatus(
-  label: string,
-  path: string,
-  expectedContent: string,
-): void {
-  if (!existsSync(path)) {
-    console.log(`[missing] ${label}: ${path}`);
-    return;
-  }
-  const actualContent = readFileSync(path, "utf-8");
-  console.log(
-    `${actualContent === expectedContent ? "[ok]" : "[stale]"} ${label}: ${path}`,
-  );
 }
 
 function printSymlinkStatus(
