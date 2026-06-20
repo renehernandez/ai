@@ -6,7 +6,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 function withTempFile(content: string, callback: (path: string) => void): void {
-  const directory = mkdtempSync(join(tmpdir(), "plan-delivery-script-"));
+  const directory = mkdtempSync(join(tmpdir(), "plan-orchestrator-script-"));
   const path = join(directory, "input.yaml");
   try {
     writeFileSync(path, content, "utf8");
@@ -16,7 +16,7 @@ function withTempFile(content: string, callback: (path: string) => void): void {
   }
 }
 
-function runPlanDelivery(
+function runPlanOrchestrator(
   command: string,
   content: string,
 ): { status: number | null; stderr: string; stdout: string } {
@@ -27,7 +27,7 @@ function runPlanDelivery(
       [
         "exec",
         "tsx",
-        "skills/plan-delivery/scripts/plan-delivery.ts",
+        "skills/plan-orchestrator/scripts/plan-orchestrator.ts",
         command,
         "--file",
         path,
@@ -59,7 +59,7 @@ function runSelectNextTask(content: string): {
       [
         "exec",
         "tsx",
-        "skills/plan-delivery/scripts/plan-delivery.ts",
+        "skills/plan-orchestrator/scripts/plan-orchestrator.ts",
         "select-next-task",
         path,
       ],
@@ -90,12 +90,12 @@ const validHandoff = `plan_delivery_handoff:
     title: Add plan delivery
     scope: Implement one OpenSpec checkbox task.
     acceptance:
-      - Plan Delivery validates the handoff.
+      - Plan Orchestrator validates the handoff.
     verification:
       - pnpm test:unit
   constraints:
     files_or_areas:
-      - skills/plan-delivery
+      - skills/plan-orchestrator
     out_of_scope: []
   delivery:
     expected_host: github_pr
@@ -112,14 +112,14 @@ const validHandoff = `plan_delivery_handoff:
 `;
 
 test("validate-handoff accepts a ready OpenSpec task handoff", () => {
-  const result = runPlanDelivery("validate-handoff", validHandoff);
+  const result = runPlanOrchestrator("validate-handoff", validHandoff);
 
   assert.equal(result.status, 0);
   assert.match(result.stdout, /plan_delivery_handoff valid/);
 });
 
 test("validate-handoff rejects legacy followthrough ledgers", () => {
-  const result = runPlanDelivery(
+  const result = runPlanOrchestrator(
     "validate-handoff",
     `plan_followthrough_ledger:
   status: active
@@ -134,7 +134,7 @@ test("validate-handoff rejects legacy followthrough ledgers", () => {
 });
 
 test("validate-handoff rejects old coordinate-root handoffs", () => {
-  const result = runPlanDelivery(
+  const result = runPlanOrchestrator(
     "validate-handoff",
     validHandoff.replace("plan_delivery_handoff:", "plan_coordinate_handoff:"),
   );

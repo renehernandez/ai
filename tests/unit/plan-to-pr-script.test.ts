@@ -70,7 +70,7 @@ const validHandoff = `plan_delivery_handoff:
     title: Add plan delivery
     scope: Implement one OpenSpec checkbox task.
     acceptance:
-      - Plan Delivery validates the handoff.
+      - Plan Orchestrator validates the handoff.
     verification:
       - pnpm test:unit
   constraints:

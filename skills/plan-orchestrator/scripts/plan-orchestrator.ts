@@ -37,7 +37,7 @@ function main(): void {
 
   if (!isCommand(command)) {
     fail(
-      "Usage: plan-delivery.ts <detect|handoff-template|validate-handoff|select-next-task> [--file path|tasks.md]",
+      "Usage: plan-orchestrator.ts <detect|handoff-template|validate-handoff|select-next-task> [--file path|tasks.md]",
     );
   }
 

@@ -8,7 +8,7 @@ description: Use when one validated plan_delivery_handoff approved unit should b
 ## Overview
 
 Implement exactly one approved unit. The unit is either an atomic plan or one
-OpenSpec checkbox task selected by `plan-delivery`.
+OpenSpec checkbox task selected by `plan-orchestrator`.
 
 This skill does not brainstorm, author plans, manage OpenSpec sequences, or keep
 a followthrough ledger.
@@ -16,7 +16,7 @@ a followthrough ledger.
 ## When To Use
 
 Use when the user provides a valid `plan_delivery_handoff`, or when
-`plan-delivery` passes one approved atomic unit or OpenSpec task.
+`plan-orchestrator` passes one approved atomic unit or OpenSpec task.
 
 Do not use for fuzzy ideas, unreviewed plans, OpenSpec proposal creation, Linear
 tickets that still need planning, or legacy handoff shapes.
@@ -79,7 +79,7 @@ scripts/plan-to-pr.ts validate-ledger --file <ledger>
 | Implementing without `plan_delivery_handoff` | Return `needs_plan_ready` |
 | Accepting legacy slice/followthrough handoffs | Return `needs_plan_ready` |
 | Checking OpenSpec tasks in a follow-up commit | Check the task in the implementation PR/MR |
-| Implementing multiple OpenSpec tasks at once | Return to OpenSpec or `plan-delivery` |
+| Implementing multiple OpenSpec tasks at once | Return to OpenSpec or `plan-orchestrator` |
 | Treating delivery gate evidence as durable state | Keep sequence state in OpenSpec |
 | Treating an open PR/MR as done before pipelines settle | Keep monitoring latest-head pipelines |
 | Assuming automatic review feedback is absent immediately after push | Wait until feedback resolves or the timeout proves nothing posted |

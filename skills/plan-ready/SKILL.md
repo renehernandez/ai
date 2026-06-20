@@ -15,7 +15,7 @@ needs a reviewed OpenSpec Blueprint.
 
 Use for ideas, feature requests, implementation plans, OpenSpec changes before
 delivery, Linear tickets, and any request that needs readiness validation before
-`plan-delivery`.
+`plan-orchestrator`.
 
 Do not use after implementation has started. Do not create synthetic slices,
 slice reviews, followthrough ledgers, or OpenSpec files directly.
@@ -40,7 +40,7 @@ When `plan-ready` or the user asks to write a plan artifact, write it under
 6. If the work is atomic, emit a validated `plan_delivery_handoff`.
 7. If the work is multi-deliverable, emit a validated `openspec_blueprint`.
 8. If missing decisions make either output unsafe, emit `blocked_readiness`.
-9. Stop. Do not invoke `plan-delivery`, `plan-to-pr`, create branches, push,
+9. Stop. Do not invoke `plan-orchestrator`, `plan-to-pr`, create branches, push,
    open PRs/MRs, request hosted review, or write OpenSpec files directly.
 
 ## Reviewer Selection
@@ -180,7 +180,7 @@ Linear comments by default.
 | Writing OpenSpec files in PlanReady | Stop at `openspec_blueprint` |
 | Maintaining a followthrough ledger | Use OpenSpec `tasks.md` for multi-step state |
 | Accepting old handoff shapes | Return `needs_plan_ready` |
-| Starting implementation after readiness | Stop and wait for `plan-delivery` |
+| Starting implementation after readiness | Stop and wait for `plan-orchestrator` |
 | Skipping baseline reviewers | Run all baseline reviewers before ready |
 
 ## Test Evidence
