@@ -287,10 +287,10 @@ Validation outputs:
 
 - `bun skills/plan-ready/scripts/plan-ready.ts validate-selection --file /private/tmp/plan-ready-valid-selection.yaml` -> `reviewer_selection_judge valid`
 - `bun skills/plan-ready/scripts/plan-ready.ts validate-handoff --file /private/tmp/plan-ready-valid-handoff.yaml` -> `plan_ready_handoff valid`
-- `bun skills/plan-unit-delivery/scripts/plan-unit-delivery.ts validate-launch-report --file /private/tmp/plan-unit-delivery-valid-launch-report.yaml` -> `reviewer_subagent_launch valid`
-- `bun skills/plan-unit-delivery/scripts/plan-unit-delivery.ts validate-review-report --file /private/tmp/plan-unit-delivery-valid-review-report.yaml` -> `reviewer_subagent_report valid`
+- `bun skills/plan-unit-delivery/scripts/plan-unit-delivery.ts validate-launch-report --file /private/tmp/plan-unit-delivery-valid-launch-report.yaml` -> `reviewer_launch valid`
+- `bun skills/plan-unit-delivery/scripts/plan-unit-delivery.ts validate-review-report --file /private/tmp/plan-unit-delivery-valid-review-report.yaml` -> `reviewer_report valid`
 - `bun skills/plan-unit-delivery/scripts/plan-unit-delivery.ts validate-ledger --file /private/tmp/plan-unit-delivery-valid-ledger.yaml` -> `delivery_gate_ledger valid`
-- Negative fixtures were rejected for bare reviewer-selection rationale, missing optional-reviewer rationale, missing launch IDs, under-launched reviewer reports, unresolved findings, `implementation-review-agent: not_applicable`, and mandatory ledger gates marked `not_applicable`.
+- Negative fixtures were rejected for bare reviewer-selection rationale, missing optional-reviewer rationale, missing review pass IDs, under-launched reviewer reports, unresolved findings, `implementation-review: not_applicable`, and mandatory ledger gates marked `not_applicable`.
 - `bun build skills/plan-ready/scripts/plan-ready.ts --outfile /private/tmp/plan-ready-check.js` and `bun build skills/plan-unit-delivery/scripts/plan-unit-delivery.ts --outfile /private/tmp/plan-unit-delivery-check.js` both bundled successfully.
 
 ## Success Criteria

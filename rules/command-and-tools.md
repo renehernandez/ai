@@ -43,12 +43,8 @@ These rules apply to command execution, network access, and tool installation ac
 
 ## Agent Runtime Sync
 
-- Use `pnpm agent-runtime agents install` for first-time sub-agent generation and runtime symlink setup.
-- Use `pnpm agent-runtime agents update` after changing agent source files or target model mappings.
-- Use `pnpm agent-runtime agents validate` for local validation of configured agents, runtime targets, and model mappings.
-- Use `pnpm agent-runtime agents status` to inspect generated agent files and runtime symlinks.
-- Add `--agent <name>` to scope agent commands.
-- Do not manually create managed agent symlinks or hand-copy generated agent files into runtime folders.
+- This repo no longer installs custom subagents. Prefer built-in Codex Explorer or Worker subagents for bounded parallel verification when a workflow benefits from them.
+- Do not manually create custom-agent symlinks, hand-copy generated agent files into runtime folders, or add repo-managed model mappings for custom agents without a new workflow decision.
 
 ## Instruction Runtime Sync
 

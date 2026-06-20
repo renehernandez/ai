@@ -68,26 +68,26 @@ test("Commander routes scoped agent filters", () => {
     "agents",
     "status",
     "--agent",
-    "implementation-review-agent",
+    "example-agent",
   ]);
 
   assert.equal(parsed.scope, "agents");
   assert.equal(parsed.command, "status");
-  assert.equal(parsed.agentName, "implementation-review-agent");
+  assert.equal(parsed.agentName, "example-agent");
 });
 
 test("Commander routes top-level wrapper commands", () => {
   const [parsed] = parseCommand([
     "status",
     "--agent",
-    "github-review-agent",
+    "example-agent",
     "--profile",
     "personal",
   ]);
 
   assert.equal(parsed.scope, undefined);
   assert.equal(parsed.command, "status");
-  assert.equal(parsed.agentName, "github-review-agent");
+  assert.equal(parsed.agentName, "example-agent");
   assert.deepEqual(parsed.profileNames, ["personal"]);
 });
 
@@ -116,7 +116,7 @@ test("Commander rejects agent flags on skills commands", () => {
     "skills",
     "status",
     "--agent",
-    "implementation-review-agent",
+    "example-agent",
   ]);
 
   assert.match(error.message, /unknown option '--agent'/);

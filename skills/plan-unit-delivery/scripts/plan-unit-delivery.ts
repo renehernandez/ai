@@ -37,30 +37,30 @@ const OPTIONAL_REVIEWERS = [
   "agent-runtime-and-skill-compatibility",
 ] as const;
 
-const REVIEW_SUBAGENTS = [
-  "implementation-review-agent",
-  "implementation-scrutiny-agent",
-  "code-quality-review-agent",
-  "code-simplifier-agent",
-  "deslop-agent",
-  "ai-readiness-upkeep-agent",
-  "docs-alignment-review-agent",
-  "security-review-agent",
+const REVIEW_PASSES = [
+  "implementation-review",
+  "implementation-scrutiny",
+  "code-quality-review",
+  "code-simplifier",
+  "deslop",
+  "ai-readiness-upkeep",
+  "docs-alignment-review",
+  "security-review",
 ] as const;
 
-const REQUIRED_REVIEW_SUBAGENTS = [
-  "implementation-review-agent",
-  "implementation-scrutiny-agent",
-  "code-quality-review-agent",
-  "code-simplifier-agent",
-  "deslop-agent",
-  "docs-alignment-review-agent",
+const REQUIRED_REVIEW_PASSES = [
+  "implementation-review",
+  "implementation-scrutiny",
+  "code-quality-review",
+  "code-simplifier",
+  "deslop",
+  "docs-alignment-review",
 ] as const;
 
-const MUST_PASS_REVIEW_SUBAGENTS = [
-  "implementation-review-agent",
-  "implementation-scrutiny-agent",
-  "code-quality-review-agent",
+const MUST_PASS_REVIEW_PASSES = [
+  "implementation-review",
+  "implementation-scrutiny",
+  "code-quality-review",
 ] as const;
 
 const ARTIFACT_TYPES = ["plan", "openspec", "linear"] as const;
@@ -73,7 +73,7 @@ const LEDGER_GATES = [
   "unit_artifact_boundary",
   "local_verification",
   "refactoring_execution",
-  "reviewer_subagents",
+  "reviewer_passes",
   "implementation_review",
   "implementation_scrutiny",
   "code_quality_review",
@@ -238,52 +238,52 @@ function printReviewerTemplate(): void {
 - Blocking rule: unresolved findings or blocked reviewer outcomes stop delivery.
 
 \`\`\`yaml
-reviewer_subagent_launch:
+reviewer_launch:
   status: launched
   launched_reviewers:
-    - implementation-review-agent
-    - implementation-scrutiny-agent
-    - code-quality-review-agent
-    - code-simplifier-agent
-    - deslop-agent
-    - docs-alignment-review-agent
+    - implementation-review
+    - implementation-scrutiny
+    - code-quality-review
+    - code-simplifier
+    - deslop
+    - docs-alignment-review
   skipped_reviewers:
-    - ai-readiness-upkeep-agent: not_applicable - no AI readiness verification or agent-surface contract changed
-    - security-review-agent: not_applicable - no security-sensitive surface changed
-  subagent_ids:
-    - implementation-review-agent: <returned subagent id>
-    - implementation-scrutiny-agent: <returned subagent id>
-    - code-quality-review-agent: <returned subagent id>
-    - code-simplifier-agent: <returned subagent id>
-    - deslop-agent: <returned subagent id>
-    - docs-alignment-review-agent: <returned subagent id>
+    - ai-readiness-upkeep: not_applicable - no AI readiness verification or agent-surface contract changed
+    - security-review: not_applicable - no security-sensitive surface changed
+  review_pass_ids:
+    - implementation-review: <inline or subagent evidence id>
+    - implementation-scrutiny: <inline or subagent evidence id>
+    - code-quality-review: <inline or subagent evidence id>
+    - code-simplifier: <inline or subagent evidence id>
+    - deslop: <inline or subagent evidence id>
+    - docs-alignment-review: <inline or subagent evidence id>
 
-reviewer_subagent_report:
+reviewer_report:
   status: complete
   launched_reviewers:
-    - implementation-review-agent
-    - implementation-scrutiny-agent
-    - code-quality-review-agent
-    - code-simplifier-agent
-    - deslop-agent
-    - docs-alignment-review-agent
+    - implementation-review
+    - implementation-scrutiny
+    - code-quality-review
+    - code-simplifier
+    - deslop
+    - docs-alignment-review
   skipped_reviewers:
-    - ai-readiness-upkeep-agent: not_applicable - no AI readiness verification or agent-surface contract changed
-    - security-review-agent: not_applicable - no security-sensitive surface changed
+    - ai-readiness-upkeep: not_applicable - no AI readiness verification or agent-surface contract changed
+    - security-review: not_applicable - no security-sensitive surface changed
   outcomes:
-    - implementation-review-agent: passed - no actionable correctness or regression findings
-    - implementation-scrutiny-agent: passed - scrutiny verdict ship
-    - code-quality-review-agent: passed - no critical or warning maintainability findings
-    - code-simplifier-agent: passed - simplification applied or not needed
-    - deslop-agent: passed - AI-shaped clutter removed or not present
-    - docs-alignment-review-agent: passed - docs alignment clean or updated
+    - implementation-review: passed - no actionable correctness or regression findings
+    - implementation-scrutiny: passed - scrutiny verdict ship
+    - code-quality-review: passed - no critical or warning maintainability findings
+    - code-simplifier: passed - simplification applied or not needed
+    - deslop: passed - AI-shaped clutter removed or not present
+    - docs-alignment-review: passed - docs alignment clean or updated
 
 review_execution_rules:
-  - Run reviewer agents with the internal subagent tool exposed by the current harness.
-  - If internal subagents are unavailable, block with evidence instead of substituting another review path.
+  - Run each review pass with the matching skill or review rubric.
+  - Built-in Codex Explorer or Worker subagents may be used for independent read-only review lanes when available.
   - Omit model overrides unless the user explicitly asks for one.
-  - Print and validate reviewer_subagent_launch immediately after spawning reviewers and before waiting for outcomes.
-  - Validate reviewer_subagent_report before PR/MR creation or final delivery.
+  - Print and validate reviewer_launch before waiting for review outcomes.
+  - Validate reviewer_report before PR/MR creation or final delivery.
 \`\`\`
 `);
 }
@@ -640,39 +640,39 @@ function validateDeliveryGateSemantics(
 
 function validateLaunchReport(input: string): void {
   const body = extractYaml(input);
-  const section = extractSection(body, "reviewer_subagent_launch");
+  const section = extractSection(body, "reviewer_launch");
   const errors: string[] = [];
   const status = scalar(section, "status");
   const launchedReviewers = list(section, "launched_reviewers");
   const skippedReviewers = list(section, "skipped_reviewers");
-  const subagentIds = list(section, "subagent_ids");
+  const reviewPassIds = list(section, "review_pass_ids");
   const skippedReviewerNames = parseSkippedReviewers(skippedReviewers, errors);
-  const subagentIdReviewers = new Set<string>();
+  const reviewPassIdReviewers = new Set<string>();
 
   if (status !== "launched") {
-    errors.push("reviewer_subagent_launch.status must be launched");
+    errors.push("reviewer_launch.status must be launched");
   }
 
   requireRequiredReviewers(launchedReviewers, errors);
   requireKnownReviewers(launchedReviewers, "launched", errors);
   requireConditionalReviewerAccounting(
-    "security-review-agent",
+    "security-review",
     launchedReviewers,
     skippedReviewerNames,
     errors,
   );
   requireConditionalReviewerAccounting(
-    "ai-readiness-upkeep-agent",
+    "ai-readiness-upkeep",
     launchedReviewers,
     skippedReviewerNames,
     errors,
   );
 
-  for (const subagentId of subagentIds) {
-    const parsed = subagentId.match(/^([^:]+):\s*(.+)$/);
+  for (const reviewPassId of reviewPassIds) {
+    const parsed = reviewPassId.match(/^([^:]+):\s*(.+)$/);
     if (!parsed) {
       errors.push(
-        `subagent id must use '<reviewer>: <returned subagent id>': ${subagentId}`,
+        `review pass id must use '<reviewer>: <inline or subagent evidence id>': ${reviewPassId}`,
       );
       continue;
     }
@@ -680,36 +680,36 @@ function validateLaunchReport(input: string): void {
     const reviewer = parsed[1].trim();
     const id = parsed[2].trim();
 
-    if (!includes(REVIEW_SUBAGENTS, reviewer)) {
-      errors.push(`unknown subagent id reviewer: ${reviewer}`);
+    if (!includes(REVIEW_PASSES, reviewer)) {
+      errors.push(`unknown review pass id reviewer: ${reviewer}`);
     }
 
     if (!id || id.startsWith("<")) {
-      errors.push(`${reviewer} subagent id is required`);
+      errors.push(`${reviewer} review pass id is required`);
     }
 
-    subagentIdReviewers.add(reviewer);
+    reviewPassIdReviewers.add(reviewer);
   }
 
   for (const reviewer of launchedReviewers) {
-    if (!subagentIdReviewers.has(reviewer)) {
-      errors.push(`missing subagent id for launched reviewer: ${reviewer}`);
+    if (!reviewPassIdReviewers.has(reviewer)) {
+      errors.push(`missing review pass id for launched reviewer: ${reviewer}`);
     }
   }
 
   if (errors.length > 0) {
     console.error(
-      `Invalid reviewer_subagent_launch:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+      `Invalid reviewer_launch:\n${errors.map((error) => `- ${error}`).join("\n")}`,
     );
     process.exit(1);
   }
 
-  console.log("reviewer_subagent_launch valid");
+  console.log("reviewer_launch valid");
 }
 
 function validateReviewReport(input: string): void {
   const body = extractYaml(input);
-  const section = extractSection(body, "reviewer_subagent_report");
+  const section = extractSection(body, "reviewer_report");
   const errors: string[] = [];
   const status = scalar(section, "status");
   const launchedReviewers = list(section, "launched_reviewers");
@@ -719,19 +719,19 @@ function validateReviewReport(input: string): void {
   const skippedReviewerNames = parseSkippedReviewers(skippedReviewers, errors);
 
   if (status !== "complete") {
-    errors.push("reviewer_subagent_report.status must be complete");
+    errors.push("reviewer_report.status must be complete");
   }
 
   requireRequiredReviewers(launchedReviewers, errors);
   requireKnownReviewers(launchedReviewers, "launched", errors);
   requireConditionalReviewerAccounting(
-    "security-review-agent",
+    "security-review",
     launchedReviewers,
     skippedReviewerNames,
     errors,
   );
   requireConditionalReviewerAccounting(
-    "ai-readiness-upkeep-agent",
+    "ai-readiness-upkeep",
     launchedReviewers,
     skippedReviewerNames,
     errors,
@@ -754,7 +754,7 @@ function validateReviewReport(input: string): void {
     const outcomeStatus = parsed[2].trim();
     const evidence = parsed[3].trim();
 
-    if (!includes(REVIEW_SUBAGENTS, reviewer)) {
+    if (!includes(REVIEW_PASSES, reviewer)) {
       errors.push(`unknown outcome reviewer: ${reviewer}`);
     }
 
@@ -771,7 +771,7 @@ function validateReviewReport(input: string): void {
     }
 
     if (
-      includes(MUST_PASS_REVIEW_SUBAGENTS, reviewer) &&
+      includes(MUST_PASS_REVIEW_PASSES, reviewer) &&
       outcomeStatus !== "passed"
     ) {
       errors.push(`${reviewer} outcome must be passed`);
@@ -782,13 +782,13 @@ function validateReviewReport(input: string): void {
     }
 
     if (
-      reviewer === "ai-readiness-upkeep-agent" &&
+      reviewer === "ai-readiness-upkeep" &&
       !evidence.match(
         /validate-report|validated ai_readiness_upkeep_report|ai_readiness_upkeep_report valid/i,
       )
     ) {
       errors.push(
-        "ai-readiness-upkeep-agent outcome evidence must mention validate-report or a validated ai_readiness_upkeep_report",
+        "ai-readiness-upkeep outcome evidence must mention validate-report or a validated ai_readiness_upkeep_report",
       );
     }
 
@@ -803,19 +803,19 @@ function validateReviewReport(input: string): void {
 
   if (errors.length > 0) {
     console.error(
-      `Invalid reviewer_subagent_report:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+      `Invalid reviewer_report:\n${errors.map((error) => `- ${error}`).join("\n")}`,
     );
     process.exit(1);
   }
 
-  console.log("reviewer_subagent_report valid");
+  console.log("reviewer_report valid");
 }
 
 function requireRequiredReviewers(
   launchedReviewers: string[],
   errors: string[],
 ): void {
-  for (const reviewer of REQUIRED_REVIEW_SUBAGENTS) {
+  for (const reviewer of REQUIRED_REVIEW_PASSES) {
     if (!launchedReviewers.includes(reviewer)) {
       errors.push(
         `launched_reviewers must include required reviewer: ${reviewer}`,
@@ -830,14 +830,14 @@ function requireKnownReviewers(
   errors: string[],
 ): void {
   for (const reviewer of reviewers) {
-    if (!includes(REVIEW_SUBAGENTS, reviewer)) {
+    if (!includes(REVIEW_PASSES, reviewer)) {
       errors.push(`unknown ${label} reviewer: ${reviewer}`);
     }
   }
 }
 
 function requireConditionalReviewerAccounting(
-  reviewer: (typeof REVIEW_SUBAGENTS)[number],
+  reviewer: (typeof REVIEW_PASSES)[number],
   launchedReviewers: string[],
   skippedReviewerNames: Set<string>,
   errors: string[],
@@ -872,7 +872,7 @@ function parseSkippedReviewers(
     const reviewer = parsed[1].trim();
     const evidence = parsed[2].trim();
 
-    if (!includes(REVIEW_SUBAGENTS, reviewer)) {
+    if (!includes(REVIEW_PASSES, reviewer)) {
       errors.push(`unknown skipped reviewer: ${reviewer}`);
     }
 

@@ -1,6 +1,6 @@
 ---
 name: gitlab-adapter-review
-description: Use when reviewing GitLab merge requests, MR diffs, GitLab discussions, GitLab CI state, or when the user asks for glab-review or GitLab review feedback.
+description: Use when reviewing GitLab merge requests, MR diffs, GitLab discussions, GitLab CI state, or GitLab review feedback.
 allowed-tools: Bash(glab:*), Bash(git:*), Bash(jq:*), Read, Glob, Grep, AskUserQuestion
 ---
 
@@ -13,7 +13,6 @@ Use GitLab as the artifact-host adapter, then apply `diff-review` to the verifie
 - The user asks to review a GitLab merge request or MR URL.
 - The current branch has an open GitLab MR.
 - `plan-unit-delivery` or `plan-review` detects a GitLab remote and needs the hosted review gate.
-- The user says `glab-review`; treat that as the legacy name for this skill.
 
 Use `diff-review` directly for local-only diffs. Use `github-adapter-review` for GitHub PRs.
 

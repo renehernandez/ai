@@ -150,25 +150,25 @@ const validHandoff = `plan_delivery_handoff:
   blockers: []
 `;
 
-const launchedReport = `reviewer_subagent_launch:
+const launchedReport = `reviewer_launch:
   status: launched
   launched_reviewers:
-    - implementation-review-agent
-    - implementation-scrutiny-agent
-    - code-quality-review-agent
-    - code-simplifier-agent
-    - deslop-agent
-    - docs-alignment-review-agent
+    - implementation-review
+    - implementation-scrutiny
+    - code-quality-review
+    - code-simplifier
+    - deslop
+    - docs-alignment-review
   skipped_reviewers:
-    - ai-readiness-upkeep-agent: not_applicable - no AI readiness verification or agent-surface contract changed
-    - security-review-agent: not_applicable - no security-sensitive surface changed
-  subagent_ids:
-    - implementation-review-agent: 019-a
-    - implementation-scrutiny-agent: 019-b
-    - code-quality-review-agent: 019-c
-    - code-simplifier-agent: 019-d
-    - deslop-agent: 019-e
-    - docs-alignment-review-agent: 019-f
+    - ai-readiness-upkeep: not_applicable - no AI readiness verification or agent-surface contract changed
+    - security-review: not_applicable - no security-sensitive surface changed
+  review_pass_ids:
+    - implementation-review: inline-a
+    - implementation-scrutiny: inline-b
+    - code-quality-review: inline-c
+    - code-simplifier: inline-d
+    - deslop: inline-e
+    - docs-alignment-review: inline-f
 `;
 
 const deliveryLedger = `delivery_gate_ledger:
@@ -193,7 +193,7 @@ const deliveryLedger = `delivery_gate_ledger:
   refactoring_execution:
     status: passed
     evidence: required refactors implemented or deferred
-  reviewer_subagents:
+  reviewer_passes:
     status: passed
     evidence: reviewer reports validated
   implementation_review:
@@ -307,9 +307,9 @@ test("reviewer-template emits a readable summary before YAML", () => {
   assert.match(result.stdout, /## Readable Summary/);
   assert.ok(
     result.stdout.indexOf("## Readable Summary") <
-      result.stdout.indexOf("reviewer_subagent_launch:"),
+      result.stdout.indexOf("reviewer_launch:"),
   );
-  assert.match(result.stdout, /reviewer_subagent_report:/);
+  assert.match(result.stdout, /reviewer_report:/);
 });
 
 test("refactoring-template emits a readable summary before YAML", () => {
@@ -427,7 +427,7 @@ test("validate-launch-report requires AI readiness accounting", () => {
   const invalid = runPlanUnitDelivery(
     "validate-launch-report",
     launchedReport.replace(
-      "    - ai-readiness-upkeep-agent: not_applicable - no AI readiness verification or agent-surface contract changed\n",
+      "    - ai-readiness-upkeep: not_applicable - no AI readiness verification or agent-surface contract changed\n",
       "",
     ),
   );
@@ -435,7 +435,7 @@ test("validate-launch-report requires AI readiness accounting", () => {
   assert.notEqual(invalid.status, 0);
   assert.match(
     invalid.stderr,
-    /ai-readiness-upkeep-agent must be launched or listed/,
+    /ai-readiness-upkeep must be launched or listed/,
   );
 });
 

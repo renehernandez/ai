@@ -283,16 +283,16 @@ Update these files in the first slice:
 | File | Required Change |
 | --- | --- |
 | `rules/feature-delivery.md` | Add AI readiness upkeep to the pre-commit quality gate as a conditional pass for verification, hook, CI, generated-artifact, contract, infra/deploy, agent-instruction, skill, prompt, or review-rubric changes. Run it before the final `docs-alignment-review` whenever readiness findings can cause docs or agent-doc changes. Rerun docs alignment after implementer-applied readiness changes. |
-| `skills/plan-unit-delivery/SKILL.md` | Add `ai-readiness-upkeep-agent` as a conditional implementation reviewer. Define trigger predicates, skipped-reviewer evidence, report validation, outcome mapping, and the `ai_readiness_upkeep` ledger gate. |
+| `skills/plan-unit-delivery/SKILL.md` | Add `ai-readiness-upkeep` as a conditional implementation review pass. Define trigger predicates, skipped-reviewer evidence, report validation, outcome mapping, and the `ai_readiness_upkeep` ledger gate. |
 | `skills/plan-unit-delivery/agents/openai.yaml` | Update the default prompt so plan-unit-delivery launches or skips the AI readiness reviewer with evidence and validates the report before PR/MR creation or final delivery. |
-| `skills/plan-unit-delivery/scripts/plan-unit-delivery.ts` | Add `ai-readiness-upkeep-agent` to known review subagents, update reviewer templates, launch validation, review-report validation, gate templates, ledger validation, and tests. The reviewer remains conditional, not part of the always-required baseline. |
+| `skills/plan-unit-delivery/scripts/plan-unit-delivery.ts` | Add `ai-readiness-upkeep` to known review passes, update reviewer templates, launch validation, review-report validation, gate templates, ledger validation, and tests. The reviewer remains conditional, not part of the always-required baseline. |
 | `skills/diff-review/SKILL.md` | Add a review lens for missing enforceable verification when a diff changes contracts or agent workflows. It should point to `ai-readiness-upkeep` rather than duplicating the skill. |
 | `templates/background-agent-pr-review-rubric.md` | Add a rubric check for missing enforceable verification before accepting prose-only AGENTS/rules/docs updates. |
 | `skills/docs-alignment-review/SKILL.md` | Clarify that docs alignment checks whether documentation is stale, while AI readiness upkeep checks whether newly exposed contracts should be enforced mechanically. |
 
 Do not update `skills/github-adapter-review/SKILL.md` or `skills/gitlab-adapter-review/SKILL.md` in the first slice unless implementation proves the hosted adapter output cannot surface the new `diff-review` rubric or background review rubric without a direct adapter change.
 
-`plan-unit-delivery` should include `ai-readiness-upkeep-agent` as a conditional reviewer when the diff touches:
+`plan-unit-delivery` should include `ai-readiness-upkeep` as a conditional review pass when the diff touches:
 
 - task commands;
 - hooks;
@@ -305,13 +305,13 @@ Do not update `skills/github-adapter-review/SKILL.md` or `skills/gitlab-adapter-
 
 For `plan-unit-delivery` report mapping:
 
-- If the AI readiness reviewer is not triggered, list `ai-readiness-upkeep-agent` under `skipped_reviewers` with `not_applicable` evidence and set the `ai_readiness_upkeep` ledger gate to `not_applicable`.
-- If launched, record its subagent id in `reviewer_subagent_launch`.
+- If the AI readiness reviewer is not triggered, list `ai-readiness-upkeep` under `skipped_reviewers` with `not_applicable` evidence and set the `ai_readiness_upkeep` ledger gate to `not_applicable`.
+- If launched, record its inline or built-in subagent evidence id in `reviewer_launch`.
 - The reviewer must emit an `ai_readiness_upkeep_report` and run `skills/ai-readiness-upkeep/scripts/ai-readiness-upkeep.ts validate-report` against it.
 - A validated report with `verdict: passed` maps to reviewer outcome `passed`.
 - A validated report with `verdict: findings` may map to reviewer outcome `passed` only after nonblocking findings are recorded as residual risk or future work.
 - A report with `verdict: blocked`, invalid YAML, unknown lanes, or missing required fields maps to reviewer outcome `blocked` until the implementer applies fixes or the user explicitly accepts the trade-off.
-- The final `reviewer_subagent_report` must not contain unresolved `findings` or `blocked` outcomes.
+- The final `reviewer_report` must not contain unresolved `findings` or `blocked` outcomes.
 
 Update review guidance so PR/MR reviews can invoke the skill when the review finds missing enforcement rather than only code correctness issues.
 

@@ -4,12 +4,6 @@
     "canonicalSkillsDir": "~/.agents/skills",
     "skillSymlinkTargets": ["~/.claude/skills"],
     "reusableScripts": ["scripts/planning-contracts.ts"],
-    "canonicalAgentsDir": "~/.agents/agents",
-    "agentSymlinkTargets": {
-      "codex": "~/.codex/agents",
-      "claude": "~/.claude/agents",
-      "opencode": "~/.config/opencode/agents"
-    },
     "instructionSymlinkTargets": {
       "agents": "~/.agents",
       "claude": "~/.claude",
@@ -68,56 +62,6 @@
         "rules/investigation-and-implementation.md",
         "rules/session-startup.md"
       ]
-    }
-  },
-  "agentModelMappings": {
-    "implementer-agent": {
-      "codex": {
-        "model": "gpt-5.4",
-        "reasoning": "high"
-      },
-      "claude": {
-        "model": "sonnet"
-      },
-      "opencode": {
-        "model": "anthropic/claude-sonnet"
-      }
-    },
-    "implementation-review-agent": {
-      "codex": {
-        "model": "gpt-5.5",
-        "reasoning": "xhigh"
-      },
-      "claude": {
-        "model": "opus"
-      },
-      "opencode": {
-        "model": "anthropic/claude-opus"
-      }
-    },
-    "github-review-agent": {
-      "codex": {
-        "model": "gpt-5.5",
-        "reasoning": "xhigh"
-      },
-      "claude": {
-        "model": "opus"
-      },
-      "opencode": {
-        "model": "anthropic/claude-opus"
-      }
-    },
-    "gitlab-review-agent": {
-      "codex": {
-        "model": "gpt-5.5",
-        "reasoning": "xhigh"
-      },
-      "claude": {
-        "model": "opus"
-      },
-      "opencode": {
-        "model": "anthropic/claude-opus"
-      }
     }
   },
   "blocks": {

@@ -14,7 +14,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
 
@@ -185,7 +185,7 @@ test("CLI validates all runtime scopes", () => {
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.match(result.stdout, /Validated 1 profile/);
-    assert.match(result.stdout, /Validated agent configuration/);
+    assert.match(result.stdout, /No custom agents configured/);
     assert.match(result.stdout, /Validated instruction configuration/);
   });
 });
@@ -327,25 +327,15 @@ test("CLI rejects flags outside their command scope", () => {
     "skills",
     "status",
     "--agent",
-    "implementation-review-agent",
+    "example-agent",
   ]);
 
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /unknown option '--agent'/);
 });
 
-test("CLI installs and reports agent generation", () => {
+test("CLI reports no custom agents and prunes retired generated agents", () => {
   withFixture(({ configPath, runtimeDir }) => {
-    const install = runAgentRuntime([
-      "agents",
-      "install",
-      "--agent",
-      "implementer-agent",
-      "--config",
-      configPath,
-    ]);
-    assert.equal(install.status, 0, install.stderr || install.stdout);
-
     const generatedPath = join(
       runtimeDir,
       "agents",
@@ -382,31 +372,38 @@ test("CLI installs and reports agent generation", () => {
       "agents",
       "implementer-agent.md",
     );
-    const generated = readFileSync(generatedPath, "utf-8");
-    const codexGenerated = readFileSync(codexGeneratedPath, "utf-8");
-    const opencodeGenerated = readFileSync(opencodeGeneratedPath, "utf-8");
 
-    assert.match(generated, /^model: sonnet$/m);
-    assert.doesNotMatch(generated, /^reasoning:/m);
-    assert.match(codexGenerated, /^model: gpt-5\.4$/m);
-    assert.match(codexGenerated, /^reasoning: high$/m);
-    assert.match(opencodeGenerated, /^model: anthropic\/claude-sonnet$/m);
-    assert.doesNotMatch(opencodeGenerated, /^reasoning:/m);
-    assert.equal(lstatSync(linkPath).isSymbolicLink(), true);
-    assert.equal(lstatSync(codexLinkPath).isSymbolicLink(), true);
-    assert.equal(lstatSync(opencodeLinkPath).isSymbolicLink(), true);
+    for (const filePath of [
+      generatedPath,
+      linkPath,
+      codexGeneratedPath,
+      codexLinkPath,
+      opencodeGeneratedPath,
+      opencodeLinkPath,
+    ]) {
+      mkdirSync(dirname(filePath), { recursive: true });
+      writeFileSync(filePath, "stale\n", "utf-8");
+    }
 
-    const status = runAgentRuntime([
+    const update = runAgentRuntime([
       "agents",
-      "status",
-      "--agent",
-      "implementer-agent",
+      "update",
       "--config",
       configPath,
     ]);
-    assert.equal(status.status, 0, status.stderr || status.stdout);
-    assert.match(status.stdout, /\[ok\].*generated/);
-    assert.match(status.stdout, /\[ok\].*implementer-agent\.md/);
+    assert.equal(update.status, 0, update.stderr || update.stdout);
+    assert.match(update.stdout, /No custom agents configured/);
+
+    for (const filePath of [
+      generatedPath,
+      linkPath,
+      codexGeneratedPath,
+      codexLinkPath,
+      opencodeGeneratedPath,
+      opencodeLinkPath,
+    ]) {
+      assert.equal(existsSync(filePath), false);
+    }
   });
 });
 
