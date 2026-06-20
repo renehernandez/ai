@@ -4,6 +4,9 @@ Use these rules when work may continue in another thread, another agent surface,
 
 ## Handoff Brief
 
+If a handoff is written as YAML or JSON, include a concise `## Readable Summary`
+before the structured block so the thread remains scannable.
+
 When handing off non-trivial work, include:
 
 - objective and current decision;

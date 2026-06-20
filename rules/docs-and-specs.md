@@ -11,6 +11,14 @@ These rules cover documentation workflow, OpenSpec, and diagrams.
 - Trivial edits, such as fixing a typo, updating a stale path, or adding a one-line clarification, do not require `/doc-smith`.
 - The rule applies in plan mode and normal mode.
 
+## Machine-Readable Thread Contracts
+
+- When writing a machine-readable YAML or JSON block back to a chat thread, first include a concise `## Readable Summary`.
+- This applies to handoffs, ledgers, gate reports, reviewer reports, OpenSpec blueprints, plan delivery artifacts, automation state, and other structured contracts.
+- Keep the summary to 3-6 bullets naming status, artifact, scope or unit, verification or gate state, blockers, and next action as relevant.
+- Keep the YAML or JSON block immediately after the summary so machine readers still have the structured contract.
+- Tiny scalar command outputs and ordinary code or config snippets are exempt.
+
 ## OpenSpec Changes
 
 - Never write OpenSpec proposals, designs, specs, or tasks directly.

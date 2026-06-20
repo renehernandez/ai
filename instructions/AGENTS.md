@@ -22,7 +22,7 @@ The linked rule files are normative and preserve the detailed policies.
 - In brainstorming or planning threads, treat agreement as design confirmation only. Do not edit files, generate migrations, or start implementation from scope agreement alone; wait for an explicit implementation trigger such as "implement this", "make the changes", "start the PR", "go ahead and code it", or "apply the plan".
 - When the user says they dislike a proposed name, structure, or design shape, provide alternatives and tradeoffs before changing files, even if they did not explicitly ask for alternatives.
 - For JavaScript and TypeScript projects, invoke package-managed commands through the package manager, such as `pnpm exec`, `pnpm dlx`, or `pnpm run`; never call binaries inside `node_modules` directly.
-- After changing shared skill sources in this repo, run `writing-skills` against the changed skill before committing. Then refresh the installed runtime copies before treating the change as live with `pnpm agent-runtime skills update --profile <name>`, and confirm the active runtime surface with `pnpm agent-runtime skills status --profile <name>` or `pnpm agent-runtime validate --profile <name>`.
+- After changing shared skill, agent, instruction, or rule sources in this repo, run `writing-skills` against the changed agent behavior before committing. For shared skill changes, refresh the installed runtime copies before treating the change as live with `pnpm agent-runtime skills update --profile <name>`, and confirm the active runtime surface with `pnpm agent-runtime skills status --profile <name>` or `pnpm agent-runtime validate --profile <name>`.
 - Write agent and Codex hooks in TypeScript unless there is a specific runtime requirement that makes another language a better fit.
 - In troubleshooting mode, diagnose and report before editing or fixing anything.
 - For multi-file implementation requests, delegate to the `implementer-agent`. If already running as `implementer-agent`, execute the approved plan.
@@ -38,6 +38,7 @@ The linked rule files are normative and preserve the detailed policies.
   labels. Prefer precise phrases such as browser route checks, responsive
   viewport checks, console checks, local browser E2E tests, deployed-preview E2E
   tests, or manual browser verification.
+- When returning machine-readable YAML or JSON contracts in chat, first include a concise `## Readable Summary`, then include the structured block for machine use.
 
 ## Harness Entrypoints
 
