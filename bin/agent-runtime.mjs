@@ -14,7 +14,10 @@ const result = spawnSync(
   ["--import", tsxLoader, runtimeScript, ...process.argv.slice(2)],
   {
     cwd: process.cwd(),
-    env: process.env,
+    env: {
+      ...process.env,
+      AGENT_RUNTIME_EXECUTABLE_PATH: process.argv[1] ?? "",
+    },
     stdio: "inherit",
   },
 );

@@ -10,6 +10,7 @@ import {
   readdirSync,
   readFileSync,
   readlinkSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -151,6 +152,18 @@ function assertSafeRuntimeArgs(args: string[]): void {
       false,
       "mutating agent-runtime integration tests must pass an explicit fixture --config",
     );
+  }
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function realPathIfPossible(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
   }
 }
 
@@ -298,6 +311,47 @@ test("global bin uses central config and target cwd for repo-local scope", () =>
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.match(result.stdout, /OpenSpec CLI:/);
+    assert.match(
+      result.stdout,
+      /\[missing\] OpenSpec config: openspec\/config.yaml/,
+    );
+  } finally {
+    rmSync(targetDir, { force: true, recursive: true });
+  }
+});
+
+test("global status reports runtime roots and target OpenSpec readiness", () => {
+  const targetDir = mkdtempSync(join(tmpdir(), "agent-runtime-status-"));
+  try {
+    writeFileSync(
+      join(targetDir, "agent-runtime.config.json"),
+      "not valid json\n",
+      "utf-8",
+    );
+    const result = runAgentRuntimeBin(["status"], {
+      cwd: targetDir,
+      env: addOpenSpecStub(targetDir),
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /Agent Runtime/);
+    assert.match(
+      result.stdout,
+      new RegExp(`Source root: ${escapeRegExp(repoRoot)}`),
+    );
+    assert.match(
+      result.stdout,
+      new RegExp(
+        `Config path: ${escapeRegExp(join(repoRoot, "agent-runtime.config.json"))}`,
+      ),
+    );
+    assert.match(
+      result.stdout,
+      new RegExp(`Target root: ${escapeRegExp(realPathIfPossible(targetDir))}`),
+    );
+    assert.match(result.stdout, /\[ok\] Executable link:/);
+    assert.match(result.stdout, /Reusable script/);
+    assert.match(result.stdout, /OpenSpec/);
     assert.match(
       result.stdout,
       /\[missing\] OpenSpec config: openspec\/config.yaml/,

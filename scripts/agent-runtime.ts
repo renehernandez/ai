@@ -280,6 +280,10 @@ export function executeParsedCommand(input: ParsedArgs): void {
   }
 
   if (!scope) {
+    if (command === "status" && !profileNames?.length && !allProfiles) {
+      runRuntimeStatus(config, runtimeContext);
+      return;
+    }
     const profileSelection = resolveProfileSelection(config, {
       profileNames,
       allProfiles,
@@ -492,7 +496,10 @@ export function createRuntimeInvocationContext(
   return {
     sourceRoot: runtimeSourceRoot(),
     targetRoot: process.cwd(),
-    executablePath: process.argv[1] ? resolve(process.argv[1]) : "",
+    executablePath:
+      process.env.AGENT_RUNTIME_EXECUTABLE_PATH || process.argv[1]
+        ? resolve(process.env.AGENT_RUNTIME_EXECUTABLE_PATH || process.argv[1])
+        : "",
     configPath: resolve(configPath),
   };
 }
@@ -851,6 +858,74 @@ function runOpenSpec(command: RuntimeCommand, config: Config): void {
   }
   normalizeOpenSpecScaffolding(openspec);
   console.log("Updated repo-local OpenSpec scaffolding.");
+}
+
+function runRuntimeStatus(
+  config: Config,
+  context: RuntimeInvocationContext,
+): void {
+  const profileSelection = {
+    profileNames: configuredProfileNames(config),
+    interactive: false,
+  };
+
+  console.log("Agent Runtime");
+  console.log(`Source root: ${context.sourceRoot}`);
+  console.log(`Config path: ${context.configPath}`);
+  console.log(`Target root: ${context.targetRoot}`);
+  console.log(`Executable path: ${context.executablePath || "(unknown)"}`);
+  printExecutableLinkStatus(context);
+  console.log("");
+
+  console.log("Skills");
+  runSkills("status", config, profileSelection);
+  console.log("");
+
+  console.log("Instructions");
+  runInstructions("status", config, profileSelection);
+  console.log("");
+
+  console.log("Hooks");
+  runHooks("status", config);
+  console.log("");
+
+  console.log("OpenSpec");
+  withWorkingDirectory(context.targetRoot, () => {
+    runOpenSpec("status", config);
+  });
+}
+
+function printExecutableLinkStatus(context: RuntimeInvocationContext): void {
+  if (!context.executablePath) {
+    console.log("[unknown] Executable link: unavailable");
+    return;
+  }
+
+  const executableRealPath = realPathIfExists(context.executablePath);
+  const sourceRealPath = realPathIfExists(context.sourceRoot);
+  if (pathIsWithin(executableRealPath, sourceRealPath)) {
+    console.log(`[ok] Executable link: ${executableRealPath}`);
+    return;
+  }
+  console.log(`[external] Executable link: ${executableRealPath}`);
+}
+
+function withWorkingDirectory<T>(directory: string, callback: () => T): T {
+  const originalCwd = process.cwd();
+  try {
+    process.chdir(directory);
+    return callback();
+  } finally {
+    process.chdir(originalCwd);
+  }
+}
+
+function pathIsWithin(path: string, parent: string): boolean {
+  const relativePath = relative(parent, path);
+  return (
+    relativePath.length === 0 ||
+    (!relativePath.startsWith("..") && !isAbsolute(relativePath))
+  );
 }
 
 function backupOpenSpecExternalTargets(config: ResolvedOpenSpecConfig): void {

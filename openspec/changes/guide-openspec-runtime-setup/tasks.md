@@ -1,7 +1,7 @@
 ## 1. Global Runtime Entrypoint
 
 - [x] 1.1 Add globally linked `agent-runtime` packaging and central source/config/target root resolution.
-- [ ] 1.2 Add read-only top-level `agent-runtime status` for global runtime installation health, managed runtime surfaces, reusable scripts, hooks, and target OpenSpec readiness.
+- [x] 1.2 Add read-only top-level `agent-runtime status` for global runtime installation health, managed runtime surfaces, reusable scripts, hooks, and target OpenSpec readiness.
 
 ## 2. State Classification And Command Boundaries
 
