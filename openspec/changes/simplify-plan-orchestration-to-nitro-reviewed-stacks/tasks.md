@@ -33,13 +33,13 @@
 
 ## 4. Orchestrator Resume And Completion
 
-- [ ] 4.1 Update `plan-orchestrator` docs, script helpers, adapter prompt, and
+- [x] 4.1 Update `plan-orchestrator` docs, script helpers, adapter prompt, and
       tests for ready plan, OpenSpec blueprint, existing OpenSpec, and
       continue/resume intake paths.
-- [ ] 4.2 Add resume inspection for planning MR, implementation stack order,
+- [x] 4.2 Add resume inspection for planning MR, implementation stack order,
       current stack tip, every MR head SHA, every MR Nitro gate state,
       `tasks.md` state, and restack requirements.
-- [ ] 4.3 Report `stack_ready` only after the planning MR and every
+- [x] 4.3 Report `stack_ready` only after the planning MR and every
       implementation MR in stack order have clean latest-head Nitro gates and
       stack integrity evidence.
 

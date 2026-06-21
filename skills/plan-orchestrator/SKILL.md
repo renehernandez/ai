@@ -27,12 +27,20 @@ All work goes through planning review before implementation:
 7. Run `plan-unit-sequencer` for unit selection.
 8. Let `plan-unit-delivery` implement exactly one selected unit at a time.
 
-## Planning Review Modes
+## Stacked Delivery Mode
 
-| Mode | Implementation may start when |
-| --- | --- |
-| `ship_then_continue` | The planning PR or MR has merged into the target branch. |
-| `stack_when_ready` | The planning PR or MR has all feedback addressed, is ready for merge, and its reviewed head is a valid stack base. |
+The only implementation mode is `stacked_delivery`.
+
+Implementation may start only when `plan-review` emits a validated
+`planning_review` with:
+
+- `mode: stacked_delivery`;
+- `gate_outcome: ready_for_stack`;
+- a passed latest-head `nitro_feedback_gate`;
+- `stack_base_ref`, `stack_base_evidence`, and `stack_identity`.
+
+Do not accept `ship_then_continue` or `stack_when_ready`. Treat them as legacy
+inputs and return `needs_plan_ready`.
 
 ## OpenSpec Proposal Flow
 
@@ -46,12 +54,48 @@ For `openspec_blueprint` outputs:
 5. Do not start implementation until `plan-review` emits valid
    `planning_review`.
 
+## Resume Flow
+
+Before continuing existing work, inspect and validate resume state with
+`scripts/plan-orchestrator.ts resume-template` and `validate-resume`.
+
+The resume state must account for:
+
+- intake kind: ready plan, OpenSpec blueprint, existing OpenSpec, or
+  continue/resume;
+- planning MR and latest Nitro gate state;
+- implementation stack order;
+- current stack tip;
+- latest head SHA and Nitro gate state for every MR;
+- stack-tip `tasks.md` fingerprint;
+- restack requirements and evidence.
+
+If an earlier MR changed after descendants exist, restack affected descendants
+and rerun Nitro gates for every changed head before continuing.
+
+## Completion
+
+Finish with `stack_ready` only after:
+
+- the planning MR and every implementation MR have latest-head Nitro gate
+  outcome `passed`;
+- stack base/head relationships are valid;
+- stack-tip task state has all deliverable tasks checked;
+- `restack_required` is `false`.
+
+Validate the final result with `scripts/plan-orchestrator.ts
+validate-stack-ready`.
+
 ## Scripts
 
 - `scripts/plan-orchestrator.ts detect`
 - `scripts/plan-orchestrator.ts plan-review-request-template`
 - `scripts/plan-orchestrator.ts validate-planning-review --file <path>`
 - `scripts/plan-orchestrator.ts validate-openspec-change <change-id>`
+- `scripts/plan-orchestrator.ts resume-template`
+- `scripts/plan-orchestrator.ts validate-resume --file <path>`
+- `scripts/plan-orchestrator.ts stack-ready-template`
+- `scripts/plan-orchestrator.ts validate-stack-ready --file <path>`
 
 ## Rejections
 
