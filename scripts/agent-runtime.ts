@@ -157,6 +157,7 @@ export type StartupHookRegistrationResult = {
 export type StartupHookStatus = {
   registered: boolean;
   locations: StartupHookLocation[];
+  staleLocations: StartupHookLocation[];
   trustState: "trusted" | "missing" | "not_applicable";
   gaps: string[];
 };
@@ -1197,19 +1198,28 @@ export function codexStartupHookStatus(
 ): StartupHookStatus {
   const hooksJsonPath = expandHome(input.hooksJsonPath);
   const configTomlPath = expandHome(input.configTomlPath);
-  const locations = startupHookLocations(hooksJsonPath, input.command);
+  const document = readHookConfigDocument(hooksJsonPath);
+  const locations = findStartupHookLocations(document, input.command);
+  const staleLocations = findStaleManagedStartupHookLocations(
+    document,
+    input.command,
+  );
   const gaps: string[] = [];
   if (locations.length === 0) {
     gaps.push("codex startup hook registration missing");
     return {
       registered: false,
       locations,
+      staleLocations,
       trustState: "not_applicable",
       gaps,
     };
   }
   if (locations.length > 1) {
     gaps.push("codex startup hook duplicate registrations");
+  }
+  if (staleLocations.length > 0) {
+    gaps.push("codex startup hook stale registrations");
   }
 
   const configToml = existsSync(configTomlPath)
@@ -1230,6 +1240,7 @@ export function codexStartupHookStatus(
   return {
     registered: true,
     locations,
+    staleLocations,
     trustState: untrustedLocations.length === 0 ? "trusted" : "missing",
     gaps,
   };
@@ -1247,8 +1258,11 @@ export function registerClaudeStartupHook(
 export function claudeStartupHookStatus(
   input: ClaudeStartupHookRegistrationInput,
 ): StartupHookStatus {
-  const locations = startupHookLocations(
-    expandHome(input.settingsJsonPath),
+  const settingsJsonPath = expandHome(input.settingsJsonPath);
+  const document = readHookConfigDocument(settingsJsonPath);
+  const locations = findStartupHookLocations(document, input.command);
+  const staleLocations = findStaleManagedStartupHookLocations(
+    document,
     input.command,
   );
   const gaps: string[] = [];
@@ -1258,9 +1272,13 @@ export function claudeStartupHookStatus(
   if (locations.length > 1) {
     gaps.push("claude startup hook duplicate registrations");
   }
+  if (staleLocations.length > 0) {
+    gaps.push("claude startup hook stale registrations");
+  }
   return {
     registered: locations.length > 0,
     locations,
+    staleLocations,
     trustState: "not_applicable",
     gaps,
   };
@@ -1271,14 +1289,15 @@ function registerStartupHookInJson(
   command: string,
 ): StartupHookRegistrationResult {
   const document = readHookConfigDocument(configPath);
+  const staleChanged = removeStaleManagedStartupHooks(document, command);
   const existingLocations = findStartupHookLocations(document, command);
   if (existingLocations.length > 0) {
     const changed = removeDuplicateStartupHooks(document, command);
-    if (changed) {
+    if (staleChanged || changed) {
       mkdirSync(dirname(configPath), { recursive: true });
       writeJson(configPath, document);
     }
-    return { changed, location: existingLocations[0] };
+    return { changed: staleChanged || changed, location: existingLocations[0] };
   }
 
   const sessionStart = ensureSessionStartMatchers(document);
@@ -1306,16 +1325,6 @@ function registerStartupHookInJson(
       hookIndex,
     },
   };
-}
-
-function startupHookLocations(
-  configPath: string,
-  command: string,
-): StartupHookLocation[] {
-  if (!existsSync(configPath)) {
-    return [];
-  }
-  return findStartupHookLocations(readHookConfigDocument(configPath), command);
 }
 
 function readHookConfigDocument(configPath: string): HookConfigDocument {
@@ -1396,6 +1405,29 @@ function removeDuplicateStartupHooks(
   return changed;
 }
 
+function removeStaleManagedStartupHooks(
+  document: HookConfigDocument,
+  command: string,
+): boolean {
+  const staleLocations = findStaleManagedStartupHookLocations(
+    document,
+    command,
+  );
+  if (staleLocations.length === 0) {
+    return false;
+  }
+  const sessionStart = ensureSessionStartMatchers(document);
+  for (const matcher of sessionStart) {
+    if (!matcher.hooks) {
+      continue;
+    }
+    matcher.hooks = matcher.hooks.filter((hook) => {
+      return !isStaleManagedStartupHook(hook, command);
+    });
+  }
+  return true;
+}
+
 function findStartupHookLocations(
   document: HookConfigDocument,
   command: string,
@@ -1423,6 +1455,42 @@ function findStartupHookLocations(
     }
   }
   return locations;
+}
+
+function findStaleManagedStartupHookLocations(
+  document: HookConfigDocument,
+  command: string,
+): StartupHookLocation[] {
+  const sessionStart = ensureSessionStartMatchers(document);
+
+  const locations: StartupHookLocation[] = [];
+  for (const [matcherIndex, matcher] of sessionStart.entries()) {
+    if (!matcher.hooks) {
+      continue;
+    }
+    for (const [hookIndex, hook] of matcher.hooks.entries()) {
+      if (isPlainRecord(hook) && isStaleManagedStartupHook(hook, command)) {
+        locations.push({
+          event: "SessionStart",
+          eventKey: "session_start",
+          matcherIndex,
+          hookIndex,
+        });
+      }
+    }
+  }
+  return locations;
+}
+
+function isStaleManagedStartupHook(
+  hook: HookCommand,
+  command: string,
+): boolean {
+  return (
+    hook.type === "command" &&
+    hook.command !== command &&
+    hook.command?.includes("startup-git-sync.ts") === true
+  );
 }
 
 function codexHookLocationIsTrusted(input: {
@@ -1689,7 +1757,11 @@ function hookRegistrationTargets(
 }
 
 function hookRegistrationNeedsMutation(status: StartupHookStatus): boolean {
-  return !status.registered || status.locations.length > 1;
+  return (
+    !status.registered ||
+    status.locations.length > 1 ||
+    status.staleLocations.length > 0
+  );
 }
 
 function statusHooks(config: ResolvedHooksConfig): void {
@@ -1787,6 +1859,11 @@ function collectBlockingRegistrationGaps(
   if (status.locations.length > 1) {
     errors.push(
       `${targetName}: ${targetName} startup hook duplicate registrations`,
+    );
+  }
+  if (status.staleLocations.length > 0) {
+    errors.push(
+      `${targetName}: ${targetName} startup hook stale registrations`,
     );
   }
 }

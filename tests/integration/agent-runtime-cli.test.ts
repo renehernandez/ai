@@ -682,6 +682,35 @@ test("CLI installs and reports managed hook symlinks", () => {
       manifestsAfterInstall.length,
     );
 
+    const updatedConfig = JSON.parse(
+      readFileSync(configPath, "utf-8"),
+    ) as FixtureConfig;
+    (
+      (
+        (updatedConfig.runtime as Record<string, unknown>).hooks as Record<
+          string,
+          unknown
+        >
+      ).startupRemote as Record<string, unknown>
+    ).name = "github";
+    writeFileSync(configPath, `${JSON.stringify(updatedConfig, null, 2)}\n`);
+
+    const remoteUpdate = runAgentRuntime([
+      "hooks",
+      "update",
+      "--config",
+      configPath,
+    ]);
+    assert.equal(
+      remoteUpdate.status,
+      0,
+      remoteUpdate.stderr || remoteUpdate.stdout,
+    );
+    const updatedCodexDocument = readFileSync(codexHooksJson, "utf-8");
+    assert.equal(matchCount(updatedCodexDocument, /startup-git-sync\.ts/g), 1);
+    assert.match(updatedCodexDocument, /--remote\\" \\"github/);
+    assert.doesNotMatch(updatedCodexDocument, /--remote\\" \\"origin/);
+
     writeFileSync(
       claudeSettings,
       JSON.stringify({ model: "fable", hooks: {} }, null, 2),

@@ -17,7 +17,7 @@
         "codex": "~/.codex/hooks"
       },
       "startupRemote": {
-        "name": "origin",
+        "name": "github",
         "expectedUrl": "https://github.com/renehernandez/ai.git"
       }
     },

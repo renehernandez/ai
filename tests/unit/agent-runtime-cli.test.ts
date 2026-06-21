@@ -275,6 +275,7 @@ test("codexStartupHookStatus reports missing registration and trust gaps", () =>
       {
         registered: false,
         locations: [],
+        staleLocations: [],
         trustState: "not_applicable",
         gaps: ["codex startup hook registration missing"],
       },
@@ -293,6 +294,7 @@ test("codexStartupHookStatus reports missing registration and trust gaps", () =>
             hookIndex: 0,
           },
         ],
+        staleLocations: [],
         trustState: "missing",
         gaps: ["codex startup hook trust missing"],
       },
@@ -315,6 +317,7 @@ test("codexStartupHookStatus reports missing registration and trust gaps", () =>
             hookIndex: 0,
           },
         ],
+        staleLocations: [],
         trustState: "trusted",
         gaps: [],
       },
@@ -369,6 +372,7 @@ test("codexStartupHookStatus reports missing registration and trust gaps", () =>
             hookIndex: 1,
           },
         ],
+        staleLocations: [],
         trustState: "trusted",
         gaps: ["codex startup hook duplicate registrations"],
       },
@@ -480,6 +484,7 @@ test("claudeStartupHookStatus reports registration gaps without trust state", ()
     assert.deepEqual(claudeStartupHookStatus({ settingsJsonPath, command }), {
       registered: false,
       locations: [],
+      staleLocations: [],
       trustState: "not_applicable",
       gaps: ["claude startup hook registration missing"],
     });
@@ -495,6 +500,7 @@ test("claudeStartupHookStatus reports registration gaps without trust state", ()
           hookIndex: 0,
         },
       ],
+      staleLocations: [],
       trustState: "not_applicable",
       gaps: [],
     });
@@ -541,6 +547,7 @@ test("claudeStartupHookStatus reports registration gaps without trust state", ()
           hookIndex: 1,
         },
       ],
+      staleLocations: [],
       trustState: "not_applicable",
       gaps: ["claude startup hook duplicate registrations"],
     });
