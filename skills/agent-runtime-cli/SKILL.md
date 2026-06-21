@@ -8,9 +8,11 @@ allowed-tools: Read, Grep, Bash(git:*), Bash(pnpm:*)
 
 ## Overview
 
-Use the package-managed CLI, `pnpm agent-runtime ...`, as the entrypoint for
-shared runtime assets. Prefer the wrapper over direct script execution, direct
-filesystem edits to installed runtime copies, or raw upstream OpenSpec setup.
+Use the runtime CLI as the entrypoint for shared runtime assets. Inside this AI
+repo, use `pnpm agent-runtime ...`. From another target project, use the
+globally linked `agent-runtime ...` binary when available. Prefer the wrapper
+over direct script execution, direct filesystem edits to installed runtime
+copies, or raw upstream OpenSpec setup.
 
 ## First Move
 
@@ -20,6 +22,7 @@ filesystem edits to installed runtime copies, or raw upstream OpenSpec setup.
    ```
 2. Choose the narrowest runtime scope that matches the work.
 3. Inspect that scope before mutating it:
+   - whole runtime from any target repo: `agent-runtime status`;
    - profile-managed runtime assets: `pnpm agent-runtime status --profile <name>`;
    - skills only: `pnpm agent-runtime skills status --profile <name>`;
    - instructions only: `pnpm agent-runtime instructions status --profile <name>`;
@@ -61,13 +64,19 @@ Runtime profiles select installed skill and instruction surfaces such as
 `--config <path>` is the shared override when a non-default
 `agent-runtime.config.json` is required.
 
+When invoked through the globally linked `agent-runtime` binary, source root and
+default config path resolve to the durable AI repo. Repo-local scopes such as
+`openspec` target the current working directory. Do not silently run AI repo
+package scripts against a target repo to simulate global usage; use the linked
+binary or explicitly explain the source/config/target roots before proceeding.
+
 ## OpenSpec Setup
 
 Do not run raw `openspec init` for repo-local managed setup. Use:
 
 ```bash
 pnpm agent-runtime openspec status
-pnpm agent-runtime openspec install
+pnpm agent-runtime openspec install --context-file ./openspec-context.md
 pnpm agent-runtime openspec update
 pnpm agent-runtime openspec validate
 ```
@@ -83,6 +92,21 @@ State rules:
 When a repo already has OpenSpec files, run `status` and `validate` before any
 mutation. Run `install` only when setup is missing. Run `update` for configured
 projects or after repair guidance indicates generated assets should refresh.
+
+First-time install writes confirmed `openspec/config.yaml` before upstream
+generation. In headless mode, provide `--context-file <path>`; do not invent or
+accept inferred context with an `--accept-inferred-config` flag. Interactive
+install previews tools, schema, profile, delivery, workflows, context, and rules
+before asking for confirmation.
+
+Normal update is asset-focused and exits without mutation when generated assets
+validate as current. To review inferred config context/rule changes, opt in with
+`--review-config`; in headless mode add `--accept-config-changes` only when the
+proposed merged config should be written.
+
+`openspec validate` checks repo config quality, generated asset targets,
+reusable runtime scripts, and symlink normalization. Run it after install,
+update, or accepted config review.
 
 ## After Shared Asset Changes
 
@@ -105,8 +129,10 @@ command before finishing.
 | Mistake | Fix |
 | --- | --- |
 | Running raw `openspec init` in a managed repo | Use `pnpm agent-runtime openspec install` only for missing setup. |
+| Running headless OpenSpec install without confirmed context | Provide `--context-file <path>`; do not use unsupported `--accept-inferred-config`. |
 | Passing `--profile` to `openspec` or `hooks` | Use profile flags only on top-level, `skills`, and `instructions` commands. |
 | Running `install` on an existing OpenSpec footprint | Run `status` and `validate`; use `update` for configured scaffolding. |
+| Expecting normal `openspec update` to rewrite config | Use `update --review-config`, and add `--accept-config-changes` only for accepted headless writes. |
 | Editing installed runtime copies directly | Edit source in this repo, then run the matching `agent-runtime ... update`. |
 | Calling work complete after source edits only | Refresh installed copies and run profile validation. |
 | Guessing flags from memory | Run `pnpm agent-runtime <scope> <command> --help`. |

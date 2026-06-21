@@ -24,4 +24,4 @@
 
 - [x] 5.1 Extend `agent-runtime openspec validate` for repo-local config quality, resolved generated-asset targets, reusable runtime scripts, and symlink normalization drift.
 - [x] 5.2 Add focused tests with an argv/env-recording fake OpenSpec CLI, linked-bin/root-resolution fixtures, context-file install input, and partial-state preservation fixtures.
-- [ ] 5.3 Update CLI help, runtime docs, `AGENTS.md`, and `skills/agent-runtime-cli/SKILL.md` for global CLI usage, root semantics, first-time install, configured-project update, and installed-surface refresh expectations.
+- [x] 5.3 Update CLI help, runtime docs, `AGENTS.md`, and `skills/agent-runtime-cli/SKILL.md` for global CLI usage, root semantics, first-time install, configured-project update, and installed-surface refresh expectations.

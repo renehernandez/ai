@@ -59,6 +59,23 @@ Portable user-level instructions that are installed into runtime profiles live i
 
 - Use `pnpm agent-runtime openspec install|update|validate|status` to manage
   repo-local OpenSpec scaffolding.
+- When invoked as a globally linked `agent-runtime` command from another repo,
+  the runtime source/config root remains this AI repo by default, while
+  repo-local scopes such as `openspec` target the invocation current working
+  directory. Use top-level `agent-runtime status` to verify source root, config
+  path, target root, executable link health, managed runtime surfaces, hooks,
+  and target OpenSpec readiness.
+- Run `agent-runtime openspec install` only for missing OpenSpec setup. Headless
+  install requires `--context-file <path>` with confirmed project context before
+  writing `openspec/config.yaml`; interactive install previews inferred config
+  and asks for confirmation. Do not use `--accept-inferred-config`.
+- Run `agent-runtime openspec update` for configured projects. Normal update is
+  asset-focused and skips mutation when validation reports generated assets are
+  current. Use `--review-config` to review inferred context/rule changes, and
+  use `--accept-config-changes` only when applying those changes headlessly.
+- Run `agent-runtime openspec validate` after install, update, or config review;
+  validation checks repo config quality, generated asset targets, reusable
+  runtime scripts, and symlink normalization.
 - OpenSpec-generated skills are canonical under `.agents/skills/openspec-*` for
   this repo, with `.codex/skills/openspec-*` and
   `.claude/skills/openspec-*` pointing back by relative symlink.
