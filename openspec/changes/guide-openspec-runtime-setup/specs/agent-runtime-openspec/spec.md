@@ -19,6 +19,10 @@ update`, `agent-runtime openspec status`, and `agent-runtime openspec validate`.
 - **THEN** `agent-runtime openspec install` fails with `repair_needed`
 - **AND** the output includes path-level findings
 
+#### Scenario: State inspection happens before mutation
+- **WHEN** `agent-runtime openspec install` or `agent-runtime openspec update` starts
+- **THEN** the command inspects OpenSpec state before backup, config write, upstream generation, or normalization
+
 ### Requirement: Guided first-time OpenSpec install
 The system SHALL create first-time OpenSpec configuration from confirmed
 defaults before generating repo-local OpenSpec assets.
@@ -28,16 +32,20 @@ defaults before generating repo-local OpenSpec assets.
 - **THEN** the command shows inferred setup defaults for tools, schema, workflow profile, delivery, and workflows
 - **AND** the user can accept, edit, or skip meaningful sections before files are written
 
-#### Scenario: Headless install requires explicit acceptance
+#### Scenario: Headless install requires context file
 - **WHEN** `agent-runtime openspec install` runs without a TTY
-- **AND** `--accept-inferred-config` is not provided
+- **AND** `--context-file <path>` is not provided
 - **THEN** the command fails with `confirmation_required`
 - **AND** no OpenSpec files are written
 
-#### Scenario: Headless install accepts inferred config
-- **WHEN** `agent-runtime openspec install --accept-inferred-config` runs without a TTY for missing OpenSpec state
-- **THEN** the command writes `openspec/config.yaml` from inferred required values
+#### Scenario: Headless install uses confirmed context file
+- **WHEN** `agent-runtime openspec install --context-file <path>` runs without a TTY for missing OpenSpec state
+- **THEN** the command writes `openspec/config.yaml` from inferred required values and the provided project context
 - **AND** it runs upstream OpenSpec generation
+
+#### Scenario: Accept-inferred config is not supported
+- **WHEN** help, docs, tests, or agent guidance describe headless first-time OpenSpec install
+- **THEN** they do not offer `--accept-inferred-config` as a supported contract
 
 ### Requirement: Deterministic upstream OpenSpec generation
 The system SHALL run upstream OpenSpec generation with deterministic runtime
@@ -57,6 +65,11 @@ inputs isolated from ambient user-level OpenSpec global configuration.
 - **WHEN** first-time install writes confirmed `openspec/config.yaml`
 - **AND** upstream OpenSpec generation completes
 - **THEN** the final `openspec/config.yaml` preserves the confirmed values
+
+#### Scenario: Failed generation leaves repairable state
+- **WHEN** upstream generation or normalization fails after files were staged or written
+- **THEN** the command restores or stabilizes config, canonical assets, and harness symlinks where possible
+- **AND** reports repair findings instead of ambiguous drift
 
 ### Requirement: Configured-project update reconciliation
 The system SHALL make `agent-runtime openspec update` reconcile configured
