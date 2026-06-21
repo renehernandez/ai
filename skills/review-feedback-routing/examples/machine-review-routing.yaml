@@ -17,6 +17,10 @@ routes:
         wait_mode: poll
         trigger: review_requested
         required: true
+        wait:
+          start_ack_timeout_minutes: 10
+          poll_interval_minutes: 1
+          start_timeout_outcome: nitro_review_start_blocked
         capabilities:
           request_review: true
           poll_feedback: true

@@ -97,6 +97,17 @@ $defs:
         type: string
       required:
         type: boolean
+      wait:
+        type: object
+        properties:
+          start_ack_timeout_minutes:
+            type: integer
+            minimum: 1
+          poll_interval_minutes:
+            type: integer
+            minimum: 1
+          start_timeout_outcome:
+            type: string
       capabilities:
         type: object
         properties:

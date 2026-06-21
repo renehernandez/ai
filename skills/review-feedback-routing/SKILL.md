@@ -45,8 +45,16 @@ Do not put review routing in CLI runtime config JSON. That config is for CLI mec
 4. Use `review_feedback.primary` to request or wait for hosted feedback.
 5. Treat `review_feedback.experimental` as opt-in only.
 6. Normalize reviewer output before feeding it into `diff-review`.
+7. When Nitro is required, validate the route and final feedback with
+   `scripts/nitro-feedback-gate.ts` before allowing a planning or delivery gate
+   to pass.
 
 If `origin`, `upstream`, or a supplied PR/MR URL point to different artifact hosts, prefer the host for the artifact being created or reviewed. If that is still ambiguous, ask one blocking question. Never fail open to the first route.
+
+For the first stacked-delivery cut, required Nitro feedback is supported only
+for Fullscript GitLab merge requests. GitHub PRs, non-Fullscript GitLab MRs,
+and ambiguous artifact hosts return `nitro_route_unsupported`; do not
+substitute Codex or another reviewer.
 
 ## Request Semantics
 
@@ -58,6 +66,18 @@ If `origin`, `upstream`, or a supplied PR/MR URL point to different artifact hos
 | `disabled` | Do not request that feedback route |
 
 Use `trigger` to clarify the expected automatic or explicit event, such as `artifact_created`, `review_requested`, `label_added`, or `comment_posted`. If `required: true`, the review gate cannot pass until latest-head feedback is collected and resolved. Missing, unavailable, stale, timed-out, or unresolved required feedback is blocking.
+
+For Nitro routes, use this default wait policy:
+
+```yaml
+wait:
+  start_ack_timeout_minutes: 10
+  poll_interval_minutes: 1
+  start_timeout_outcome: nitro_review_start_blocked
+```
+
+The timeout applies only to Nitro acknowledging or starting the review. Once
+Nitro starts, completion is pending until the latest-head review finishes.
 
 ## Staleness Rule
 
@@ -77,6 +97,34 @@ review_feedback:
 Use `passed` only when the routed reviewer produced latest-head feedback and no
 actionable findings remain. Use `blocked` for missing feedback, timeout, stale
 feedback, unavailable adapters, unresolved findings, or unknown head SHA.
+
+When the selected reviewer is Nitro, return the shared gate shape validated by
+`scripts/nitro-feedback-gate.ts validate`:
+
+```yaml
+nitro_feedback_gate:
+  artifact: <Fullscript GitLab MR URL>
+  head_sha: <latest MR head sha>
+  request:
+    required: true
+    requested_after_latest_push: true
+    evidence:
+      - <request command, note URL, or discussion evidence>
+  start:
+    status: started | blocked | pending
+    timeout_minutes: 10
+    poll_interval_minutes: 1
+    evidence:
+      - <Nitro pending review, acknowledgement, or start evidence>
+  completion:
+    status: clean | findings | stale | unavailable | pending
+    evidence:
+      - <Nitro latest-head completion evidence>
+  unresolved_actionable_feedback: []
+  non_actionable_feedback: []
+  stale_feedback_ignored: []
+  gate_outcome: passed | blocked | pending
+```
 
 ## Normalized Feedback Contract
 

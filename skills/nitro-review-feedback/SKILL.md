@@ -30,8 +30,19 @@ Collect Nitro feedback from Fullscript GitLab MRs and normalize it for `diff-rev
 4. Identify Nitro-authored feedback by author, bot identity, command response, or org convention visible in the payload.
 5. Classify feedback as pending, no issues, findings, unavailable, or stale.
 6. Normalize actionable findings to the shared contract.
+7. Convert Nitro status into `nitro_feedback_gate` with
+   `scripts/nitro-feedback-gate.ts normalize-feedback`, then validate it with
+   `scripts/nitro-feedback-gate.ts validate`.
 
 Request Nitro only when routing says `request_mode: explicit` with `capabilities.request_review: true`, or when the user explicitly asks. For Fullscript GitLab, the configured route requires posting `glab mr note <MR_IID> -m "/request_review @nitro"` after MR creation and after material follow-up pushes unless a latest-head Nitro review is already in flight.
+
+Material follow-up pushes include feedback fixes, restacks, conflict fixes,
+pipeline fixes, user edits, rebases, and plan or documentation feedback fixes.
+
+Use a 10-minute timeout only for Nitro acknowledgement or review start, polling
+every 1 minute. If Nitro starts but does not complete, return
+`nitro_review_completion_pending` through the shared gate instead of treating
+the review as passed or failed.
 
 ## Output Contract
 
@@ -45,6 +56,46 @@ findings: <normalized diff-review findings or none>
 stale_against_head: <yes | no | unknown>
 verification_gaps: <none | list>
 ```
+
+## Shared Gate Contract
+
+Return and validate this gate before `plan-review`, `plan-unit-delivery`, or
+`stack_ready` treats Nitro as complete:
+
+```yaml
+nitro_feedback_gate:
+  artifact: <Fullscript GitLab MR URL>
+  head_sha: <latest MR head sha>
+  request:
+    required: true
+    requested_after_latest_push: true
+    evidence:
+      - <request command, note URL, or discussion evidence>
+  start:
+    status: started | blocked | pending
+    timeout_minutes: 10
+    poll_interval_minutes: 1
+    evidence:
+      - <Nitro pending review, acknowledgement, or start evidence>
+  completion:
+    status: clean | findings | stale | unavailable | pending
+    evidence:
+      - <Nitro latest-head completion evidence>
+  unresolved_actionable_feedback: []
+  non_actionable_feedback: []
+  stale_feedback_ignored: []
+  gate_outcome: passed | blocked | pending
+```
+
+Status mapping:
+
+| Nitro status | Gate completion | Gate outcome |
+| --- | --- | --- |
+| `pending` | `pending` | `pending` |
+| `no issues` | `clean` | `passed` |
+| `findings` | `findings` | `blocked` |
+| `unavailable` | `unavailable` | `blocked` |
+| `stale` | `stale` | `blocked` |
 
 ## Common Mistakes
 

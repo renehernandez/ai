@@ -11,14 +11,14 @@
 
 ## 2. Nitro Feedback Gate
 
-- [ ] 2.1 Add a shared `nitro_feedback_gate` template and validator covering
+- [x] 2.1 Add a shared `nitro_feedback_gate` template and validator covering
       request evidence, start acknowledgement, completion status, stale
       feedback, actionable findings, non-actionable rationale, and gate outcome.
-- [ ] 2.2 Normalize `nitro-review-feedback` statuses into the shared gate:
+- [x] 2.2 Normalize `nitro-review-feedback` statuses into the shared gate:
       `pending`, `no issues`, `findings`, `unavailable`, and `stale`.
-- [ ] 2.3 Add the 10-minute review-start acknowledgement timeout, 1-minute poll
+- [x] 2.3 Add the 10-minute review-start acknowledgement timeout, 1-minute poll
       interval, and resumable `nitro_review_completion_pending` state.
-- [ ] 2.4 Update review routing so required Nitro feedback supports only
+- [x] 2.4 Update review routing so required Nitro feedback supports only
       Fullscript GitLab MRs and returns `nitro_route_unsupported` for GitHub,
       non-Fullscript GitLab, and ambiguous routes.
 
