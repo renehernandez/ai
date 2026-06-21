@@ -23,6 +23,7 @@ import {
   createProgram,
   createRuntimeBackup,
   createRuntimeInvocationContext,
+  inspectOpenSpecState,
   registerClaudeStartupHook,
   registerCodexStartupHook,
 } from "../../scripts/agent-runtime.ts";
@@ -78,6 +79,34 @@ function withTempDir(callback: (directory: string) => void): void {
   } finally {
     rmSync(directory, { force: true, recursive: true });
   }
+}
+
+function withTempCwd(callback: (directory: string) => void): void {
+  withTempDir((directory) => {
+    const originalCwd = process.cwd();
+    try {
+      process.chdir(directory);
+      callback(process.cwd());
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+}
+
+function testOpenSpecConfig() {
+  return {
+    tools: ["codex", "claude"],
+    canonicalSkillsDir: ".agents/skills",
+    canonicalCommandsDir: ".agents/commands",
+    backupsRoot: "backups",
+    skillTargets: {
+      codex: ".codex/skills",
+      claude: ".claude/skills",
+    },
+    commandTargets: {
+      claude: ".claude/commands",
+    },
+  };
 }
 
 test("Commander routes scoped skills commands", () => {
@@ -148,6 +177,51 @@ test("Runtime invocation context separates source and target roots", () => {
     } finally {
       process.chdir(originalCwd);
     }
+  });
+});
+
+test("OpenSpec state classification reports missing setup", () => {
+  withTempCwd(() => {
+    const report = inspectOpenSpecState(testOpenSpecConfig());
+
+    assert.equal(report.state, "missing");
+    assert.deepEqual(report.findings, []);
+  });
+});
+
+test("OpenSpec state classification reports config-only partial setup", () => {
+  withTempCwd(() => {
+    mkdirSync("openspec", { recursive: true });
+    writeFileSync("openspec/config.yaml", "schema: spec-driven\n", "utf-8");
+
+    const report = inspectOpenSpecState(testOpenSpecConfig());
+
+    assert.equal(report.state, "partial");
+    assert.match(report.findings.join("\n"), /No managed OpenSpec skills/);
+  });
+});
+
+test("OpenSpec state classification reports assets-only partial setup", () => {
+  withTempCwd(() => {
+    mkdirSync(".agents/skills/openspec-propose", { recursive: true });
+
+    const report = inspectOpenSpecState(testOpenSpecConfig());
+
+    assert.equal(report.state, "partial");
+    assert.match(report.findings.join("\n"), /Missing OpenSpec config/);
+  });
+});
+
+test("OpenSpec state classification reports configured setup", () => {
+  withTempCwd(() => {
+    mkdirSync("openspec", { recursive: true });
+    mkdirSync(".agents/skills/openspec-propose", { recursive: true });
+    writeFileSync("openspec/config.yaml", "schema: spec-driven\n", "utf-8");
+
+    const report = inspectOpenSpecState(testOpenSpecConfig());
+
+    assert.equal(report.state, "configured");
+    assert.deepEqual(report.findings, []);
   });
 });
 

@@ -173,13 +173,25 @@ export type ClaudeStartupHookRegistrationInput = {
   command: string;
 };
 
-type ResolvedOpenSpecConfig = {
+export type ResolvedOpenSpecConfig = {
   tools: string[];
   canonicalSkillsDir: string;
   canonicalCommandsDir: string;
   skillTargets: Record<string, string>;
   commandTargets: Record<string, string>;
   backupsRoot: string;
+};
+
+export type OpenSpecSetupState = "missing" | "configured" | "partial";
+
+export type OpenSpecStateReport = {
+  state: OpenSpecSetupState;
+  configPath: string;
+  canonicalSkillsDir: string;
+  canonicalCommandsDir: string;
+  skillNames: string[];
+  commandNames: string[];
+  findings: string[];
 };
 
 type ResolvedHooksConfig = {
@@ -828,9 +840,10 @@ function runScope(
 
 function runOpenSpec(command: RuntimeCommand, config: Config): void {
   const openspec = resolvedOpenSpecConfig(config);
+  const stateReport = inspectOpenSpecState(openspec);
 
   if (command === "status") {
-    statusOpenSpec(openspec);
+    statusOpenSpec(openspec, stateReport);
     return;
   }
 
@@ -984,6 +997,64 @@ function resolvedOpenSpecConfig(config: Config): ResolvedOpenSpecConfig {
       },
       "runtime.openspec.commandTargets",
     ),
+  };
+}
+
+export function inspectOpenSpecState(
+  config: ResolvedOpenSpecConfig,
+): OpenSpecStateReport {
+  const canonicalSkillsDir = resolve(config.canonicalSkillsDir);
+  const canonicalCommandsDir = resolve(config.canonicalCommandsDir);
+  const skillTargetDirs = Object.values(config.skillTargets).map((target) =>
+    resolve(target),
+  );
+  const commandTargetDirs = Object.values(config.commandTargets).map((target) =>
+    join(resolve(target), "opsx"),
+  );
+  const configPath = join("openspec", "config.yaml");
+  const skillNames = openSpecSkillNames([
+    canonicalSkillsDir,
+    ...skillTargetDirs,
+  ]);
+  const commandNames = openSpecCommandNames([
+    join(canonicalCommandsDir, "opsx"),
+    ...commandTargetDirs,
+  ]);
+  const findings: string[] = [];
+  const hasConfig = existsSync(configPath);
+  const hasOpenSpecDirectory = existsSync("openspec");
+  const hasGeneratedAssets = skillNames.length > 0 || commandNames.length > 0;
+  const hasFootprint = hasConfig || hasOpenSpecDirectory || hasGeneratedAssets;
+
+  if (!hasFootprint) {
+    return {
+      state: "missing",
+      configPath,
+      canonicalSkillsDir,
+      canonicalCommandsDir,
+      skillNames,
+      commandNames,
+      findings,
+    };
+  }
+
+  if (!hasConfig) {
+    findings.push(`Missing OpenSpec config: ${configPath}`);
+  }
+  if (skillNames.length === 0) {
+    findings.push(
+      `No managed OpenSpec skills found under ${canonicalSkillsDir}`,
+    );
+  }
+
+  return {
+    state: findings.length === 0 ? "configured" : "partial",
+    configPath,
+    canonicalSkillsDir,
+    canonicalCommandsDir,
+    skillNames,
+    commandNames,
+    findings,
   };
 }
 
@@ -1192,7 +1263,10 @@ function validateOpenSpec(config: ResolvedOpenSpecConfig): void {
   }
 }
 
-function statusOpenSpec(config: ResolvedOpenSpecConfig): void {
+function statusOpenSpec(
+  config: ResolvedOpenSpecConfig,
+  stateReport = inspectOpenSpecState(config),
+): void {
   const cli = openSpecCli();
   if (!cli) {
     throw new Error(
@@ -1201,6 +1275,10 @@ function statusOpenSpec(config: ResolvedOpenSpecConfig): void {
   }
 
   console.log(`OpenSpec CLI: ${cli.path} (${cli.version})`);
+  console.log(`OpenSpec state: ${stateReport.state}`);
+  for (const finding of stateReport.findings) {
+    console.log(`  - ${finding}`);
+  }
   printPathStatus("OpenSpec config", join("openspec", "config.yaml"));
   statusOpenSpecSkills(config);
   statusOpenSpecCommands(config);
