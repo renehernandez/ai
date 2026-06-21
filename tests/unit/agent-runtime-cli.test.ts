@@ -20,6 +20,7 @@ import type { Command } from "commander";
 import {
   claudeStartupHookStatus,
   codexStartupHookStatus,
+  collectOpenSpecProjectSignals,
   createOpenSpecInstallSetup,
   createProgram,
   createRuntimeBackup,
@@ -246,6 +247,55 @@ test("OpenSpec config renderer writes schema, context, and artifact rules", () =
   assert.match(rendered, /context: \|-\n {2}Project: example\n/);
   assert.match(rendered, /rules:\n {2}proposal:\n/);
   assert.match(rendered, / {4}- "Include goals and non-goals\."/);
+});
+
+test("OpenSpec project signal collection is bounded and ignores unsafe inputs", () => {
+  withTempCwd((directory) => {
+    writeFileSync(
+      "package.json",
+      JSON.stringify(
+        {
+          name: "signal-project",
+          packageManager: "pnpm@11.5.3",
+          scripts: {
+            build: "tsc",
+            test: "node --test",
+          },
+          devDependencies: {
+            typescript: "^5.9.3",
+          },
+        },
+        null,
+        2,
+      ),
+      "utf-8",
+    );
+    writeFileSync(
+      "README.md",
+      "# Signal Project\nUseful project context.\n",
+      "utf-8",
+    );
+    writeFileSync("lefthook.yml", "pre-commit:\n  commands: {}\n", "utf-8");
+    writeFileSync(".env", "SECRET=value\n", "utf-8");
+    writeFileSync("pnpm-lock.yaml", "lockfileVersion: 9\n", "utf-8");
+    mkdirSync("node_modules", { recursive: true });
+    mkdirSync("logs", { recursive: true });
+    mkdirSync("openspec", { recursive: true });
+
+    const report = collectOpenSpecProjectSignals(directory);
+    const context = report.contextLines.join("\n");
+
+    assert.match(context, /Project: signal-project/);
+    assert.match(context, /Package scripts: build, test/);
+    assert.match(context, /README.md: # Signal Project Useful project context/);
+    assert.doesNotMatch(context, /SECRET/);
+    assert.doesNotMatch(context, /pnpm-lock/);
+    assert.ok(report.ignoredNames.includes(".env"));
+    assert.ok(report.ignoredNames.includes("node_modules"));
+    assert.ok(report.ignoredNames.includes("openspec"));
+    assert.match(report.rules.tasks.join("\n"), /package-managed verification/);
+    assert.match(report.rules.tasks.join("\n"), /repository hooks/);
+  });
 });
 
 test("OpenSpec state classification reports missing setup", () => {

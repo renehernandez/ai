@@ -217,6 +217,13 @@ export type OpenSpecInstallSetup = {
   rules: Record<string, string[]>;
 };
 
+export type OpenSpecProjectSignalReport = {
+  contextLines: string[];
+  rules: Record<string, string[]>;
+  inspectedPaths: string[];
+  ignoredNames: string[];
+};
+
 type ResolvedHooksConfig = {
   sourceDir: string;
   canonicalDir: string;
@@ -315,6 +322,42 @@ const DEFAULT_OPENSPEC_RULES: Record<string, string[]> = {
     "Keep implementation tasks independently verifiable and commit-sized.",
   ],
 };
+const PROJECT_SIGNAL_MAX_FILE_BYTES = 12_000;
+const PROJECT_SIGNAL_MAX_DOC_LINES = 8;
+const PROJECT_SIGNAL_DOC_FILES = [
+  "README.md",
+  "README",
+  "AGENTS.md",
+  "CLAUDE.md",
+] as const;
+const PROJECT_SIGNAL_IGNORED_NAMES = new Set([
+  ".agent-runtime",
+  ".cache",
+  ".codex",
+  ".git",
+  ".next",
+  ".turbo",
+  ".venv",
+  "backups",
+  "build",
+  "coverage",
+  "dist",
+  "logs",
+  "node_modules",
+  "openspec",
+  "tmp",
+  "agent-runtime.lock.json",
+  "package-lock.json",
+  "pnpm-lock.yaml",
+  "yarn.lock",
+]);
+const PROJECT_SIGNAL_SECRET_PATTERNS = [
+  /^\.env($|\.)/,
+  /\.pem$/,
+  /\.key$/,
+  /secret/i,
+  /credential/i,
+] as const;
 const RETIRED_MANAGED_SKILL_NAMES = [
   "plan-to-review",
   "plan-coordinate",
@@ -1230,10 +1273,11 @@ export function createOpenSpecInstallSetup(
   config: ResolvedOpenSpecConfig,
   input: { context?: string } = {},
 ): OpenSpecInstallSetup {
+  const projectSignals = collectOpenSpecProjectSignals();
   const contextLines = [
     ...configuredOpenSpecContextLines(config),
     ...(input.context ? input.context.split(/\r?\n/) : []),
-    ...inferredProjectContextLines(),
+    ...projectSignals.contextLines,
   ];
 
   return {
@@ -1243,7 +1287,7 @@ export function createOpenSpecInstallSetup(
     delivery: config.delivery,
     workflows: config.workflows,
     context: uniqueNonEmptyLines(contextLines).join("\n"),
-    rules: config.rules,
+    rules: mergeOpenSpecRules(config.rules, projectSignals.rules),
   };
 }
 
@@ -1260,10 +1304,16 @@ function configuredOpenSpecContextLines(
   ];
 }
 
-function inferredProjectContextLines(): string[] {
+export function collectOpenSpecProjectSignals(
+  root = process.cwd(),
+): OpenSpecProjectSignalReport {
   const lines: string[] = [];
-  const packageJsonPath = "package.json";
+  const rules: Record<string, string[]> = {};
+  const inspectedPaths: string[] = [];
+  const ignoredNames: string[] = [];
+  const packageJsonPath = join(root, "package.json");
   if (existsSync(packageJsonPath)) {
+    inspectedPaths.push("package.json");
     const packageJson = readJson<Record<string, unknown>>(packageJsonPath);
     const name = stringValue(packageJson.name);
     if (name) {
@@ -1278,12 +1328,58 @@ function inferredProjectContextLines(): string[] {
         lines.push(`Package manager: ${inferredPackageManager}`);
       }
     }
-    const runtimeHints = packageRuntimeHints(packageJson);
+    const runtimeHints = packageRuntimeHints(root, packageJson);
     if (runtimeHints.length > 0) {
       lines.push(`Tech stack: ${runtimeHints.join(", ")}`);
     }
+    const scripts = recordKeys(packageJson.scripts);
+    if (scripts.length > 0) {
+      lines.push(`Package scripts: ${scripts.sort().slice(0, 8).join(", ")}`);
+    }
+    if (scripts.some((script) => /^test(:|$)/.test(script))) {
+      appendOpenSpecRule(
+        rules,
+        "tasks",
+        "Include the relevant package-managed verification command for code changes.",
+      );
+    }
   }
-  return lines;
+
+  for (const docFile of PROJECT_SIGNAL_DOC_FILES) {
+    const path = join(root, docFile);
+    if (!existsSync(path) || fileSize(path) > PROJECT_SIGNAL_MAX_FILE_BYTES) {
+      continue;
+    }
+    inspectedPaths.push(docFile);
+    const excerpt = documentSignalExcerpt(path);
+    if (excerpt.length > 0) {
+      lines.push(`${docFile}: ${excerpt}`);
+    }
+  }
+
+  const topLevelNames = projectTopLevelNames(root, ignoredNames);
+  if (topLevelNames.length > 0) {
+    lines.push(
+      `Top-level project files: ${topLevelNames.slice(0, 16).join(", ")}`,
+    );
+  }
+  if (
+    topLevelNames.includes("lefthook.yml") ||
+    topLevelNames.includes("lefthook.yaml")
+  ) {
+    appendOpenSpecRule(
+      rules,
+      "tasks",
+      "Account for configured repository hooks when planning verification.",
+    );
+  }
+
+  return {
+    contextLines: uniqueNonEmptyLines(lines),
+    rules,
+    inspectedPaths,
+    ignoredNames: uniqueNames(ignoredNames).sort(),
+  };
 }
 
 function stringValue(value: unknown): string | undefined {
@@ -1305,13 +1401,19 @@ function inferPackageManager(): string | undefined {
   return undefined;
 }
 
-function packageRuntimeHints(packageJson: Record<string, unknown>): string[] {
+function packageRuntimeHints(
+  root: string,
+  packageJson: Record<string, unknown>,
+): string[] {
   const dependencyNames = new Set([
     ...recordKeys(packageJson.dependencies),
     ...recordKeys(packageJson.devDependencies),
   ]);
   const hints: string[] = [];
-  if (dependencyNames.has("typescript") || existsSync("tsconfig.json")) {
+  if (
+    dependencyNames.has("typescript") ||
+    existsSync(join(root, "tsconfig.json"))
+  ) {
     hints.push("TypeScript");
   }
   if (dependencyNames.has("tsx")) {
@@ -1330,6 +1432,68 @@ function recordKeys(value: unknown): string[] {
   return value && typeof value === "object" && !Array.isArray(value)
     ? Object.keys(value)
     : [];
+}
+
+function fileSize(path: string): number {
+  return lstatSync(path).size;
+}
+
+function documentSignalExcerpt(path: string): string {
+  const content = readFileSync(path, "utf-8");
+  const lines = content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .filter((line) => !line.startsWith("```"))
+    .slice(0, PROJECT_SIGNAL_MAX_DOC_LINES);
+  return lines.join(" ").slice(0, 600);
+}
+
+function projectTopLevelNames(root: string, ignoredNames: string[]): string[] {
+  if (!existsSync(root)) {
+    return [];
+  }
+  const names: string[] = [];
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (shouldIgnoreProjectSignalName(entry.name)) {
+      ignoredNames.push(entry.name);
+      continue;
+    }
+    names.push(entry.name);
+  }
+  return names.sort();
+}
+
+function shouldIgnoreProjectSignalName(name: string): boolean {
+  return (
+    PROJECT_SIGNAL_IGNORED_NAMES.has(name) ||
+    PROJECT_SIGNAL_SECRET_PATTERNS.some((pattern) => pattern.test(name))
+  );
+}
+
+function appendOpenSpecRule(
+  rules: Record<string, string[]>,
+  artifact: string,
+  rule: string,
+): void {
+  rules[artifact] = [...(rules[artifact] ?? []), rule];
+}
+
+function mergeOpenSpecRules(
+  baseRules: Record<string, string[]>,
+  inferredRules: Record<string, string[]>,
+): Record<string, string[]> {
+  const merged: Record<string, string[]> = {};
+  for (const artifact of new Set([
+    ...Object.keys(baseRules),
+    ...Object.keys(inferredRules),
+  ])) {
+    merged[artifact] = uniqueNonEmptyLines([
+      ...(baseRules[artifact] ?? []),
+      ...(inferredRules[artifact] ?? []),
+    ]);
+  }
+  return merged;
 }
 
 function uniqueNonEmptyLines(lines: string[]): string[] {
