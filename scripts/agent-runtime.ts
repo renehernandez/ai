@@ -111,6 +111,53 @@ type HooksConfig = {
   allowDisposableSource?: boolean;
 };
 
+type HookCommand = {
+  type?: string;
+  command?: string;
+  [key: string]: unknown;
+};
+
+type HookMatcher = {
+  matcher?: string;
+  hooks?: HookCommand[];
+  [key: string]: unknown;
+};
+
+type HookConfigDocument = {
+  hooks?: Record<string, HookMatcher[]>;
+  [key: string]: unknown;
+};
+
+type StartupHookLocation = {
+  event: "SessionStart";
+  eventKey: "session_start";
+  matcherIndex: number;
+  hookIndex: number;
+};
+
+export type StartupHookRegistrationResult = {
+  changed: boolean;
+  location: StartupHookLocation;
+};
+
+export type StartupHookStatus = {
+  registered: boolean;
+  locations: StartupHookLocation[];
+  trustState: "trusted" | "missing" | "not_applicable";
+  gaps: string[];
+};
+
+export type CodexStartupHookRegistrationInput = {
+  hooksJsonPath: string;
+  configTomlPath: string;
+  command: string;
+};
+
+export type ClaudeStartupHookRegistrationInput = {
+  settingsJsonPath: string;
+  command: string;
+};
+
 type ResolvedOpenSpecConfig = {
   tools: string[];
   canonicalSkillsDir: string;
@@ -1103,6 +1150,257 @@ function runHooks(
   console.log(
     `${command === "install" ? "Installed" : "Updated"} managed hooks.`,
   );
+}
+
+export function registerCodexStartupHook(
+  input: CodexStartupHookRegistrationInput,
+): StartupHookRegistrationResult {
+  return registerStartupHookInJson(
+    expandHome(input.hooksJsonPath),
+    input.command,
+  );
+}
+
+export function codexStartupHookStatus(
+  input: CodexStartupHookRegistrationInput,
+): StartupHookStatus {
+  const hooksJsonPath = expandHome(input.hooksJsonPath);
+  const configTomlPath = expandHome(input.configTomlPath);
+  const locations = startupHookLocations(hooksJsonPath, input.command);
+  const gaps: string[] = [];
+  if (locations.length === 0) {
+    gaps.push("codex startup hook registration missing");
+    return {
+      registered: false,
+      locations,
+      trustState: "not_applicable",
+      gaps,
+    };
+  }
+  if (locations.length > 1) {
+    gaps.push("codex startup hook duplicate registrations");
+  }
+
+  const configToml = existsSync(configTomlPath)
+    ? readFileSync(configTomlPath, "utf-8")
+    : "";
+  const untrustedLocations = locations.filter(
+    (location) =>
+      !codexHookLocationIsTrusted({
+        configToml,
+        hooksJsonPath,
+        location,
+      }),
+  );
+  if (untrustedLocations.length > 0) {
+    gaps.push("codex startup hook trust missing");
+  }
+
+  return {
+    registered: true,
+    locations,
+    trustState: untrustedLocations.length === 0 ? "trusted" : "missing",
+    gaps,
+  };
+}
+
+export function registerClaudeStartupHook(
+  input: ClaudeStartupHookRegistrationInput,
+): StartupHookRegistrationResult {
+  return registerStartupHookInJson(
+    expandHome(input.settingsJsonPath),
+    input.command,
+  );
+}
+
+export function claudeStartupHookStatus(
+  input: ClaudeStartupHookRegistrationInput,
+): StartupHookStatus {
+  const locations = startupHookLocations(
+    expandHome(input.settingsJsonPath),
+    input.command,
+  );
+  const gaps: string[] = [];
+  if (locations.length === 0) {
+    gaps.push("claude startup hook registration missing");
+  }
+  if (locations.length > 1) {
+    gaps.push("claude startup hook duplicate registrations");
+  }
+  return {
+    registered: locations.length > 0,
+    locations,
+    trustState: "not_applicable",
+    gaps,
+  };
+}
+
+function registerStartupHookInJson(
+  configPath: string,
+  command: string,
+): StartupHookRegistrationResult {
+  const document = readHookConfigDocument(configPath);
+  const existingLocation = findStartupHookLocation(document, command);
+  if (existingLocation) {
+    return { changed: false, location: existingLocation };
+  }
+
+  const sessionStart = ensureSessionStartMatchers(document);
+  let matcherIndex = sessionStart.findIndex(
+    (entry) => entry.matcher === undefined,
+  );
+  if (matcherIndex === -1) {
+    matcherIndex = sessionStart.length;
+    sessionStart.push({ hooks: [] });
+  }
+
+  const matcher = sessionStart[matcherIndex];
+  matcher.hooks ??= [];
+  const hookIndex = matcher.hooks.length;
+  matcher.hooks.push({ type: "command", command });
+  writeJson(configPath, document);
+
+  return {
+    changed: true,
+    location: {
+      event: "SessionStart",
+      eventKey: "session_start",
+      matcherIndex,
+      hookIndex,
+    },
+  };
+}
+
+function startupHookLocations(
+  configPath: string,
+  command: string,
+): StartupHookLocation[] {
+  if (!existsSync(configPath)) {
+    return [];
+  }
+  return findStartupHookLocations(readHookConfigDocument(configPath), command);
+}
+
+function readHookConfigDocument(configPath: string): HookConfigDocument {
+  if (!existsSync(configPath)) {
+    return { hooks: {} };
+  }
+  const document = readJson<HookConfigDocument>(configPath);
+  if (
+    document === null ||
+    typeof document !== "object" ||
+    Array.isArray(document)
+  ) {
+    throw new Error(`Invalid hook config document: ${configPath}`);
+  }
+  if (document.hooks !== undefined && !isPlainRecord(document.hooks)) {
+    throw new Error(`Invalid hooks object in ${configPath}`);
+  }
+  return document;
+}
+
+function ensureSessionStartMatchers(
+  document: HookConfigDocument,
+): HookMatcher[] {
+  document.hooks ??= {};
+  const sessionStart = document.hooks.SessionStart;
+  if (sessionStart === undefined) {
+    document.hooks.SessionStart = [];
+    return document.hooks.SessionStart;
+  }
+  if (!Array.isArray(sessionStart)) {
+    throw new Error("Invalid SessionStart hook registration");
+  }
+  for (const [matcherIndex, matcher] of sessionStart.entries()) {
+    if (!isPlainRecord(matcher)) {
+      throw new Error(
+        `Invalid SessionStart hook matcher at index ${matcherIndex}`,
+      );
+    }
+    if (matcher.hooks !== undefined && !Array.isArray(matcher.hooks)) {
+      throw new Error(
+        `Invalid SessionStart hooks array at matcher index ${matcherIndex}`,
+      );
+    }
+    for (const [hookIndex, hook] of (matcher.hooks ?? []).entries()) {
+      if (!isPlainRecord(hook)) {
+        throw new Error(
+          `Invalid SessionStart hook at matcher index ${matcherIndex}, hook index ${hookIndex}`,
+        );
+      }
+    }
+  }
+  return sessionStart;
+}
+
+function findStartupHookLocation(
+  document: HookConfigDocument,
+  command: string,
+): StartupHookLocation | undefined {
+  return findStartupHookLocations(document, command)[0];
+}
+
+function findStartupHookLocations(
+  document: HookConfigDocument,
+  command: string,
+): StartupHookLocation[] {
+  const sessionStart = ensureSessionStartMatchers(document);
+
+  const locations: StartupHookLocation[] = [];
+  for (const [matcherIndex, matcher] of sessionStart.entries()) {
+    if (!matcher.hooks) {
+      continue;
+    }
+    for (const [hookIndex, hook] of matcher.hooks.entries()) {
+      if (
+        isPlainRecord(hook) &&
+        hook.type === "command" &&
+        hook.command === command
+      ) {
+        locations.push({
+          event: "SessionStart",
+          eventKey: "session_start",
+          matcherIndex,
+          hookIndex,
+        });
+      }
+    }
+  }
+  return locations;
+}
+
+function codexHookLocationIsTrusted(input: {
+  configToml: string;
+  hooksJsonPath: string;
+  location: StartupHookLocation;
+}): boolean {
+  const trustKey = [
+    input.hooksJsonPath,
+    input.location.eventKey,
+    input.location.matcherIndex,
+    input.location.hookIndex,
+  ].join(":");
+  const section = `[hooks.state."${tomlBasicStringEscape(trustKey)}"]`;
+  let inSection = false;
+  for (const line of input.configToml.split(/\r?\n/u)) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+      inSection = trimmed === section;
+      continue;
+    }
+    if (inSection && /^trusted_hash\s*=/u.test(trimmed)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function tomlBasicStringEscape(value: string): string {
+  return value.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function resolvedHooksConfig(config: Config): ResolvedHooksConfig {

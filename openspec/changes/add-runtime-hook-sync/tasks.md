@@ -22,7 +22,7 @@
 
 ## 4. Codex And Claude Registration
 
-- [ ] 4.1 Add fixture-tested Codex and Claude startup registration helpers that
+- [x] 4.1 Add fixture-tested Codex and Claude startup registration helpers that
   preserve unrelated config, avoid duplicate registrations, and report trust or
   registration gaps.
 - [ ] 4.2 Wire Codex and Claude registration into hooks update, validate, and

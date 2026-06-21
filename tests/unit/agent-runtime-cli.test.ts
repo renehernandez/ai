@@ -18,8 +18,12 @@ import test from "node:test";
 import type { Command } from "commander";
 
 import {
+  claudeStartupHookStatus,
+  codexStartupHookStatus,
   createProgram,
   createRuntimeBackup,
+  registerClaudeStartupHook,
+  registerCodexStartupHook,
 } from "../../scripts/agent-runtime.ts";
 
 type ParsedCommand = {
@@ -168,6 +172,379 @@ test("Commander rejects removed agents commands", () => {
   const error = parseInvalidCommand(["agents", "status"]);
 
   assert.match(error.message, /unknown command 'agents'/);
+});
+
+test("registerCodexStartupHook preserves hooks JSON content and stays idempotent", () => {
+  withTempDir((directory) => {
+    const hooksJsonPath = join(directory, "hooks.json");
+    const configTomlPath = join(directory, "config.toml");
+    const command = "$HOME/.codex/hooks/git-sync.sh";
+    writeFileSync(
+      hooksJsonPath,
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          hooks: {
+            Stop: [
+              {
+                hooks: [
+                  {
+                    type: "command",
+                    command: "afplay /System/Library/Sounds/Ping.aiff",
+                  },
+                ],
+              },
+            ],
+            SessionStart: [
+              {
+                hooks: [
+                  {
+                    type: "command",
+                    command: "$HOME/.codex/hooks/existing.sh",
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        null,
+        2,
+      )}\n`,
+      "utf-8",
+    );
+    writeFileSync(
+      configTomlPath,
+      'model = "gpt-5"\n\n[hooks.state]\n',
+      "utf-8",
+    );
+    const originalToml = readFileSync(configTomlPath, "utf-8");
+
+    const first = registerCodexStartupHook({
+      hooksJsonPath,
+      configTomlPath,
+      command,
+    });
+    const second = registerCodexStartupHook({
+      hooksJsonPath,
+      configTomlPath,
+      command,
+    });
+    const document = JSON.parse(readFileSync(hooksJsonPath, "utf-8"));
+
+    assert.equal(first.changed, true);
+    assert.deepEqual(first.location, {
+      event: "SessionStart",
+      eventKey: "session_start",
+      matcherIndex: 0,
+      hookIndex: 1,
+    });
+    assert.equal(second.changed, false);
+    assert.deepEqual(second.location, first.location);
+    assert.equal(document.schemaVersion, 1);
+    assert.equal(document.hooks.Stop.length, 1);
+    assert.deepEqual(document.hooks.SessionStart[0].hooks, [
+      {
+        type: "command",
+        command: "$HOME/.codex/hooks/existing.sh",
+      },
+      {
+        type: "command",
+        command,
+      },
+    ]);
+    assert.equal(readFileSync(configTomlPath, "utf-8"), originalToml);
+  });
+});
+
+test("codexStartupHookStatus reports missing registration and trust gaps", () => {
+  withTempDir((directory) => {
+    const actualHooksJsonPath = join(directory, "hooks.json");
+    const hooksJsonPath = join(directory, "nested", "..", "hooks.json");
+    const configTomlPath = join(directory, "config.toml");
+    const command = "$HOME/.codex/hooks/git-sync.sh";
+
+    writeFileSync(
+      actualHooksJsonPath,
+      JSON.stringify({ hooks: { SessionStart: [{ hooks: [] }] } }, null, 2),
+      "utf-8",
+    );
+    writeFileSync(configTomlPath, "[hooks.state]\n", "utf-8");
+
+    assert.deepEqual(
+      codexStartupHookStatus({ hooksJsonPath, configTomlPath, command }),
+      {
+        registered: false,
+        locations: [],
+        trustState: "not_applicable",
+        gaps: ["codex startup hook registration missing"],
+      },
+    );
+
+    registerCodexStartupHook({ hooksJsonPath, configTomlPath, command });
+    assert.deepEqual(
+      codexStartupHookStatus({ hooksJsonPath, configTomlPath, command }),
+      {
+        registered: true,
+        locations: [
+          {
+            event: "SessionStart",
+            eventKey: "session_start",
+            matcherIndex: 0,
+            hookIndex: 0,
+          },
+        ],
+        trustState: "missing",
+        gaps: ["codex startup hook trust missing"],
+      },
+    );
+
+    writeFileSync(
+      configTomlPath,
+      `[hooks.state]\n\n[hooks.state."${actualHooksJsonPath}:session_start:0:0"]\ntrusted_hash = "sha256:abc"\n`,
+      "utf-8",
+    );
+    assert.deepEqual(
+      codexStartupHookStatus({ hooksJsonPath, configTomlPath, command }),
+      {
+        registered: true,
+        locations: [
+          {
+            event: "SessionStart",
+            eventKey: "session_start",
+            matcherIndex: 0,
+            hookIndex: 0,
+          },
+        ],
+        trustState: "trusted",
+        gaps: [],
+      },
+    );
+
+    writeFileSync(
+      actualHooksJsonPath,
+      JSON.stringify(
+        {
+          hooks: {
+            SessionStart: [
+              {
+                hooks: [
+                  {
+                    type: "command",
+                    command,
+                  },
+                  {
+                    type: "command",
+                    command,
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        null,
+        2,
+      ),
+      "utf-8",
+    );
+    writeFileSync(
+      configTomlPath,
+      `[hooks.state]\n\n[hooks.state."${actualHooksJsonPath}:session_start:0:0"]\ntrusted_hash = "sha256:abc"\n\n[hooks.state."${actualHooksJsonPath}:session_start:0:1"]\ntrusted_hash = "sha256:def"\n`,
+      "utf-8",
+    );
+    assert.deepEqual(
+      codexStartupHookStatus({ hooksJsonPath, configTomlPath, command }),
+      {
+        registered: true,
+        locations: [
+          {
+            event: "SessionStart",
+            eventKey: "session_start",
+            matcherIndex: 0,
+            hookIndex: 0,
+          },
+          {
+            event: "SessionStart",
+            eventKey: "session_start",
+            matcherIndex: 0,
+            hookIndex: 1,
+          },
+        ],
+        trustState: "trusted",
+        gaps: ["codex startup hook duplicate registrations"],
+      },
+    );
+  });
+});
+
+test("startup hook helpers reject malformed SessionStart registrations", () => {
+  withTempDir((directory) => {
+    const settingsJsonPath = join(directory, "settings.json");
+    const command = "$HOME/.claude/hooks/git-sync.sh";
+    writeFileSync(
+      settingsJsonPath,
+      JSON.stringify({ hooks: { SessionStart: [null] } }, null, 2),
+      "utf-8",
+    );
+
+    assert.throws(
+      () => registerClaudeStartupHook({ settingsJsonPath, command }),
+      /Invalid SessionStart hook matcher at index 0/,
+    );
+    assert.throws(
+      () => claudeStartupHookStatus({ settingsJsonPath, command }),
+      /Invalid SessionStart hook matcher at index 0/,
+    );
+
+    writeFileSync(
+      settingsJsonPath,
+      JSON.stringify(
+        { hooks: { SessionStart: [{ hooks: "not an array" }] } },
+        null,
+        2,
+      ),
+      "utf-8",
+    );
+    assert.throws(
+      () => registerClaudeStartupHook({ settingsJsonPath, command }),
+      /Invalid SessionStart hooks array at matcher index 0/,
+    );
+  });
+});
+
+test("registerClaudeStartupHook preserves settings JSON content and stays idempotent", () => {
+  withTempDir((directory) => {
+    const settingsJsonPath = join(directory, "settings.json");
+    const command = "$HOME/.claude/hooks/git-sync.sh";
+    writeFileSync(
+      settingsJsonPath,
+      `${JSON.stringify(
+        {
+          model: "fable",
+          permissions: {
+            allow: ["Bash(git status)"],
+          },
+          hooks: {
+            Notification: [
+              {
+                matcher: "permission_prompt",
+                hooks: [
+                  {
+                    type: "command",
+                    command: "afplay /System/Library/Sounds/Glass.aiff",
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        null,
+        2,
+      )}\n`,
+      "utf-8",
+    );
+
+    const first = registerClaudeStartupHook({ settingsJsonPath, command });
+    const second = registerClaudeStartupHook({ settingsJsonPath, command });
+    const document = JSON.parse(readFileSync(settingsJsonPath, "utf-8"));
+
+    assert.equal(first.changed, true);
+    assert.deepEqual(first.location, {
+      event: "SessionStart",
+      eventKey: "session_start",
+      matcherIndex: 0,
+      hookIndex: 0,
+    });
+    assert.equal(second.changed, false);
+    assert.equal(document.model, "fable");
+    assert.deepEqual(document.permissions.allow, ["Bash(git status)"]);
+    assert.equal(document.hooks.Notification.length, 1);
+    assert.deepEqual(document.hooks.SessionStart, [
+      {
+        hooks: [
+          {
+            type: "command",
+            command,
+          },
+        ],
+      },
+    ]);
+  });
+});
+
+test("claudeStartupHookStatus reports registration gaps without trust state", () => {
+  withTempDir((directory) => {
+    const settingsJsonPath = join(directory, "settings.json");
+    const command = "$HOME/.claude/hooks/git-sync.sh";
+    writeFileSync(settingsJsonPath, JSON.stringify({ hooks: {} }), "utf-8");
+
+    assert.deepEqual(claudeStartupHookStatus({ settingsJsonPath, command }), {
+      registered: false,
+      locations: [],
+      trustState: "not_applicable",
+      gaps: ["claude startup hook registration missing"],
+    });
+
+    registerClaudeStartupHook({ settingsJsonPath, command });
+    assert.deepEqual(claudeStartupHookStatus({ settingsJsonPath, command }), {
+      registered: true,
+      locations: [
+        {
+          event: "SessionStart",
+          eventKey: "session_start",
+          matcherIndex: 0,
+          hookIndex: 0,
+        },
+      ],
+      trustState: "not_applicable",
+      gaps: [],
+    });
+
+    writeFileSync(
+      settingsJsonPath,
+      JSON.stringify(
+        {
+          hooks: {
+            SessionStart: [
+              {
+                hooks: [
+                  {
+                    type: "command",
+                    command,
+                  },
+                  {
+                    type: "command",
+                    command,
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        null,
+        2,
+      ),
+      "utf-8",
+    );
+    assert.deepEqual(claudeStartupHookStatus({ settingsJsonPath, command }), {
+      registered: true,
+      locations: [
+        {
+          event: "SessionStart",
+          eventKey: "session_start",
+          matcherIndex: 0,
+          hookIndex: 0,
+        },
+        {
+          event: "SessionStart",
+          eventKey: "session_start",
+          matcherIndex: 0,
+          hookIndex: 1,
+        },
+      ],
+      trustState: "not_applicable",
+      gaps: ["claude startup hook duplicate registrations"],
+    });
+  });
 });
 
 test("createRuntimeBackup snapshots executable files", () => {
