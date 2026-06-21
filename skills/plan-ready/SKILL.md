@@ -94,7 +94,7 @@ plan_delivery_handoff:
     out_of_scope:
       - <explicit non-goal>
   delivery:
-    expected_host: github_pr | gitlab_mr | direct_publish
+    expected_host: github_pr | gitlab_mr
     completion_updates: []
   review:
     required_reviewers:

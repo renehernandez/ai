@@ -37,9 +37,9 @@ The default workflow is:
 
 Review-first plan workflows are the exception to ordinary direct-publish or
 implementation-first handling. When `plan-orchestrator`, `plan-review`, or an
-approved plan workflow requires planning review, create the planning-only PR/MR
-first, wait for the required planning-review gate, and only then continue to
-implementation sequencing.
+approved plan workflow requires Nitro-reviewed stacked delivery, create the
+planning MR first, wait for the required Nitro-clean planning-review gate, and
+only then continue to stacked implementation sequencing.
 
 When review feedback, CI, or browser checks expose missing coverage, apply the
 Fastest Durable Regression rule in `rules/testing-and-verification.md` before

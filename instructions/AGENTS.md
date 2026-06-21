@@ -34,7 +34,7 @@ The linked rule files are normative and preserve the detailed policies.
 - Always use the `hallmark` skill for frontend design work, including greenfield UI, redesigns, design audits, visual polish, and design extraction from URLs or screenshots.
 - Always use the 1Password MCP server when working with 1Password developer environments; do not wait for the user to explicitly ask for it.
 - Prefer CLI tools that carry authentication and org conventions: `gh` for GitHub, `glab` for GitLab, and `wrangler` for Cloudflare.
-- Review-first plan workflows are an explicit hosted-review exception to ordinary direct-publish guidance. When `plan-orchestrator`, `plan-review`, or the approved plan workflow requires a planning-only PR/MR, create that planning artifact first and wait for the required planning-review gate before implementation sequencing.
+- Review-first plan workflows are an explicit Nitro-reviewed stacked-delivery exception to ordinary direct-publish guidance. When `plan-orchestrator`, `plan-review`, or the approved plan workflow requires Nitro-reviewed stacked delivery, create the planning MR first and wait for the required Nitro-clean planning-review gate before stacked implementation sequencing.
 - Do not use "smoke test" or "smoke tests" wording. Describe the exact verification performed instead, such as browser route checks, console checks, or manual browser verification.
 - Avoid slop-like contrast phrasing and generic AI filler. Do not lean on formulas like "X, not just Y", "more than just", "isn't just", or "the future of"; state the concrete claim directly.
 - Describe the exact verification performed instead of using vague shortcut

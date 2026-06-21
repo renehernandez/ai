@@ -59,14 +59,14 @@
 
 ## 6. Rule And Skill Alignment
 
-- [ ] 6.1 Update `plan-ready` docs, scripts, adapter prompt, and tests so
+- [x] 6.1 Update `plan-ready` docs, scripts, adapter prompt, and tests so
       orchestrated plan delivery does not emit or accept `direct_publish`.
-- [ ] 6.2 Update `plan-review`, `review-feedback-routing`, and hosted-review
+- [x] 6.2 Update `plan-review`, `review-feedback-routing`, and hosted-review
       adapter prompts so the first cut is Nitro-capable Fullscript GitLab only.
-- [ ] 6.3 Update `AGENTS.md`, `instructions/AGENTS.md`, and
+- [x] 6.3 Update `AGENTS.md`, `instructions/AGENTS.md`, and
       `rules/feature-delivery.md` so `plan-orchestrator` stacked delivery is an
       explicit exception to ordinary direct-main publication.
-- [ ] 6.4 Verify that runtime-facing instructions and prompts only document the
+- [x] 6.4 Verify that runtime-facing instructions and prompts only document the
       new `stacked_delivery` contract after shared validators and consumer
       skill tests reject `ship_then_continue`, reject `stack_when_ready`, reject
       orchestrated `direct_publish`, and accept `stacked_delivery`.

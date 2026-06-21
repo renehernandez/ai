@@ -187,6 +187,24 @@ test("validate-handoff requires openspec completion updates for openspec tasks",
   });
 });
 
+test("validate-handoff rejects direct publish for orchestrated delivery", () => {
+  withTempPlan(({ artifactRef, fingerprint }) => {
+    const result = runPlanReady(
+      "validate-handoff",
+      validHandoff(artifactRef, fingerprint).replace(
+        "    expected_host: github_pr",
+        "    expected_host: direct_publish",
+      ),
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /delivery.expected_host must be one of: github_pr, gitlab_mr/,
+    );
+  });
+});
+
 test("validate-handoff rejects stale artifact fingerprints", () => {
   withTempPlan(({ artifactRef }) => {
     const result = runPlanReady(
@@ -225,6 +243,7 @@ test("handoff-template emits the plan delivery contract", () => {
   );
   assert.match(result.stdout, /plan_delivery_handoff:/);
   assert.match(result.stdout, /\.agents\/plans\/example\.md/);
+  assert.doesNotMatch(result.stdout, /direct_publish/);
   assert.doesNotMatch(result.stdout, /reviewed_slices/);
   assert.doesNotMatch(result.stdout, /docs\/plans\/example\.md/);
 });

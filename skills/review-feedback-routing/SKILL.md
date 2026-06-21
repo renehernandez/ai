@@ -1,6 +1,6 @@
 ---
 name: review-feedback-routing
-description: Use when selecting machine-level review routing for GitHub PRs, GitLab MRs, Nitro, Codex, review feedback adapters, artifact hosts, or PR/MR review feedback policy.
+description: Use when selecting machine-level review routing for GitHub PRs, GitLab MRs, Nitro, review feedback adapters, artifact hosts, or PR/MR review feedback policy.
 allowed-tools: Read, Glob, Grep, Bash(git:*)
 ---
 
@@ -12,7 +12,7 @@ Route PR/MR artifact handling separately from AI review feedback. Machine policy
 
 - `plan-unit-delivery` or `plan-review` needs to decide which artifact host and review feedback adapter to use.
 - A repo has GitHub and GitLab remotes, mirrored repositories, or ambiguous review workflows.
-- The user asks how Nitro, Codex, or hosted review feedback should be requested or consumed.
+- The user asks how Nitro or hosted review feedback should be requested or consumed.
 
 ## Source of Truth
 
@@ -34,8 +34,8 @@ Do not put review routing in CLI runtime config JSON. That config is for CLI mec
 | `artifact.kind` | Review artifact type | `pull_request`, `merge_request` |
 | `create_adapter` | Skill for opening/updating the artifact | `github-pr-create`, `glab-mr-create` |
 | `inspect_adapter` | Skill for gathering host metadata/diff/checks | `github-adapter-review`, `gitlab-adapter-review` |
-| `reviewer` | Actor that provides review feedback | `nitro`, `codex`, `human` |
-| `feedback_adapter` | Skill for requesting/polling/parsing feedback | `nitro-review-feedback`, `codex-review-feedback` |
+| `reviewer` | Actor that provides review feedback | `nitro`, `human` |
+| `feedback_adapter` | Skill for requesting/polling/parsing feedback | `nitro-review-feedback` |
 
 ## Workflow
 
@@ -129,7 +129,7 @@ nitro_feedback_gate:
 ## Normalized Feedback Contract
 
 ```markdown
-reviewer: <nitro | codex | human | unknown>
+reviewer: <nitro | human | unknown>
 artifact: <PR/MR URL>
 head_sha: <sha-or-unknown>
 feedback_kind: <inline | summary | check | discussion | review>
@@ -145,7 +145,7 @@ verification_gaps: <none | list>
 | --- | --- |
 | Treating all GitLab remotes as Nitro | Match `git.fullscript.io` specifically |
 | Treating all GitHub remotes the same | Add `org` or `repo` match keys when private GitHub and open-source GitHub differ |
-| Mixing GitHub/GitLab with Nitro/Codex | Keep artifact host and review feedback separate |
+| Mixing GitHub/GitLab with Nitro | Keep artifact host and review feedback separate |
 | Adding future reviewers before they exist | Leave them out until the adapter exists |
 | Letting CLI config decide review policy | Read routing YAML instead |
 | Letting a typo fail open | Unmatched routes must ask or block according to `unmatched` |
@@ -155,7 +155,7 @@ verification_gaps: <none | list>
 ## Validation Scenarios
 
 - Fullscript GitLab MR: pass only if `git.fullscript.io` selects GitLab artifact adapters and explicit Nitro feedback requested through `/request_review @nitro`.
-- GitHub open-source PR: pass only if `github.com` selects GitHub artifact adapters and Codex explicit feedback.
+- GitHub PR: return `nitro_route_unsupported` for required Nitro feedback in this first cut.
 - Mixed `origin`/`upstream` remotes: pass only if the artifact URL or target remote controls routing, or the agent asks.
 - Unmatched typo host: pass only if routing asks or blocks instead of picking the nearest route.
 - Future reviewer absent: pass only if no unconfigured reviewer route is selected or invented.
@@ -164,6 +164,6 @@ verification_gaps: <none | list>
 
 - RED: sub-agent `019eae29-0cdb-76c2-bbb9-7a5be0501e9a` mixed some artifact-host and reviewer terms, suggested a non-runtime config location, and identified over-broad GitHub routing, origin/upstream ambiguity, vague automatic semantics, skip/override gaps, and typo fail-open risk.
 - GREEN: this skill separates artifact host, review feedback, and adapters; uses machine policy before repo overrides; excludes unconfigured future reviewers; and requires unmatched routes to ask or block.
-- GREEN: sub-agent `019eae2b-728b-79a0-afa9-87231b5a896e` passed the mixed GitHub/Fullscript GitLab routing test by selecting GitHub + Codex for a GitHub PR, leaving Nitro on the Fullscript GitLab route, and asking on unmatched hosts.
+- GREEN: GitHub artifacts now remain unsupported for required Nitro feedback in the first stacked-delivery cut instead of selecting another reviewer.
 - RED: thread `019eb821-3bda-7db2-b40d-12c90f93b4cb` blocked after repeated polls because routing marked Fullscript Nitro as automatic with `request_review: false`, so no Nitro review was requested.
 - GREEN: Fullscript Nitro routing now uses explicit `review_requested` semantics with `request_review: true`, matching the Fullscript Nitro rule that posts `/request_review @nitro` after MR creation or material follow-up pushes.

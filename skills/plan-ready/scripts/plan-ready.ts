@@ -51,7 +51,7 @@ const OPTIONAL_REVIEWERS = Object.keys(OPTIONAL_REVIEWER_DESCRIPTIONS) as Array<
 >;
 const ARTIFACT_TYPES = ["plan", "openspec", "linear"] as const;
 const ROUTES = ["atomic_plan", "openspec_task"] as const;
-const EXPECTED_HOSTS = ["github_pr", "gitlab_mr", "direct_publish"] as const;
+const EXPECTED_HOSTS = ["github_pr", "gitlab_mr"] as const;
 type Command =
   | "detect"
   | "reviewer-template"
@@ -201,7 +201,7 @@ function printHandoffTemplate(): void {
 - Status: ready for one atomic delivery unit.
 - Route: atomic plan.
 - Artifact: .agents/plans/example.md.
-- Delivery: create one PR, MR, or direct-publish commit for the approved unit.
+- Delivery: create one PR or MR for the approved unit.
 - Verification: run the listed checks before delivery.
 
 \`\`\`yaml
@@ -226,7 +226,7 @@ plan_delivery_handoff:
     out_of_scope:
       - <explicit non-goal>
   delivery:
-    expected_host: github_pr | gitlab_mr | direct_publish
+    expected_host: github_pr | gitlab_mr
     completion_updates: []
   review:
     required_reviewers:

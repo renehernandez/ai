@@ -21,7 +21,6 @@ const ARTIFACT_TYPES = ["plan", "openspec", "linear"] as const;
 const REQUEST_STATUSES = ["ready_for_review"] as const;
 const REQUESTED_REVIEWERS = [
   "nitro",
-  "codex",
   "developers",
   "human",
   "security",

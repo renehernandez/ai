@@ -27,25 +27,3 @@ routes:
           inline_comments: true
           summary_comments: true
           head_sha_tracking: true
-
-  - match:
-      remote_host: github.com
-    artifact:
-      host: github
-      kind: pull_request
-      create_adapter: github-pr-create
-      inspect_adapter: github-adapter-review
-    review_feedback:
-      primary:
-        reviewer: codex
-        feedback_adapter: codex-review-feedback
-        request_mode: explicit
-        wait_mode: poll
-        trigger: review_requested
-        required: true
-        capabilities:
-          request_review: true
-          poll_feedback: true
-          inline_comments: true
-          summary_comments: true
-          head_sha_tracking: true
