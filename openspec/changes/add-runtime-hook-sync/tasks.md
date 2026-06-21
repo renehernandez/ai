@@ -15,7 +15,7 @@
 
 ## 3. Startup Git Sync Hook
 
-- [ ] 3.1 Add the conservative TypeScript startup Git sync hook with fixture
+- [x] 3.1 Add the conservative TypeScript startup Git sync hook with fixture
   tests for default-branch resolution, primary worktree fast-forward,
   clean-worktree rebase, detached HEAD policy, conflict aborts, and
   deterministic invocation.
