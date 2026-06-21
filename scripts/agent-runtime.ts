@@ -847,6 +847,7 @@ function runOpenSpec(command: RuntimeCommand, config: Config): void {
     return;
   }
 
+  assertOpenSpecCommandBoundary(command, stateReport);
   ensureOpenSpecCli();
 
   if (command === "validate") {
@@ -871,6 +872,49 @@ function runOpenSpec(command: RuntimeCommand, config: Config): void {
   }
   normalizeOpenSpecScaffolding(openspec);
   console.log("Updated repo-local OpenSpec scaffolding.");
+}
+
+function assertOpenSpecCommandBoundary(
+  command: RuntimeCommand,
+  stateReport: OpenSpecStateReport,
+): void {
+  if (command === "install") {
+    if (stateReport.state === "missing") {
+      return;
+    }
+    if (stateReport.state === "configured") {
+      throw new Error(
+        "Repo-local OpenSpec is already configured. Use `agent-runtime openspec update` to refresh generated assets.",
+      );
+    }
+    throw new Error(formatOpenSpecPartialStateError("install", stateReport));
+  }
+
+  if (command === "update") {
+    if (stateReport.state === "configured") {
+      return;
+    }
+    if (stateReport.state === "missing") {
+      throw new Error(
+        "Repo-local OpenSpec is not configured. Use `agent-runtime openspec install` to create the initial scaffolding.",
+      );
+    }
+    throw new Error(formatOpenSpecPartialStateError("update", stateReport));
+  }
+}
+
+function formatOpenSpecPartialStateError(
+  command: Extract<RuntimeCommand, "install" | "update">,
+  stateReport: OpenSpecStateReport,
+): string {
+  const findings =
+    stateReport.findings.length > 0
+      ? stateReport.findings
+      : ["OpenSpec setup has an incomplete generated asset footprint."];
+  return [
+    `Repo-local OpenSpec setup is partial. Repair these findings before running \`agent-runtime openspec ${command}\`:`,
+    ...findings.map((finding) => `- ${finding}`),
+  ].join("\n");
 }
 
 function runRuntimeStatus(

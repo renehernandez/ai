@@ -396,31 +396,9 @@ test("CLI shows hooks scope help", () => {
   assert.match(result.stdout, /validate/);
 });
 
-test("CLI installs and normalizes repo-local OpenSpec scaffolding", () => {
+test("CLI installs missing OpenSpec scaffolding and updates configured projects", () => {
   withFixture(({ configPath, runtimeDir }) => {
     const env = addOpenSpecStub(runtimeDir);
-    mkdirSync(join(runtimeDir, "openspec"), { recursive: true });
-    mkdirSync(join(runtimeDir, ".codex", "skills", "openspec-propose"), {
-      recursive: true,
-    });
-    mkdirSync(join(runtimeDir, ".claude", "commands", "opsx"), {
-      recursive: true,
-    });
-    writeFileSync(
-      join(runtimeDir, "openspec", "config.yaml"),
-      "sentinel config\n",
-      "utf-8",
-    );
-    writeFileSync(
-      join(runtimeDir, ".codex", "skills", "openspec-propose", "SKILL.md"),
-      "sentinel codex skill\n",
-      "utf-8",
-    );
-    writeFileSync(
-      join(runtimeDir, ".claude", "commands", "opsx", "propose.md"),
-      "sentinel claude command\n",
-      "utf-8",
-    );
 
     const install = runAgentRuntime(
       ["openspec", "install", "--config", configPath],
@@ -465,67 +443,33 @@ test("CLI installs and normalizes repo-local OpenSpec scaffolding", () => {
       ),
       "../../../.agents/commands/opsx/propose.md",
     );
-    const manifestsAfterInstall = collectBackupManifests(
-      join(runtimeDir, "backups"),
-    );
-    assert.ok(
-      manifestsAfterInstall.some((manifest) =>
-        manifest.includes(`${join("openspec", "agents")}${sep}`),
-      ),
-    );
-    assert.ok(
-      manifestsAfterInstall.some((manifest) =>
-        manifest.includes(`${join("openspec", "codex")}${sep}`),
-      ),
-    );
-    const configBackup = findBackupManifest(
-      manifestsAfterInstall,
-      (manifest) =>
-        manifest.assetKind === "openspec" &&
-        manifest.targetName === "config" &&
-        manifest.kind === "file",
-    );
-    assert.equal(
-      readFileSync(join(dirname(configBackup), "target"), "utf-8"),
+    writeFileSync(
+      join(runtimeDir, "openspec", "config.yaml"),
       "sentinel config\n",
+      "utf-8",
     );
-    const codexSkillBackup = findBackupManifest(
-      manifestsAfterInstall,
-      (manifest, manifestPath) =>
-        manifest.assetKind === "openspec" &&
-        manifest.targetName === "codex" &&
-        manifest.kind === "directory" &&
-        existsSync(
-          join(dirname(manifestPath), "target", "openspec-propose", "SKILL.md"),
-        ),
-    );
-    assert.equal(
-      readFileSync(
-        join(
-          dirname(codexSkillBackup),
-          "target",
-          "openspec-propose",
-          "SKILL.md",
-        ),
-        "utf-8",
-      ),
+    rmSync(join(runtimeDir, ".codex", "skills", "openspec-propose"), {
+      force: true,
+      recursive: true,
+    });
+    mkdirSync(join(runtimeDir, ".codex", "skills", "openspec-propose"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(runtimeDir, ".codex", "skills", "openspec-propose", "SKILL.md"),
       "sentinel codex skill\n",
+      "utf-8",
     );
-    const claudeCommandBackup = findBackupManifest(
-      manifestsAfterInstall,
-      (manifest, manifestPath) =>
-        manifest.assetKind === "openspec" &&
-        manifest.targetName === "claude" &&
-        manifest.kind === "directory" &&
-        existsSync(join(dirname(manifestPath), "target", "propose.md")),
-    );
-    assert.equal(
-      readFileSync(
-        join(dirname(claudeCommandBackup), "target", "propose.md"),
-        "utf-8",
-      ),
+    rmSync(join(runtimeDir, ".claude", "commands", "opsx", "propose.md"), {
+      force: true,
+      recursive: true,
+    });
+    writeFileSync(
+      join(runtimeDir, ".claude", "commands", "opsx", "propose.md"),
       "sentinel claude command\n",
+      "utf-8",
     );
+
     writeFileSync(
       join(runtimeDir, ".agents", "skills", "openspec-propose", "SKILL.md"),
       "canonical skill before update\n",
@@ -547,6 +491,64 @@ test("CLI installs and normalizes repo-local OpenSpec scaffolding", () => {
 
     const manifestsAfterUpdate = collectBackupManifests(
       join(runtimeDir, "backups"),
+    );
+    assert.ok(
+      manifestsAfterUpdate.some((manifest) =>
+        manifest.includes(`${join("openspec", "agents")}${sep}`),
+      ),
+    );
+    assert.ok(
+      manifestsAfterUpdate.some((manifest) =>
+        manifest.includes(`${join("openspec", "codex")}${sep}`),
+      ),
+    );
+    const configBackup = findBackupManifest(
+      manifestsAfterUpdate,
+      (manifest) =>
+        manifest.assetKind === "openspec" &&
+        manifest.targetName === "config" &&
+        manifest.kind === "file",
+    );
+    assert.equal(
+      readFileSync(join(dirname(configBackup), "target"), "utf-8"),
+      "sentinel config\n",
+    );
+    const codexSkillBackup = findBackupManifest(
+      manifestsAfterUpdate,
+      (manifest, manifestPath) =>
+        manifest.assetKind === "openspec" &&
+        manifest.targetName === "codex" &&
+        manifest.kind === "directory" &&
+        existsSync(
+          join(dirname(manifestPath), "target", "openspec-propose", "SKILL.md"),
+        ),
+    );
+    assert.equal(
+      readFileSync(
+        join(
+          dirname(codexSkillBackup),
+          "target",
+          "openspec-propose",
+          "SKILL.md",
+        ),
+        "utf-8",
+      ),
+      "sentinel codex skill\n",
+    );
+    const claudeCommandBackup = findBackupManifest(
+      manifestsAfterUpdate,
+      (manifest, manifestPath) =>
+        manifest.assetKind === "openspec" &&
+        manifest.targetName === "claude" &&
+        manifest.kind === "directory" &&
+        existsSync(join(dirname(manifestPath), "target", "propose.md")),
+    );
+    assert.equal(
+      readFileSync(
+        join(dirname(claudeCommandBackup), "target", "propose.md"),
+        "utf-8",
+      ),
+      "sentinel claude command\n",
     );
     const canonicalSkillBackup = findBackupManifest(
       manifestsAfterUpdate,
@@ -603,6 +605,108 @@ test("CLI installs and normalizes repo-local OpenSpec scaffolding", () => {
       collectBackupManifests(join(runtimeDir, "backups")).length,
       manifestsAfterUpdate.length,
     );
+  });
+});
+
+test("CLI refuses OpenSpec install when setup is already configured", () => {
+  withFixture(({ configPath, runtimeDir }) => {
+    mkdirSync(join(runtimeDir, "openspec"), { recursive: true });
+    mkdirSync(join(runtimeDir, ".agents", "skills", "openspec-propose"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(runtimeDir, "openspec", "config.yaml"),
+      "sentinel config\n",
+      "utf-8",
+    );
+
+    const result = runAgentRuntime(
+      ["openspec", "install", "--config", configPath],
+      {
+        cwd: runtimeDir,
+        env: { PATH: join(runtimeDir, "missing-bin") },
+      },
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /already configured/);
+    assert.match(result.stderr, /agent-runtime openspec update/);
+    assert.doesNotMatch(result.stderr, /npm install -g/);
+    assert.equal(collectBackupManifests(join(runtimeDir, "backups")).length, 0);
+    assert.equal(
+      readFileSync(join(runtimeDir, "openspec", "config.yaml"), "utf-8"),
+      "sentinel config\n",
+    );
+  });
+});
+
+test("CLI refuses OpenSpec update when setup is missing", () => {
+  withFixture(({ configPath, runtimeDir }) => {
+    const result = runAgentRuntime(
+      ["openspec", "update", "--config", configPath],
+      {
+        cwd: runtimeDir,
+        env: { PATH: join(runtimeDir, "missing-bin") },
+      },
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /not configured/);
+    assert.match(result.stderr, /agent-runtime openspec install/);
+    assert.doesNotMatch(result.stderr, /npm install -g/);
+    assert.equal(
+      existsSync(join(runtimeDir, "openspec", "config.yaml")),
+      false,
+    );
+    assert.equal(collectBackupManifests(join(runtimeDir, "backups")).length, 0);
+  });
+});
+
+test("CLI refuses OpenSpec install or update when setup is partial", () => {
+  withFixture(({ configPath, runtimeDir }) => {
+    mkdirSync(join(runtimeDir, "openspec"), { recursive: true });
+    writeFileSync(
+      join(runtimeDir, "openspec", "config.yaml"),
+      "sentinel config\n",
+      "utf-8",
+    );
+
+    const install = runAgentRuntime(
+      ["openspec", "install", "--config", configPath],
+      {
+        cwd: runtimeDir,
+        env: addOpenSpecStub(runtimeDir),
+      },
+    );
+
+    assert.notEqual(install.status, 0);
+    assert.match(install.stderr, /setup is partial/);
+    assert.match(install.stderr, /No managed OpenSpec skills/);
+    assert.equal(existsSync(join(runtimeDir, ".agents", "skills")), false);
+    assert.equal(collectBackupManifests(join(runtimeDir, "backups")).length, 0);
+  });
+
+  withFixture(({ configPath, runtimeDir }) => {
+    mkdirSync(join(runtimeDir, ".agents", "skills", "openspec-propose"), {
+      recursive: true,
+    });
+
+    const update = runAgentRuntime(
+      ["openspec", "update", "--config", configPath],
+      {
+        cwd: runtimeDir,
+        env: addOpenSpecStub(runtimeDir),
+      },
+    );
+
+    assert.notEqual(update.status, 0);
+    assert.match(update.stderr, /setup is partial/);
+    assert.match(update.stderr, /Missing OpenSpec config/);
+    assert.equal(
+      existsSync(join(runtimeDir, "openspec", "config.yaml")),
+      false,
+    );
+    assert.equal(collectBackupManifests(join(runtimeDir, "backups")).length, 0);
   });
 });
 

@@ -6,7 +6,7 @@
 ## 2. State Classification And Command Boundaries
 
 - [x] 2.1 Add `OpenSpecStateReport` and `inspectOpenSpecState` so `install`, `update`, `status`, and `validate` share missing, configured, and partial setup classification before backup or mutation.
-- [ ] 2.2 Enforce command boundaries so `install` only runs for missing state, configured projects use `update`, partial state reports path-level repair findings, and `update` refuses missing state.
+- [x] 2.2 Enforce command boundaries so `install` only runs for missing state, configured projects use `update`, partial state reports path-level repair findings, and `update` refuses missing state.
 
 ## 3. Guided Install Setup
 
