@@ -286,6 +286,8 @@ type ProfileSelection = {
 
 type OpenSpecCommandOptions = {
   contextFile?: string;
+  reviewConfig?: boolean;
+  acceptConfigChanges?: boolean;
 };
 
 type LockFile = {
@@ -542,6 +544,14 @@ function addOpenSpecCommands(program: Command, execute: CommandExecutor): void {
         "Confirmed project context file for headless first-time install",
       );
     }
+    if (command === "update") {
+      scopedCommand
+        .option("--review-config", "Review inferred OpenSpec config changes")
+        .option(
+          "--accept-config-changes",
+          "Apply inferred OpenSpec config changes in headless review mode",
+        );
+    }
     scopedCommand.action(
       (first: CommandOptions | Command, second?: Command) => {
         const { options, commandObject } = actionContext(first, second);
@@ -553,6 +563,8 @@ function addOpenSpecCommands(program: Command, execute: CommandExecutor): void {
             contextFile: options.contextFile
               ? resolve(options.contextFile)
               : undefined,
+            reviewConfig: options.reviewConfig,
+            acceptConfigChanges: options.acceptConfigChanges,
           },
         });
       },
@@ -585,6 +597,8 @@ type CommandOptions = {
   profile?: string[];
   allProfiles?: boolean;
   contextFile?: string;
+  reviewConfig?: boolean;
+  acceptConfigChanges?: boolean;
 };
 
 function collectOption(value: string, previous: string[] = []): string[] {
@@ -996,6 +1010,10 @@ function runOpenSpec(
     return;
   }
 
+  if (options.reviewConfig && !reviewOpenSpecConfig(openspec, options)) {
+    return;
+  }
+
   const validationErrors = openSpecValidationErrors(openspec);
   if (validationErrors.length === 0) {
     console.log("OpenSpec generated assets are current.");
@@ -1073,6 +1091,149 @@ function printOpenSpecInstallPreview(setup: OpenSpecInstallSetup): void {
       console.log(`    - ${rule}`);
     }
   }
+}
+
+function reviewOpenSpecConfig(
+  config: ResolvedOpenSpecConfig,
+  options: OpenSpecCommandOptions,
+): boolean {
+  const currentPath = join("openspec", "config.yaml");
+  const currentConfig = existsSync(currentPath)
+    ? readFileSync(currentPath, "utf-8")
+    : "";
+  const proposedConfig = renderOpenSpecConfigYaml(
+    mergeOpenSpecConfigDocument(
+      currentConfig,
+      createOpenSpecInstallSetup(config),
+    ),
+  );
+
+  if (currentConfig === proposedConfig) {
+    console.log("OpenSpec config is current.");
+    return true;
+  }
+
+  console.log("Proposed OpenSpec config changes:");
+  console.log(proposedConfig.trimEnd());
+
+  if (!canPrompt()) {
+    if (!options.acceptConfigChanges) {
+      console.log(
+        "OpenSpec config review was not applied. Re-run with `--accept-config-changes` to write these changes headlessly.",
+      );
+      return false;
+    }
+    writeFileSync(currentPath, proposedConfig, "utf-8");
+    console.log("Updated openspec/config.yaml from accepted config review.");
+    return true;
+  }
+
+  writeSync(1, "Apply these OpenSpec config changes? [y/N] ");
+  const answer = promptLine().toLowerCase();
+  if (answer !== "y" && answer !== "yes") {
+    console.log("OpenSpec config review was not applied.");
+    return false;
+  }
+  writeFileSync(currentPath, proposedConfig, "utf-8");
+  console.log("Updated openspec/config.yaml from config review.");
+  return true;
+}
+
+function mergeOpenSpecConfigDocument(
+  currentConfig: string,
+  proposedSetup: OpenSpecInstallSetup,
+): OpenSpecInstallSetup {
+  const parsed = parseOpenSpecConfigDocument(currentConfig);
+  return {
+    ...proposedSetup,
+    schema: parsed.schema || proposedSetup.schema,
+    context: uniqueNonEmptyLines([
+      ...parsed.contextLines,
+      ...proposedSetup.context.split(/\r?\n/),
+    ]).join("\n"),
+    rules: mergeOpenSpecRules(parsed.rules, proposedSetup.rules),
+  };
+}
+
+function parseOpenSpecConfigDocument(content: string): {
+  schema: string;
+  contextLines: string[];
+  rules: Record<string, string[]>;
+} {
+  const lines = content.split(/\r?\n/);
+  const rules: Record<string, string[]> = {};
+  let schema = "";
+  let mode: "root" | "context" | "rules" | "rule-values" = "root";
+  let currentRule = "";
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+    const trimmed = line.trim();
+    if (trimmed.length === 0 || trimmed.startsWith("#")) {
+      continue;
+    }
+    if (mode === "context" && rawLine.startsWith("  ")) {
+      continue;
+    }
+    if (trimmed.startsWith("schema:")) {
+      schema = unquoteYamlScalar(trimmed.slice("schema:".length).trim());
+      mode = "root";
+      continue;
+    }
+    if (trimmed.startsWith("context:")) {
+      mode = "context";
+      continue;
+    }
+    if (trimmed === "rules:") {
+      mode = "rules";
+      continue;
+    }
+    if (mode === "rules" && rawLine.startsWith("  ") && trimmed.endsWith(":")) {
+      currentRule = unquoteYamlScalar(trimmed.slice(0, -1));
+      rules[currentRule] = rules[currentRule] ?? [];
+      mode = "rule-values";
+      continue;
+    }
+    if (mode === "rule-values" && currentRule && rawLine.startsWith("    - ")) {
+      rules[currentRule].push(unquoteYamlScalar(trimmed.slice(2).trim()));
+    }
+  }
+  return {
+    schema,
+    contextLines: parseOpenSpecContextLines(content),
+    rules,
+  };
+}
+
+function parseOpenSpecContextLines(content: string): string[] {
+  const lines = content.split(/\r?\n/);
+  const selected: string[] = [];
+  let inContext = false;
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    if (trimmed.startsWith("context:")) {
+      inContext = true;
+      continue;
+    }
+    if (!inContext) {
+      continue;
+    }
+    if (!rawLine.startsWith("  ")) {
+      break;
+    }
+    selected.push(rawLine.slice(2));
+  }
+  return uniqueNonEmptyLines(selected);
+}
+
+function unquoteYamlScalar(value: string): string {
+  if (value.startsWith('"') && value.endsWith('"')) {
+    try {
+      return JSON.parse(value) as string;
+    } catch {
+      return value.slice(1, -1);
+    }
+  }
+  return value;
 }
 
 function assertOpenSpecCommandBoundary(

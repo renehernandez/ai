@@ -729,6 +729,108 @@ test("CLI skips OpenSpec update when generated assets are current", () => {
   });
 });
 
+test("CLI reports OpenSpec config review changes without headless acceptance", () => {
+  withFixture(({ configPath, runtimeDir }) => {
+    const contextFile = join(runtimeDir, "openspec-context.md");
+    writeFileSync(contextFile, "Confirmed context.\n", "utf-8");
+    const env = addOpenSpecStub(runtimeDir);
+
+    const install = runAgentRuntime(
+      [
+        "openspec",
+        "install",
+        "--context-file",
+        contextFile,
+        "--config",
+        configPath,
+      ],
+      { cwd: runtimeDir, env },
+    );
+    assert.equal(install.status, 0, install.stderr || install.stdout);
+    writeFileSync(
+      join(runtimeDir, "openspec", "config.yaml"),
+      "schema: spec-driven\ncontext: |-\n  Existing context.\n",
+      "utf-8",
+    );
+
+    const update = runAgentRuntime(
+      ["openspec", "update", "--review-config", "--config", configPath],
+      { cwd: runtimeDir, env },
+    );
+
+    assert.equal(update.status, 0, update.stderr || update.stdout);
+    assert.match(update.stdout, /Proposed OpenSpec config changes/);
+    assert.match(update.stdout, /OpenSpec config review was not applied/);
+    assert.equal(
+      readFileSync(join(runtimeDir, "openspec", "config.yaml"), "utf-8"),
+      "schema: spec-driven\ncontext: |-\n  Existing context.\n",
+    );
+  });
+});
+
+test("CLI applies accepted headless OpenSpec config review", () => {
+  withFixture(({ configPath, runtimeDir }) => {
+    const contextFile = join(runtimeDir, "openspec-context.md");
+    writeFileSync(contextFile, "Confirmed context.\n", "utf-8");
+    const env = addOpenSpecStub(runtimeDir);
+
+    const install = runAgentRuntime(
+      [
+        "openspec",
+        "install",
+        "--context-file",
+        contextFile,
+        "--config",
+        configPath,
+      ],
+      { cwd: runtimeDir, env },
+    );
+    assert.equal(install.status, 0, install.stderr || install.stdout);
+    writeFileSync(
+      join(runtimeDir, "openspec", "config.yaml"),
+      "schema: spec-driven\ncontext: |-\n  Existing context.\nrules:\n  tasks:\n    - Existing task rule.\n",
+      "utf-8",
+    );
+    writeFileSync(
+      join(runtimeDir, "package.json"),
+      JSON.stringify(
+        {
+          name: "review-config-fixture",
+          scripts: {
+            test: "node --test",
+          },
+        },
+        null,
+        2,
+      ),
+      "utf-8",
+    );
+
+    const update = runAgentRuntime(
+      [
+        "openspec",
+        "update",
+        "--review-config",
+        "--accept-config-changes",
+        "--config",
+        configPath,
+      ],
+      { cwd: runtimeDir, env },
+    );
+
+    assert.equal(update.status, 0, update.stderr || update.stdout);
+    assert.match(update.stdout, /Updated openspec\/config.yaml/);
+    const updatedConfig = readFileSync(
+      join(runtimeDir, "openspec", "config.yaml"),
+      "utf-8",
+    );
+    assert.match(updatedConfig, /Existing context/);
+    assert.match(updatedConfig, /OpenSpec tools: codex, claude/);
+    assert.match(updatedConfig, /Existing task rule/);
+    assert.match(updatedConfig, /package-managed verification/);
+  });
+});
+
 test("CLI preserves confirmed OpenSpec config when upstream generation fails", () => {
   withFixture(({ configPath, runtimeDir }) => {
     const contextFile = join(runtimeDir, "openspec-context.md");

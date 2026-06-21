@@ -18,7 +18,7 @@
 
 - [x] 4.1 Add bounded project-signal collection for concise context and artifact-rule inference, ignoring secrets, caches, generated assets, logs, archives, runtime state, and lockfile bodies.
 - [x] 4.2 Keep normal `agent-runtime openspec update` asset-focused and quiet unless generated assets need refresh or validation reports drift.
-- [ ] 4.3 Add `update --review-config` config review with preserve-by-default merges and headless `--accept-config-changes` behavior.
+- [x] 4.3 Add `update --review-config` config review with preserve-by-default merges and headless `--accept-config-changes` behavior.
 
 ## 5. Validation, Tests, And Docs
 
