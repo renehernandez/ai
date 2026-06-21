@@ -193,6 +193,7 @@ export type ResolvedOpenSpecConfig = {
   skillTargets: Record<string, string>;
   commandTargets: Record<string, string>;
   backupsRoot: string;
+  reusableScripts: RuntimeFileConfig[];
 };
 
 export type OpenSpecSetupState = "missing" | "configured" | "partial";
@@ -313,6 +314,15 @@ const DEFAULT_OPENSPEC_WORKFLOWS = [
   "apply",
   "archive",
 ] as const;
+const KNOWN_OPENSPEC_SCHEMAS = new Set(["spec-driven", "workspace-planning"]);
+const KNOWN_OPENSPEC_ARTIFACT_IDS = new Set([
+  "proposal",
+  "specs",
+  "design",
+  "tasks",
+  "apply",
+]);
+const MAX_OPENSPEC_CONTEXT_LENGTH = 6000;
 const DEFAULT_OPENSPEC_RULES: Record<string, string[]> = {
   proposal: [
     "State goals, non-goals, and user-visible behavior changes when they are relevant.",
@@ -1396,6 +1406,7 @@ function resolvedOpenSpecConfig(config: Config): ResolvedOpenSpecConfig {
     canonicalSkillsDir: input.canonicalSkillsDir ?? ".agents/skills",
     canonicalCommandsDir: input.canonicalCommandsDir ?? ".agents/commands",
     backupsRoot: runtimeBackupsRoot(config),
+    reusableScripts: config.runtime.reusableScripts ?? [],
     skillTargets: nonEmptyRecord(
       input.skillTargets,
       {
@@ -1999,6 +2010,8 @@ function validateOpenSpec(config: ResolvedOpenSpecConfig): void {
 
 function openSpecValidationErrors(config: ResolvedOpenSpecConfig): string[] {
   const errors: string[] = [];
+  validateOpenSpecConfigQuality(errors);
+  validateOpenSpecReusableScripts(config, errors);
   const canonicalSkillsDir = resolve(config.canonicalSkillsDir);
   const skillTargetDirs = Object.values(config.skillTargets).map((target) =>
     resolve(target),
@@ -2049,6 +2062,50 @@ function openSpecValidationErrors(config: ResolvedOpenSpecConfig): string[] {
   }
 
   return errors;
+}
+
+function validateOpenSpecConfigQuality(errors: string[]): void {
+  const configPath = join("openspec", "config.yaml");
+  if (!existsSync(configPath)) {
+    errors.push(`Missing OpenSpec config: ${configPath}`);
+    return;
+  }
+  const content = readFileSync(configPath, "utf-8");
+  const parsed = parseOpenSpecConfigDocument(content);
+  if (!parsed.schema) {
+    errors.push("OpenSpec config missing schema");
+  } else if (!KNOWN_OPENSPEC_SCHEMAS.has(parsed.schema)) {
+    errors.push(`Unknown OpenSpec schema: ${parsed.schema}`);
+  }
+  const contextLength = parsed.contextLines.join("\n").length;
+  if (contextLength > MAX_OPENSPEC_CONTEXT_LENGTH) {
+    errors.push(
+      `OpenSpec context is too large: ${contextLength} characters exceeds ${MAX_OPENSPEC_CONTEXT_LENGTH}`,
+    );
+  }
+  for (const artifact of Object.keys(parsed.rules)) {
+    if (!KNOWN_OPENSPEC_ARTIFACT_IDS.has(artifact)) {
+      errors.push(
+        `OpenSpec config has rules for unknown artifact: ${artifact}`,
+      );
+    }
+  }
+}
+
+function validateOpenSpecReusableScripts(
+  config: ResolvedOpenSpecConfig,
+  errors: string[],
+): void {
+  for (const runtimeFile of config.reusableScripts) {
+    const sourcePath = runtimeFileSourcePath(runtimeFile);
+    const targetPath = runtimeFileTargetPath(runtimeFile);
+    if (!existsSync(sourcePath)) {
+      errors.push(`Missing reusable runtime script source: ${sourcePath}`);
+    }
+    if (targetPath.trim().length === 0) {
+      errors.push(`Reusable runtime script has empty target: ${sourcePath}`);
+    }
+  }
 }
 
 function statusOpenSpec(

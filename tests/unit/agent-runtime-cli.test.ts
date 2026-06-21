@@ -111,6 +111,7 @@ function testOpenSpecConfig() {
     canonicalSkillsDir: ".agents/skills",
     canonicalCommandsDir: ".agents/commands",
     backupsRoot: "backups",
+    reusableScripts: [],
     skillTargets: {
       codex: ".codex/skills",
       claude: ".claude/skills",

@@ -501,7 +501,7 @@ test("CLI installs missing OpenSpec scaffolding and updates configured projects"
     assert.match(installedConfig, /rules:/);
     writeFileSync(
       join(runtimeDir, "openspec", "config.yaml"),
-      "sentinel config\n",
+      "schema: spec-driven\ncontext: |-\n  sentinel config\n",
       "utf-8",
     );
     rmSync(join(runtimeDir, ".codex", "skills", "openspec-propose"), {
@@ -567,7 +567,7 @@ test("CLI installs missing OpenSpec scaffolding and updates configured projects"
     );
     assert.equal(
       readFileSync(join(dirname(configBackup), "target"), "utf-8"),
-      "sentinel config\n",
+      "schema: spec-driven\ncontext: |-\n  sentinel config\n",
     );
     const codexSkillBackup = findBackupManifest(
       manifestsAfterUpdate,
@@ -914,7 +914,7 @@ test("CLI refuses OpenSpec install when setup is already configured", () => {
     });
     writeFileSync(
       join(runtimeDir, "openspec", "config.yaml"),
-      "sentinel config\n",
+      "schema: spec-driven\ncontext: |-\n  sentinel config\n",
       "utf-8",
     );
 
@@ -933,7 +933,7 @@ test("CLI refuses OpenSpec install when setup is already configured", () => {
     assert.equal(collectBackupManifests(join(runtimeDir, "backups")).length, 0);
     assert.equal(
       readFileSync(join(runtimeDir, "openspec", "config.yaml"), "utf-8"),
-      "sentinel config\n",
+      "schema: spec-driven\ncontext: |-\n  sentinel config\n",
     );
   });
 });
@@ -965,7 +965,7 @@ test("CLI refuses OpenSpec install or update when setup is partial", () => {
     mkdirSync(join(runtimeDir, "openspec"), { recursive: true });
     writeFileSync(
       join(runtimeDir, "openspec", "config.yaml"),
-      "sentinel config\n",
+      "schema: spec-driven\ncontext: |-\n  sentinel config\n",
       "utf-8",
     );
 
@@ -1030,6 +1030,56 @@ test("CLI reports missing OpenSpec CLI", () => {
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /npm install -g @fission-ai\/openspec@latest/);
   });
+});
+
+test("CLI validates OpenSpec config quality and reusable scripts", () => {
+  withFixture(
+    ({ configPath, runtimeDir }) => {
+      const contextFile = join(runtimeDir, "openspec-context.md");
+      writeFileSync(contextFile, "Confirmed context.\n", "utf-8");
+      const env = addOpenSpecStub(runtimeDir);
+
+      const install = runAgentRuntime(
+        [
+          "openspec",
+          "install",
+          "--context-file",
+          contextFile,
+          "--config",
+          configPath,
+        ],
+        { cwd: runtimeDir, env },
+      );
+      assert.equal(install.status, 0, install.stderr || install.stdout);
+      writeFileSync(
+        join(runtimeDir, "openspec", "config.yaml"),
+        "schema: mystery\ncontext: |-\n  Still bounded.\nrules:\n  unknown-artifact:\n    - Invalid rule.\n",
+        "utf-8",
+      );
+
+      const validate = runAgentRuntime(
+        ["openspec", "validate", "--config", configPath],
+        { cwd: runtimeDir, env },
+      );
+
+      assert.notEqual(validate.status, 0);
+      assert.match(validate.stderr, /Unknown OpenSpec schema: mystery/);
+      assert.match(
+        validate.stderr,
+        /rules for unknown artifact: unknown-artifact/,
+      );
+      assert.match(validate.stderr, /Missing reusable runtime script source/);
+    },
+    (config, runtimeDir) => {
+      const runtime = config.runtime as Record<string, unknown>;
+      runtime.reusableScripts = [
+        {
+          sourcePath: join(runtimeDir, "missing-script.ts"),
+          targetPath: "scripts/missing-script.ts",
+        },
+      ];
+    },
+  );
 });
 
 test("CLI installs and reports managed hook symlinks", () => {
