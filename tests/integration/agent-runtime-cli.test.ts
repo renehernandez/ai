@@ -401,9 +401,22 @@ test("CLI shows hooks scope help", () => {
 test("CLI installs missing OpenSpec scaffolding and updates configured projects", () => {
   withFixture(({ configPath, runtimeDir }) => {
     const env = addOpenSpecStub(runtimeDir);
+    const contextFile = join(runtimeDir, "openspec-context.md");
+    writeFileSync(
+      contextFile,
+      "Confirmed context: use OpenSpec for agent runtime planning.\n",
+      "utf-8",
+    );
 
     const install = runAgentRuntime(
-      ["openspec", "install", "--config", configPath],
+      [
+        "openspec",
+        "install",
+        "--context-file",
+        contextFile,
+        "--config",
+        configPath,
+      ],
       {
         cwd: runtimeDir,
         env,
@@ -451,6 +464,7 @@ test("CLI installs missing OpenSpec scaffolding and updates configured projects"
     );
     assert.match(installedConfig, /^schema: spec-driven/m);
     assert.match(installedConfig, /OpenSpec tools: codex, claude/);
+    assert.match(installedConfig, /Confirmed context/);
     assert.match(installedConfig, /rules:/);
     writeFileSync(
       join(runtimeDir, "openspec", "config.yaml"),
@@ -617,6 +631,48 @@ test("CLI installs missing OpenSpec scaffolding and updates configured projects"
   });
 });
 
+test("CLI requires a context file for headless OpenSpec install", () => {
+  withFixture(({ configPath, runtimeDir }) => {
+    const result = runAgentRuntime(
+      ["openspec", "install", "--config", configPath],
+      {
+        cwd: runtimeDir,
+        env: addOpenSpecStub(runtimeDir),
+      },
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /confirmation_required/);
+    assert.match(result.stderr, /--context-file <path>/);
+    assert.equal(
+      existsSync(join(runtimeDir, "openspec", "config.yaml")),
+      false,
+    );
+    assert.equal(collectBackupManifests(join(runtimeDir, "backups")).length, 0);
+  });
+});
+
+test("CLI does not support accepting inferred OpenSpec config headlessly", () => {
+  withFixture(({ configPath, runtimeDir }) => {
+    const result = runAgentRuntime(
+      [
+        "openspec",
+        "install",
+        "--accept-inferred-config",
+        "--config",
+        configPath,
+      ],
+      {
+        cwd: runtimeDir,
+        env: addOpenSpecStub(runtimeDir),
+      },
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /unknown option '--accept-inferred-config'/);
+  });
+});
+
 test("CLI refuses OpenSpec install when setup is already configured", () => {
   withFixture(({ configPath, runtimeDir }) => {
     mkdirSync(join(runtimeDir, "openspec"), { recursive: true });
@@ -721,8 +777,17 @@ test("CLI refuses OpenSpec install or update when setup is partial", () => {
 
 test("CLI reports missing OpenSpec CLI", () => {
   withFixture(({ configPath, runtimeDir }) => {
+    const contextFile = join(runtimeDir, "openspec-context.md");
+    writeFileSync(contextFile, "Confirmed context.\n", "utf-8");
     const result = runAgentRuntime(
-      ["openspec", "install", "--config", configPath],
+      [
+        "openspec",
+        "install",
+        "--context-file",
+        contextFile,
+        "--config",
+        configPath,
+      ],
       {
         cwd: runtimeDir,
         env: { PATH: join(runtimeDir, "missing-bin") },

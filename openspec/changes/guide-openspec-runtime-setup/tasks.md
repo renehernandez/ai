@@ -11,7 +11,7 @@
 ## 3. Guided Install Setup
 
 - [x] 3.1 Add first-time default inference and confirmed config creation for tools, schema, OpenSpec profile, delivery, workflows, context, and artifact rules.
-- [ ] 3.2 Add guided install preview plus headless `--context-file` handling before writing `openspec/config.yaml`; do not support `--accept-inferred-config`.
+- [x] 3.2 Add guided install preview plus headless `--context-file` handling before writing `openspec/config.yaml`; do not support `--accept-inferred-config`.
 - [ ] 3.3 Run upstream OpenSpec generation with isolated deterministic profile, delivery, and workflow inputs, then preserve confirmed repo-local config and normalize generated assets with repairable rollback behavior.
 
 ## 4. Context Inference And Update Reconciliation

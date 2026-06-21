@@ -245,6 +245,7 @@ type ParsedArgs = {
   allProfiles?: boolean;
   configPath: string;
   runtimeContext?: RuntimeInvocationContext;
+  openSpecOptions?: OpenSpecCommandOptions;
 };
 
 export type RuntimeInvocationContext = {
@@ -273,6 +274,10 @@ type SkillInstallPlan = {
 type ProfileSelection = {
   profileNames: string[];
   interactive: boolean;
+};
+
+type OpenSpecCommandOptions = {
+  contextFile?: string;
 };
 
 type LockFile = {
@@ -362,6 +367,7 @@ export function executeParsedCommand(input: ParsedArgs): void {
     command,
     config,
     profileSelection,
+    openSpecOptions: input.openSpecOptions,
   });
 }
 
@@ -480,20 +486,33 @@ function addOpenSpecCommands(program: Command, execute: CommandExecutor): void {
     .command("openspec")
     .description("Manage repo-local OpenSpec scaffolding");
   for (const command of runtimeCommands()) {
-    openspec
+    const scopedCommand = openspec
       .command(command)
       .description(
         `${labelForCommand(command)} repo-local OpenSpec scaffolding`,
       )
-      .option("--config <path>", "Path to agent runtime config", CONFIG_FILE)
-      .action((first: CommandOptions | Command, second?: Command) => {
+      .option("--config <path>", "Path to agent runtime config", CONFIG_FILE);
+    if (command === "install") {
+      scopedCommand.option(
+        "--context-file <path>",
+        "Confirmed project context file for headless first-time install",
+      );
+    }
+    scopedCommand.action(
+      (first: CommandOptions | Command, second?: Command) => {
         const { options, commandObject } = actionContext(first, second);
         execute({
           scope: "openspec",
           command,
           configPath: configPathFor(commandObject, options),
+          openSpecOptions: {
+            contextFile: options.contextFile
+              ? resolve(options.contextFile)
+              : undefined,
+          },
         });
-      });
+      },
+    );
   }
 }
 
@@ -521,6 +540,7 @@ type CommandOptions = {
   config?: string;
   profile?: string[];
   allProfiles?: boolean;
+  contextFile?: string;
 };
 
 function collectOption(value: string, previous: string[] = []): string[] {
@@ -863,6 +883,7 @@ function runScope(
     command: RuntimeCommand;
     config: Config;
     profileSelection: ProfileSelection;
+    openSpecOptions?: OpenSpecCommandOptions;
   },
 ): void {
   if (scope === "skills") {
@@ -870,7 +891,7 @@ function runScope(
     return;
   }
   if (scope === "openspec") {
-    runOpenSpec(input.command, input.config);
+    runOpenSpec(input.command, input.config, input.openSpecOptions);
     return;
   }
   if (scope === "hooks") {
@@ -880,7 +901,11 @@ function runScope(
   runInstructions(input.command, input.config, input.profileSelection);
 }
 
-function runOpenSpec(command: RuntimeCommand, config: Config): void {
+function runOpenSpec(
+  command: RuntimeCommand,
+  config: Config,
+  options: OpenSpecCommandOptions = {},
+): void {
   const openspec = resolvedOpenSpecConfig(config);
   const stateReport = inspectOpenSpecState(openspec);
 
@@ -890,6 +915,10 @@ function runOpenSpec(command: RuntimeCommand, config: Config): void {
   }
 
   assertOpenSpecCommandBoundary(command, stateReport);
+  const installSetup =
+    command === "install"
+      ? resolveConfirmedOpenSpecInstallSetup(openspec, options)
+      : undefined;
   ensureOpenSpecCli();
 
   if (command === "validate") {
@@ -899,7 +928,7 @@ function runOpenSpec(command: RuntimeCommand, config: Config): void {
   }
 
   if (command === "install") {
-    writeConfirmedOpenSpecConfig(createOpenSpecInstallSetup(openspec));
+    writeConfirmedOpenSpecConfig(installSetup);
     runOpenSpecCli(["init", ".", "--tools", openspec.tools.join(",")]);
     normalizeOpenSpecScaffolding(openspec);
     console.log("Installed repo-local OpenSpec scaffolding.");
@@ -914,6 +943,69 @@ function runOpenSpec(command: RuntimeCommand, config: Config): void {
   }
   normalizeOpenSpecScaffolding(openspec);
   console.log("Updated repo-local OpenSpec scaffolding.");
+}
+
+function resolveConfirmedOpenSpecInstallSetup(
+  config: ResolvedOpenSpecConfig,
+  options: OpenSpecCommandOptions,
+): OpenSpecInstallSetup {
+  const contextFile = options.contextFile;
+  const contextFromFile = contextFile
+    ? readConfirmedOpenSpecContextFile(contextFile)
+    : "";
+  const setup = createOpenSpecInstallSetup(config, {
+    context: contextFromFile,
+  });
+
+  if (!canPrompt()) {
+    if (!contextFile) {
+      throw new Error(
+        "confirmation_required: headless OpenSpec install requires `--context-file <path>` so project context is confirmed before files are written.",
+      );
+    }
+    return setup;
+  }
+
+  printOpenSpecInstallPreview(setup);
+  writeSync(1, "Write openspec/config.yaml and generate assets? [y/N] ");
+  const answer = promptLine().toLowerCase();
+  if (answer !== "y" && answer !== "yes") {
+    throw new Error(
+      "confirmation_required: OpenSpec install was not confirmed; no files were written.",
+    );
+  }
+  return setup;
+}
+
+function readConfirmedOpenSpecContextFile(path: string): string {
+  if (!existsSync(path)) {
+    throw new Error(`Missing OpenSpec context file: ${path}`);
+  }
+  const context = readFileSync(path, "utf-8").trim();
+  if (context.length === 0) {
+    throw new Error(`OpenSpec context file is empty: ${path}`);
+  }
+  return context;
+}
+
+function printOpenSpecInstallPreview(setup: OpenSpecInstallSetup): void {
+  console.log("OpenSpec install preview");
+  console.log(`Tools: ${setup.tools.join(", ")}`);
+  console.log(`Schema: ${setup.schema}`);
+  console.log(`Profile: ${setup.profile}`);
+  console.log(`Delivery: ${setup.delivery}`);
+  console.log(`Workflows: ${setup.workflows.join(", ")}`);
+  console.log("Context:");
+  for (const line of setup.context.split(/\r?\n/)) {
+    console.log(`  ${line}`);
+  }
+  console.log("Artifact rules:");
+  for (const [artifact, rules] of Object.entries(setup.rules)) {
+    console.log(`  ${artifact}:`);
+    for (const rule of rules) {
+      console.log(`    - ${rule}`);
+    }
+  }
 }
 
 function assertOpenSpecCommandBoundary(
@@ -1118,9 +1210,11 @@ function normalizeOpenSpecRules(
 
 export function createOpenSpecInstallSetup(
   config: ResolvedOpenSpecConfig,
+  input: { context?: string } = {},
 ): OpenSpecInstallSetup {
   const contextLines = [
     ...configuredOpenSpecContextLines(config),
+    ...(input.context ? input.context.split(/\r?\n/) : []),
     ...inferredProjectContextLines(),
   ];
 
