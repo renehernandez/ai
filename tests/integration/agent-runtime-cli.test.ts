@@ -241,7 +241,9 @@ if (process.argv.includes("--version")) {
 const command = process.argv[2];
 if (command === "init" || command === "update") {
   fs.mkdirSync("openspec", { recursive: true });
-  write("openspec/config.yaml", "defaultSchema: spec-driven\\n");
+  if (!fs.existsSync("openspec/config.yaml")) {
+    write("openspec/config.yaml", "defaultSchema: spec-driven\\n");
+  }
   for (const tool of ["codex", "claude"]) {
     for (const skill of ["openspec-propose", "openspec-apply-change"]) {
       write(path.join("." + tool, "skills", skill, "SKILL.md"), "---\\nname: " + skill + "\\n---\\n");
@@ -443,6 +445,13 @@ test("CLI installs missing OpenSpec scaffolding and updates configured projects"
       ),
       "../../../.agents/commands/opsx/propose.md",
     );
+    const installedConfig = readFileSync(
+      join(runtimeDir, "openspec", "config.yaml"),
+      "utf-8",
+    );
+    assert.match(installedConfig, /^schema: spec-driven/m);
+    assert.match(installedConfig, /OpenSpec tools: codex, claude/);
+    assert.match(installedConfig, /rules:/);
     writeFileSync(
       join(runtimeDir, "openspec", "config.yaml"),
       "sentinel config\n",

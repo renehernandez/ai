@@ -20,12 +20,14 @@ import type { Command } from "commander";
 import {
   claudeStartupHookStatus,
   codexStartupHookStatus,
+  createOpenSpecInstallSetup,
   createProgram,
   createRuntimeBackup,
   createRuntimeInvocationContext,
   inspectOpenSpecState,
   registerClaudeStartupHook,
   registerCodexStartupHook,
+  renderOpenSpecConfigYaml,
 } from "../../scripts/agent-runtime.ts";
 
 const repoRoot = process.cwd();
@@ -96,6 +98,15 @@ function withTempCwd(callback: (directory: string) => void): void {
 function testOpenSpecConfig() {
   return {
     tools: ["codex", "claude"],
+    schema: "spec-driven",
+    profile: "custom",
+    delivery: "both",
+    workflows: ["propose", "explore", "apply", "archive"],
+    context: "",
+    rules: {
+      proposal: ["State goals clearly."],
+      tasks: ["Keep tasks small."],
+    },
     canonicalSkillsDir: ".agents/skills",
     canonicalCommandsDir: ".agents/commands",
     backupsRoot: "backups",
@@ -178,6 +189,63 @@ test("Runtime invocation context separates source and target roots", () => {
       process.chdir(originalCwd);
     }
   });
+});
+
+test("OpenSpec install setup infers project defaults", () => {
+  withTempCwd(() => {
+    writeFileSync(
+      "package.json",
+      JSON.stringify(
+        {
+          name: "example-cli",
+          packageManager: "pnpm@11.5.3",
+          dependencies: { commander: "^15.0.0" },
+          devDependencies: { typescript: "^5.9.3" },
+        },
+        null,
+        2,
+      ),
+      "utf-8",
+    );
+
+    const setup = createOpenSpecInstallSetup(testOpenSpecConfig());
+
+    assert.deepEqual(setup.tools, ["codex", "claude"]);
+    assert.equal(setup.schema, "spec-driven");
+    assert.equal(setup.profile, "custom");
+    assert.equal(setup.delivery, "both");
+    assert.deepEqual(setup.workflows, [
+      "propose",
+      "explore",
+      "apply",
+      "archive",
+    ]);
+    assert.match(setup.context, /OpenSpec tools: codex, claude/);
+    assert.match(setup.context, /Project: example-cli/);
+    assert.match(setup.context, /Package manager: pnpm@11\.5\.3/);
+    assert.match(setup.context, /Tech stack: TypeScript, Commander CLI/);
+    assert.deepEqual(setup.rules.tasks, ["Keep tasks small."]);
+  });
+});
+
+test("OpenSpec config renderer writes schema, context, and artifact rules", () => {
+  const rendered = renderOpenSpecConfigYaml({
+    tools: ["codex"],
+    schema: "spec-driven",
+    profile: "custom",
+    delivery: "both",
+    workflows: ["propose"],
+    context: "Project: example\nOpenSpec delivery: both",
+    rules: {
+      proposal: ["Include goals and non-goals."],
+      tasks: ["Keep tasks independently verifiable."],
+    },
+  });
+
+  assert.match(rendered, /^schema: spec-driven\n/);
+  assert.match(rendered, /context: \|-\n {2}Project: example\n/);
+  assert.match(rendered, /rules:\n {2}proposal:\n/);
+  assert.match(rendered, / {4}- "Include goals and non-goals\."/);
 });
 
 test("OpenSpec state classification reports missing setup", () => {

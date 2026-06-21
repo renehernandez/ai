@@ -98,6 +98,12 @@ type InstructionProfileConfig = {
 
 type OpenSpecConfig = {
   tools?: string[];
+  schema?: string;
+  profile?: string;
+  delivery?: string;
+  workflows?: string[];
+  context?: string;
+  rules?: Record<string, string[]>;
   canonicalSkillsDir?: string;
   canonicalCommandsDir?: string;
   skillTargets?: Record<string, string>;
@@ -175,6 +181,12 @@ export type ClaudeStartupHookRegistrationInput = {
 
 export type ResolvedOpenSpecConfig = {
   tools: string[];
+  schema: string;
+  profile: string;
+  delivery: string;
+  workflows: string[];
+  context: string;
+  rules: Record<string, string[]>;
   canonicalSkillsDir: string;
   canonicalCommandsDir: string;
   skillTargets: Record<string, string>;
@@ -192,6 +204,16 @@ export type OpenSpecStateReport = {
   skillNames: string[];
   commandNames: string[];
   findings: string[];
+};
+
+export type OpenSpecInstallSetup = {
+  tools: string[];
+  schema: string;
+  profile: string;
+  delivery: string;
+  workflows: string[];
+  context: string;
+  rules: Record<string, string[]>;
 };
 
 type ResolvedHooksConfig = {
@@ -267,6 +289,26 @@ const CONFIG_FILE = "agent-runtime.config.json";
 const LOCK_FILE = "agent-runtime.lock.json";
 const CACHE_DIR = ".agent-runtime/cache";
 const OPENSPEC_INSTALL_COMMAND = "npm install -g @fission-ai/openspec@latest";
+const DEFAULT_OPENSPEC_SCHEMA = "spec-driven";
+const DEFAULT_OPENSPEC_PROFILE = "custom";
+const DEFAULT_OPENSPEC_DELIVERY = "both";
+const DEFAULT_OPENSPEC_WORKFLOWS = [
+  "propose",
+  "explore",
+  "apply",
+  "archive",
+] as const;
+const DEFAULT_OPENSPEC_RULES: Record<string, string[]> = {
+  proposal: [
+    "State goals, non-goals, and user-visible behavior changes when they are relevant.",
+  ],
+  design: [
+    "Record important tradeoffs, alternatives considered, and selected technical direction.",
+  ],
+  tasks: [
+    "Keep implementation tasks independently verifiable and commit-sized.",
+  ],
+};
 const RETIRED_MANAGED_SKILL_NAMES = [
   "plan-to-review",
   "plan-coordinate",
@@ -857,7 +899,7 @@ function runOpenSpec(command: RuntimeCommand, config: Config): void {
   }
 
   if (command === "install") {
-    backupOpenSpecExternalTargets(openspec);
+    writeConfirmedOpenSpecConfig(createOpenSpecInstallSetup(openspec));
     runOpenSpecCli(["init", ".", "--tools", openspec.tools.join(",")]);
     normalizeOpenSpecScaffolding(openspec);
     console.log("Installed repo-local OpenSpec scaffolding.");
@@ -1023,6 +1065,14 @@ function resolvedOpenSpecConfig(config: Config): ResolvedOpenSpecConfig {
   const input = config.runtime.openspec ?? {};
   return {
     tools: nonEmptyStrings(input.tools, ["codex", "claude"]),
+    schema: nonEmptyString(input.schema, DEFAULT_OPENSPEC_SCHEMA),
+    profile: nonEmptyString(input.profile, DEFAULT_OPENSPEC_PROFILE),
+    delivery: nonEmptyString(input.delivery, DEFAULT_OPENSPEC_DELIVERY),
+    workflows: nonEmptyStrings(input.workflows, [
+      ...DEFAULT_OPENSPEC_WORKFLOWS,
+    ]),
+    context: input.context?.trim() ?? "",
+    rules: normalizeOpenSpecRules(input.rules),
     canonicalSkillsDir: input.canonicalSkillsDir ?? ".agents/skills",
     canonicalCommandsDir: input.canonicalCommandsDir ?? ".agents/commands",
     backupsRoot: runtimeBackupsRoot(config),
@@ -1042,6 +1092,183 @@ function resolvedOpenSpecConfig(config: Config): ResolvedOpenSpecConfig {
       "runtime.openspec.commandTargets",
     ),
   };
+}
+
+function nonEmptyString(value: string | undefined, fallback: string): string {
+  const selected = value?.trim();
+  return selected && selected.length > 0 ? selected : fallback;
+}
+
+function normalizeOpenSpecRules(
+  rules: Record<string, string[]> | undefined,
+): Record<string, string[]> {
+  const merged: Record<string, string[]> = {
+    ...DEFAULT_OPENSPEC_RULES,
+  };
+  for (const [artifact, values] of Object.entries(rules ?? {})) {
+    const normalizedValues = values
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0);
+    if (normalizedValues.length > 0) {
+      merged[artifact] = normalizedValues;
+    }
+  }
+  return merged;
+}
+
+export function createOpenSpecInstallSetup(
+  config: ResolvedOpenSpecConfig,
+): OpenSpecInstallSetup {
+  const contextLines = [
+    ...configuredOpenSpecContextLines(config),
+    ...inferredProjectContextLines(),
+  ];
+
+  return {
+    tools: config.tools,
+    schema: config.schema,
+    profile: config.profile,
+    delivery: config.delivery,
+    workflows: config.workflows,
+    context: uniqueNonEmptyLines(contextLines).join("\n"),
+    rules: config.rules,
+  };
+}
+
+function configuredOpenSpecContextLines(
+  config: ResolvedOpenSpecConfig,
+): string[] {
+  const configuredContext = config.context.trim();
+  return [
+    `OpenSpec tools: ${config.tools.join(", ")}`,
+    `OpenSpec profile: ${config.profile}`,
+    `OpenSpec delivery: ${config.delivery}`,
+    `OpenSpec workflows: ${config.workflows.join(", ")}`,
+    ...(configuredContext.length > 0 ? configuredContext.split(/\r?\n/) : []),
+  ];
+}
+
+function inferredProjectContextLines(): string[] {
+  const lines: string[] = [];
+  const packageJsonPath = "package.json";
+  if (existsSync(packageJsonPath)) {
+    const packageJson = readJson<Record<string, unknown>>(packageJsonPath);
+    const name = stringValue(packageJson.name);
+    if (name) {
+      lines.push(`Project: ${name}`);
+    }
+    const packageManager = stringValue(packageJson.packageManager);
+    if (packageManager) {
+      lines.push(`Package manager: ${packageManager}`);
+    } else {
+      const inferredPackageManager = inferPackageManager();
+      if (inferredPackageManager) {
+        lines.push(`Package manager: ${inferredPackageManager}`);
+      }
+    }
+    const runtimeHints = packageRuntimeHints(packageJson);
+    if (runtimeHints.length > 0) {
+      lines.push(`Tech stack: ${runtimeHints.join(", ")}`);
+    }
+  }
+  return lines;
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : undefined;
+}
+
+function inferPackageManager(): string | undefined {
+  if (existsSync("pnpm-lock.yaml")) {
+    return "pnpm";
+  }
+  if (existsSync("yarn.lock")) {
+    return "yarn";
+  }
+  if (existsSync("package-lock.json")) {
+    return "npm";
+  }
+  return undefined;
+}
+
+function packageRuntimeHints(packageJson: Record<string, unknown>): string[] {
+  const dependencyNames = new Set([
+    ...recordKeys(packageJson.dependencies),
+    ...recordKeys(packageJson.devDependencies),
+  ]);
+  const hints: string[] = [];
+  if (dependencyNames.has("typescript") || existsSync("tsconfig.json")) {
+    hints.push("TypeScript");
+  }
+  if (dependencyNames.has("tsx")) {
+    hints.push("tsx");
+  }
+  if (dependencyNames.has("commander")) {
+    hints.push("Commander CLI");
+  }
+  if (dependencyNames.has("@biomejs/biome")) {
+    hints.push("Biome");
+  }
+  return hints;
+}
+
+function recordKeys(value: unknown): string[] {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? Object.keys(value)
+    : [];
+}
+
+function uniqueNonEmptyLines(lines: string[]): string[] {
+  const selected: string[] = [];
+  const seen = new Set<string>();
+  for (const line of lines) {
+    const normalized = line.trim();
+    if (normalized.length > 0 && !seen.has(normalized)) {
+      selected.push(normalized);
+      seen.add(normalized);
+    }
+  }
+  return selected;
+}
+
+function writeConfirmedOpenSpecConfig(setup: OpenSpecInstallSetup): void {
+  mkdirSync("openspec", { recursive: true });
+  writeFileSync(
+    join("openspec", "config.yaml"),
+    renderOpenSpecConfigYaml(setup),
+    "utf-8",
+  );
+}
+
+export function renderOpenSpecConfigYaml(setup: OpenSpecInstallSetup): string {
+  const lines = [`schema: ${yamlScalar(setup.schema)}`];
+  if (setup.context.trim().length > 0) {
+    lines.push("context: |-");
+    for (const line of setup.context.split(/\r?\n/)) {
+      lines.push(`  ${line}`);
+    }
+  }
+
+  const ruleEntries = Object.entries(setup.rules).filter(
+    ([, values]) => values.length > 0,
+  );
+  if (ruleEntries.length > 0) {
+    lines.push("rules:");
+    for (const [artifact, values] of ruleEntries) {
+      lines.push(`  ${yamlScalar(artifact)}:`);
+      for (const value of values) {
+        lines.push(`    - ${yamlScalar(value)}`);
+      }
+    }
+  }
+
+  return `${lines.join("\n")}\n`;
+}
+
+function yamlScalar(value: string): string {
+  return /^[A-Za-z0-9_-]+$/.test(value) ? value : JSON.stringify(value);
 }
 
 export function inspectOpenSpecState(
