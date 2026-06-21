@@ -78,6 +78,7 @@ type Config = {
     skillSymlinkTargets: string[];
     reusableScripts?: RuntimeFileConfig[];
     instructionSymlinkTargets?: Record<string, string>;
+    backupsDir?: string;
     lockFile?: string;
     openspec?: OpenSpecConfig;
   };
@@ -108,6 +109,7 @@ type ResolvedOpenSpecConfig = {
   canonicalCommandsDir: string;
   skillTargets: Record<string, string>;
   commandTargets: Record<string, string>;
+  backupsRoot: string;
 };
 
 type ParsedArgs = {
@@ -683,12 +685,14 @@ function runOpenSpec(command: RuntimeCommand, config: Config): void {
   }
 
   if (command === "install") {
+    backupOpenSpecExternalTargets(openspec);
     runOpenSpecCli(["init", ".", "--tools", openspec.tools.join(",")]);
     normalizeOpenSpecScaffolding(openspec);
     console.log("Installed repo-local OpenSpec scaffolding.");
     return;
   }
 
+  backupOpenSpecExternalTargets(openspec);
   if (isOpenSpecInitialized()) {
     runOpenSpecCli(["update", "."]);
   } else {
@@ -698,12 +702,47 @@ function runOpenSpec(command: RuntimeCommand, config: Config): void {
   console.log("Updated repo-local OpenSpec scaffolding.");
 }
 
+function backupOpenSpecExternalTargets(config: ResolvedOpenSpecConfig): void {
+  backupRuntimeTarget(join("openspec", "config.yaml"), {
+    assetKind: "openspec",
+    backupsRoot: config.backupsRoot,
+    targetName: "config",
+  });
+  backupRuntimeTarget(resolve(config.canonicalSkillsDir), {
+    assetKind: "openspec",
+    backupsRoot: config.backupsRoot,
+    targetName: "agents",
+  });
+  backupRuntimeTarget(join(resolve(config.canonicalCommandsDir), "opsx"), {
+    assetKind: "openspec",
+    backupsRoot: config.backupsRoot,
+    targetName: "agents",
+  });
+  for (const [targetName, targetDir] of Object.entries(config.skillTargets)) {
+    backupRuntimeTarget(resolve(targetDir), {
+      assetKind: "openspec",
+      backupsRoot: config.backupsRoot,
+      targetName,
+    });
+  }
+  for (const [targetName, targetRoot] of Object.entries(
+    config.commandTargets,
+  )) {
+    backupRuntimeTarget(join(resolve(targetRoot), "opsx"), {
+      assetKind: "openspec",
+      backupsRoot: config.backupsRoot,
+      targetName,
+    });
+  }
+}
+
 function resolvedOpenSpecConfig(config: Config): ResolvedOpenSpecConfig {
   const input = config.runtime.openspec ?? {};
   return {
     tools: nonEmptyStrings(input.tools, ["codex", "claude"]),
     canonicalSkillsDir: input.canonicalSkillsDir ?? ".agents/skills",
     canonicalCommandsDir: input.canonicalCommandsDir ?? ".agents/commands",
+    backupsRoot: runtimeBackupsRoot(config),
     skillTargets: nonEmptyRecord(input.skillTargets, {
       codex: ".codex/skills",
       claude: ".claude/skills",
@@ -790,9 +829,10 @@ function normalizeOpenSpecScaffolding(config: ResolvedOpenSpecConfig): void {
 
 function normalizeOpenSpecSkills(config: ResolvedOpenSpecConfig): void {
   const canonicalSkillsDir = resolve(config.canonicalSkillsDir);
-  const targetDirs = Object.values(config.skillTargets).map((target) =>
-    resolve(target),
+  const targetEntries = Object.entries(config.skillTargets).map(
+    ([targetName, target]) => [targetName, resolve(target)] as const,
   );
+  const targetDirs = targetEntries.map(([, targetDir]) => targetDir);
   const skillNames = openSpecSkillNames([canonicalSkillsDir, ...targetDirs]);
 
   for (const skillName of skillNames) {
@@ -804,11 +844,19 @@ function normalizeOpenSpecSkills(config: ResolvedOpenSpecConfig): void {
       sourcePath &&
       realPathIfExists(sourcePath) !== realPathIfExists(canonicalPath)
     ) {
-      replaceDirectory(sourcePath, canonicalPath);
+      replaceDirectory(sourcePath, canonicalPath, {
+        assetKind: "openspec",
+        backupsRoot: config.backupsRoot,
+        targetName: "agents",
+      });
     }
 
-    for (const targetDir of targetDirs) {
-      replaceRelativeSymlink(canonicalPath, join(targetDir, skillName));
+    for (const [targetName, targetDir] of targetEntries) {
+      replaceRelativeSymlink(canonicalPath, join(targetDir, skillName), {
+        assetKind: "openspec",
+        backupsRoot: config.backupsRoot,
+        targetName,
+      });
     }
   }
 }
@@ -832,9 +880,17 @@ function normalizeOpenSpecCommands(config: ResolvedOpenSpecConfig): void {
         sourcePath &&
         realPathIfExists(sourcePath) !== realPathIfExists(canonicalPath)
       ) {
-        replaceFile(sourcePath, canonicalPath);
+        replaceFile(sourcePath, canonicalPath, {
+          assetKind: "openspec",
+          backupsRoot: config.backupsRoot,
+          targetName: "agents",
+        });
       }
-      replaceRelativeSymlink(canonicalPath, join(targetOpsxDir, commandName));
+      replaceRelativeSymlink(canonicalPath, join(targetOpsxDir, commandName), {
+        assetKind: "openspec",
+        backupsRoot: config.backupsRoot,
+        targetName,
+      });
     }
 
     if (commandNames.length > 0) {
@@ -1034,16 +1090,25 @@ function firstExistingPath(paths: string[]): string | undefined {
   return paths.find((path) => existsSync(path));
 }
 
-function replaceFile(source: string, destination: string): void {
+function replaceFile(
+  source: string,
+  destination: string,
+  backup?: RuntimeBackupContext,
+): void {
   const temporaryDestination = `${destination}.tmp-${process.pid}`;
   rmSync(temporaryDestination, { force: true });
   mkdirSync(dirname(destination), { recursive: true });
   cpSync(source, temporaryDestination);
+  backupRuntimeTarget(destination, backup);
   rmSync(destination, { force: true });
   renameSync(temporaryDestination, destination);
 }
 
-function replaceRelativeSymlink(target: string, linkPath: string): void {
+function replaceRelativeSymlink(
+  target: string,
+  linkPath: string,
+  backup?: RuntimeBackupContext,
+): void {
   const stats = lstatIfExists(linkPath);
   if (stats) {
     if (
@@ -1052,7 +1117,10 @@ function replaceRelativeSymlink(target: string, linkPath: string): void {
     ) {
       return;
     }
+    backupRuntimeTarget(linkPath, backup);
     rmSync(linkPath, { force: true, recursive: true });
+  } else {
+    backupRuntimeTarget(linkPath, backup);
   }
   mkdirSync(dirname(linkPath), { recursive: true });
   symlinkSync(
@@ -1081,6 +1149,7 @@ function runSkills(
 
   const lockFile = lockFileFor(config);
   const lock = readLock(lockFile);
+  const backupsRoot = runtimeBackupsRoot(config);
   const canonicalSkillsDir = expandHome(config.runtime.canonicalSkillsDir);
   const symlinkTargets = resolveSkillSymlinkTargets(
     canonicalSkillsDir,
@@ -1100,13 +1169,21 @@ function runSkills(
     profileNames,
     canonicalSkillsDir,
     symlinkTargets,
+    backupsRoot,
   });
   installReusableScripts(config, [canonicalSkillsDir, ...symlinkTargets]);
-  pruneRetiredManagedSkills(lock, profileNames, [
-    canonicalSkillsDir,
-    ...symlinkTargets,
-  ]);
+  pruneRetiredManagedSkills(
+    lock,
+    profileNames,
+    [canonicalSkillsDir, ...symlinkTargets],
+    backupsRoot,
+  );
 
+  backupRuntimeTarget(lockFile, {
+    assetKind: "config",
+    backupsRoot,
+    targetName: "agent-runtime-lock",
+  });
   writeJson(lockFile, lock);
 }
 
@@ -1117,6 +1194,7 @@ function installSkillUnion(input: {
   profileNames: string[];
   canonicalSkillsDir: string;
   symlinkTargets: string[];
+  backupsRoot: string;
 }): void {
   const profileSources = new Map<string, SkillSource[]>();
   const installPlans = buildSkillInstallPlans(
@@ -1144,6 +1222,7 @@ function installSkillUnion(input: {
           resolvedCommit: resolvedWorkspaceCommit,
           canonicalSkillsDir: input.canonicalSkillsDir,
           symlinkTargets: input.symlinkTargets,
+          backupsRoot: input.backupsRoot,
         });
 
         installedByKey.set(
@@ -1184,6 +1263,7 @@ function installSkillUnion(input: {
         resolvedCommit,
         canonicalSkillsDir: input.canonicalSkillsDir,
         symlinkTargets: input.symlinkTargets,
+        backupsRoot: input.backupsRoot,
       });
 
       installedByKey.set(skillInstallKey(plan.source, skillName), lockedSkill);
@@ -1218,6 +1298,7 @@ function pruneRetiredManagedSkills(
   lock: LockFile,
   profileNames: string[],
   skillDirs: string[],
+  backupsRoot: string,
 ): void {
   for (const profileName of profileNames) {
     for (const retiredName of RETIRED_MANAGED_SKILL_NAMES) {
@@ -1227,23 +1308,33 @@ function pruneRetiredManagedSkills(
 
   for (const directory of skillDirs) {
     for (const retiredName of RETIRED_MANAGED_SKILL_NAMES) {
-      removeRetiredManagedSkill(join(directory, retiredName));
+      removeRetiredManagedSkill(join(directory, retiredName), backupsRoot);
     }
   }
 }
 
-function removeRetiredManagedSkill(path: string): void {
+function removeRetiredManagedSkill(path: string, backupsRoot: string): void {
   if (!existsSync(path)) {
     return;
   }
 
   const stat = lstatSync(path);
   if (stat.isSymbolicLink()) {
+    backupRuntimeTarget(path, {
+      assetKind: "skills",
+      backupsRoot,
+      targetName: runtimeTargetName(path),
+    });
     rmSync(path, { force: true });
     return;
   }
 
   if (stat.isDirectory() && existsSync(join(path, "SKILL.md"))) {
+    backupRuntimeTarget(path, {
+      assetKind: "skills",
+      backupsRoot,
+      targetName: runtimeTargetName(path),
+    });
     rmSync(path, { force: true, recursive: true });
   }
 }
@@ -1254,6 +1345,7 @@ function installSkill(input: {
   resolvedCommit: string;
   canonicalSkillsDir: string;
   symlinkTargets: string[];
+  backupsRoot: string;
 }): LockedSkill {
   const skillPath = join(input.source.basePath, input.skillName);
   const sourceSkillDir = join(cachePathForSource(input.source.url), skillPath);
@@ -1264,9 +1356,17 @@ function installSkill(input: {
   }
 
   const destination = join(input.canonicalSkillsDir, input.skillName);
-  replaceDirectory(sourceSkillDir, destination);
+  replaceDirectory(sourceSkillDir, destination, {
+    assetKind: "skills",
+    backupsRoot: input.backupsRoot,
+    targetName: runtimeTargetName(input.canonicalSkillsDir),
+  });
   for (const target of input.symlinkTargets) {
-    replaceSymlink(destination, join(target, input.skillName));
+    replaceSymlink(destination, join(target, input.skillName), {
+      assetKind: "skills",
+      backupsRoot: input.backupsRoot,
+      targetName: runtimeTargetName(target),
+    });
   }
 
   return {
@@ -1286,6 +1386,7 @@ function installLocalSkill(input: {
   resolvedCommit: string;
   canonicalSkillsDir: string;
   symlinkTargets: string[];
+  backupsRoot: string;
 }): LockedSkill {
   const skillPath = join(input.source.localPath, input.skillName);
   const sourceSkillDir = resolve(skillPath);
@@ -1296,9 +1397,17 @@ function installLocalSkill(input: {
   }
 
   const destination = join(input.canonicalSkillsDir, input.skillName);
-  replaceDirectory(sourceSkillDir, destination);
+  replaceDirectory(sourceSkillDir, destination, {
+    assetKind: "skills",
+    backupsRoot: input.backupsRoot,
+    targetName: runtimeTargetName(input.canonicalSkillsDir),
+  });
   for (const target of input.symlinkTargets) {
-    replaceSymlink(destination, join(target, input.skillName));
+    replaceSymlink(destination, join(target, input.skillName), {
+      assetKind: "skills",
+      backupsRoot: input.backupsRoot,
+      targetName: runtimeTargetName(target),
+    });
   }
 
   return {
@@ -1511,18 +1620,28 @@ function installReusableScripts(config: Config, skillDirs: string[]): void {
     return;
   }
 
+  const backupsRoot = runtimeBackupsRoot(config);
   const runtimeRoots = runtimeRootsForSkillDirs(skillDirs);
   const canonicalRoot = runtimeRoots[0];
   for (const runtimeFile of reusableScripts) {
     const source = resolve(runtimeFileSourcePath(runtimeFile));
     const targetPath = runtimeFileTargetPath(runtimeFile);
     const canonicalTarget = runtimeTargetPath(canonicalRoot, targetPath);
-    replaceFile(source, canonicalTarget);
+    replaceFile(source, canonicalTarget, {
+      assetKind: "reusable-scripts",
+      backupsRoot,
+      targetName: runtimeTargetName(canonicalRoot),
+    });
 
     for (const runtimeRoot of runtimeRoots.slice(1)) {
       replaceRelativeSymlink(
         canonicalTarget,
         runtimeTargetPath(runtimeRoot, targetPath),
+        {
+          assetKind: "reusable-scripts",
+          backupsRoot,
+          targetName: runtimeTargetName(runtimeRoot),
+        },
       );
     }
   }
@@ -1606,9 +1725,14 @@ function runInstructions(
       target: operation.sourcePath,
     })),
   );
-  pruneUnselectedInstructionSymlinks(config, selection);
+  const backupsRoot = runtimeBackupsRoot(config);
+  pruneUnselectedInstructionSymlinks(config, selection, backupsRoot);
   for (const operation of operations) {
-    replaceSafeSymlink(operation.sourcePath, operation.linkPath);
+    replaceSafeSymlink(operation.sourcePath, operation.linkPath, {
+      assetKind: "instructions",
+      backupsRoot,
+      targetName: operation.targetName,
+    });
     console.log(
       `${command === "install" ? "Installed" : "Updated"} ${operation.label} for ${operation.targetName}`,
     );
@@ -1704,6 +1828,7 @@ function instructionOperations(
 function pruneUnselectedInstructionSymlinks(
   config: Config,
   selection: ProfileSelection,
+  backupsRoot: string,
 ): void {
   const selectedPaths = new Set(
     selectedInstructionPaths(config, selection).map(instructionTargetPath),
@@ -1722,6 +1847,11 @@ function pruneUnselectedInstructionSymlinks(
       if (!stats?.isSymbolicLink()) {
         continue;
       }
+      backupRuntimeTarget(linkPath, {
+        assetKind: "instructions",
+        backupsRoot,
+        targetName: runtimeTargetName(target),
+      });
       rmSync(linkPath, { force: true });
       console.log(`Pruned ${targetPath} from ${expandHome(target)}`);
     }
@@ -1961,13 +2091,18 @@ function workspaceCommit(): string {
   return run("git", ["rev-parse", "HEAD"]).trim();
 }
 
-function replaceDirectory(source: string, destination: string): void {
+function replaceDirectory(
+  source: string,
+  destination: string,
+  backup?: RuntimeBackupContext,
+): void {
   const temporaryDestination = `${destination}.tmp-${process.pid}`;
   rmSync(temporaryDestination, { force: true, recursive: true });
   cpSync(source, temporaryDestination, {
     recursive: true,
     verbatimSymlinks: true,
   });
+  backupRuntimeTarget(destination, backup);
   rmSync(destination, { force: true, recursive: true });
   mkdirSync(dirname(destination), { recursive: true });
   renameSync(temporaryDestination, destination);
@@ -1995,6 +2130,12 @@ export type RuntimeBackupInput = {
   retentionCount?: number;
 };
 
+type RuntimeBackupContext = {
+  assetKind: string;
+  targetName?: string;
+  backupsRoot: string;
+};
+
 export function createRuntimeBackup(
   input: RuntimeBackupInput,
 ): RuntimeBackupResult {
@@ -2004,7 +2145,11 @@ export function createRuntimeBackup(
     throw new Error("retentionCount must be at least 1");
   }
 
-  const targetRoot = join(input.backupsRoot, input.assetKind, input.targetName);
+  const targetRoot = join(
+    input.backupsRoot,
+    backupPathSegment(input.assetKind),
+    backupPathSegment(input.targetName),
+  );
   mkdirSync(targetRoot, { recursive: true });
 
   const backupPath = nextBackupPath(targetRoot, createdAt);
@@ -2121,13 +2266,63 @@ function pruneRuntimeBackups(targetRoot: string, retentionCount: number): void {
   }
 }
 
-function replaceSymlink(target: string, linkPath: string): void {
+function backupRuntimeTarget(
+  targetPath: string,
+  context: RuntimeBackupContext | undefined,
+): void {
+  if (!context) {
+    return;
+  }
+  createRuntimeBackup({
+    sourcePath: targetPath,
+    backupsRoot: context.backupsRoot,
+    assetKind: context.assetKind,
+    targetName: context.targetName ?? runtimeTargetName(targetPath),
+  });
+}
+
+function runtimeBackupsRoot(config: Config): string {
+  return expandHome(config.runtime.backupsDir ?? "~/.agents/runtime/backups");
+}
+
+function runtimeTargetName(path: string): string {
+  const segments = resolve(path).split(sep);
+  if (segments.includes(".agents")) {
+    return "agents";
+  }
+  if (segments.includes(".codex")) {
+    return "codex";
+  }
+  if (segments.includes(".claude")) {
+    return "claude";
+  }
+  return backupPathSegment(resolve(path));
+}
+
+function backupPathSegment(value: string): string {
+  const segment = value.replace(/[^A-Za-z0-9._-]+/g, "_");
+  if (!segment || segment === "." || segment === "..") {
+    throw new Error(`Invalid backup path segment: ${value}`);
+  }
+  return segment;
+}
+
+function replaceSymlink(
+  target: string,
+  linkPath: string,
+  backup?: RuntimeBackupContext,
+): void {
+  backupRuntimeTarget(linkPath, backup);
   rmSync(linkPath, { force: true, recursive: true });
   mkdirSync(dirname(linkPath), { recursive: true });
   symlinkSync(target, linkPath, "dir");
 }
 
-export function replaceSafeSymlink(target: string, linkPath: string): void {
+export function replaceSafeSymlink(
+  target: string,
+  linkPath: string,
+  backup?: RuntimeBackupContext,
+): void {
   const stats = lstatIfExists(linkPath);
   if (stats) {
     if (realPathIfExists(linkPath) === realPathIfExists(target)) {
@@ -2136,7 +2331,10 @@ export function replaceSafeSymlink(target: string, linkPath: string): void {
     if (!stats.isSymbolicLink()) {
       throw new Error(`Refusing to replace non-symlink target: ${linkPath}`);
     }
+    backupRuntimeTarget(linkPath, backup);
     rmSync(linkPath, { force: true });
+  } else {
+    backupRuntimeTarget(linkPath, backup);
   }
   mkdirSync(dirname(linkPath), { recursive: true });
   symlinkSync(target, linkPath, symlinkType(target));

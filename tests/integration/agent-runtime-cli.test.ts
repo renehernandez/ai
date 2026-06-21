@@ -7,6 +7,7 @@ import {
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   readlinkSync,
   rmSync,
@@ -14,7 +15,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, sep } from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
 
@@ -23,6 +24,12 @@ type Fixture = {
   runtimeDir: string;
 };
 type FixtureConfig = Record<string, unknown>;
+type BackupManifest = {
+  assetKind: string;
+  targetName?: string;
+  status: string;
+  kind: string;
+};
 
 const repoRoot = process.cwd();
 const runtimeScript = join(repoRoot, "scripts/agent-runtime.ts");
@@ -60,6 +67,7 @@ function withFixture(
   const runtime = config.runtime as Record<string, unknown>;
   runtime.canonicalSkillsDir = join(runtimeDir, "skills");
   runtime.skillSymlinkTargets = [join(runtimeDir, "claude", "skills")];
+  runtime.backupsDir = join(runtimeDir, "backups");
   runtime.reusableScripts = [
     {
       sourcePath: join(repoRoot, "scripts/planning-contracts.ts"),
@@ -116,6 +124,37 @@ function matchCount(input: string, pattern: RegExp): number {
   return [...input.matchAll(pattern)].length;
 }
 
+function collectBackupManifests(directory: string): string[] {
+  if (!existsSync(directory)) {
+    return [];
+  }
+  const manifests: string[] = [];
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      manifests.push(...collectBackupManifests(path));
+    } else if (entry.isFile() && entry.name === "manifest.json") {
+      manifests.push(path);
+    }
+  }
+  return manifests.sort();
+}
+
+function readBackupManifest(path: string): BackupManifest {
+  return JSON.parse(readFileSync(path, "utf-8")) as BackupManifest;
+}
+
+function findBackupManifest(
+  manifests: string[],
+  predicate: (manifest: BackupManifest, path: string) => boolean,
+): string {
+  const manifestPath = manifests.find((path) =>
+    predicate(readBackupManifest(path), path),
+  );
+  assert.ok(manifestPath, "expected matching backup manifest");
+  return manifestPath;
+}
+
 function cachePathForUrl(directory: string, url: string): string {
   const hash = createHash("sha256").update(url).digest("hex").slice(0, 16);
   return join(directory, ".agent-runtime", "cache", `skills-${hash}`);
@@ -168,7 +207,7 @@ process.exit(1);
 }
 
 test("CLI validates all runtime scopes", () => {
-  withFixture(({ configPath }) => {
+  withFixture(({ configPath, runtimeDir }) => {
     const result = runAgentRuntime([
       "validate",
       "--profile",
@@ -180,6 +219,7 @@ test("CLI validates all runtime scopes", () => {
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.match(result.stdout, /Validated 1 profile/);
     assert.match(result.stdout, /Validated instruction configuration/);
+    assert.deepEqual(collectBackupManifests(join(runtimeDir, "backups")), []);
   });
 });
 
@@ -224,6 +264,29 @@ test("CLI shows OpenSpec scope help", () => {
 test("CLI installs and normalizes repo-local OpenSpec scaffolding", () => {
   withFixture(({ configPath, runtimeDir }) => {
     const env = addOpenSpecStub(runtimeDir);
+    mkdirSync(join(runtimeDir, "openspec"), { recursive: true });
+    mkdirSync(join(runtimeDir, ".codex", "skills", "openspec-propose"), {
+      recursive: true,
+    });
+    mkdirSync(join(runtimeDir, ".claude", "commands", "opsx"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(runtimeDir, "openspec", "config.yaml"),
+      "sentinel config\n",
+      "utf-8",
+    );
+    writeFileSync(
+      join(runtimeDir, ".codex", "skills", "openspec-propose", "SKILL.md"),
+      "sentinel codex skill\n",
+      "utf-8",
+    );
+    writeFileSync(
+      join(runtimeDir, ".claude", "commands", "opsx", "propose.md"),
+      "sentinel claude command\n",
+      "utf-8",
+    );
+
     const install = runAgentRuntime(
       ["openspec", "install", "--config", configPath],
       {
@@ -267,6 +330,122 @@ test("CLI installs and normalizes repo-local OpenSpec scaffolding", () => {
       ),
       "../../../.agents/commands/opsx/propose.md",
     );
+    const manifestsAfterInstall = collectBackupManifests(
+      join(runtimeDir, "backups"),
+    );
+    assert.ok(
+      manifestsAfterInstall.some((manifest) =>
+        manifest.includes(`${join("openspec", "agents")}${sep}`),
+      ),
+    );
+    assert.ok(
+      manifestsAfterInstall.some((manifest) =>
+        manifest.includes(`${join("openspec", "codex")}${sep}`),
+      ),
+    );
+    const configBackup = findBackupManifest(
+      manifestsAfterInstall,
+      (manifest) =>
+        manifest.assetKind === "openspec" &&
+        manifest.targetName === "config" &&
+        manifest.kind === "file",
+    );
+    assert.equal(
+      readFileSync(join(dirname(configBackup), "target"), "utf-8"),
+      "sentinel config\n",
+    );
+    const codexSkillBackup = findBackupManifest(
+      manifestsAfterInstall,
+      (manifest, manifestPath) =>
+        manifest.assetKind === "openspec" &&
+        manifest.targetName === "codex" &&
+        manifest.kind === "directory" &&
+        existsSync(
+          join(dirname(manifestPath), "target", "openspec-propose", "SKILL.md"),
+        ),
+    );
+    assert.equal(
+      readFileSync(
+        join(
+          dirname(codexSkillBackup),
+          "target",
+          "openspec-propose",
+          "SKILL.md",
+        ),
+        "utf-8",
+      ),
+      "sentinel codex skill\n",
+    );
+    const claudeCommandBackup = findBackupManifest(
+      manifestsAfterInstall,
+      (manifest, manifestPath) =>
+        manifest.assetKind === "openspec" &&
+        manifest.targetName === "claude" &&
+        manifest.kind === "directory" &&
+        existsSync(join(dirname(manifestPath), "target", "propose.md")),
+    );
+    assert.equal(
+      readFileSync(
+        join(dirname(claudeCommandBackup), "target", "propose.md"),
+        "utf-8",
+      ),
+      "sentinel claude command\n",
+    );
+    writeFileSync(
+      join(runtimeDir, ".agents", "skills", "openspec-propose", "SKILL.md"),
+      "canonical skill before update\n",
+      "utf-8",
+    );
+    writeFileSync(
+      join(runtimeDir, ".agents", "commands", "opsx", "propose.md"),
+      "canonical command before update\n",
+      "utf-8",
+    );
+    const update = runAgentRuntime(
+      ["openspec", "update", "--config", configPath],
+      {
+        cwd: runtimeDir,
+        env,
+      },
+    );
+    assert.equal(update.status, 0, update.stderr || update.stdout);
+
+    const manifestsAfterUpdate = collectBackupManifests(
+      join(runtimeDir, "backups"),
+    );
+    const canonicalSkillBackup = findBackupManifest(
+      manifestsAfterUpdate,
+      (manifest, manifestPath) =>
+        manifest.assetKind === "openspec" &&
+        manifest.targetName === "agents" &&
+        manifest.kind === "directory" &&
+        existsSync(
+          join(dirname(manifestPath), "target", "openspec-propose", "SKILL.md"),
+        ) &&
+        readFileSync(
+          join(dirname(manifestPath), "target", "openspec-propose", "SKILL.md"),
+          "utf-8",
+        ) === "canonical skill before update\n",
+    );
+    assert.ok(canonicalSkillBackup);
+    const canonicalCommandBackup = findBackupManifest(
+      manifestsAfterUpdate,
+      (manifest, manifestPath) =>
+        manifest.assetKind === "openspec" &&
+        manifest.targetName === "agents" &&
+        manifest.kind === "directory" &&
+        existsSync(join(dirname(manifestPath), "target", "propose.md")) &&
+        readFileSync(
+          join(dirname(manifestPath), "target", "propose.md"),
+          "utf-8",
+        ) === "canonical command before update\n",
+    );
+    assert.ok(canonicalCommandBackup);
+    assert.ok(
+      manifestsAfterUpdate.some((manifest) =>
+        manifest.includes(`${join("openspec", "claude")}${sep}`),
+      ),
+    );
 
     const validate = runAgentRuntime(
       ["openspec", "validate", "--config", configPath],
@@ -285,6 +464,10 @@ test("CLI installs and normalizes repo-local OpenSpec scaffolding", () => {
     assert.match(status.stdout, /OpenSpec CLI:/);
     assert.match(status.stdout, /openspec-propose/);
     assert.match(status.stdout, /propose\.md/);
+    assert.equal(
+      collectBackupManifests(join(runtimeDir, "backups")).length,
+      manifestsAfterUpdate.length,
+    );
   });
 });
 
@@ -393,6 +576,97 @@ test("CLI installs overlapping profile skills once", () => {
       config.profiles = {
         personal: { include: ["common"], paths: ["AGENTS.md"] },
         work: { include: ["common", "work"], paths: ["AGENTS.md"] },
+      };
+    },
+  );
+});
+
+test("CLI backs up skill, reusable script, and lockfile mutations", () => {
+  let localSkillsDir = "";
+  withFixture(
+    ({ configPath, runtimeDir }) => {
+      const install = runAgentRuntime([
+        "skills",
+        "install",
+        "--profile",
+        "personal",
+        "--config",
+        configPath,
+      ]);
+      assert.equal(install.status, 0, install.stderr || install.stdout);
+
+      const backupsRoot = join(runtimeDir, "backups");
+      const installManifests = collectBackupManifests(backupsRoot);
+      const installManifestData = installManifests.map(
+        (manifestPath) =>
+          JSON.parse(readFileSync(manifestPath, "utf-8")) as {
+            assetKind: string;
+            targetName: string;
+          },
+      );
+      assert.ok(installManifests.length > 0);
+      assert.ok(
+        installManifestData.some((manifest) => manifest.assetKind === "skills"),
+      );
+      assert.ok(
+        installManifestData.some(
+          (manifest) => manifest.assetKind === "reusable-scripts",
+        ),
+      );
+      assert.ok(
+        installManifestData.some(
+          (manifest) =>
+            manifest.assetKind === "config" &&
+            manifest.targetName === "agent-runtime-lock",
+        ),
+      );
+
+      writeFileSync(
+        join(localSkillsDir, "backed-up", "SKILL.md"),
+        "---\nname: backed-up\n---\nupdated\n",
+        "utf-8",
+      );
+      const update = runAgentRuntime([
+        "skills",
+        "update",
+        "--profile",
+        "personal",
+        "--config",
+        configPath,
+      ]);
+      assert.equal(update.status, 0, update.stderr || update.stdout);
+
+      const updatedManifests = collectBackupManifests(backupsRoot);
+      assert.ok(updatedManifests.length > installManifests.length);
+      assert.ok(
+        updatedManifests.some((manifestPath) => {
+          const manifest = JSON.parse(readFileSync(manifestPath, "utf-8")) as {
+            kind: string;
+            status: string;
+          };
+          return manifest.kind === "directory" && manifest.status === "created";
+        }),
+      );
+    },
+    (config, runtimeDir) => {
+      localSkillsDir = join(runtimeDir, "local-skills");
+      mkdirSync(join(localSkillsDir, "backed-up"), { recursive: true });
+      writeFileSync(
+        join(localSkillsDir, "backed-up", "SKILL.md"),
+        "---\nname: backed-up\n---\n",
+        "utf-8",
+      );
+
+      config.blocks = {
+        local: {
+          skills: [{ localPath: localSkillsDir, names: ["backed-up"] }],
+        },
+      };
+      config.profiles = {
+        personal: {
+          include: ["local"],
+          paths: [],
+        },
       };
     },
   );
@@ -844,6 +1118,19 @@ test("CLI installs and reports instruction symlinks", () => {
       join(repoRoot, "instructions/AGENTS.md"),
     );
     assert.equal(lstatSync(claudeRuleLink).isSymbolicLink(), true);
+    const manifestsAfterInstall = collectBackupManifests(
+      join(runtimeDir, "backups"),
+    );
+    assert.ok(
+      manifestsAfterInstall.some((manifest) =>
+        manifest.includes(`${join("instructions", "agents")}${sep}`),
+      ),
+    );
+    assert.ok(
+      manifestsAfterInstall.some((manifest) =>
+        manifest.includes(`${join("instructions", "claude")}${sep}`),
+      ),
+    );
 
     const status = runAgentRuntime([
       "instructions",
@@ -861,6 +1148,10 @@ test("CLI installs and reports instruction symlinks", () => {
     assert.match(status.stdout, /\[ok\].*AGENTS\.md/);
     assert.match(status.stdout, /Instruction rules\/command-and-tools\.md/);
     assert.match(status.stdout, /\[ok\].*rules\/command-and-tools\.md/);
+    assert.equal(
+      collectBackupManifests(join(runtimeDir, "backups")).length,
+      manifestsAfterInstall.length,
+    );
   });
 });
 

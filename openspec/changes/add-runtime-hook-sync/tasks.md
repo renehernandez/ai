@@ -3,7 +3,7 @@
 - [x] 1.1 Add a shared backup primitive for files, directories, symlinks,
   missing targets, backup verification, seven-backup retention, and focused
   unit tests.
-- [ ] 1.2 Integrate the backup primitive into existing skills, instructions,
+- [x] 1.2 Integrate the backup primitive into existing skills, instructions,
   reusable script, and OpenSpec runtime mutation paths while keeping validate
   and status commands read-only.
 
