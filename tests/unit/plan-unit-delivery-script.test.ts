@@ -177,7 +177,30 @@ const launchedReport = `reviewer_launch:
     - docs-alignment-review: inline-f
 `;
 
-const deliveryLedger = `delivery_gate_ledger:
+const deliveryLedger = `nitro_feedback_gate:
+  artifact: https://git.fullscript.io/group/project/-/merge_requests/2
+  head_sha: abc789
+  request:
+    required: true
+    requested_after_latest_push: true
+    evidence:
+      - glab mr note 2 -m "/request_review @nitro"
+  start:
+    status: started
+    timeout_minutes: 10
+    poll_interval_minutes: 1
+    evidence:
+      - Nitro acknowledged latest-head review
+  completion:
+    status: clean
+    evidence:
+      - Nitro completed latest-head review with no issues
+  unresolved_actionable_feedback: []
+  non_actionable_feedback: []
+  stale_feedback_ignored: []
+  gate_outcome: passed
+
+delivery_gate_ledger:
   handoff_validation:
     status: passed
     evidence: plan_delivery_handoff validated
@@ -249,7 +272,7 @@ const deliveryLedger = `delivery_gate_ledger:
     evidence: latest-head pipeline passed
   automatic_review_feedback_wait:
     status: passed
-    evidence: latest-head automatic review feedback resolved
+    evidence: latest-head Nitro feedback resolved
 `;
 
 test("validate-handoff accepts the delivery handoff", () => {
@@ -457,6 +480,19 @@ test("validate-ledger accepts delivery gate evidence", () => {
   assert.equal(result.status, 0);
 });
 
+test("validate-ledger requires a passed Nitro feedback gate", () => {
+  const result = runPlanUnitDelivery(
+    "validate-ledger",
+    deliveryLedger.replace(
+      /^nitro_feedback_gate:[\s\S]*?\n\ndelivery_gate_ledger:/,
+      "delivery_gate_ledger:",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /nitro_feedback_gate.artifact/);
+});
+
 test("validate-ledger requires refactoring execution evidence", () => {
   const result = runPlanUnitDelivery(
     "validate-ledger",
@@ -474,7 +510,7 @@ test("validate-ledger requires automatic review feedback wait evidence", () => {
   const result = runPlanUnitDelivery(
     "validate-ledger",
     deliveryLedger.replace(
-      "    evidence: latest-head automatic review feedback resolved\n",
+      "    evidence: latest-head Nitro feedback resolved\n",
       "    evidence: latest-head review checked\n",
     ),
   );
@@ -482,7 +518,7 @@ test("validate-ledger requires automatic review feedback wait evidence", () => {
   assert.notEqual(result.status, 0);
   assert.match(
     result.stderr,
-    /automatic_review_feedback_wait\.evidence must show resolved feedback/,
+    /automatic_review_feedback_wait\.evidence must show resolved Nitro feedback/,
   );
 });
 

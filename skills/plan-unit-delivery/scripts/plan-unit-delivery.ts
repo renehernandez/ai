@@ -2,6 +2,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { nitroFeedbackGateErrors } from "../../../scripts/nitro-feedback-gate.ts";
 import {
   extractSection,
   extractYaml,
@@ -237,9 +238,32 @@ function printGateTemplate(): void {
 
 - Delivery state: all required gates have evidence.
 - Verification: one-task PR/MR boundary, local checks, reviewer outcomes, artifact separation, hosted review, pipelines, and automatic feedback wait are accounted for.
-- Finish condition: landed, direct-published, stack-ready, or blocked with evidence.
+- Finish condition: stack-ready or blocked with evidence.
 
 \`\`\`yaml
+nitro_feedback_gate:
+  artifact: <Fullscript GitLab implementation MR URL>
+  head_sha: <implementation artifact latest head sha>
+  request:
+    required: true
+    requested_after_latest_push: true
+    evidence:
+      - <request command, note URL, or discussion evidence>
+  start:
+    status: started
+    timeout_minutes: 10
+    poll_interval_minutes: 1
+    evidence:
+      - <Nitro acknowledgement or review-start evidence>
+  completion:
+    status: clean
+    evidence:
+      - <Nitro latest-head completion evidence>
+  unresolved_actionable_feedback: []
+  non_actionable_feedback: []
+  stale_feedback_ignored: []
+  gate_outcome: passed
+
 delivery_gate_ledger:
 ${gateLines}
 \`\`\`
@@ -588,6 +612,13 @@ function validateLedger(input: string): void {
   const body = extractYaml(input);
   const section = extractSection(body, "delivery_gate_ledger");
   const errors: string[] = [];
+  errors.push(
+    ...nitroFeedbackGateErrors(input).map((error) =>
+      error.startsWith("nitro_feedback_gate.")
+        ? error
+        : `nitro_feedback_gate.${error}`,
+    ),
+  );
 
   for (const gate of LEDGER_GATES) {
     const gateSection = findSection(section, gate);
@@ -700,11 +731,11 @@ function validateDeliveryGateSemantics(
   if (
     evidence &&
     !evidence.match(
-      /\b(resolved|no automatic review feedback|none posted|timeout|timed out|unavailable)\b/i,
+      /\b(resolved|no nitro feedback|none posted|timeout|timed out|unavailable)\b/i,
     )
   ) {
     errors.push(
-      "automatic_review_feedback_wait.evidence must show resolved feedback, no posted feedback after timeout, or unavailable review system evidence",
+      "automatic_review_feedback_wait.evidence must show resolved Nitro feedback, no posted feedback after timeout, or unavailable review system evidence",
     );
   }
 }

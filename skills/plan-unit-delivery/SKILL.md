@@ -1,6 +1,6 @@
 ---
 name: plan-unit-delivery
-description: Use when one validated plan_delivery_handoff approved unit should be implemented through local verification, review gates, automatic feedback, CI, and PR, MR, or direct-publish delivery.
+description: Use when one validated plan_delivery_handoff approved unit should be implemented through local verification, review gates, Nitro feedback, CI, and stacked PR/MR delivery.
 ---
 
 # Plan Unit Delivery
@@ -29,10 +29,9 @@ Legacy `plan_ready_handoff`, `plan_followthrough_slice_handoff`,
 `reviewed_slices`, `slice_plan_review`, and followthrough-ledger inputs are
 unsupported. Return `needs_plan_ready`.
 
-For OpenSpec tasks, the implementation PR/MR or direct-publish commit must
-change the selected checkbox from `[ ]` to `[x]` in the same branch that
-implements the task. Do not create a follow-up bookkeeping commit for task
-completion.
+For OpenSpec tasks, the implementation PR/MR must change the selected checkbox
+from `[ ]` to `[x]` in the same branch that implements the task. Do not create
+a follow-up bookkeeping commit for task completion.
 
 Each OpenSpec task must be delivered in its own PR/MR. A task may require
 multiple commits inside that PR/MR. Do not combine multiple OpenSpec tasks in
@@ -70,29 +69,32 @@ path.
 8. Launch implementation reviewers through internal subagents.
 9. Reconcile reviewer outcomes.
 10. Run review-feedback routing.
-11. Open or update the routed PR/MR, or direct publish only when repo policy
-   explicitly allows it.
+11. Open or update one routed implementation PR/MR stacked on the expected
+    stack tip from the handoff.
 12. Prove the implementation artifact is separate from the planning-review
     PR/MR. If the same hosted artifact would be reused, block and split the
-    implementation to a separate PR/MR or direct-publish unit.
+    implementation to a separate PR/MR.
 13. Run artifact-host review.
 14. Monitor artifact-host pipelines for the latest head until they pass, fail,
     block, or are unavailable with evidence. Include child or downstream
     pipeline state when the host exposes it.
-15. Wait for routed automatic review feedback on the latest head until feedback
-    is resolved, no automatic feedback is present after the chosen timeout, or
-    the review system is unavailable with evidence. The timeout window must be
-    explicit in the delivery gate evidence.
-16. Finish only when landed, direct-published, stack-ready, or blocked with
-    evidence.
+15. Request Nitro feedback after MR creation and after every material
+    head-changing push, including feedback fixes, restacks, conflict fixes,
+    pipeline fixes, user edits, rebases, and plan or documentation feedback
+    fixes.
+16. Wait for the shared latest-head `nitro_feedback_gate` to pass. A requested,
+    pending, stale, unavailable, or findings gate is blocking.
+17. Finish only when the unit implementation MR is stack-ready with a passed
+    Nitro gate, or blocked with evidence.
 
 Block with `implementation_scope_escape` when the selected unit requires
 unrelated task edits, new OpenSpec tasks, or broadening the approved scope.
 
 ## Delivery Gate Ledger
 
-`delivery_gate_ledger` remains a session-only evidence ledger for this delivery
-loop. It is not durable sequence state and must not replace OpenSpec `tasks.md`.
+`nitro_feedback_gate` and `delivery_gate_ledger` remain session-only evidence
+for this delivery loop. They are not durable sequence state and must not
+replace OpenSpec `tasks.md`.
 
 When writing `delivery_gate_ledger`, `reviewer_launch`,
 `reviewer_report`, `refactoring_execution`, or the final delivery
@@ -108,6 +110,10 @@ scripts/plan-unit-delivery.ts gate-template
 scripts/plan-unit-delivery.ts validate-ledger --file <ledger>
 ```
 
+The final ledger must include a passed `nitro_feedback_gate`. `validate-ledger`
+rejects missing, pending, stale, unavailable, findings, or unresolved Nitro
+feedback gates.
+
 ## Mistakes
 
 | Mistake | Fix |
@@ -115,13 +121,14 @@ scripts/plan-unit-delivery.ts validate-ledger --file <ledger>
 | Implementing without `plan_delivery_handoff` | Return `needs_plan_ready` |
 | Accepting legacy slice/followthrough handoffs | Return `needs_plan_ready` |
 | Combining multiple OpenSpec tasks in one PR/MR | Split into one PR/MR per task |
-| Checking OpenSpec tasks in a follow-up commit | Check the task in the implementation PR/MR or direct-publish commit |
+| Checking OpenSpec tasks in a follow-up commit | Check the task in the implementation PR/MR |
 | Reusing the planning-review PR/MR for implementation | Create a separate implementation artifact and record separation evidence |
 | Implementing multiple OpenSpec tasks at once | Return to OpenSpec or `plan-unit-sequencer` |
 | Finishing without proving the task delta | Run `validate-task-delta` against base and unit `tasks.md` |
 | Treating delivery gate evidence as durable state | Keep sequence state in OpenSpec |
 | Treating an open PR/MR as done before pipelines settle | Keep monitoring latest-head pipelines |
-| Assuming automatic review feedback is absent immediately after push | Wait until feedback resolves or the timeout proves nothing posted |
+| Assuming Nitro feedback is absent immediately after push | Request Nitro for the latest head, wait up to 10 minutes for review start, then wait for completion |
+| Moving on after restacking descendants | Rerun the full Nitro gate for every changed descendant head |
 | Returning gate YAML without a readable thread summary | Add `## Readable Summary` before the YAML |
 
 ## Test Evidence

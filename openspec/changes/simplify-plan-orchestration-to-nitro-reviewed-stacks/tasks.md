@@ -45,16 +45,16 @@
 
 ## 5. Sequencer And Unit Delivery
 
-- [ ] 5.1 Update `plan-unit-sequencer` docs, script helpers, adapter prompt,
+- [x] 5.1 Update `plan-unit-sequencer` docs, script helpers, adapter prompt,
       and tests so OpenSpec task selection always advances from current
       stack-tip state.
-- [ ] 5.2 Update `plan-unit-delivery` docs, script helpers, adapter prompt, and
+- [x] 5.2 Update `plan-unit-delivery` docs, script helpers, adapter prompt, and
       tests so one atomic plan or one OpenSpec deliverable task maps to one
       stacked implementation MR.
-- [ ] 5.3 Require `plan-unit-delivery` to request fresh Nitro feedback after
+- [x] 5.3 Require `plan-unit-delivery` to request fresh Nitro feedback after
       every material head-changing push and pass the shared Nitro gate before
       reporting unit success.
-- [ ] 5.4 Require restacked descendants to rerun the full Nitro gate before
+- [x] 5.4 Require restacked descendants to rerun the full Nitro gate before
       `stack_ready`.
 
 ## 6. Rule And Skill Alignment
