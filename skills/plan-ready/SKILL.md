@@ -157,28 +157,6 @@ creation mostly mechanical: `proposal.md` takes the objective and scope,
 `tasks.md` takes the reviewed deliverables, spec deltas take proposed
 requirements, and `design.md` captures tradeoffs when needed.
 
-## Runtime And Platform Blueprints
-
-For runtime, infrastructure, deployability, data, binding, migration, or
-generated-asset plans, split more aggressively than the product surface implies.
-The recommended first task should usually stop at the first deployable runtime
-proof, with no dependencies.
-
-Before marking a runtime blueprint ready, make the first task or blockers state:
-
-- service identity, including any service plus optional environment tuple;
-- public ingress posture, including preview, workers.dev, route, and custom
-  domain caveats;
-- auth or write policy for the first writable surface;
-- migration proof and rollback or forward-only migration constraints;
-- review or runtime data cleanup before the first persistent write.
-
-If those decisions are missing, emit `blocked_readiness` rather than a broad
-blueprint. Do not let the first task combine runtime deployability, generated
-consumer changes, schema or metadata expansion, proxy behavior, documentation,
-preflight checks, and review lifecycle cleanup unless reviewers explicitly
-confirm that the combined task is still one independently verifiable delivery.
-
 Legacy `slice_plan_review`, `reviewed_slices`,
 `plan_ready_handoff`, `plan_followthrough_slice_handoff`, and
 followthrough-ledger inputs are unsupported. Return `needs_plan_ready` and ask
@@ -224,10 +202,5 @@ Linear comments by default.
 
 - RED: previous workflow duplicated OpenSpec through `slice_plan_review`,
   `reviewed_slices`, and followthrough ledgers.
-- RED: runtime blueprint planning combined deployability, generated consumers,
-  binding, metadata, proxy behavior, docs, and cleanup before reviewers narrowed
-  the first delivery boundary.
 - GREEN: new workflow routes atomic work to `plan_delivery_handoff` and
   multi-deliverable work to a validated `openspec_blueprint`.
-- GREEN: runtime blueprints now require a first deployable proof plus explicit
-  binding identity, ingress, auth/write policy, migration, and cleanup decisions.
