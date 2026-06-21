@@ -110,6 +110,19 @@ test("Commander routes scoped OpenSpec commands", () => {
   assert.equal(parsed.configPath, "custom.json");
 });
 
+test("Commander routes scoped hooks commands", () => {
+  const [parsed] = parseCommand([
+    "hooks",
+    "install",
+    "--config",
+    "custom.json",
+  ]);
+
+  assert.equal(parsed.scope, "hooks");
+  assert.equal(parsed.command, "install");
+  assert.equal(parsed.configPath, "custom.json");
+});
+
 test("Commander routes all selection flags", () => {
   const [parsed] = parseCommand(["install", "--all-profiles"]);
 
@@ -135,6 +148,12 @@ test("Commander rejects profile flags on OpenSpec commands", () => {
     "--profile",
     "work",
   ]);
+
+  assert.match(error.message, /unknown option '--profile'/);
+});
+
+test("Commander rejects profile flags on hooks commands", () => {
+  const error = parseInvalidCommand(["hooks", "status", "--profile", "work"]);
 
   assert.match(error.message, /unknown option '--profile'/);
 });

@@ -79,6 +79,15 @@ function withFixture(
     agents: join(runtimeDir, "root"),
     claude: join(runtimeDir, "claude"),
   };
+  runtime.hooks = {
+    sourceDir: join(repoRoot, "hooks"),
+    canonicalDir: join(runtimeDir, "agents", "hooks"),
+    allowDisposableSource: true,
+    targets: {
+      claude: join(runtimeDir, "claude", "hooks"),
+      codex: join(runtimeDir, "codex", "hooks"),
+    },
+  };
   configureConfig(config, runtimeDir);
   writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf-8");
 
@@ -245,6 +254,7 @@ test("CLI shows global help", () => {
   assert.match(result.stdout, /Usage: agent-runtime/);
   assert.match(result.stdout, /Commands:/);
   assert.doesNotMatch(result.stdout, /\bagents\b/);
+  assert.match(result.stdout, /hooks/);
   assert.match(result.stdout, /instructions/);
   assert.match(result.stdout, /openspec/);
   assert.match(result.stdout, /skills/);
@@ -255,6 +265,17 @@ test("CLI shows OpenSpec scope help", () => {
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /Usage: agent-runtime openspec/);
+  assert.match(result.stdout, /install/);
+  assert.match(result.stdout, /status/);
+  assert.match(result.stdout, /update/);
+  assert.match(result.stdout, /validate/);
+});
+
+test("CLI shows hooks scope help", () => {
+  const result = runAgentRuntime(["hooks", "--help"]);
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /Usage: agent-runtime hooks/);
   assert.match(result.stdout, /install/);
   assert.match(result.stdout, /status/);
   assert.match(result.stdout, /update/);
@@ -483,6 +504,193 @@ test("CLI reports missing OpenSpec CLI", () => {
 
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /npm install -g @fission-ai\/openspec@latest/);
+  });
+});
+
+test("CLI installs and reports managed hook symlinks", () => {
+  withFixture(({ configPath, runtimeDir }) => {
+    const canonicalHooks = join(runtimeDir, "agents", "hooks");
+    const claudeHooks = join(runtimeDir, "claude", "hooks");
+    const codexHooks = join(runtimeDir, "codex", "hooks");
+    mkdirSync(canonicalHooks, { recursive: true });
+    mkdirSync(claudeHooks, { recursive: true });
+    mkdirSync(codexHooks, { recursive: true });
+    writeFileSync(join(canonicalHooks, "sentinel.txt"), "agents\n", "utf-8");
+    writeFileSync(join(claudeHooks, "sentinel.txt"), "claude\n", "utf-8");
+    writeFileSync(join(codexHooks, "sentinel.txt"), "codex\n", "utf-8");
+
+    const install = runAgentRuntime([
+      "hooks",
+      "install",
+      "--config",
+      configPath,
+    ]);
+    assert.equal(install.status, 0, install.stderr || install.stdout);
+    assert.equal(lstatSync(canonicalHooks).isSymbolicLink(), true);
+    assert.equal(readlinkSync(canonicalHooks), join(repoRoot, "hooks"));
+    assert.equal(lstatSync(claudeHooks).isSymbolicLink(), true);
+    assert.equal(readlinkSync(claudeHooks), canonicalHooks);
+    assert.equal(lstatSync(codexHooks).isSymbolicLink(), true);
+    assert.equal(readlinkSync(codexHooks), canonicalHooks);
+
+    const manifestsAfterInstall = collectBackupManifests(
+      join(runtimeDir, "backups"),
+    );
+    const agentsBackup = findBackupManifest(
+      manifestsAfterInstall,
+      (manifest, manifestPath) =>
+        manifest.assetKind === "hooks" &&
+        manifest.targetName === "agents" &&
+        manifest.kind === "directory" &&
+        readFileSync(
+          join(dirname(manifestPath), "target", "sentinel.txt"),
+          "utf-8",
+        ) === "agents\n",
+    );
+    assert.ok(agentsBackup);
+    const claudeBackup = findBackupManifest(
+      manifestsAfterInstall,
+      (manifest, manifestPath) =>
+        manifest.assetKind === "hooks" &&
+        manifest.targetName === "claude" &&
+        manifest.kind === "directory" &&
+        readFileSync(
+          join(dirname(manifestPath), "target", "sentinel.txt"),
+          "utf-8",
+        ) === "claude\n",
+    );
+    assert.ok(claudeBackup);
+    const codexBackup = findBackupManifest(
+      manifestsAfterInstall,
+      (manifest, manifestPath) =>
+        manifest.assetKind === "hooks" &&
+        manifest.targetName === "codex" &&
+        manifest.kind === "directory" &&
+        readFileSync(
+          join(dirname(manifestPath), "target", "sentinel.txt"),
+          "utf-8",
+        ) === "codex\n",
+    );
+    assert.ok(codexBackup);
+
+    const validate = runAgentRuntime([
+      "hooks",
+      "validate",
+      "--config",
+      configPath,
+    ]);
+    assert.equal(validate.status, 0, validate.stderr || validate.stdout);
+    assert.match(validate.stdout, /Hook source/);
+    assert.match(validate.stdout, /Canonical hooks/);
+    assert.match(validate.stdout, /codex startup hook registration/);
+
+    const status = runAgentRuntime(["hooks", "status", "--config", configPath]);
+    assert.equal(status.status, 0, status.stderr || status.stdout);
+    assert.match(status.stdout, /\[ok\] codex hooks/);
+    assert.equal(
+      collectBackupManifests(join(runtimeDir, "backups")).length,
+      manifestsAfterInstall.length,
+    );
+  });
+});
+
+test("CLI validates managed hook symlink state", () => {
+  withFixture(({ configPath, runtimeDir }) => {
+    const validate = runAgentRuntime([
+      "hooks",
+      "validate",
+      "--config",
+      configPath,
+    ]);
+    assert.notEqual(validate.status, 0);
+    assert.match(validate.stderr, /Invalid managed hooks/);
+    assert.match(validate.stderr, /Missing canonical hooks symlink/);
+
+    const status = runAgentRuntime(["hooks", "status", "--config", configPath]);
+    assert.equal(status.status, 0, status.stderr || status.stdout);
+    assert.equal(collectBackupManifests(join(runtimeDir, "backups")).length, 0);
+  });
+});
+
+test("CLI refuses unsafe managed hook targets", () => {
+  withFixture(({ configPath, runtimeDir }) => {
+    mkdirSync(join(runtimeDir, "codex"), { recursive: true });
+    writeFileSync(join(runtimeDir, "codex", "hooks"), "not a dir\n", "utf-8");
+
+    const result = runAgentRuntime([
+      "hooks",
+      "install",
+      "--config",
+      configPath,
+    ]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Refusing to replace unsafe hook target/);
+    assert.equal(collectBackupManifests(join(runtimeDir, "backups")).length, 0);
+  });
+});
+
+test("CLI refuses disposable worktree hook sources by default", () => {
+  withFixture(
+    ({ configPath, runtimeDir }) => {
+      const result = runAgentRuntime([
+        "hooks",
+        "install",
+        "--config",
+        configPath,
+      ]);
+
+      assert.notEqual(result.status, 0);
+      assert.match(
+        result.stderr,
+        /Refusing to install hooks from disposable worktree source/,
+      );
+      assert.equal(
+        collectBackupManifests(join(runtimeDir, "backups")).length,
+        0,
+      );
+    },
+    (config, runtimeDir) => {
+      const disposableSource = join(
+        runtimeDir,
+        ".codex",
+        "worktrees",
+        "temp",
+        "ai",
+        "hooks",
+      );
+      mkdirSync(disposableSource, { recursive: true });
+      writeFileSync(join(disposableSource, "hook.ts"), "hook\n", "utf-8");
+
+      const runtime = config.runtime as Record<string, unknown>;
+      runtime.hooks = {
+        sourceDir: disposableSource,
+        canonicalDir: join(runtimeDir, "agents", "hooks"),
+        targets: {
+          codex: join(runtimeDir, "codex", "hooks"),
+        },
+      };
+    },
+  );
+});
+
+test("CLI wrapper install preflights hooks before skill mutations", () => {
+  withFixture(({ configPath, runtimeDir }) => {
+    mkdirSync(join(runtimeDir, "codex"), { recursive: true });
+    writeFileSync(join(runtimeDir, "codex", "hooks"), "not a dir\n", "utf-8");
+
+    const result = runAgentRuntime([
+      "install",
+      "--profile",
+      "personal",
+      "--config",
+      configPath,
+    ]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Refusing to replace unsafe hook target/);
+    assert.equal(existsSync(join(runtimeDir, "lock.json")), false);
+    assert.equal(collectBackupManifests(join(runtimeDir, "backups")).length, 0);
   });
 });
 

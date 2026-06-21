@@ -9,6 +9,14 @@
       "claude": "~/.claude",
       "codex": "~/.codex"
     },
+    "hooks": {
+      "sourceDir": "/Users/rene.hernandez/work/projects/rene.hernandez/ai/hooks",
+      "canonicalDir": "~/.agents/hooks",
+      "targets": {
+        "claude": "~/.claude/hooks",
+        "codex": "~/.codex/hooks"
+      }
+    },
     "openspec": {
       "tools": ["codex", "claude"],
       "canonicalSkillsDir": ".agents/skills",

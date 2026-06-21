@@ -31,7 +31,7 @@ import {
 import { pathToFileURL } from "node:url";
 import { Command } from "commander";
 
-type Scope = "skills" | "instructions" | "openspec";
+type Scope = "skills" | "instructions" | "openspec" | "hooks";
 type RuntimeCommand = "install" | "update" | "validate" | "status";
 type SkillCommand = Extract<RuntimeCommand, "install" | "update" | "validate">;
 
@@ -81,6 +81,7 @@ type Config = {
     backupsDir?: string;
     lockFile?: string;
     openspec?: OpenSpecConfig;
+    hooks?: HooksConfig;
   };
   instructions?: {
     paths: InstructionPathConfig[];
@@ -103,6 +104,13 @@ type OpenSpecConfig = {
   commandTargets?: Record<string, string>;
 };
 
+type HooksConfig = {
+  sourceDir?: string;
+  canonicalDir?: string;
+  targets?: Record<string, string>;
+  allowDisposableSource?: boolean;
+};
+
 type ResolvedOpenSpecConfig = {
   tools: string[];
   canonicalSkillsDir: string;
@@ -110,6 +118,14 @@ type ResolvedOpenSpecConfig = {
   skillTargets: Record<string, string>;
   commandTargets: Record<string, string>;
   backupsRoot: string;
+};
+
+type ResolvedHooksConfig = {
+  sourceDir: string;
+  canonicalDir: string;
+  targets: Record<string, string>;
+  backupsRoot: string;
+  allowDisposableSource: boolean;
 };
 
 type ParsedArgs = {
@@ -180,8 +196,14 @@ export function executeParsedCommand(input: ParsedArgs): void {
       allProfiles,
     });
     preflightWrapperCommand(command, config, profileSelection);
+    if (command === "install" || command === "update") {
+      runHooks(command, config);
+    }
     runSkills(command, config, profileSelection);
     runInstructions(command, config, profileSelection);
+    if (command === "validate" || command === "status") {
+      runHooks(command, config, { enforceValidate: false });
+    }
     return;
   }
 
@@ -216,6 +238,7 @@ export function createProgram(
   addSkillsCommands(program, execute);
   addInstructionsCommands(program, execute);
   addOpenSpecCommands(program, execute);
+  addHooksCommands(program, execute);
 
   return program;
 }
@@ -327,6 +350,26 @@ function addOpenSpecCommands(program: Command, execute: CommandExecutor): void {
   }
 }
 
+function addHooksCommands(program: Command, execute: CommandExecutor): void {
+  const hooks = program
+    .command("hooks")
+    .description("Manage runtime hook symlinks");
+  for (const command of runtimeCommands()) {
+    hooks
+      .command(command)
+      .description(`${labelForCommand(command)} managed hooks`)
+      .option("--config <path>", "Path to agent runtime config", CONFIG_FILE)
+      .action((first: CommandOptions | Command, second?: Command) => {
+        const { options, commandObject } = actionContext(first, second);
+        execute({
+          scope: "hooks",
+          command,
+          configPath: configPathFor(commandObject, options),
+        });
+      });
+  }
+}
+
 type CommandOptions = {
   config?: string;
   profile?: string[];
@@ -386,7 +429,7 @@ function resolveProfileSelectionForScope(
   config: Config,
   input: { profileNames?: string[]; allProfiles?: boolean },
 ): ProfileSelection {
-  if (scope === "openspec") {
+  if (scope === "openspec" || scope === "hooks") {
     if ((input.profileNames?.length ?? 0) > 0 || input.allProfiles) {
       throw new Error(
         "--profile can only be used with skills, instructions, or wrapper commands",
@@ -665,6 +708,10 @@ function runScope(
     runOpenSpec(input.command, input.config);
     return;
   }
+  if (scope === "hooks") {
+    runHooks(input.command, input.config);
+    return;
+  }
   runInstructions(input.command, input.config, input.profileSelection);
 }
 
@@ -743,13 +790,21 @@ function resolvedOpenSpecConfig(config: Config): ResolvedOpenSpecConfig {
     canonicalSkillsDir: input.canonicalSkillsDir ?? ".agents/skills",
     canonicalCommandsDir: input.canonicalCommandsDir ?? ".agents/commands",
     backupsRoot: runtimeBackupsRoot(config),
-    skillTargets: nonEmptyRecord(input.skillTargets, {
-      codex: ".codex/skills",
-      claude: ".claude/skills",
-    }),
-    commandTargets: nonEmptyRecord(input.commandTargets, {
-      claude: ".claude/commands",
-    }),
+    skillTargets: nonEmptyRecord(
+      input.skillTargets,
+      {
+        codex: ".codex/skills",
+        claude: ".claude/skills",
+      },
+      "runtime.openspec.skillTargets",
+    ),
+    commandTargets: nonEmptyRecord(
+      input.commandTargets,
+      {
+        claude: ".claude/commands",
+      },
+      "runtime.openspec.commandTargets",
+    ),
   };
 }
 
@@ -770,6 +825,7 @@ function nonEmptyStrings(
 function nonEmptyRecord(
   value: Record<string, string> | undefined,
   defaults: Record<string, string>,
+  label = "target map",
 ): Record<string, string> {
   if (!value) {
     return defaults;
@@ -778,7 +834,7 @@ function nonEmptyRecord(
     ([, target]) => target.trim().length > 0,
   );
   if (entries.length === 0) {
-    throw new Error("runtime.openspec target maps must not be empty");
+    throw new Error(`${label} must not be empty`);
   }
   return Object.fromEntries(entries);
 }
@@ -1017,6 +1073,217 @@ function statusOpenSpecCommands(config: ResolvedOpenSpecConfig): void {
       );
     }
   }
+}
+
+function runHooks(
+  command: RuntimeCommand,
+  config: Config,
+  options: { enforceValidate?: boolean } = {},
+): void {
+  const hooks = resolvedHooksConfig(config);
+  validateHookConfig(hooks);
+
+  if (command === "status") {
+    statusHooks(hooks);
+    return;
+  }
+
+  if (command === "validate") {
+    statusHooks(hooks);
+    if (options.enforceValidate ?? true) {
+      validateInstalledHooks(hooks);
+    }
+    console.log("Validated hook configuration.");
+    return;
+  }
+
+  validateDurableHookSource(hooks);
+  validateHookReplacementTargets(hooks);
+  installHookSymlinks(hooks);
+  console.log(
+    `${command === "install" ? "Installed" : "Updated"} managed hooks.`,
+  );
+}
+
+function resolvedHooksConfig(config: Config): ResolvedHooksConfig {
+  const input = config.runtime.hooks ?? {};
+  return {
+    sourceDir: input.sourceDir ?? "hooks",
+    canonicalDir: input.canonicalDir ?? "~/.agents/hooks",
+    targets: nonEmptyRecord(
+      input.targets,
+      {
+        codex: "~/.codex/hooks",
+        claude: "~/.claude/hooks",
+      },
+      "runtime.hooks.targets",
+    ),
+    backupsRoot: runtimeBackupsRoot(config),
+    allowDisposableSource: input.allowDisposableSource === true,
+  };
+}
+
+function validateHookConfig(config: ResolvedHooksConfig): void {
+  const sourceDir = resolve(expandHome(config.sourceDir));
+  if (!lstatIfExists(sourceDir)?.isDirectory()) {
+    throw new Error(`Missing hooks source directory: ${config.sourceDir}`);
+  }
+
+  if (config.canonicalDir.trim().length === 0) {
+    throw new Error("runtime.hooks.canonicalDir must be configured");
+  }
+  if (Object.keys(config.targets).length === 0) {
+    throw new Error("runtime.hooks.targets must configure at least one target");
+  }
+}
+
+function validateHookReplacementTargets(config: ResolvedHooksConfig): void {
+  const sourceDir = resolve(expandHome(config.sourceDir));
+  validateHookReplacementTarget(expandHome(config.canonicalDir), sourceDir);
+  for (const targetDir of Object.values(config.targets)) {
+    validateHookReplacementTarget(
+      expandHome(targetDir),
+      expandHome(config.canonicalDir),
+    );
+  }
+}
+
+function validateHookReplacementTarget(linkPath: string, target: string): void {
+  const stats = lstatIfExists(linkPath);
+  if (!stats) {
+    return;
+  }
+  if (
+    stats.isSymbolicLink() &&
+    realPathIfExists(linkPath) === realPathIfExists(target)
+  ) {
+    return;
+  }
+  if (stats.isSymbolicLink() || stats.isDirectory()) {
+    return;
+  }
+  throw new Error(`Refusing to replace unsafe hook target: ${linkPath}`);
+}
+
+function validateDurableHookSource(config: ResolvedHooksConfig): void {
+  if (config.allowDisposableSource) {
+    return;
+  }
+  const sourceDir = resolve(expandHome(config.sourceDir));
+  if (sourceDir.includes(`${sep}.codex${sep}worktrees${sep}`)) {
+    throw new Error(
+      `Refusing to install hooks from disposable worktree source: ${sourceDir}`,
+    );
+  }
+}
+
+function validateInstalledHooks(config: ResolvedHooksConfig): void {
+  const sourceDir = resolve(expandHome(config.sourceDir));
+  const canonicalDir = expandHome(config.canonicalDir);
+  const errors: string[] = [];
+  validateSymlink({
+    linkPath: canonicalDir,
+    expectedTarget: sourceDir,
+    label: "canonical hooks",
+    errors,
+  });
+  for (const [targetName, targetDir] of Object.entries(config.targets)) {
+    validateSymlink({
+      linkPath: expandHome(targetDir),
+      expectedTarget: canonicalDir,
+      label: `${targetName} hooks`,
+      errors,
+    });
+  }
+  if (errors.length > 0) {
+    throw new Error(
+      `Invalid managed hooks:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+    );
+  }
+}
+
+type HookSymlinkOperation = {
+  targetName: string;
+  target: string;
+  linkPath: string;
+};
+
+function installHookSymlinks(config: ResolvedHooksConfig): void {
+  const sourceDir = resolve(expandHome(config.sourceDir));
+  const canonicalDir = expandHome(config.canonicalDir);
+  const operations: HookSymlinkOperation[] = [
+    {
+      targetName: "agents",
+      target: sourceDir,
+      linkPath: canonicalDir,
+    },
+  ];
+  for (const [targetName, targetDir] of Object.entries(config.targets)) {
+    operations.push({
+      targetName,
+      target: canonicalDir,
+      linkPath: expandHome(targetDir),
+    });
+  }
+
+  for (const operation of operations) {
+    backupHookSymlinkOperation(operation, config.backupsRoot);
+  }
+  for (const operation of operations) {
+    replaceHookSymlink(operation);
+  }
+}
+
+function statusHooks(config: ResolvedHooksConfig): void {
+  const sourceDir = resolve(expandHome(config.sourceDir));
+  const canonicalDir = expandHome(config.canonicalDir);
+  printPathStatus("Hook source", sourceDir);
+  printSymlinkStatus("Canonical hooks", canonicalDir, sourceDir);
+  for (const [targetName, targetDir] of Object.entries(config.targets)) {
+    printSymlinkStatus(
+      `${targetName} hooks`,
+      expandHome(targetDir),
+      canonicalDir,
+    );
+    console.log(`[unregistered] ${targetName} startup hook registration`);
+  }
+}
+
+function replaceHookSymlink(operation: HookSymlinkOperation): void {
+  const stats = lstatIfExists(operation.linkPath);
+  if (
+    stats?.isSymbolicLink() &&
+    realPathIfExists(operation.linkPath) === realPathIfExists(operation.target)
+  ) {
+    return;
+  }
+
+  if (stats && !stats.isSymbolicLink() && !stats.isDirectory()) {
+    throw new Error(
+      `Refusing to replace unsafe hook target: ${operation.linkPath}`,
+    );
+  }
+  rmSync(operation.linkPath, { force: true, recursive: true });
+  mkdirSync(dirname(operation.linkPath), { recursive: true });
+  symlinkSync(operation.target, operation.linkPath, "dir");
+}
+
+function backupHookSymlinkOperation(
+  operation: HookSymlinkOperation,
+  backupsRoot: string,
+): void {
+  const stats = lstatIfExists(operation.linkPath);
+  if (
+    stats?.isSymbolicLink() &&
+    realPathIfExists(operation.linkPath) === realPathIfExists(operation.target)
+  ) {
+    return;
+  }
+  backupRuntimeTarget(operation.linkPath, {
+    assetKind: "hooks",
+    backupsRoot,
+    targetName: operation.targetName,
+  });
 }
 
 function validateSymlink(input: {
@@ -1760,6 +2027,9 @@ function preflightWrapperCommand(
       target: operation.sourcePath,
     })),
   );
+  const hooks = resolvedHooksConfig(config);
+  validateHookConfig(hooks);
+  validateHookReplacementTargets(hooks);
 }
 
 function validateInstructionConfig(
