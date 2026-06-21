@@ -32,6 +32,7 @@ The linked rule files are normative and preserve the detailed policies.
 - Use `/doc-smith` for non-trivial documentation work and Mermaid for Markdown diagrams.
 - Use `/scrutinize` for adversarial validation of plans, implementation diffs, PRs, hosted review feedback, proposed approaches, sanity checks, and second opinions.
 - Always use the `hallmark` skill for frontend design work, including greenfield UI, redesigns, design audits, visual polish, and design extraction from URLs or screenshots.
+- Always use the 1Password MCP server when working with 1Password developer environments; do not wait for the user to explicitly ask for it.
 - Prefer CLI tools that carry authentication and org conventions: `gh` for GitHub, `glab` for GitLab, and `wrangler` for Cloudflare.
 - Review-first plan workflows are an explicit hosted-review exception to ordinary direct-publish guidance. When `plan-orchestrator`, `plan-review`, or the approved plan workflow requires a planning-only PR/MR, create that planning artifact first and wait for the required planning-review gate before implementation sequencing.
 - Do not use "smoke test" or "smoke tests" wording. Describe the exact verification performed instead, such as browser route checks, console checks, or manual browser verification.
