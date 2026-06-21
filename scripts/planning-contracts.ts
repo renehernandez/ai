@@ -10,15 +10,9 @@ export const LEGACY_PLAN_ROOTS = [
 
 export const LEGACY_PLAN_KEYS = ["reviewed_slices"] as const;
 
-export const PLANNING_REVIEW_MODES = [
-  "ship_then_continue",
-  "stack_when_ready",
-] as const;
+export const PLANNING_REVIEW_MODES = ["stacked_delivery"] as const;
 
-export const PLANNING_REVIEW_OUTCOMES = [
-  "approved",
-  "ready_for_stack",
-] as const;
+export const PLANNING_REVIEW_OUTCOMES = ["ready_for_stack"] as const;
 
 export const PLANNING_REVIEW_ARTIFACT_TYPES = [
   "plan",
@@ -39,6 +33,10 @@ export type PlanningReview = {
   reviewed_head?: string;
   stack_base_ref?: string;
   stack_base_evidence?: string;
+  stack_identity_expected_base_ref?: string;
+  stack_identity_expected_base_sha?: string;
+  stack_identity_predecessor_artifact?: string;
+  stack_identity_restack_required?: string;
   task_state_fingerprint?: string;
   validation_evidence: string[];
   review_evidence: string[];
@@ -156,6 +154,7 @@ export function legacyPlanContractErrors(input: string): string[] {
 export function parsePlanningReview(input: string): PlanningReview {
   const body = extractYaml(input);
   const section = findSection(body, "planning_review") ?? "";
+  const stackIdentity = findSection(section, "stack_identity") ?? "";
   const validation = findSection(section, "validation") ?? "";
   const review = findSection(section, "review") ?? "";
 
@@ -172,6 +171,19 @@ export function parsePlanningReview(input: string): PlanningReview {
     reviewed_head: scalar(section, "reviewed_head"),
     stack_base_ref: scalar(section, "stack_base_ref"),
     stack_base_evidence: scalar(section, "stack_base_evidence"),
+    stack_identity_expected_base_ref: scalar(
+      stackIdentity,
+      "expected_base_ref",
+    ),
+    stack_identity_expected_base_sha: scalar(
+      stackIdentity,
+      "expected_base_sha",
+    ),
+    stack_identity_predecessor_artifact: scalar(
+      stackIdentity,
+      "predecessor_artifact",
+    ),
+    stack_identity_restack_required: scalar(stackIdentity, "restack_required"),
     task_state_fingerprint: scalar(section, "task_state_fingerprint"),
     validation_evidence: list(validation || section, "evidence"),
     review_evidence: list(review || section, "evidence"),
@@ -226,7 +238,14 @@ export function validatePlanningReviewContract(
     );
   }
 
-  if (review.mode && !includes(PLANNING_REVIEW_MODES, review.mode)) {
+  if (
+    review.mode === "ship_then_continue" ||
+    review.mode === "stack_when_ready"
+  ) {
+    errors.push(
+      `planning_review.mode ${review.mode} is legacy; rerun plan-ready and plan-review with stacked_delivery`,
+    );
+  } else if (review.mode && !includes(PLANNING_REVIEW_MODES, review.mode)) {
     errors.push(
       `planning_review.mode must be one of: ${PLANNING_REVIEW_MODES.join(", ")}`,
     );
@@ -241,7 +260,7 @@ export function validatePlanningReviewContract(
     );
   }
 
-  if (review.mode === "stack_when_ready") {
+  if (review.mode === "stacked_delivery") {
     requireValue(
       review.stack_base_ref,
       "planning_review.stack_base_ref",
@@ -252,19 +271,34 @@ export function validatePlanningReviewContract(
       "planning_review.stack_base_evidence",
       errors,
     );
+    requireValue(
+      review.stack_identity_expected_base_ref,
+      "planning_review.stack_identity.expected_base_ref",
+      errors,
+    );
+    requireValue(
+      review.stack_identity_expected_base_sha,
+      "planning_review.stack_identity.expected_base_sha",
+      errors,
+    );
+    requireValue(
+      review.stack_identity_restack_required,
+      "planning_review.stack_identity.restack_required",
+      errors,
+    );
     if (review.gate_outcome !== "ready_for_stack") {
       errors.push(
-        "planning_review.gate_outcome must be ready_for_stack for stack_when_ready",
+        "planning_review.gate_outcome must be ready_for_stack for stacked_delivery",
       );
     }
   }
 
   if (
-    review.mode === "ship_then_continue" &&
-    review.gate_outcome !== "approved"
+    review.stack_identity_restack_required &&
+    !["true", "false"].includes(review.stack_identity_restack_required)
   ) {
     errors.push(
-      "planning_review.gate_outcome must be approved for ship_then_continue",
+      "planning_review.stack_identity.restack_required must be true or false",
     );
   }
 

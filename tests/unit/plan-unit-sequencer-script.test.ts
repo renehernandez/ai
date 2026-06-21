@@ -125,6 +125,12 @@ const validHandoff = `plan_delivery_handoff:
     out_of_scope: []
   delivery:
     expected_host: github_pr
+    stack_identity:
+      expected_base_ref: plan/example
+      expected_base_sha: def456
+      predecessor_artifact: https://example.test/review/1
+      selected_task_base_sha: def456
+      restack_required: false
     completion_updates:
       - Mark OpenSpec task checkbox complete in one separate implementation PR/MR.
   review:
@@ -142,21 +148,26 @@ const planningReview = `planning_review:
   artifact_type: openspec
   artifact_ref: openspec/changes/example-change
   review_artifact: https://example.test/review/1
-  mode: stack_when_ready
+  mode: stacked_delivery
   gate_outcome: ready_for_stack
   target_branch: main
   target_base_sha: abc123
   planning_branch: plan/example
   reviewed_head: def456
   stack_base_ref: plan/example
-  stack_base_evidence: planning MR ready for merge
+  stack_base_evidence: latest-head Nitro feedback completed cleanly
+  stack_identity:
+    expected_base_ref: plan/example
+    expected_base_sha: def456
+    predecessor_artifact:
+    restack_required: false
   task_state_fingerprint: feedface
   validation:
     evidence:
       - openspec validate example-change --strict --no-interactive
   review:
     evidence:
-      - feedback addressed and ready to stack
+      - feedback addressed and latest-head Nitro gate passed
   blockers: []
 `;
 

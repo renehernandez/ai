@@ -110,21 +110,26 @@ const planningReview = `planning_review:
   artifact_type: openspec
   artifact_ref: openspec/changes/example-change
   review_artifact: https://example.test/review/1
-  mode: ship_then_continue
-  gate_outcome: approved
+  mode: stacked_delivery
+  gate_outcome: ready_for_stack
   target_branch: main
   target_base_sha: abc123
   planning_branch: plan/example
   reviewed_head: def456
-  stack_base_ref:
-  stack_base_evidence:
+  stack_base_ref: plan/example
+  stack_base_evidence: latest-head Nitro feedback completed cleanly
+  stack_identity:
+    expected_base_ref: plan/example
+    expected_base_sha: def456
+    predecessor_artifact:
+    restack_required: false
   task_state_fingerprint: feedface
   validation:
     evidence:
       - openspec validate example-change --strict --no-interactive
   review:
     evidence:
-      - planning MR merged after feedback was addressed
+      - planning MR latest-head Nitro feedback completed cleanly
   blockers: []
 `;
 
@@ -191,6 +196,22 @@ test("validate-planning-review rejects pending blockers", () => {
   assert.match(
     result.stderr,
     /planning_review.blockers must be empty before sequencing/,
+  );
+});
+
+test("validate-planning-review rejects legacy planning modes", () => {
+  const result = runPlanReview(
+    "validate-planning-review",
+    planningReview.replace(
+      "mode: stacked_delivery",
+      "mode: ship_then_continue",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /planning_review.mode ship_then_continue is legacy/,
   );
 });
 

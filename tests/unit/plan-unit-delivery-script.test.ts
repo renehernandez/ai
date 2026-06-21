@@ -138,6 +138,12 @@ const validHandoff = `plan_delivery_handoff:
     out_of_scope: []
   delivery:
     expected_host: github_pr
+    stack_identity:
+      expected_base_ref: plan/example
+      expected_base_sha: def456
+      predecessor_artifact: https://example.test/review/1
+      selected_task_base_sha: def456
+      restack_required: false
     completion_updates:
       - Mark OpenSpec task checkbox complete in the same PR/MR.
   review:
@@ -229,6 +235,12 @@ const deliveryLedger = `delivery_gate_ledger:
   artifact_creation_update:
     status: passed
     evidence: PR URL
+  stack_identity:
+    status: passed
+    evidence: implementation artifact and latest head recorded
+    implementation_artifact: https://example.test/review/2
+    implementation_head_sha: abc789
+    restack_required: false
   artifact_host_review:
     status: passed
     evidence: PR inspected

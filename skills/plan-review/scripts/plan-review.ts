@@ -185,8 +185,8 @@ function printPlanningReviewTemplate(): void {
 
 - Status: reviewed planning is ready for implementation sequencing.
 - Artifact: openspec/changes/example-change.
-- Mode: ship then continue after the planning PR or MR merges.
-- Gate: hosted planning review is complete and implementation may start.
+- Mode: stacked delivery from the reviewed planning PR or MR head.
+- Gate: hosted planning review is complete and the planning head is ready for stack-based implementation.
 
 \`\`\`yaml
 planning_review:
@@ -194,21 +194,26 @@ planning_review:
   artifact_type: openspec
   artifact_ref: openspec/changes/example-change
   review_artifact: <planning PR or MR URL>
-  mode: ship_then_continue
-  gate_outcome: approved
+  mode: stacked_delivery
+  gate_outcome: ready_for_stack
   target_branch: main
   target_base_sha: <target branch sha reviewed by planning artifact>
   planning_branch: <planning branch name>
   reviewed_head: <planning artifact head sha>
-  stack_base_ref:
-  stack_base_evidence:
+  stack_base_ref: <planning PR or MR branch/ref>
+  stack_base_evidence: <latest-head review evidence proving this head is the stack base>
+  stack_identity:
+    expected_base_ref: <planning PR or MR branch/ref>
+    expected_base_sha: <planning artifact head sha>
+    predecessor_artifact:
+    restack_required: false
   task_state_fingerprint: <sha256 of reviewed plan or OpenSpec task state>
   validation:
     evidence:
       - openspec validate example-change --strict --no-interactive
   review:
     evidence:
-      - planning PR or MR merged after feedback was addressed
+      - planning PR or MR latest-head feedback completed with no unresolved actionable findings
   blockers: []
 \`\`\`
 `);

@@ -22,7 +22,7 @@ import {
 
 const ROUTES = ["atomic_plan", "openspec_task"] as const;
 const ARTIFACT_TYPES = ["plan", "openspec", "linear"] as const;
-const EXPECTED_HOSTS = ["github_pr", "gitlab_mr", "direct_publish"] as const;
+const EXPECTED_HOSTS = ["github_pr", "gitlab_mr"] as const;
 const BASELINE_REVIEWERS = [
   "implementation-readiness",
   "edge-cases-and-risks",
@@ -135,7 +135,13 @@ plan_delivery_handoff:
     out_of_scope:
       - <explicit non-goal>
   delivery:
-    expected_host: github_pr | gitlab_mr | direct_publish
+    expected_host: github_pr | gitlab_mr
+    stack_identity:
+      expected_base_ref: <planning PR or MR branch/ref>
+      expected_base_sha: <planning artifact head sha>
+      predecessor_artifact: <planning PR or MR URL>
+      selected_task_base_sha: <stack tip sha used to select this unit>
+      restack_required: false
     completion_updates:
       - Mark OpenSpec task checkbox complete in one separate implementation PR/MR.
   review:
@@ -152,7 +158,7 @@ function printPlanningReviewTemplate(): void {
 
 - Status: reviewed planning is required before selecting implementation units.
 - Artifact: openspec/changes/example-change.
-- Mode: ship then continue after the planning PR or MR merges.
+- Mode: stacked delivery from the reviewed planning PR or MR head.
 - Next action: validate this handoff, then emit exactly one plan_delivery_handoff.
 
 \`\`\`yaml
@@ -161,21 +167,26 @@ planning_review:
   artifact_type: openspec
   artifact_ref: openspec/changes/example-change
   review_artifact: <planning PR or MR URL>
-  mode: ship_then_continue
-  gate_outcome: approved
+  mode: stacked_delivery
+  gate_outcome: ready_for_stack
   target_branch: main
   target_base_sha: <target branch sha reviewed by planning artifact>
   planning_branch: <planning branch name>
   reviewed_head: <planning artifact head sha>
-  stack_base_ref:
-  stack_base_evidence:
+  stack_base_ref: <planning PR or MR branch/ref>
+  stack_base_evidence: <latest-head review evidence proving this head is the stack base>
+  stack_identity:
+    expected_base_ref: <planning PR or MR branch/ref>
+    expected_base_sha: <planning artifact head sha>
+    predecessor_artifact:
+    restack_required: false
   task_state_fingerprint: <sha256 of reviewed task state>
   validation:
     evidence:
       - openspec validate example-change --strict --no-interactive
   review:
     evidence:
-      - planning PR or MR merged after feedback was addressed
+      - planning PR or MR latest-head feedback completed with no unresolved actionable findings
   blockers: []
 \`\`\`
 `);
@@ -208,6 +219,31 @@ function validateHandoff(input: string): void {
   requireValue(handoff.unitTitle, "approved_unit.title", errors);
   requireValue(handoff.unitScope, "approved_unit.scope", errors);
   requireValue(handoff.expectedHost, "delivery.expected_host", errors);
+  requireValue(
+    handoff.expectedBaseRef,
+    "delivery.stack_identity.expected_base_ref",
+    errors,
+  );
+  requireValue(
+    handoff.expectedBaseSha,
+    "delivery.stack_identity.expected_base_sha",
+    errors,
+  );
+  requireValue(
+    handoff.predecessorArtifact,
+    "delivery.stack_identity.predecessor_artifact",
+    errors,
+  );
+  requireValue(
+    handoff.selectedTaskBaseSha,
+    "delivery.stack_identity.selected_task_base_sha",
+    errors,
+  );
+  requireValue(
+    handoff.restackRequired,
+    "delivery.stack_identity.restack_required",
+    errors,
+  );
 
   if (handoff.status && handoff.status !== "ready") {
     errors.push("status must be ready");
@@ -221,6 +257,14 @@ function validateHandoff(input: string): void {
   if (handoff.expectedHost && !includes(EXPECTED_HOSTS, handoff.expectedHost)) {
     errors.push(
       `delivery.expected_host must be one of: ${EXPECTED_HOSTS.join(", ")}`,
+    );
+  }
+  if (
+    handoff.restackRequired &&
+    !["true", "false"].includes(handoff.restackRequired)
+  ) {
+    errors.push(
+      "delivery.stack_identity.restack_required must be true or false",
     );
   }
   if (handoff.acceptance.length === 0) {
@@ -300,6 +344,11 @@ function parseHandoff(input: string): {
   verification: string[];
   filesOrAreas: string[];
   expectedHost?: string;
+  expectedBaseRef?: string;
+  expectedBaseSha?: string;
+  predecessorArtifact?: string;
+  selectedTaskBaseSha?: string;
+  restackRequired?: string;
   completionUpdates: string[];
   requiredReviewers: string[];
   blockers: string[];
@@ -310,6 +359,7 @@ function parseHandoff(input: string): {
   const unit = extractSection(section, "approved_unit");
   const constraints = extractSection(section, "constraints");
   const delivery = extractSection(section, "delivery");
+  const stackIdentity = extractSection(delivery, "stack_identity");
   const review = extractSection(section, "review");
 
   return {
@@ -325,6 +375,11 @@ function parseHandoff(input: string): {
     verification: list(unit, "verification"),
     filesOrAreas: list(constraints, "files_or_areas"),
     expectedHost: scalar(delivery, "expected_host"),
+    expectedBaseRef: scalar(stackIdentity, "expected_base_ref"),
+    expectedBaseSha: scalar(stackIdentity, "expected_base_sha"),
+    predecessorArtifact: scalar(stackIdentity, "predecessor_artifact"),
+    selectedTaskBaseSha: scalar(stackIdentity, "selected_task_base_sha"),
+    restackRequired: scalar(stackIdentity, "restack_required"),
     completionUpdates: list(delivery, "completion_updates"),
     requiredReviewers: list(review, "required_reviewers"),
     blockers: list(section, "blockers"),

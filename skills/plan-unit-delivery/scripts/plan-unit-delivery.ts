@@ -85,6 +85,7 @@ const LEDGER_GATES = [
   "review_feedback_routing",
   "implementation_artifact_separation",
   "artifact_creation_update",
+  "stack_identity",
   "artifact_host_review",
   "pipeline_monitoring",
   "automatic_review_feedback_wait",
@@ -129,6 +130,11 @@ type ParsedHandoff = {
   verification: string[];
   files_or_areas: string[];
   expected_host?: string;
+  expected_base_ref?: string;
+  expected_base_sha?: string;
+  predecessor_artifact?: string;
+  selected_task_base_sha?: string;
+  restack_required?: string;
   completion_updates: string[];
   required_reviewers: string[];
   optional_reviewers: string[];
@@ -213,6 +219,20 @@ function detect(): void {
 }
 
 function printGateTemplate(): void {
+  const gateLines = LEDGER_GATES.map((gate) => {
+    const base = `  ${gate}:
+    status: passed
+    evidence: <evidence>`;
+    if (gate !== "stack_identity") {
+      return base;
+    }
+
+    return `${base}
+    implementation_artifact: <implementation PR or MR URL>
+    implementation_head_sha: <implementation artifact latest head sha>
+    restack_required: false`;
+  }).join("\n");
+
   console.log(`## Readable Summary
 
 - Delivery state: all required gates have evidence.
@@ -221,11 +241,7 @@ function printGateTemplate(): void {
 
 \`\`\`yaml
 delivery_gate_ledger:
-${LEDGER_GATES.map(
-  (gate) => `  ${gate}:
-    status: passed
-    evidence: <evidence>`,
-).join("\n")}
+${gateLines}
 \`\`\`
 `);
 }
@@ -328,6 +344,31 @@ function validateHandoff(input: string): void {
   requireValue(handoff.approved_unit_title, "approved_unit.title", errors);
   requireValue(handoff.approved_unit_scope, "approved_unit.scope", errors);
   requireValue(handoff.expected_host, "delivery.expected_host", errors);
+  requireValue(
+    handoff.expected_base_ref,
+    "delivery.stack_identity.expected_base_ref",
+    errors,
+  );
+  requireValue(
+    handoff.expected_base_sha,
+    "delivery.stack_identity.expected_base_sha",
+    errors,
+  );
+  requireValue(
+    handoff.predecessor_artifact,
+    "delivery.stack_identity.predecessor_artifact",
+    errors,
+  );
+  requireValue(
+    handoff.selected_task_base_sha,
+    "delivery.stack_identity.selected_task_base_sha",
+    errors,
+  );
+  requireValue(
+    handoff.restack_required,
+    "delivery.stack_identity.restack_required",
+    errors,
+  );
 
   if (handoff.status && handoff.status !== "ready") {
     errors.push("status must be ready");
@@ -349,12 +390,16 @@ function validateHandoff(input: string): void {
 
   if (
     handoff.expected_host &&
-    !["github_pr", "gitlab_mr", "direct_publish"].includes(
-      handoff.expected_host,
-    )
+    !["github_pr", "gitlab_mr"].includes(handoff.expected_host)
+  ) {
+    errors.push("delivery.expected_host must be one of: github_pr, gitlab_mr");
+  }
+  if (
+    handoff.restack_required &&
+    !["true", "false"].includes(handoff.restack_required)
   ) {
     errors.push(
-      "delivery.expected_host must be one of: github_pr, gitlab_mr, direct_publish",
+      "delivery.stack_identity.restack_required must be true or false",
     );
   }
 
@@ -588,6 +633,32 @@ function validateDeliveryGateSemantics(
   section: string,
   errors: string[],
 ): void {
+  const stackIdentityGate = findSection(section, "stack_identity");
+  const implementationArtifact = stackIdentityGate
+    ? scalar(stackIdentityGate, "implementation_artifact")
+    : undefined;
+  const implementationHeadSha = stackIdentityGate
+    ? scalar(stackIdentityGate, "implementation_head_sha")
+    : undefined;
+  const restackRequired = stackIdentityGate
+    ? scalar(stackIdentityGate, "restack_required")
+    : undefined;
+
+  requireValue(
+    implementationArtifact,
+    "stack_identity.implementation_artifact",
+    errors,
+  );
+  requireValue(
+    implementationHeadSha,
+    "stack_identity.implementation_head_sha",
+    errors,
+  );
+  requireValue(restackRequired, "stack_identity.restack_required", errors);
+  if (restackRequired && !["true", "false"].includes(restackRequired)) {
+    errors.push("stack_identity.restack_required must be true or false");
+  }
+
   const artifactBoundaryGate = findSection(section, "unit_artifact_boundary");
   const artifactBoundaryEvidence = artifactBoundaryGate
     ? scalar(artifactBoundaryGate, "evidence")
@@ -893,6 +964,7 @@ function parseHandoff(input: string): ParsedHandoff {
   const approvedUnit = findSection(section, "approved_unit") ?? "";
   const constraints = findSection(section, "constraints") ?? "";
   const delivery = findSection(section, "delivery") ?? "";
+  const stackIdentity = findSection(delivery, "stack_identity") ?? "";
   const review = findSection(section, "review") ?? "";
 
   return {
@@ -908,6 +980,11 @@ function parseHandoff(input: string): ParsedHandoff {
     verification: list(approvedUnit, "verification"),
     files_or_areas: list(constraints, "files_or_areas"),
     expected_host: scalar(delivery, "expected_host"),
+    expected_base_ref: scalar(stackIdentity, "expected_base_ref"),
+    expected_base_sha: scalar(stackIdentity, "expected_base_sha"),
+    predecessor_artifact: scalar(stackIdentity, "predecessor_artifact"),
+    selected_task_base_sha: scalar(stackIdentity, "selected_task_base_sha"),
+    restack_required: scalar(stackIdentity, "restack_required"),
     completion_updates: list(delivery, "completion_updates"),
     required_reviewers: list(review, "required_reviewers"),
     optional_reviewers: list(review, "optional_reviewers"),

@@ -1,10 +1,10 @@
 ## 1. Shared Contracts
 
-- [ ] 1.1 Replace planning-review mode validation, templates, fixtures, and
+- [x] 1.1 Replace planning-review mode validation, templates, fixtures, and
       tests with `mode: stacked_delivery` and `gate_outcome: ready_for_stack`.
-- [ ] 1.2 Reject `ship_then_continue`, `stack_when_ready`, and orchestrated
+- [x] 1.2 Reject `ship_then_continue`, `stack_when_ready`, and orchestrated
       `direct_publish` paths with explicit legacy or unsupported-route errors.
-- [ ] 1.3 Add stack identity fields to planning and delivery contracts:
+- [x] 1.3 Add stack identity fields to planning and delivery contracts:
       expected base ref/SHA, predecessor artifact, selected task base SHA,
       implementation artifact URL, implementation head SHA, and restack
       evidence.
