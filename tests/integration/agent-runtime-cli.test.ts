@@ -684,6 +684,51 @@ test("CLI installs missing OpenSpec scaffolding and updates configured projects"
   });
 });
 
+test("CLI skips OpenSpec update when generated assets are current", () => {
+  withFixture(({ configPath, runtimeDir }) => {
+    const recordPath = join(runtimeDir, "openspec-record.jsonl");
+    const contextFile = join(runtimeDir, "openspec-context.md");
+    writeFileSync(contextFile, "Confirmed context.\n", "utf-8");
+    const env = addOpenSpecStub(runtimeDir, { recordPath });
+
+    const install = runAgentRuntime(
+      [
+        "openspec",
+        "install",
+        "--context-file",
+        contextFile,
+        "--config",
+        configPath,
+      ],
+      {
+        cwd: runtimeDir,
+        env,
+      },
+    );
+    assert.equal(install.status, 0, install.stderr || install.stdout);
+    const backupCountAfterInstall = collectBackupManifests(
+      join(runtimeDir, "backups"),
+    ).length;
+
+    const update = runAgentRuntime(
+      ["openspec", "update", "--config", configPath],
+      {
+        cwd: runtimeDir,
+        env,
+      },
+    );
+
+    assert.equal(update.status, 0, update.stderr || update.stdout);
+    assert.match(update.stdout, /OpenSpec generated assets are current/);
+    const records = readFileSync(recordPath, "utf-8").trim().split("\n");
+    assert.equal(records.length, 1);
+    assert.equal(
+      collectBackupManifests(join(runtimeDir, "backups")).length,
+      backupCountAfterInstall,
+    );
+  });
+});
+
 test("CLI preserves confirmed OpenSpec config when upstream generation fails", () => {
   withFixture(({ configPath, runtimeDir }) => {
     const contextFile = join(runtimeDir, "openspec-context.md");

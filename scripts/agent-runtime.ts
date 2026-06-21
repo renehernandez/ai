@@ -996,6 +996,12 @@ function runOpenSpec(
     return;
   }
 
+  const validationErrors = openSpecValidationErrors(openspec);
+  if (validationErrors.length === 0) {
+    console.log("OpenSpec generated assets are current.");
+    return;
+  }
+
   backupOpenSpecExternalTargets(openspec);
   try {
     runOpenSpecGeneration(openspec, ["update", "."]);
@@ -1822,6 +1828,15 @@ function normalizeOpenSpecCommands(config: ResolvedOpenSpecConfig): void {
 }
 
 function validateOpenSpec(config: ResolvedOpenSpecConfig): void {
+  const errors = openSpecValidationErrors(config);
+  if (errors.length > 0) {
+    throw new Error(
+      `Invalid repo-local OpenSpec scaffolding:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+    );
+  }
+}
+
+function openSpecValidationErrors(config: ResolvedOpenSpecConfig): string[] {
   const errors: string[] = [];
   const canonicalSkillsDir = resolve(config.canonicalSkillsDir);
   const skillTargetDirs = Object.values(config.skillTargets).map((target) =>
@@ -1872,11 +1887,7 @@ function validateOpenSpec(config: ResolvedOpenSpecConfig): void {
     }
   }
 
-  if (errors.length > 0) {
-    throw new Error(
-      `Invalid repo-local OpenSpec scaffolding:\n${errors.map((error) => `- ${error}`).join("\n")}`,
-    );
-  }
+  return errors;
 }
 
 function statusOpenSpec(
