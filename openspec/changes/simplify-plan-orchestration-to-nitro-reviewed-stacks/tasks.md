@@ -24,11 +24,11 @@
 
 ## 3. Planning Review Stack Base
 
-- [ ] 3.1 Update `plan-review` docs, script templates, validators, adapter
+- [x] 3.1 Update `plan-review` docs, script templates, validators, adapter
       prompt, and tests to emit `planning_review.mode: stacked_delivery`.
-- [ ] 3.2 Require a clean latest-head `nitro_feedback_gate` before
+- [x] 3.2 Require a clean latest-head `nitro_feedback_gate` before
       `plan-review` emits `planning_review`.
-- [ ] 3.3 Include stack base ref/SHA and Nitro-clean stack-base evidence in the
+- [x] 3.3 Include stack base ref/SHA and Nitro-clean stack-base evidence in the
       reviewed planning handoff.
 
 ## 4. Orchestrator Resume And Completion

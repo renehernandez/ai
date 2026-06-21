@@ -2,6 +2,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { nitroFeedbackGateErrors } from "../../../scripts/nitro-feedback-gate.ts";
 import {
   extractSection,
   extractYaml,
@@ -189,6 +190,29 @@ function printPlanningReviewTemplate(): void {
 - Gate: hosted planning review is complete and the planning head is ready for stack-based implementation.
 
 \`\`\`yaml
+nitro_feedback_gate:
+  artifact: <Fullscript GitLab planning MR URL>
+  head_sha: <planning artifact head sha>
+  request:
+    required: true
+    requested_after_latest_push: true
+    evidence:
+      - <request command, note URL, or discussion evidence>
+  start:
+    status: started
+    timeout_minutes: 10
+    poll_interval_minutes: 1
+    evidence:
+      - <Nitro acknowledgement or review-start evidence>
+  completion:
+    status: clean
+    evidence:
+      - <Nitro latest-head completion evidence>
+  unresolved_actionable_feedback: []
+  non_actionable_feedback: []
+  stale_feedback_ignored: []
+  gate_outcome: passed
+
 planning_review:
   status: reviewed
   artifact_type: openspec
@@ -387,6 +411,13 @@ function parseRequest(input: string): ParsedRequest {
 function validatePlanningReview(input: string): void {
   const errors = legacyPlanContractErrors(input);
   validatePlanningReviewContract(input, errors);
+  errors.push(
+    ...nitroFeedbackGateErrors(input).map((error) =>
+      error.startsWith("nitro_feedback_gate.")
+        ? error
+        : `nitro_feedback_gate.${error}`,
+    ),
+  );
 
   if (errors.length > 0) {
     console.error(

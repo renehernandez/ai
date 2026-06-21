@@ -1,6 +1,6 @@
 ---
 name: plan-review
-description: Use when a reviewed plan, OpenSpec change, or planning-only branch should be published as a PR or MR for Nitro, Codex, and developer feedback before implementation.
+description: Use when a reviewed plan, OpenSpec change, or planning-only branch should be published as a PR or MR for Nitro and developer feedback before implementation.
 ---
 
 # Plan Review
@@ -15,7 +15,7 @@ implementation.
 ## When To Use
 
 Use when the user wants to publish a plan, OpenSpec change, or planning-only
-branch for Nitro, Codex, or developer review before coding starts.
+branch for Nitro or developer review before coding starts.
 
 Use `plan-ready` first when the plan still needs scope hardening. Use
 `plan-unit-sequencer` only after this skill emits a validated
@@ -59,7 +59,6 @@ Announce each helper before it starts:
 - `Using the GitLab MR creation path to open or update the planning-only GitLab draft MR.`
 - `Using $nitro-review-feedback to wait for Nitro feedback on the latest MR head.`
 - `Using the Fullscript GitLab review-request path to request Nitro review for the updated MR head.`
-- `Using $codex-review-feedback to wait for Codex feedback on the latest PR head.`
 
 After each gate, report one line with the gate, artifact or head SHA, verdict,
 and next action.
@@ -100,7 +99,8 @@ and next action.
     - Fullscript GitLab/Nitro: use `nitro-review-feedback` first. If latest-head
       Nitro feedback is missing or stale after create/update, post the standard
       Nitro review request for the current head, then wait again.
-    - GitHub/Codex: use `codex-review-feedback` when routing selects Codex.
+    - Unsupported artifact hosts: return `nitro_route_unsupported`; do not
+      substitute Codex or another reviewer for this first cut.
     - Developer review: keep the PR/MR open and report pending human review; do
       not fabricate approval.
 11. Apply only plan/documentation feedback. If feedback asks for implementation,
@@ -110,12 +110,11 @@ and next action.
 13. Before finishing, generate `scripts/plan-review.ts gate-template`, fill
     it, and validate it with `validate-ledger` as internal evidence.
 14. Emit `planning_review` with `scripts/plan-review.ts
-    planning-review-template`, fill it with the hosted review evidence, and
-    validate it with `validate-planning-review`.
-15. Finish only when the planning-only artifact is reviewed enough for the
-    selected mode. In `ship_then_continue`, the planning PR/MR must be merged.
-    In `stack_when_ready`, feedback must be addressed and the reviewed head
-    must be usable as the stack base.
+    planning-review-template`, fill it with the hosted review evidence and a
+    passed `nitro_feedback_gate`, and validate it with
+    `validate-planning-review`.
+15. Finish only when the planning MR has latest-head Nitro feedback completed
+    cleanly and the reviewed head is recorded as the implementation stack base.
 
 ## Gate Rules
 
@@ -135,9 +134,9 @@ and next action.
 ## Final Planning Review Handoff
 
 The final response must include a concise `## Readable Summary` followed by
-`planning_review` YAML. The detailed gate ledger may be included as supporting
-evidence, but downstream skills must not infer readiness from
-`plan_review_gate_ledger`.
+`nitro_feedback_gate` and `planning_review` YAML. The detailed gate ledger may
+be included as supporting evidence, but downstream skills must not infer
+readiness from `plan_review_gate_ledger`.
 
 The readable summary is for thread scanning, especially on mobile. Keep it to
 3-6 bullets with artifact, review route, validation state, automatic feedback
@@ -145,26 +144,54 @@ state, blockers, and next action. Do not replace the YAML; the YAML remains the
 machine-readable review ledger.
 
 ```yaml
+nitro_feedback_gate:
+  artifact: <Fullscript GitLab planning MR URL>
+  head_sha: <planning artifact head sha>
+  request:
+    required: true
+    requested_after_latest_push: true
+    evidence:
+      - <request command, note URL, or discussion evidence>
+  start:
+    status: started
+    timeout_minutes: 10
+    poll_interval_minutes: 1
+    evidence:
+      - <Nitro acknowledgement or review-start evidence>
+  completion:
+    status: clean
+    evidence:
+      - <Nitro latest-head completion evidence>
+  unresolved_actionable_feedback: []
+  non_actionable_feedback: []
+  stale_feedback_ignored: []
+  gate_outcome: passed
+
 planning_review:
   status: reviewed
   artifact_type: openspec
   artifact_ref: openspec/changes/example-change
   review_artifact: <planning PR or MR URL>
-  mode: ship_then_continue
-  gate_outcome: approved
+  mode: stacked_delivery
+  gate_outcome: ready_for_stack
   target_branch: main
   target_base_sha: <target branch sha reviewed by planning artifact>
   planning_branch: <planning branch name>
   reviewed_head: <planning artifact head sha>
-  stack_base_ref:
-  stack_base_evidence:
+  stack_base_ref: <planning PR or MR branch/ref>
+  stack_base_evidence: <latest-head Nitro feedback and stack-base evidence>
+  stack_identity:
+    expected_base_ref: <planning PR or MR branch/ref>
+    expected_base_sha: <planning artifact head sha>
+    predecessor_artifact:
+    restack_required: false
   task_state_fingerprint: <sha256 of reviewed plan or task state>
   validation:
     evidence:
       - openspec validate example-change --strict --no-interactive
   review:
     evidence:
-      - planning PR or MR merged after feedback was addressed
+      - planning MR latest-head Nitro feedback completed cleanly
   blockers: []
 ```
 

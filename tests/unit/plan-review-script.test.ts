@@ -105,7 +105,30 @@ const deliveryHandoff = `plan_delivery_handoff:
   blockers: []
 `;
 
-const planningReview = `planning_review:
+const planningReview = `nitro_feedback_gate:
+  artifact: https://git.fullscript.io/group/project/-/merge_requests/1
+  head_sha: def456
+  request:
+    required: true
+    requested_after_latest_push: true
+    evidence:
+      - glab mr note 1 -m "/request_review @nitro"
+  start:
+    status: started
+    timeout_minutes: 10
+    poll_interval_minutes: 1
+    evidence:
+      - Nitro acknowledged latest-head review
+  completion:
+    status: clean
+    evidence:
+      - Nitro completed latest-head review with no issues
+  unresolved_actionable_feedback: []
+  non_actionable_feedback: []
+  stale_feedback_ignored: []
+  gate_outcome: passed
+
+planning_review:
   status: reviewed
   artifact_type: openspec
   artifact_ref: openspec/changes/example-change
@@ -197,6 +220,19 @@ test("validate-planning-review rejects pending blockers", () => {
     result.stderr,
     /planning_review.blockers must be empty before sequencing/,
   );
+});
+
+test("validate-planning-review rejects missing Nitro gate", () => {
+  const result = runPlanReview(
+    "validate-planning-review",
+    planningReview.replace(
+      /^nitro_feedback_gate:[\s\S]*?\n\nplanning_review:/,
+      "planning_review:",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /nitro_feedback_gate.artifact/);
 });
 
 test("validate-planning-review rejects legacy planning modes", () => {

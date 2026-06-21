@@ -1,4 +1,5 @@
 #!/usr/bin/env tsx
+import { pathToFileURL } from "node:url";
 import {
   extractSection,
   extractYaml,
@@ -33,7 +34,12 @@ type Command =
   | "normalize-feedback"
   | "validate-route";
 
-main();
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+  main();
+}
 
 function main(): void {
   const [command, ...args] = process.argv.slice(2);
@@ -97,7 +103,7 @@ nitro_feedback_gate:
 `);
 }
 
-function validateGate(input: string): void {
+export function nitroFeedbackGateErrors(input: string): string[] {
   const errors: string[] = [];
   const gate = parseGate(input);
 
@@ -157,6 +163,12 @@ function validateGate(input: string): void {
   }
 
   validateGateOutcome(gate, errors);
+
+  return errors;
+}
+
+function validateGate(input: string): void {
+  const errors = nitroFeedbackGateErrors(input);
 
   if (errors.length > 0) {
     console.error(
