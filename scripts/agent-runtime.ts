@@ -28,7 +28,7 @@ import {
   resolve,
   sep,
 } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { Command } from "commander";
 
 type Scope = "skills" | "instructions" | "openspec" | "hooks";
@@ -210,6 +210,14 @@ type ParsedArgs = {
   profileNames?: string[];
   allProfiles?: boolean;
   configPath: string;
+  runtimeContext?: RuntimeInvocationContext;
+};
+
+export type RuntimeInvocationContext = {
+  sourceRoot: string;
+  targetRoot: string;
+  executablePath: string;
+  configPath: string;
 };
 
 type LockedSkill = {
@@ -264,7 +272,12 @@ export function main(): void {
 
 export function executeParsedCommand(input: ParsedArgs): void {
   const { scope, command, profileNames, allProfiles, configPath } = input;
-  const config = readJson<Config>(configPath);
+  const runtimeContext =
+    input.runtimeContext ?? createRuntimeInvocationContext(configPath);
+  const config = readJson<Config>(runtimeContext.configPath);
+  if (scope !== "openspec") {
+    process.chdir(runtimeContext.sourceRoot);
+  }
 
   if (!scope) {
     const profileSelection = resolveProfileSelection(config, {
@@ -461,16 +474,31 @@ function configPathFor(
   options: CommandOptions,
 ): string {
   if (
-    commandObject.getOptionValueSource("config") &&
-    commandObject.getOptionValueSource("config") !== "default"
+    commandObject.getOptionValueSourceWithGlobals("config") &&
+    commandObject.getOptionValueSourceWithGlobals("config") !== "default"
   ) {
-    return options.config ?? CONFIG_FILE;
+    return resolve(
+      commandObject.optsWithGlobals<CommandOptions>().config ??
+        options.config ??
+        CONFIG_FILE,
+    );
   }
-  return (
-    commandObject.optsWithGlobals<CommandOptions>().config ??
-    options.config ??
-    CONFIG_FILE
-  );
+  return join(runtimeSourceRoot(), CONFIG_FILE);
+}
+
+export function createRuntimeInvocationContext(
+  configPath = join(runtimeSourceRoot(), CONFIG_FILE),
+): RuntimeInvocationContext {
+  return {
+    sourceRoot: runtimeSourceRoot(),
+    targetRoot: process.cwd(),
+    executablePath: process.argv[1] ? resolve(process.argv[1]) : "",
+    configPath: resolve(configPath),
+  };
+}
+
+function runtimeSourceRoot(): string {
+  return dirname(dirname(fileURLToPath(import.meta.url)));
 }
 
 function actionContext(

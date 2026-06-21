@@ -2,6 +2,9 @@
   "name": "agent-runtime",
   "private": true,
   "type": "module",
+  "bin": {
+    "agent-runtime": "bin/agent-runtime.mjs"
+  },
   "scripts": {
     "agent-runtime": "tsx scripts/agent-runtime.ts",
     "biome:check": "biome check --staged --no-errors-on-unmatched",

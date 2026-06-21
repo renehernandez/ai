@@ -33,6 +33,7 @@ type BackupManifest = {
 
 const repoRoot = process.cwd();
 const runtimeScript = join(repoRoot, "scripts/agent-runtime.ts");
+const runtimeBin = join(repoRoot, "bin", "agent-runtime.mjs");
 const tsxLoader = pathToFileURL(
   join(repoRoot, "node_modules", "tsx", "dist", "loader.mjs"),
 ).href;
@@ -120,6 +121,22 @@ function runAgentRuntime(
       env: { ...withoutGitRepositoryEnv(), ...options.env },
     },
   );
+  return {
+    stdout: result.stdout,
+    stderr: result.stderr,
+    status: result.status,
+  };
+}
+
+function runAgentRuntimeBin(
+  args: string[],
+  options: RunOptions = {},
+): { stdout: string; stderr: string; status: number | null } {
+  const result = spawnSync(process.execPath, [runtimeBin, ...args], {
+    cwd: options.cwd ?? repoRoot,
+    encoding: "utf-8",
+    env: { ...withoutGitRepositoryEnv(), ...options.env },
+  });
   return {
     stdout: result.stdout,
     stderr: result.stderr,
@@ -264,6 +281,30 @@ test("CLI accepts global config before the command", () => {
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.match(result.stdout, /Validated 1 profile/);
   });
+});
+
+test("global bin uses central config and target cwd for repo-local scope", () => {
+  const targetDir = mkdtempSync(join(tmpdir(), "agent-runtime-target-"));
+  try {
+    writeFileSync(
+      join(targetDir, "agent-runtime.config.json"),
+      "not valid json\n",
+      "utf-8",
+    );
+    const result = runAgentRuntimeBin(["openspec", "status"], {
+      cwd: targetDir,
+      env: addOpenSpecStub(targetDir),
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /OpenSpec CLI:/);
+    assert.match(
+      result.stdout,
+      /\[missing\] OpenSpec config: openspec\/config.yaml/,
+    );
+  } finally {
+    rmSync(targetDir, { force: true, recursive: true });
+  }
 });
 
 test("CLI shows global help", () => {

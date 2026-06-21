@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import test from "node:test";
 import type { Command } from "commander";
 
@@ -22,9 +22,12 @@ import {
   codexStartupHookStatus,
   createProgram,
   createRuntimeBackup,
+  createRuntimeInvocationContext,
   registerClaudeStartupHook,
   registerCodexStartupHook,
 } from "../../scripts/agent-runtime.ts";
+
+const repoRoot = process.cwd();
 
 type ParsedCommand = {
   scope?: string;
@@ -90,7 +93,7 @@ test("Commander routes scoped skills commands", () => {
   assert.equal(parsed.scope, "skills");
   assert.equal(parsed.command, "validate");
   assert.deepEqual(parsed.profileNames, ["work"]);
-  assert.equal(parsed.configPath, "custom.json");
+  assert.equal(parsed.configPath, resolve("custom.json"));
 });
 
 test("Commander routes top-level wrapper commands", () => {
@@ -99,6 +102,7 @@ test("Commander routes top-level wrapper commands", () => {
   assert.equal(parsed.scope, undefined);
   assert.equal(parsed.command, "status");
   assert.deepEqual(parsed.profileNames, ["personal"]);
+  assert.equal(parsed.configPath, join(repoRoot, "agent-runtime.config.json"));
 });
 
 test("Commander routes scoped OpenSpec commands", () => {
@@ -111,7 +115,7 @@ test("Commander routes scoped OpenSpec commands", () => {
 
   assert.equal(parsed.scope, "openspec");
   assert.equal(parsed.command, "install");
-  assert.equal(parsed.configPath, "custom.json");
+  assert.equal(parsed.configPath, resolve("custom.json"));
 });
 
 test("Commander routes scoped hooks commands", () => {
@@ -124,7 +128,27 @@ test("Commander routes scoped hooks commands", () => {
 
   assert.equal(parsed.scope, "hooks");
   assert.equal(parsed.command, "install");
-  assert.equal(parsed.configPath, "custom.json");
+  assert.equal(parsed.configPath, resolve("custom.json"));
+});
+
+test("Runtime invocation context separates source and target roots", () => {
+  withTempDir((directory) => {
+    const originalCwd = process.cwd();
+    try {
+      process.chdir(directory);
+      const targetRoot = process.cwd();
+      const context = createRuntimeInvocationContext();
+
+      assert.equal(context.sourceRoot, repoRoot);
+      assert.equal(context.targetRoot, targetRoot);
+      assert.equal(
+        context.configPath,
+        join(repoRoot, "agent-runtime.config.json"),
+      );
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
 });
 
 test("Commander routes all selection flags", () => {
