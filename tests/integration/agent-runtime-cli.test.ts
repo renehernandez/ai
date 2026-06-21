@@ -218,7 +218,10 @@ function cachePathForUrl(directory: string, url: string): string {
   return join(directory, ".agent-runtime", "cache", `skills-${hash}`);
 }
 
-function addOpenSpecStub(runtimeDir: string): Record<string, string> {
+function addOpenSpecStub(
+  runtimeDir: string,
+  options: { recordPath?: string; failCommand?: string } = {},
+): Record<string, string> {
   const binDir = join(runtimeDir, "bin");
   const openspecPath = join(binDir, "openspec");
   mkdirSync(binDir, { recursive: true });
@@ -233,6 +236,24 @@ function write(file, content) {
   fs.writeFileSync(file, content);
 }
 
+function recordInvocation(command) {
+  if (!process.env.OPENSPEC_STUB_RECORD_PATH) {
+    return;
+  }
+  const configPath = process.env.XDG_CONFIG_HOME
+    ? path.join(process.env.XDG_CONFIG_HOME, "openspec", "config.json")
+    : "";
+  const record = {
+    command,
+    argv: process.argv.slice(2),
+    xdgConfigHome: process.env.XDG_CONFIG_HOME || "",
+    config: configPath && fs.existsSync(configPath)
+      ? JSON.parse(fs.readFileSync(configPath, "utf-8"))
+      : null,
+  };
+  fs.appendFileSync(process.env.OPENSPEC_STUB_RECORD_PATH, JSON.stringify(record) + "\\n");
+}
+
 if (process.argv.includes("--version")) {
   process.stdout.write("1.4.1\\n");
   process.exit(0);
@@ -240,6 +261,11 @@ if (process.argv.includes("--version")) {
 
 const command = process.argv[2];
 if (command === "init" || command === "update") {
+  recordInvocation(command);
+  if (process.env.OPENSPEC_STUB_FAIL_COMMAND === command) {
+    process.stderr.write("forced openspec failure: " + command + "\\n");
+    process.exit(42);
+  }
   fs.mkdirSync("openspec", { recursive: true });
   if (!fs.existsSync("openspec/config.yaml")) {
     write("openspec/config.yaml", "defaultSchema: spec-driven\\n");
@@ -263,6 +289,12 @@ process.exit(1);
   chmodSync(openspecPath, 0o755);
   return {
     PATH: `${binDir}:${process.env.PATH ?? ""}`,
+    ...(options.recordPath
+      ? { OPENSPEC_STUB_RECORD_PATH: options.recordPath }
+      : {}),
+    ...(options.failCommand
+      ? { OPENSPEC_STUB_FAIL_COMMAND: options.failCommand }
+      : {}),
   };
 }
 
@@ -400,7 +432,8 @@ test("CLI shows hooks scope help", () => {
 
 test("CLI installs missing OpenSpec scaffolding and updates configured projects", () => {
   withFixture(({ configPath, runtimeDir }) => {
-    const env = addOpenSpecStub(runtimeDir);
+    const recordPath = join(runtimeDir, "openspec-record.jsonl");
+    const env = addOpenSpecStub(runtimeDir, { recordPath });
     const contextFile = join(runtimeDir, "openspec-context.md");
     writeFileSync(
       contextFile,
@@ -606,6 +639,26 @@ test("CLI installs missing OpenSpec scaffolding and updates configured projects"
         manifest.includes(`${join("openspec", "claude")}${sep}`),
       ),
     );
+    const records = readFileSync(recordPath, "utf-8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    assert.deepEqual(records[0].argv, [
+      "init",
+      ".",
+      "--tools",
+      "codex,claude",
+      "--profile",
+      "custom",
+    ]);
+    assert.deepEqual(records[1].argv, ["update", "."]);
+    assert.deepEqual(records[0].config, {
+      profile: "custom",
+      delivery: "both",
+      workflows: ["propose", "explore", "apply", "archive"],
+    });
+    assert.equal(typeof records[0].xdgConfigHome, "string");
+    assert.equal(existsSync(records[0].xdgConfigHome as string), false);
 
     const validate = runAgentRuntime(
       ["openspec", "validate", "--config", configPath],
@@ -628,6 +681,39 @@ test("CLI installs missing OpenSpec scaffolding and updates configured projects"
       collectBackupManifests(join(runtimeDir, "backups")).length,
       manifestsAfterUpdate.length,
     );
+  });
+});
+
+test("CLI preserves confirmed OpenSpec config when upstream generation fails", () => {
+  withFixture(({ configPath, runtimeDir }) => {
+    const contextFile = join(runtimeDir, "openspec-context.md");
+    writeFileSync(contextFile, "Confirmed failure context.\n", "utf-8");
+
+    const result = runAgentRuntime(
+      [
+        "openspec",
+        "install",
+        "--context-file",
+        contextFile,
+        "--config",
+        configPath,
+      ],
+      {
+        cwd: runtimeDir,
+        env: addOpenSpecStub(runtimeDir, { failCommand: "init" }),
+      },
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /repairable/);
+    assert.match(result.stderr, /forced openspec failure: init/);
+    assert.match(result.stderr, /No managed OpenSpec skills/);
+    const config = readFileSync(
+      join(runtimeDir, "openspec", "config.yaml"),
+      "utf-8",
+    );
+    assert.match(config, /Confirmed failure context/);
+    assert.equal(existsSync(join(runtimeDir, ".agents", "skills")), false);
   });
 });
 

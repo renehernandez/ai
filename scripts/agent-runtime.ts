@@ -6,6 +6,7 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
   readFileSync,
   readlinkSync,
@@ -17,7 +18,7 @@ import {
   writeFileSync,
   writeSync,
 } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import {
   basename,
   dirname,
@@ -929,19 +930,36 @@ function runOpenSpec(
 
   if (command === "install") {
     writeConfirmedOpenSpecConfig(installSetup);
-    runOpenSpecCli(["init", ".", "--tools", openspec.tools.join(",")]);
-    normalizeOpenSpecScaffolding(openspec);
+    const confirmedConfig = readFileSync(
+      join("openspec", "config.yaml"),
+      "utf-8",
+    );
+    try {
+      runOpenSpecGeneration(openspec, [
+        "init",
+        ".",
+        "--tools",
+        openspec.tools.join(","),
+        "--profile",
+        openspec.profile,
+      ]);
+      writeFileSync(join("openspec", "config.yaml"), confirmedConfig, "utf-8");
+      normalizeOpenSpecScaffolding(openspec);
+    } catch (error) {
+      stabilizeOpenSpecGenerationFailure(openspec, confirmedConfig);
+      throwOpenSpecGenerationError("install", error, openspec);
+    }
     console.log("Installed repo-local OpenSpec scaffolding.");
     return;
   }
 
   backupOpenSpecExternalTargets(openspec);
-  if (isOpenSpecInitialized()) {
-    runOpenSpecCli(["update", "."]);
-  } else {
-    runOpenSpecCli(["init", ".", "--tools", openspec.tools.join(",")]);
+  try {
+    runOpenSpecGeneration(openspec, ["update", "."]);
+    normalizeOpenSpecScaffolding(openspec);
+  } catch (error) {
+    throwOpenSpecGenerationError("update", error, openspec);
   }
-  normalizeOpenSpecScaffolding(openspec);
   console.log("Updated repo-local OpenSpec scaffolding.");
 }
 
@@ -1485,12 +1503,81 @@ function openSpecCli(): { path: string; version: string } | undefined {
   };
 }
 
-function runOpenSpecCli(args: string[]): void {
-  run("openspec", args);
+function runOpenSpecGeneration(
+  config: ResolvedOpenSpecConfig,
+  args: string[],
+): void {
+  const configHome = mkdtempSync(join(tmpdir(), "agent-runtime-openspec-"));
+  const openSpecConfigDir = join(configHome, "openspec");
+  mkdirSync(openSpecConfigDir, { recursive: true });
+  writeFileSync(
+    join(openSpecConfigDir, "config.json"),
+    `${JSON.stringify(openSpecGlobalConfig(config), null, 2)}\n`,
+    "utf-8",
+  );
+
+  try {
+    runOpenSpecCliWithEnv(args, {
+      XDG_CONFIG_HOME: configHome,
+    });
+  } finally {
+    rmSync(configHome, { force: true, recursive: true });
+  }
 }
 
-function isOpenSpecInitialized(): boolean {
-  return existsSync(join("openspec", "config.yaml"));
+function openSpecGlobalConfig(config: ResolvedOpenSpecConfig): {
+  profile: string;
+  delivery: string;
+  workflows: string[];
+} {
+  return {
+    profile: config.profile,
+    delivery: config.delivery,
+    workflows: config.workflows,
+  };
+}
+
+function runOpenSpecCliWithEnv(
+  args: string[],
+  env: Record<string, string>,
+): void {
+  run("openspec", args, { env });
+}
+
+function stabilizeOpenSpecGenerationFailure(
+  config: ResolvedOpenSpecConfig,
+  confirmedConfig?: string,
+): void {
+  if (confirmedConfig) {
+    mkdirSync("openspec", { recursive: true });
+    writeFileSync(join("openspec", "config.yaml"), confirmedConfig, "utf-8");
+  }
+  const stateReport = inspectOpenSpecState(config);
+  if (stateReport.state === "partial") {
+    for (const finding of stateReport.findings) {
+      console.error(`repair_needed: ${finding}`);
+    }
+  }
+}
+
+function throwOpenSpecGenerationError(
+  command: Extract<RuntimeCommand, "install" | "update">,
+  cause: unknown,
+  config: ResolvedOpenSpecConfig,
+): never {
+  const stateReport = inspectOpenSpecState(config);
+  const findings =
+    stateReport.findings.length > 0
+      ? stateReport.findings
+      : ["Inspect generated OpenSpec config, skills, commands, and symlinks."];
+  const causeMessage = cause instanceof Error ? cause.message : String(cause);
+  throw new Error(
+    [
+      `OpenSpec ${command} generation failed; repo-local setup is repairable.`,
+      ...findings.map((finding) => `- ${finding}`),
+      causeMessage,
+    ].join("\n"),
+  );
 }
 
 function normalizeOpenSpecScaffolding(config: ResolvedOpenSpecConfig): void {
@@ -3940,9 +4027,14 @@ function sortRecord<T>(record: Record<string, T>): Record<string, T> {
   );
 }
 
-function run(command: string, args: string[]): string {
+function run(
+  command: string,
+  args: string[],
+  options: { env?: Record<string, string> } = {},
+): string {
   const result = spawnSync(command, args, {
     encoding: "utf-8",
+    env: { ...process.env, ...options.env },
     stdio: ["ignore", "pipe", "pipe"],
   });
 
