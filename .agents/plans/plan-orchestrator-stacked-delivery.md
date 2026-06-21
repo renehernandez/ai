@@ -430,6 +430,10 @@ for Nitro closure on each MR before creating the next MR.
   before emitting `planning_review`.
 - `plan-unit-delivery` requests fresh Nitro feedback after every
   feedback-fix push before reporting unit success.
+- Runtime-facing instructions, prompts, and rule updates land only after shared
+  validators and consumer skill tests reject `ship_then_continue`, reject
+  `stack_when_ready`, reject orchestrated `direct_publish`, and accept
+  `stacked_delivery`.
 - `plan-unit-sequencer` treats stack tip `tasks.md` as the source of truth for
   unmerged stacked implementation state.
 - OpenSpec task delivery remains one implementation MR per deliverable task.
@@ -522,10 +526,10 @@ OpenSpec task outline:
    adapter prompt, and tests for one-unit stacked MR delivery, one-checkbox
    deltas, fresh Nitro requests after every material head-changing push, and
    restack recovery evidence.
-7. Repo rule and instruction alignment: update `AGENTS.md`,
-   `instructions/AGENTS.md`, `rules/feature-delivery.md`, `plan-ready`, and
-   review-routing docs so stacked Nitro-reviewed delivery overrides ordinary
-   direct publish for plan workflows.
+7. Repo rule and instruction alignment: update `plan-ready`,
+   `review-feedback-routing`, `AGENTS.md`, `instructions/AGENTS.md`, and
+   `rules/feature-delivery.md` only after the shared validators and consumer
+   skill tests prove the new contract is enforceable.
 8. Runtime refresh and cleanup: refresh installed skill surfaces, validate
    personal and work profiles, and remove stale references to retired modes and
    unsupported direct-publish paths.
@@ -537,18 +541,20 @@ OpenSpec task outline:
    represent stacked delivery as the only mode.
 2. Add the shared `nitro_feedback_gate` template/validator plus Nitro status
    normalization and unsupported host routing.
-3. Update repo rules, installed instructions, `plan-ready`, and review routing
-   docs/scripts/prompts for stacked Nitro-reviewed delivery.
-4. Update `plan-review` docs, scripts, adapter prompt, and tests for reviewed
+3. Update `plan-review` docs, scripts, adapter prompt, and tests for reviewed
    planning MR stack-base semantics and Nitro-only latest-head feedback gates.
-5. Update `plan-orchestrator` docs, scripts, adapter prompt, and tests for
+4. Update `plan-orchestrator` docs, scripts, adapter prompt, and tests for
    resumable stacked workflow routing, resume inspection, and stack-ready
    completion.
-6. Update `plan-unit-sequencer` docs, scripts, adapter prompt, and tests so
+5. Update `plan-unit-sequencer` docs, scripts, adapter prompt, and tests so
    OpenSpec task selection always advances from stack-tip state.
-7. Update `plan-unit-delivery` docs, scripts, adapter prompt, and tests for
+6. Update `plan-unit-delivery` docs, scripts, adapter prompt, and tests for
    one-unit stacked MR delivery, one-checkbox deltas, Nitro feedback gates, and
    restack recovery evidence.
+7. Update repo rules, installed instructions, `plan-ready`, and review routing
+   docs/scripts/prompts for stacked Nitro-reviewed delivery only after the
+   migrated validators and consumer tests reject legacy modes and orchestrated
+   direct publish.
 8. Refresh runtime skill surfaces and validate installed personal and work
    profiles.
 

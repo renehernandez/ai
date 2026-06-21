@@ -102,6 +102,23 @@ Handoffs and ledgers need enough data to prove the stack relationship:
 This data is required before implementing resume, restack, or `stack_ready`
 validation.
 
+### Migrate Contracts Before Runtime-Facing Instructions
+
+The shared validators and consumer skill tests must enforce the new contract
+before rules, installed instructions, or adapter prompts present it as the live
+workflow. The implementation order is:
+
+1. migrate shared planning-review validators, templates, fixtures, and tests;
+2. add the shared Nitro gate validator and unsupported-route checks;
+3. migrate `plan-review`, `plan-orchestrator`, `plan-unit-sequencer`, and
+   `plan-unit-delivery` consumers so their tests reject `ship_then_continue`,
+   reject `stack_when_ready`, reject orchestrated `direct_publish`, and accept
+   `stacked_delivery`;
+4. update runtime-facing rules, installed instructions, and prompts.
+
+This keeps intermediate commits from advertising behavior that the installed
+runtime cannot yet validate.
+
 ## Risks / Trade-offs
 
 - Restricting the first cut to Fullscript GitLab blocks GitHub plan workflow

@@ -22,50 +22,54 @@
       Fullscript GitLab MRs and returns `nitro_route_unsupported` for GitHub,
       non-Fullscript GitLab, and ambiguous routes.
 
-## 3. Rule And Skill Alignment
+## 3. Planning Review Stack Base
 
-- [ ] 3.1 Update `AGENTS.md`, `instructions/AGENTS.md`, and
-      `rules/feature-delivery.md` so `plan-orchestrator` stacked delivery is an
-      explicit exception to ordinary direct-main publication.
-- [ ] 3.2 Update `plan-ready` docs, scripts, adapter prompt, and tests so
-      orchestrated plan delivery does not emit or accept `direct_publish`.
-- [ ] 3.3 Update `plan-review`, `review-feedback-routing`, and hosted-review
-      adapter prompts so the first cut is Nitro-capable Fullscript GitLab only.
-
-## 4. Planning Review Stack Base
-
-- [ ] 4.1 Update `plan-review` docs, script templates, validators, adapter
+- [ ] 3.1 Update `plan-review` docs, script templates, validators, adapter
       prompt, and tests to emit `planning_review.mode: stacked_delivery`.
-- [ ] 4.2 Require a clean latest-head `nitro_feedback_gate` before
+- [ ] 3.2 Require a clean latest-head `nitro_feedback_gate` before
       `plan-review` emits `planning_review`.
-- [ ] 4.3 Include stack base ref/SHA and Nitro-clean stack-base evidence in the
+- [ ] 3.3 Include stack base ref/SHA and Nitro-clean stack-base evidence in the
       reviewed planning handoff.
 
-## 5. Orchestrator Resume And Completion
+## 4. Orchestrator Resume And Completion
 
-- [ ] 5.1 Update `plan-orchestrator` docs, script helpers, adapter prompt, and
+- [ ] 4.1 Update `plan-orchestrator` docs, script helpers, adapter prompt, and
       tests for ready plan, OpenSpec blueprint, existing OpenSpec, and
       continue/resume intake paths.
-- [ ] 5.2 Add resume inspection for planning MR, implementation stack order,
+- [ ] 4.2 Add resume inspection for planning MR, implementation stack order,
       current stack tip, every MR head SHA, every MR Nitro gate state,
       `tasks.md` state, and restack requirements.
-- [ ] 5.3 Report `stack_ready` only after the planning MR and every
+- [ ] 4.3 Report `stack_ready` only after the planning MR and every
       implementation MR in stack order have clean latest-head Nitro gates and
       stack integrity evidence.
 
-## 6. Sequencer And Unit Delivery
+## 5. Sequencer And Unit Delivery
 
-- [ ] 6.1 Update `plan-unit-sequencer` docs, script helpers, adapter prompt,
+- [ ] 5.1 Update `plan-unit-sequencer` docs, script helpers, adapter prompt,
       and tests so OpenSpec task selection always advances from current
       stack-tip state.
-- [ ] 6.2 Update `plan-unit-delivery` docs, script helpers, adapter prompt, and
+- [ ] 5.2 Update `plan-unit-delivery` docs, script helpers, adapter prompt, and
       tests so one atomic plan or one OpenSpec deliverable task maps to one
       stacked implementation MR.
-- [ ] 6.3 Require `plan-unit-delivery` to request fresh Nitro feedback after
+- [ ] 5.3 Require `plan-unit-delivery` to request fresh Nitro feedback after
       every material head-changing push and pass the shared Nitro gate before
       reporting unit success.
-- [ ] 6.4 Require restacked descendants to rerun the full Nitro gate before
+- [ ] 5.4 Require restacked descendants to rerun the full Nitro gate before
       `stack_ready`.
+
+## 6. Rule And Skill Alignment
+
+- [ ] 6.1 Update `plan-ready` docs, scripts, adapter prompt, and tests so
+      orchestrated plan delivery does not emit or accept `direct_publish`.
+- [ ] 6.2 Update `plan-review`, `review-feedback-routing`, and hosted-review
+      adapter prompts so the first cut is Nitro-capable Fullscript GitLab only.
+- [ ] 6.3 Update `AGENTS.md`, `instructions/AGENTS.md`, and
+      `rules/feature-delivery.md` so `plan-orchestrator` stacked delivery is an
+      explicit exception to ordinary direct-main publication.
+- [ ] 6.4 Verify that runtime-facing instructions and prompts only document the
+      new `stacked_delivery` contract after shared validators and consumer
+      skill tests reject `ship_then_continue`, reject `stack_when_ready`, reject
+      orchestrated `direct_publish`, and accept `stacked_delivery`.
 
 ## 7. Runtime Refresh
 

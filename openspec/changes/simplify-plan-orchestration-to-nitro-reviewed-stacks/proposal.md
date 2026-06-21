@@ -23,6 +23,9 @@ before the current MR is fully reviewed.
   planning MR and every implementation MR in the stack.
 - Update shared repo rules, installed instructions, plan skills, adapter
   prompts, validators, tests, and runtime refresh expectations.
+- Sequence runtime-facing rule, instruction, and prompt updates after the
+  validators and consumer skill tests enforce the new stacked-delivery
+  contract.
 
 ## Capabilities
 
