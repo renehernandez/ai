@@ -1973,6 +1973,154 @@ function replaceDirectory(source: string, destination: string): void {
   renameSync(temporaryDestination, destination);
 }
 
+export type RuntimeBackupStatus = "created" | "missing";
+export type RuntimeBackupKind = "file" | "directory" | "symlink" | "missing";
+
+export type RuntimeBackupResult = {
+  status: RuntimeBackupStatus;
+  kind: RuntimeBackupKind;
+  sourcePath: string;
+  backupPath: string;
+  manifestPath: string;
+  targetBackupPath?: string;
+  verified: boolean;
+};
+
+export type RuntimeBackupInput = {
+  sourcePath: string;
+  backupsRoot: string;
+  assetKind: string;
+  targetName: string;
+  now?: Date;
+  retentionCount?: number;
+};
+
+export function createRuntimeBackup(
+  input: RuntimeBackupInput,
+): RuntimeBackupResult {
+  const retentionCount = input.retentionCount ?? 7;
+  const createdAt = input.now ?? new Date();
+  if (retentionCount < 1) {
+    throw new Error("retentionCount must be at least 1");
+  }
+
+  const targetRoot = join(input.backupsRoot, input.assetKind, input.targetName);
+  mkdirSync(targetRoot, { recursive: true });
+
+  const backupPath = nextBackupPath(targetRoot, createdAt);
+  mkdirSync(backupPath, { recursive: true });
+
+  let result: RuntimeBackupResult;
+  try {
+    const manifestPath = join(backupPath, "manifest.json");
+    const stats = lstatIfExists(input.sourcePath);
+    const targetBackupPath = stats ? join(backupPath, "target") : undefined;
+    const kind = runtimeBackupKind(stats);
+    const status: RuntimeBackupStatus = stats ? "created" : "missing";
+
+    if (stats?.isSymbolicLink()) {
+      symlinkSync(readlinkSync(input.sourcePath), targetBackupPath);
+    } else if (stats?.isDirectory()) {
+      cpSync(input.sourcePath, targetBackupPath, {
+        recursive: true,
+        verbatimSymlinks: true,
+      });
+    } else if (stats?.isFile()) {
+      cpSync(input.sourcePath, targetBackupPath);
+    }
+
+    writeJson(manifestPath, {
+      assetKind: input.assetKind,
+      targetName: input.targetName,
+      sourcePath: input.sourcePath,
+      status,
+      kind,
+      createdAt: createdAt.toISOString(),
+    });
+
+    result = {
+      status,
+      kind,
+      sourcePath: input.sourcePath,
+      backupPath,
+      manifestPath,
+      targetBackupPath,
+      verified: false,
+    };
+    if (!verifyRuntimeBackup(result)) {
+      throw new Error(`Runtime backup verification failed: ${backupPath}`);
+    }
+  } catch (error) {
+    rmSync(backupPath, { force: true, recursive: true });
+    throw error;
+  }
+
+  result.verified = true;
+  pruneRuntimeBackups(targetRoot, retentionCount);
+  return result;
+}
+
+function runtimeBackupKind(
+  stats: ReturnType<typeof lstatSync> | undefined,
+): RuntimeBackupKind {
+  if (!stats) {
+    return "missing";
+  }
+  if (stats.isSymbolicLink()) {
+    return "symlink";
+  }
+  if (stats.isDirectory()) {
+    return "directory";
+  }
+  if (stats.isFile()) {
+    return "file";
+  }
+  throw new Error("Unsupported backup target type");
+}
+
+function nextBackupPath(targetRoot: string, now: Date): string {
+  const baseName = now.toISOString().replace(/[:.]/g, "-");
+  const matchingBackups = readdirSync(targetRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .filter((name) => name === baseName || name.startsWith(`${baseName}-`));
+  if (matchingBackups.length === 0) {
+    return join(targetRoot, baseName);
+  }
+  const nextSuffix =
+    Math.max(
+      ...matchingBackups.map((name) =>
+        name === baseName ? 1 : Number(name.slice(baseName.length + 1)),
+      ),
+    ) + 1;
+  return join(targetRoot, `${baseName}-${String(nextSuffix).padStart(6, "0")}`);
+}
+
+function verifyRuntimeBackup(result: RuntimeBackupResult): boolean {
+  if (!existsSync(result.backupPath) || !existsSync(result.manifestPath)) {
+    return false;
+  }
+  if (result.status === "missing") {
+    return result.targetBackupPath === undefined;
+  }
+  return Boolean(
+    result.targetBackupPath && lstatIfExists(result.targetBackupPath),
+  );
+}
+
+function pruneRuntimeBackups(targetRoot: string, retentionCount: number): void {
+  const backups = readdirSync(targetRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+  for (const backup of backups.slice(
+    0,
+    Math.max(0, backups.length - retentionCount),
+  )) {
+    rmSync(join(targetRoot, backup), { force: true, recursive: true });
+  }
+}
+
 function replaceSymlink(target: string, linkPath: string): void {
   rmSync(linkPath, { force: true, recursive: true });
   mkdirSync(dirname(linkPath), { recursive: true });
