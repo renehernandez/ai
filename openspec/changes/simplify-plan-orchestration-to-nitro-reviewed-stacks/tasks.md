@@ -73,12 +73,12 @@
 
 ## 7. Runtime Refresh
 
-- [ ] 7.1 Run `writing-skills` against changed shared agent and skill behavior.
-- [ ] 7.2 Run unit and integration tests for planning scripts and runtime
+- [x] 7.1 Run `writing-skills` against changed shared agent and skill behavior.
+- [x] 7.2 Run unit and integration tests for planning scripts and runtime
       behavior.
-- [ ] 7.3 Refresh personal and work runtime skills, then run skills
+- [x] 7.3 Refresh personal and work runtime skills, then run skills
       status/validate for both profiles.
-- [ ] 7.4 If installed instructions changed, run instructions status/validate
+- [x] 7.4 If installed instructions changed, run instructions status/validate
       for both profiles.
-- [ ] 7.5 Validate repo-local OpenSpec scaffolding and strict validation for
+- [x] 7.5 Validate repo-local OpenSpec scaffolding and strict validation for
       this change.
