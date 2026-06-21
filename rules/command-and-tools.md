@@ -46,6 +46,16 @@ These rules apply to command execution, network access, and tool installation ac
 - This repo currently has no repo-managed subagent mappings. Skills may still delegate to available local, cloud, or custom subagents exposed by the active harness.
 - Do not manually create subagent symlinks or hand-copy generated agent files into runtime folders; use the repo runtime or the owning harness mechanism when adding managed subagents.
 
+## Hook Runtime Sync
+
+- Use `pnpm agent-runtime hooks install` for first-time managed hook setup.
+- Use `pnpm agent-runtime hooks update` after changing files under `hooks/` or hook registration behavior.
+- Use `pnpm agent-runtime hooks validate` to enforce managed hook symlink state and Codex/Claude startup registration state.
+- Use `pnpm agent-runtime hooks status` for read-only hook source, symlink, registration, Codex trust, and selected remote reporting.
+- Do not manually create managed hook symlinks or hand-copy hook files into `~/.agents/hooks`, `~/.codex/hooks`, or `~/.claude/hooks`.
+- Do not manually edit Codex or Claude startup hook registration when `agent-runtime hooks update` can apply the registration with backups.
+- Codex startup hook trust is app-owned state. If status reports `[untrusted] codex startup hook trust`, report that state and avoid hand-editing trust hashes.
+
 ## Instruction Runtime Sync
 
 - Use `pnpm agent-runtime instructions install --profile <name>` for first-time `AGENTS.md` and managed rule-file symlink setup.
@@ -58,5 +68,6 @@ These rules apply to command execution, network access, and tool installation ac
 
 ## Runtime Wrapper Commands
 
-- Use `pnpm agent-runtime install --profile <name>`, `pnpm agent-runtime update --profile <name>`, `pnpm agent-runtime validate --profile <name>`, or `pnpm agent-runtime status --profile <name>` to run the corresponding command across skills and instructions.
+- Use `pnpm agent-runtime install --profile <name>` or `pnpm agent-runtime update --profile <name>` to refresh skills, instructions, and hooks.
+- Use `pnpm agent-runtime validate --profile <name>` or `pnpm agent-runtime status --profile <name>` to validate skills and instructions while reporting hook state. Use scoped `pnpm agent-runtime hooks validate` when hook symlink and startup registration failures should block.
 - Add `--help` to the root command, wrapper commands, scoped commands, or scoped subcommands to inspect available options before running a command.

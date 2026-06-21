@@ -7,12 +7,48 @@ AI repo.
 
 Source of truth:
 
-- Repo path: `/Users/renehernandez/personal/projects/ai/hooks`
-- Runtime path: `/Users/renehernandez/.agents/hooks`
-- Codex config: `/Users/renehernandez/.codex/config.toml`
+- Repo path: `/Users/rene.hernandez/work/projects/rene.hernandez/ai/hooks`
+- Runtime path: `/Users/rene.hernandez/.agents/hooks`
+- Codex hooks config: `/Users/rene.hernandez/.codex/hooks.json`
+- Codex trust state: `/Users/rene.hernandez/.codex/config.toml`
+- Claude settings: `/Users/rene.hernandez/.claude/settings.json`
 
 Hooks in this folder should be written in TypeScript unless a specific runtime
 requirement justifies another language.
+
+## Managed Runtime Flow
+
+Use `agent-runtime` to manage hook symlinks and startup registration:
+
+```sh
+pnpm agent-runtime hooks update
+pnpm agent-runtime hooks validate
+pnpm agent-runtime hooks status
+```
+
+`hooks install` and `hooks update` replace managed hook directories with
+symlinks after backup verification, then register `startup-git-sync.ts` in the
+Codex and Claude startup hook configs. Config files are backed up under
+`~/.agents/runtime/backups/config/<codex|claude>/` before mutation.
+
+`hooks validate` and `hooks status` are read-only. They report hook source and
+symlink state, Codex and Claude startup registration state, Codex trust state,
+and the selected startup Git sync remote URL. The remote line warns when the
+selected remote URL differs from `runtime.hooks.startupRemote.expectedUrl` in
+`agent-runtime.config.json`; this check is evaluated in the current Git
+repository where the command runs. Codex may still report untrusted until the
+app records trust for the registered startup hook.
+
+The top-level wrapper commands include hook handling:
+
+```sh
+pnpm agent-runtime update --profile personal
+pnpm agent-runtime validate --profile personal
+```
+
+Scoped `hooks validate` enforces hook symlink and registration correctness.
+Top-level `validate` reports hook state without failing solely because this
+machine has not installed the managed hook symlinks yet.
 
 ## `block-node-modules-bin.ts`
 
@@ -37,7 +73,7 @@ The hook blocks patterns such as:
 Agents can inspect hook metadata with:
 
 ```sh
-npx tsx /Users/renehernandez/.agents/hooks/block-node-modules-bin.ts --agent-discovery
+pnpm exec tsx /Users/rene.hernandez/.agents/hooks/block-node-modules-bin.ts --agent-discovery
 ```
 
 The discovery output is JSON. It includes the hook event, matcher, purpose,
@@ -47,12 +83,18 @@ behavior, and preferred replacement commands.
 Human-readable help is also available:
 
 ```sh
-npx tsx /Users/renehernandez/.agents/hooks/block-node-modules-bin.ts --help
+pnpm exec tsx /Users/rene.hernandez/.agents/hooks/block-node-modules-bin.ts --help
 ```
 
 ## Codex Registration
 
-The user-level Codex config enables hooks and registers this script:
+`agent-runtime hooks update` manages startup Git sync registration in
+`~/.codex/hooks.json`. Older manual hook snippets may still exist in
+`~/.codex/config.toml` for other hook types, but startup registration should be
+managed through `hooks.json`.
+
+The node_modules guard can still be registered manually as a Codex `PreToolUse`
+hook when needed:
 
 ```toml
 [features]
@@ -63,7 +105,7 @@ matcher = "^Bash$"
 
 [[hooks.PreToolUse.hooks]]
 type = "command"
-command = "npx tsx /Users/renehernandez/.agents/hooks/block-node-modules-bin.ts"
+command = "pnpm exec tsx /Users/rene.hernandez/.agents/hooks/block-node-modules-bin.ts"
 timeout = 5
 statusMessage = "Checking shell command policy"
 ```
@@ -88,14 +130,14 @@ Blocked payload:
 
 ```sh
 printf '{"tool_input":{"command":"./node_modules/.bin/vite build"}}' \
-  | npx tsx /Users/renehernandez/.agents/hooks/block-node-modules-bin.ts
+  | pnpm exec tsx /Users/rene.hernandez/.agents/hooks/block-node-modules-bin.ts
 ```
 
 Allowed payload:
 
 ```sh
 printf '{"tool_input":{"command":"pnpm exec vite build"}}' \
-  | npx tsx /Users/renehernandez/.agents/hooks/block-node-modules-bin.ts
+  | pnpm exec tsx /Users/rene.hernandez/.agents/hooks/block-node-modules-bin.ts
 ```
 
 The blocked case emits a Codex `deny` decision. The allowed case exits with no

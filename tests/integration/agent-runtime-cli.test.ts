@@ -87,6 +87,14 @@ function withFixture(
       claude: join(runtimeDir, "claude", "hooks"),
       codex: join(runtimeDir, "codex", "hooks"),
     },
+    registration: {
+      codexHooksJsonPath: join(runtimeDir, "codex", "hooks.json"),
+      codexConfigTomlPath: join(runtimeDir, "codex", "config.toml"),
+      claudeSettingsJsonPath: join(runtimeDir, "claude", "settings.json"),
+    },
+    startupRemote: {
+      name: "origin",
+    },
   };
   configureConfig(config, runtimeDir);
   writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf-8");
@@ -102,6 +110,7 @@ function runAgentRuntime(
   args: string[],
   options: RunOptions = {},
 ): { stdout: string; stderr: string; status: number | null } {
+  assertSafeRuntimeArgs(args);
   const result = spawnSync(
     process.execPath,
     ["--import", tsxLoader, runtimeScript, ...args],
@@ -116,6 +125,16 @@ function runAgentRuntime(
     stderr: result.stderr,
     status: result.status,
   };
+}
+
+function assertSafeRuntimeArgs(args: string[]): void {
+  if (!args.some((arg) => arg === "--config")) {
+    assert.equal(
+      args.some((arg) => arg === "install" || arg === "update"),
+      false,
+      "mutating agent-runtime integration tests must pass an explicit fixture --config",
+    );
+  }
 }
 
 function runGit(args: string[], options: RunOptions = {}): string {
@@ -512,12 +531,24 @@ test("CLI installs and reports managed hook symlinks", () => {
     const canonicalHooks = join(runtimeDir, "agents", "hooks");
     const claudeHooks = join(runtimeDir, "claude", "hooks");
     const codexHooks = join(runtimeDir, "codex", "hooks");
+    const claudeSettings = join(runtimeDir, "claude", "settings.json");
+    const codexHooksJson = join(runtimeDir, "codex", "hooks.json");
     mkdirSync(canonicalHooks, { recursive: true });
     mkdirSync(claudeHooks, { recursive: true });
     mkdirSync(codexHooks, { recursive: true });
     writeFileSync(join(canonicalHooks, "sentinel.txt"), "agents\n", "utf-8");
     writeFileSync(join(claudeHooks, "sentinel.txt"), "claude\n", "utf-8");
     writeFileSync(join(codexHooks, "sentinel.txt"), "codex\n", "utf-8");
+    writeFileSync(
+      claudeSettings,
+      JSON.stringify({ model: "fable", hooks: {} }, null, 2),
+      "utf-8",
+    );
+    writeFileSync(
+      codexHooksJson,
+      JSON.stringify({ hooks: { Stop: [{ hooks: [] }] } }, null, 2),
+      "utf-8",
+    );
 
     const install = runAgentRuntime([
       "hooks",
@@ -532,6 +563,20 @@ test("CLI installs and reports managed hook symlinks", () => {
     assert.equal(readlinkSync(claudeHooks), canonicalHooks);
     assert.equal(lstatSync(codexHooks).isSymbolicLink(), true);
     assert.equal(readlinkSync(codexHooks), canonicalHooks);
+    const claudeDocument = JSON.parse(readFileSync(claudeSettings, "utf-8"));
+    const codexDocument = JSON.parse(readFileSync(codexHooksJson, "utf-8"));
+    assert.equal(claudeDocument.model, "fable");
+    assert.equal(claudeDocument.hooks.SessionStart.length, 1);
+    assert.equal(
+      matchCount(JSON.stringify(claudeDocument), /startup-git-sync\.ts/g),
+      1,
+    );
+    assert.equal(codexDocument.hooks.Stop.length, 1);
+    assert.equal(codexDocument.hooks.SessionStart.length, 1);
+    assert.equal(
+      matchCount(JSON.stringify(codexDocument), /startup-git-sync\.ts/g),
+      1,
+    );
 
     const manifestsAfterInstall = collectBackupManifests(
       join(runtimeDir, "backups"),
@@ -572,6 +617,28 @@ test("CLI installs and reports managed hook symlinks", () => {
         ) === "codex\n",
     );
     assert.ok(codexBackup);
+    const claudeConfigBackup = findBackupManifest(
+      manifestsAfterInstall,
+      (manifest, manifestPath) =>
+        manifest.assetKind === "config" &&
+        manifest.targetName === "claude" &&
+        manifest.kind === "file" &&
+        readFileSync(join(dirname(manifestPath), "target"), "utf-8").includes(
+          '"model": "fable"',
+        ),
+    );
+    assert.ok(claudeConfigBackup);
+    const codexConfigBackup = findBackupManifest(
+      manifestsAfterInstall,
+      (manifest, manifestPath) =>
+        manifest.assetKind === "config" &&
+        manifest.targetName === "codex" &&
+        manifest.kind === "file" &&
+        readFileSync(join(dirname(manifestPath), "target"), "utf-8").includes(
+          '"Stop"',
+        ),
+    );
+    assert.ok(codexConfigBackup);
 
     const validate = runAgentRuntime([
       "hooks",
@@ -582,7 +649,9 @@ test("CLI installs and reports managed hook symlinks", () => {
     assert.equal(validate.status, 0, validate.stderr || validate.stdout);
     assert.match(validate.stdout, /Hook source/);
     assert.match(validate.stdout, /Canonical hooks/);
-    assert.match(validate.stdout, /codex startup hook registration/);
+    assert.match(validate.stdout, /\[ok\] claude startup hook registration/);
+    assert.match(validate.stdout, /\[ok\] codex startup hook registration/);
+    assert.match(validate.stdout, /\[untrusted\] codex startup hook trust/);
 
     const status = runAgentRuntime(["hooks", "status", "--config", configPath]);
     assert.equal(status.status, 0, status.stderr || status.stdout);
@@ -591,6 +660,42 @@ test("CLI installs and reports managed hook symlinks", () => {
       collectBackupManifests(join(runtimeDir, "backups")).length,
       manifestsAfterInstall.length,
     );
+
+    const update = runAgentRuntime(["hooks", "update", "--config", configPath]);
+    assert.equal(update.status, 0, update.stderr || update.stdout);
+    assert.equal(
+      matchCount(
+        readFileSync(claudeSettings, "utf-8"),
+        /startup-git-sync\.ts/g,
+      ),
+      1,
+    );
+    assert.equal(
+      matchCount(
+        readFileSync(codexHooksJson, "utf-8"),
+        /startup-git-sync\.ts/g,
+      ),
+      1,
+    );
+    assert.equal(
+      collectBackupManifests(join(runtimeDir, "backups")).length,
+      manifestsAfterInstall.length,
+    );
+
+    writeFileSync(
+      claudeSettings,
+      JSON.stringify({ model: "fable", hooks: {} }, null, 2),
+      "utf-8",
+    );
+    const invalid = runAgentRuntime([
+      "hooks",
+      "validate",
+      "--config",
+      configPath,
+    ]);
+    assert.notEqual(invalid.status, 0);
+    assert.match(invalid.stderr, /Invalid hook registrations/);
+    assert.match(invalid.stderr, /claude startup hook registration missing/);
   });
 });
 
@@ -610,6 +715,77 @@ test("CLI validates managed hook symlink state", () => {
     assert.equal(status.status, 0, status.stderr || status.stdout);
     assert.equal(collectBackupManifests(join(runtimeDir, "backups")).length, 0);
   });
+});
+
+test("CLI preflights hook registration configs before symlink mutation", () => {
+  withFixture(({ configPath, runtimeDir }) => {
+    const canonicalHooks = join(runtimeDir, "agents", "hooks");
+    const claudeHooks = join(runtimeDir, "claude", "hooks");
+    const codexHooks = join(runtimeDir, "codex", "hooks");
+    const claudeSettings = join(runtimeDir, "claude", "settings.json");
+    mkdirSync(canonicalHooks, { recursive: true });
+    mkdirSync(claudeHooks, { recursive: true });
+    mkdirSync(codexHooks, { recursive: true });
+    writeFileSync(join(canonicalHooks, "sentinel.txt"), "agents\n", "utf-8");
+    writeFileSync(join(claudeHooks, "sentinel.txt"), "claude\n", "utf-8");
+    writeFileSync(join(codexHooks, "sentinel.txt"), "codex\n", "utf-8");
+    writeFileSync(claudeSettings, "{not json", "utf-8");
+
+    const result = runAgentRuntime(["hooks", "update", "--config", configPath]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Expected property name|JSON/);
+    assert.equal(lstatSync(canonicalHooks).isSymbolicLink(), false);
+    assert.equal(lstatSync(claudeHooks).isSymbolicLink(), false);
+    assert.equal(lstatSync(codexHooks).isSymbolicLink(), false);
+    assert.equal(
+      readFileSync(join(canonicalHooks, "sentinel.txt"), "utf-8"),
+      "agents\n",
+    );
+    assert.equal(
+      readFileSync(join(claudeHooks, "sentinel.txt"), "utf-8"),
+      "claude\n",
+    );
+    assert.equal(
+      readFileSync(join(codexHooks, "sentinel.txt"), "utf-8"),
+      "codex\n",
+    );
+    assert.equal(collectBackupManifests(join(runtimeDir, "backups")).length, 0);
+  });
+});
+
+test("CLI reports selected startup Git sync remote warnings", () => {
+  withFixture(
+    ({ configPath, runtimeDir }) => {
+      const status = runAgentRuntime([
+        "hooks",
+        "status",
+        "--config",
+        configPath,
+      ]);
+
+      assert.equal(status.status, 0, status.stderr || status.stdout);
+      assert.match(
+        status.stdout,
+        /\[warning\] startup Git sync remote origin:/,
+      );
+      assert.match(status.stdout, /https:\/\/example.invalid\/primary.git/);
+      assert.equal(
+        collectBackupManifests(join(runtimeDir, "backups")).length,
+        0,
+      );
+    },
+    (config) => {
+      const runtime = config.runtime as Record<string, unknown>;
+      runtime.hooks = {
+        ...(runtime.hooks as Record<string, unknown>),
+        startupRemote: {
+          name: "origin",
+          expectedUrl: "https://example.invalid/primary.git",
+        },
+      };
+    },
+  );
 });
 
 test("CLI refuses unsafe managed hook targets", () => {

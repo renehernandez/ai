@@ -15,6 +15,10 @@
       "targets": {
         "claude": "~/.claude/hooks",
         "codex": "~/.codex/hooks"
+      },
+      "startupRemote": {
+        "name": "origin",
+        "expectedUrl": "https://github.com/renehernandez/ai.git"
       }
     },
     "openspec": {

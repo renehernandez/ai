@@ -109,6 +109,20 @@ type HooksConfig = {
   canonicalDir?: string;
   targets?: Record<string, string>;
   allowDisposableSource?: boolean;
+  registration?: HookRegistrationConfig;
+  startupRemote?: HookStartupRemoteConfig;
+};
+
+type HookRegistrationConfig = {
+  startupCommand?: string;
+  codexHooksJsonPath?: string;
+  codexConfigTomlPath?: string;
+  claudeSettingsJsonPath?: string;
+};
+
+type HookStartupRemoteConfig = {
+  name?: string;
+  expectedUrl?: string;
 };
 
 type HookCommand = {
@@ -173,6 +187,20 @@ type ResolvedHooksConfig = {
   targets: Record<string, string>;
   backupsRoot: string;
   allowDisposableSource: boolean;
+  registration: ResolvedHookRegistrationConfig;
+  startupRemote: ResolvedHookStartupRemoteConfig;
+};
+
+type ResolvedHookRegistrationConfig = {
+  startupCommand: string;
+  codexHooksJsonPath: string;
+  codexConfigTomlPath: string;
+  claudeSettingsJsonPath: string;
+};
+
+type ResolvedHookStartupRemoteConfig = {
+  name: string;
+  expectedUrl?: string;
 };
 
 type ParsedArgs = {
@@ -1139,6 +1167,7 @@ function runHooks(
     statusHooks(hooks);
     if (options.enforceValidate ?? true) {
       validateInstalledHooks(hooks);
+      validateHookRegistrations(hooks);
     }
     console.log("Validated hook configuration.");
     return;
@@ -1146,7 +1175,9 @@ function runHooks(
 
   validateDurableHookSource(hooks);
   validateHookReplacementTargets(hooks);
+  preflightHookRegistrations(hooks);
   installHookSymlinks(hooks);
+  installHookRegistrations(hooks);
   console.log(
     `${command === "install" ? "Installed" : "Updated"} managed hooks.`,
   );
@@ -1240,9 +1271,14 @@ function registerStartupHookInJson(
   command: string,
 ): StartupHookRegistrationResult {
   const document = readHookConfigDocument(configPath);
-  const existingLocation = findStartupHookLocation(document, command);
-  if (existingLocation) {
-    return { changed: false, location: existingLocation };
+  const existingLocations = findStartupHookLocations(document, command);
+  if (existingLocations.length > 0) {
+    const changed = removeDuplicateStartupHooks(document, command);
+    if (changed) {
+      mkdirSync(dirname(configPath), { recursive: true });
+      writeJson(configPath, document);
+    }
+    return { changed, location: existingLocations[0] };
   }
 
   const sessionStart = ensureSessionStartMatchers(document);
@@ -1258,6 +1294,7 @@ function registerStartupHookInJson(
   matcher.hooks ??= [];
   const hookIndex = matcher.hooks.length;
   matcher.hooks.push({ type: "command", command });
+  mkdirSync(dirname(configPath), { recursive: true });
   writeJson(configPath, document);
 
   return {
@@ -1333,11 +1370,30 @@ function ensureSessionStartMatchers(
   return sessionStart;
 }
 
-function findStartupHookLocation(
+function removeDuplicateStartupHooks(
   document: HookConfigDocument,
   command: string,
-): StartupHookLocation | undefined {
-  return findStartupHookLocations(document, command)[0];
+): boolean {
+  const sessionStart = ensureSessionStartMatchers(document);
+  let found = false;
+  let changed = false;
+  for (const matcher of sessionStart) {
+    if (!matcher.hooks) {
+      continue;
+    }
+    matcher.hooks = matcher.hooks.filter((hook) => {
+      if (hook.type !== "command" || hook.command !== command) {
+        return true;
+      }
+      if (!found) {
+        found = true;
+        return true;
+      }
+      changed = true;
+      return false;
+    });
+  }
+  return changed;
 }
 
 function findStartupHookLocations(
@@ -1405,8 +1461,10 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 
 function resolvedHooksConfig(config: Config): ResolvedHooksConfig {
   const input = config.runtime.hooks ?? {};
+  const sourceDir = input.sourceDir ?? "hooks";
+  const startupRemoteName = input.startupRemote?.name ?? "origin";
   return {
-    sourceDir: input.sourceDir ?? "hooks",
+    sourceDir,
     canonicalDir: input.canonicalDir ?? "~/.agents/hooks",
     targets: nonEmptyRecord(
       input.targets,
@@ -1418,7 +1476,47 @@ function resolvedHooksConfig(config: Config): ResolvedHooksConfig {
     ),
     backupsRoot: runtimeBackupsRoot(config),
     allowDisposableSource: input.allowDisposableSource === true,
+    registration: {
+      startupCommand:
+        input.registration?.startupCommand ??
+        startupGitSyncCommand(sourceDir, startupRemoteName),
+      codexHooksJsonPath:
+        input.registration?.codexHooksJsonPath ?? "~/.codex/hooks.json",
+      codexConfigTomlPath:
+        input.registration?.codexConfigTomlPath ?? "~/.codex/config.toml",
+      claudeSettingsJsonPath:
+        input.registration?.claudeSettingsJsonPath ?? "~/.claude/settings.json",
+    },
+    startupRemote: {
+      name: startupRemoteName,
+      expectedUrl: input.startupRemote?.expectedUrl,
+    },
   };
+}
+
+function startupGitSyncCommand(sourceDir: string, remoteName: string): string {
+  const scriptPath = join(
+    resolve(expandHome(sourceDir)),
+    "startup-git-sync.ts",
+  );
+  const loaderPath = pathToFileURL(
+    join(
+      dirname(resolve(expandHome(sourceDir))),
+      "node_modules",
+      "tsx",
+      "dist",
+      "loader.mjs",
+    ),
+  ).href;
+  const argv = [
+    process.execPath,
+    "--import",
+    loaderPath,
+    scriptPath,
+    "--remote",
+    remoteName,
+  ];
+  return argv.map((arg) => JSON.stringify(arg)).join(" ");
 }
 
 function validateHookConfig(config: ResolvedHooksConfig): void {
@@ -1532,6 +1630,68 @@ function installHookSymlinks(config: ResolvedHooksConfig): void {
   }
 }
 
+function installHookRegistrations(config: ResolvedHooksConfig): void {
+  const targets = hookRegistrationTargets(config);
+  for (const target of targets) {
+    const status = target.status();
+    if (!hookRegistrationNeedsMutation(status)) {
+      continue;
+    }
+    backupRuntimeTarget(expandHome(target.backupPath), {
+      assetKind: "config",
+      backupsRoot: config.backupsRoot,
+      targetName: target.targetName,
+    });
+    target.register();
+  }
+}
+
+function preflightHookRegistrations(config: ResolvedHooksConfig): void {
+  for (const target of hookRegistrationTargets(config)) {
+    target.status();
+  }
+}
+
+type HookRegistrationTarget = {
+  targetName: "claude" | "codex";
+  backupPath: string;
+  status: () => StartupHookStatus;
+  register: () => StartupHookRegistrationResult;
+};
+
+function hookRegistrationTargets(
+  config: ResolvedHooksConfig,
+): HookRegistrationTarget[] {
+  const startupCommand = config.registration.startupCommand;
+  const codexInput: CodexStartupHookRegistrationInput = {
+    hooksJsonPath: config.registration.codexHooksJsonPath,
+    configTomlPath: config.registration.codexConfigTomlPath,
+    command: startupCommand,
+  };
+  const claudeInput: ClaudeStartupHookRegistrationInput = {
+    settingsJsonPath: config.registration.claudeSettingsJsonPath,
+    command: startupCommand,
+  };
+  return [
+    {
+      targetName: "claude",
+      backupPath: claudeInput.settingsJsonPath,
+      status: () => claudeStartupHookStatus(claudeInput),
+      register: () => registerClaudeStartupHook(claudeInput),
+    },
+    {
+      targetName: "codex",
+      backupPath: codexInput.hooksJsonPath,
+      status: () => codexStartupHookStatus(codexInput),
+      register: () => registerCodexStartupHook(codexInput),
+    },
+  ];
+}
+
+function hookRegistrationNeedsMutation(status: StartupHookStatus): boolean {
+  return !status.registered || status.locations.length > 1;
+}
+
 function statusHooks(config: ResolvedHooksConfig): void {
   const sourceDir = resolve(expandHome(config.sourceDir));
   const canonicalDir = expandHome(config.canonicalDir);
@@ -1543,7 +1703,91 @@ function statusHooks(config: ResolvedHooksConfig): void {
       expandHome(targetDir),
       canonicalDir,
     );
-    console.log(`[unregistered] ${targetName} startup hook registration`);
+  }
+  for (const target of hookRegistrationTargets(config)) {
+    printHookRegistrationStatus(target.targetName, target.status());
+  }
+  printStartupRemoteStatus(config);
+}
+
+function printHookRegistrationStatus(
+  targetName: "claude" | "codex",
+  status: StartupHookStatus,
+): void {
+  if (!status.registered) {
+    console.log(`[missing] ${targetName} startup hook registration`);
+    return;
+  }
+  if (status.locations.length > 1) {
+    console.log(`[duplicate] ${targetName} startup hook registration`);
+  } else {
+    console.log(`[ok] ${targetName} startup hook registration`);
+  }
+  if (targetName === "codex") {
+    console.log(
+      `[${status.trustState === "trusted" ? "trusted" : "untrusted"}] codex startup hook trust`,
+    );
+  }
+}
+
+function printStartupRemoteStatus(config: ResolvedHooksConfig): void {
+  const selectedRemote = config.startupRemote.name;
+  const remoteUrl = gitRemoteUrl(selectedRemote);
+  if (!remoteUrl) {
+    console.log(
+      `[warning] startup Git sync remote ${selectedRemote}: unavailable`,
+    );
+    return;
+  }
+  if (
+    config.startupRemote.expectedUrl &&
+    remoteUrl !== config.startupRemote.expectedUrl
+  ) {
+    console.log(
+      `[warning] startup Git sync remote ${selectedRemote}: ${remoteUrl} differs from expected ${config.startupRemote.expectedUrl}`,
+    );
+    return;
+  }
+  console.log(`[ok] startup Git sync remote ${selectedRemote}: ${remoteUrl}`);
+}
+
+function gitRemoteUrl(remoteName: string): string | undefined {
+  const result = spawnSync("git", ["remote", "get-url", remoteName], {
+    encoding: "utf-8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (result.status !== 0) {
+    return undefined;
+  }
+  return result.stdout.trim();
+}
+
+function validateHookRegistrations(config: ResolvedHooksConfig): void {
+  const errors: string[] = [];
+  for (const target of hookRegistrationTargets(config)) {
+    collectBlockingRegistrationGaps(target.targetName, target.status(), errors);
+  }
+  if (errors.length > 0) {
+    throw new Error(
+      `Invalid hook registrations:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+    );
+  }
+}
+
+function collectBlockingRegistrationGaps(
+  targetName: "claude" | "codex",
+  status: StartupHookStatus,
+  errors: string[],
+): void {
+  if (!status.registered) {
+    errors.push(
+      `${targetName}: ${targetName} startup hook registration missing`,
+    );
+  }
+  if (status.locations.length > 1) {
+    errors.push(
+      `${targetName}: ${targetName} startup hook duplicate registrations`,
+    );
   }
 }
 
