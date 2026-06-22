@@ -64,7 +64,7 @@ function withFixture(
   const runtimeDir = mkdtempSync(join(tmpdir(), "ax-cli-"));
   const configPath = join(runtimeDir, "config.json");
   const config = JSON.parse(
-    readFileSync(join(repoRoot, "agent-runtime.config.json"), "utf-8"),
+    readFileSync(join(repoRoot, "ax.config.json"), "utf-8"),
   ) as FixtureConfig;
   const runtime = config.runtime as Record<string, unknown>;
   runtime.canonicalSkillsDir = join(runtimeDir, "skills");
@@ -223,7 +223,7 @@ function findBackupManifest(
 
 function cachePathForUrl(directory: string, url: string): string {
   const hash = createHash("sha256").update(url).digest("hex").slice(0, 16);
-  return join(directory, ".agent-runtime", "cache", `skills-${hash}`);
+  return join(directory, ".ax", "cache", `skills-${hash}`);
 }
 
 function configureLocalSkillWithScript(
@@ -414,7 +414,7 @@ test("global status reports runtime roots and target OpenSpec readiness", () => 
     assert.match(
       result.stdout,
       new RegExp(
-        `Config path: ${escapeRegExp(join(repoRoot, "agent-runtime.config.json"))}`,
+        `Config path: ${escapeRegExp(join(repoRoot, "ax.config.json"))}`,
       ),
     );
     assert.match(
@@ -1624,7 +1624,7 @@ test("CLI backs up skill, reusable script, and lockfile mutations", () => {
         installManifestData.some(
           (manifest) =>
             manifest.assetKind === "config" &&
-            manifest.targetName === "agent-runtime-lock",
+            manifest.targetName === "ax-lock",
         ),
       );
 
@@ -2372,7 +2372,7 @@ test("CLI install fetches a locked remote commit missing from a stale cache", ()
       runGit(["push", "origin", "main"], { cwd: sourceDir, env: gitEnv });
 
       const cacheDir = cachePathForUrl(runtimeDir, remoteUrl);
-      mkdirSync(join(runtimeDir, ".agent-runtime", "cache"), {
+      mkdirSync(join(runtimeDir, ".ax", "cache"), {
         recursive: true,
       });
       runGit(["clone", "--quiet", remoteUrl, cacheDir], { env: gitEnv });

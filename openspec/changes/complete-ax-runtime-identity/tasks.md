@@ -1,6 +1,6 @@
 ## 1. Implementation
 
-- [ ] 1.1 Rename live AX runtime defaults
+- [x] 1.1 Rename live AX runtime defaults
   - Deliverable: Rename tracked default config and lock artifacts, cache root,
     executable env var, and backup target naming while preserving the legacy
     reference policy.

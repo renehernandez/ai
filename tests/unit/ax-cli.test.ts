@@ -144,7 +144,7 @@ test("Commander routes top-level wrapper commands", () => {
   assert.equal(parsed.scope, undefined);
   assert.equal(parsed.command, "status");
   assert.deepEqual(parsed.profileNames, ["personal"]);
-  assert.equal(parsed.configPath, join(repoRoot, "agent-runtime.config.json"));
+  assert.equal(parsed.configPath, join(repoRoot, "ax.config.json"));
 });
 
 test("Commander routes scoped OpenSpec commands", () => {
@@ -183,19 +183,42 @@ test("Runtime invocation context separates source and target roots", () => {
 
       assert.equal(context.sourceRoot, repoRoot);
       assert.equal(context.targetRoot, targetRoot);
-      assert.equal(
-        context.configPath,
-        join(repoRoot, "agent-runtime.config.json"),
-      );
+      assert.equal(context.configPath, join(repoRoot, "ax.config.json"));
     } finally {
       process.chdir(originalCwd);
     }
   });
 });
 
+test("Runtime invocation context uses AX executable path env var", () => {
+  const originalAxExecutablePath = process.env.AX_EXECUTABLE_PATH;
+  const originalAgentRuntimeExecutablePath =
+    process.env.AGENT_RUNTIME_EXECUTABLE_PATH;
+  try {
+    process.env.AX_EXECUTABLE_PATH = "/tmp/ax-bin";
+    process.env.AGENT_RUNTIME_EXECUTABLE_PATH = "/tmp/agent-runtime-bin";
+
+    const context = createRuntimeInvocationContext();
+
+    assert.equal(context.executablePath, resolve("/tmp/ax-bin"));
+  } finally {
+    if (originalAxExecutablePath === undefined) {
+      delete process.env.AX_EXECUTABLE_PATH;
+    } else {
+      process.env.AX_EXECUTABLE_PATH = originalAxExecutablePath;
+    }
+    if (originalAgentRuntimeExecutablePath === undefined) {
+      delete process.env.AGENT_RUNTIME_EXECUTABLE_PATH;
+    } else {
+      process.env.AGENT_RUNTIME_EXECUTABLE_PATH =
+        originalAgentRuntimeExecutablePath;
+    }
+  }
+});
+
 test("runtime config manages helper scripts imported by installed planning skills", () => {
   const config = JSON.parse(
-    readFileSync(join(repoRoot, "agent-runtime.config.json"), "utf-8"),
+    readFileSync(join(repoRoot, "ax.config.json"), "utf-8"),
   ) as { runtime?: { reusableScripts?: string[] } };
   const reusableScripts = new Set(config.runtime?.reusableScripts ?? []);
 
