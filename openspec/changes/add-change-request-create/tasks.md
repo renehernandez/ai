@@ -12,7 +12,7 @@
   - Update `rules/git-and-review.md` and any necessary adjacent workflow wording.
   - Update `skills/github-pr-create/SKILL.md` and `skills/glab-mr-create/SKILL.md` so neutral requests delegate to `change-request-create`.
   - Keep direct provider usage supported with minimal safe body guidance.
-- [ ] 1.4 Add pressure scenarios and validation coverage.
+- [x] 1.4 Add pressure scenarios and validation coverage.
   - Add documented RED/GREEN pressure scenarios or fixtures for GitLab leak rejection, GitHub template preservation, existing artifact update, ambiguous routing, multi-template selection, and hosted failure inclusion.
   - Run `pnpm run skills:validate`, `pnpm test:unit`, and `pnpm test`.
 - [ ] 1.5 Run shared skill review and runtime gates.
