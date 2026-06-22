@@ -2,6 +2,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
   cpSync,
   existsSync,
   lstatSync,
@@ -21,6 +22,7 @@ import {
 import { homedir, tmpdir } from "node:os";
 import {
   basename,
+  delimiter,
   dirname,
   extname,
   isAbsolute,
@@ -36,6 +38,7 @@ import ts from "typescript";
 type Scope = "skills" | "instructions" | "openspec" | "hooks";
 type RuntimeCommand = "install" | "update" | "validate" | "status";
 type SkillCommand = Extract<RuntimeCommand, "install" | "update" | "validate">;
+type ShimCommand = "install" | "status" | "uninstall";
 
 type RemoteSkillSource = {
   url: string;
@@ -251,6 +254,7 @@ type ResolvedHookStartupRemoteConfig = {
 type ParsedArgs = {
   scope?: Scope;
   command: RuntimeCommand;
+  shimCommand?: ShimCommand;
   profileNames?: string[];
   allProfiles?: boolean;
   configPath: string;
@@ -305,6 +309,9 @@ type LockFile = {
 const CONFIG_FILE = "ax.config.json";
 const LOCK_FILE = "ax.lock.json";
 const CACHE_DIR = ".ax/cache";
+const SHIM_PATH = "~/.local/bin/ax";
+const SHIM_MARKER = "# AX_MANAGED_SHIM";
+const SHIM_SOURCE_ROOT_PREFIX = "# AX_SOURCE_ROOT=";
 const OPENSPEC_INSTALL_COMMAND = "npm install -g @fission-ai/openspec@latest";
 const DEFAULT_OPENSPEC_SCHEMA = "spec-driven";
 const DEFAULT_OPENSPEC_PROFILE = "custom";
@@ -391,6 +398,10 @@ export function executeParsedCommand(input: ParsedArgs): void {
   const { scope, command, profileNames, allProfiles, configPath } = input;
   const runtimeContext =
     input.runtimeContext ?? createRuntimeInvocationContext(configPath);
+  if (input.shimCommand) {
+    runShim(input.shimCommand, runtimeContext);
+    return;
+  }
   const config = readJson<Config>(runtimeContext.configPath);
   if (scope !== "openspec") {
     process.chdir(runtimeContext.sourceRoot);
@@ -450,8 +461,28 @@ export function createProgram(
   addInstructionsCommands(program, execute);
   addOpenSpecCommands(program, execute);
   addHooksCommands(program, execute);
+  addShimCommands(program, execute);
 
   return program;
+}
+
+function addShimCommands(program: Command, execute: CommandExecutor): void {
+  const shim = program
+    .command("shim")
+    .description("Manage the AX-owned global command shim");
+  for (const shimCommand of shimCommands()) {
+    shim
+      .command(shimCommand)
+      .description(`${labelForCommand(shimCommand)} the managed AX shim`)
+      .action((first: CommandOptions | Command, second?: Command) => {
+        const { options, commandObject } = actionContext(first, second);
+        execute({
+          command: "status",
+          shimCommand,
+          configPath: configPathFor(commandObject, options),
+        });
+      });
+  }
 }
 
 function addWrapperCommand(
@@ -691,7 +722,11 @@ function runtimeCommands(): RuntimeCommand[] {
   return ["install", "update", "validate", "status"];
 }
 
-function labelForCommand(command: RuntimeCommand): string {
+function shimCommands(): ShimCommand[] {
+  return ["install", "status", "uninstall"];
+}
+
+function labelForCommand(command: RuntimeCommand | ShimCommand): string {
   return command[0].toUpperCase() + command.slice(1);
 }
 
@@ -1355,6 +1390,152 @@ function printExecutableLinkStatus(context: RuntimeInvocationContext): void {
     return;
   }
   console.log(`[external] Executable link: ${executableRealPath}`);
+}
+
+function runShim(
+  command: ShimCommand,
+  context: RuntimeInvocationContext,
+): void {
+  if (command === "install") {
+    installShim(context);
+    return;
+  }
+  if (command === "uninstall") {
+    uninstallShim(context);
+    return;
+  }
+  statusShim(context);
+}
+
+function installShim(context: RuntimeInvocationContext): void {
+  const shimPath = managedShimPath();
+  const existing = lstatIfExists(shimPath);
+  if (existing && !isManagedShim(shimPath)) {
+    throw new Error(
+      `Refusing to overwrite unmanaged ax shim at ${shimPath}. Remove it or move it before running ax shim install.`,
+    );
+  }
+  mkdirSync(dirname(shimPath), { recursive: true });
+  writeFileSync(shimPath, renderManagedShim(context), "utf-8");
+  chmodSync(shimPath, 0o755);
+  console.log(`Installed managed AX shim: ${shimPath}`);
+  statusShim(context);
+}
+
+function uninstallShim(context: RuntimeInvocationContext): void {
+  const shimPath = managedShimPath();
+  if (!existsSync(shimPath)) {
+    console.log(`Managed AX shim is not installed: ${shimPath}`);
+    return;
+  }
+  if (!isManagedShim(shimPath)) {
+    throw new Error(`Refusing to remove unmanaged ax shim at ${shimPath}.`);
+  }
+  rmSync(shimPath);
+  console.log(`Removed managed AX shim: ${shimPath}`);
+  statusShim(context);
+}
+
+function statusShim(context: RuntimeInvocationContext): void {
+  const shimPath = managedShimPath();
+  const shimDirectory = dirname(shimPath);
+  const stats = lstatIfExists(shimPath);
+  const managed = stats ? isManagedShim(shimPath) : false;
+  const executable = Boolean(stats && stats.mode & 0o111);
+  const pathEntries = process.env.PATH?.split(delimiter).filter(Boolean) ?? [];
+  const matchingAxEntries = pathEntries
+    .map((entry) => join(entry, "ax"))
+    .filter((entry) => {
+      const entryStats = lstatIfExists(entry);
+      return Boolean(entryStats && entryStats.mode & 0o111);
+    });
+  const firstAx = matchingAxEntries[0];
+
+  console.log("AX Shim");
+  console.log(`Shim path: ${shimPath}`);
+  console.log(
+    `${stats ? (managed ? "[ok]" : "[unmanaged]") : "[missing]"} Managed shim`,
+  );
+  if (stats) {
+    console.log(`${executable ? "[ok]" : "[not-executable]"} Executable bit`);
+  }
+  if (managed) {
+    const sourceRoot = managedShimSourceRoot(shimPath);
+    console.log(
+      `${sourceRoot === context.sourceRoot ? "[ok]" : "[stale]"} Source root: ${sourceRoot}`,
+    );
+    console.log(`Expected source root: ${context.sourceRoot}`);
+    if (sourceRoot !== "(unknown)" && !existsSync(sourceRoot)) {
+      console.log(`[stale] Source root path missing: ${sourceRoot}`);
+    }
+    if (isDisposableWorktreePath(sourceRoot)) {
+      console.log(
+        `[detached] Source root appears to be a disposable worktree: ${sourceRoot}`,
+      );
+    }
+  }
+  console.log(
+    `${pathEntries.includes(shimDirectory) ? "[ok]" : "[missing]"} PATH includes ${shimDirectory}`,
+  );
+  if (!pathEntries.includes(shimDirectory)) {
+    console.log(
+      `Add to your shell profile: export PATH="${shimDirectory}:$PATH"`,
+    );
+  }
+  if (matchingAxEntries.length === 0) {
+    console.log("[missing] PATH ax entries: none");
+    return;
+  }
+  for (const [index, entry] of matchingAxEntries.entries()) {
+    const prefix =
+      entry === shimPath
+        ? index === 0
+          ? "[ok]"
+          : "[shadowed]"
+        : index === 0
+          ? "[shadowing]"
+          : "[external]";
+    console.log(`${prefix} PATH ax entry: ${entry}`);
+  }
+  if (firstAx && firstAx !== shimPath) {
+    console.log(`[warning] ${firstAx} shadows the managed AX shim.`);
+  }
+}
+
+function managedShimPath(): string {
+  return expandHome(SHIM_PATH);
+}
+
+function renderManagedShim(context: RuntimeInvocationContext): string {
+  const executable = join(context.sourceRoot, "bin", "ax.mjs");
+  return [
+    "#!/bin/sh",
+    SHIM_MARKER,
+    `${SHIM_SOURCE_ROOT_PREFIX}${context.sourceRoot}`,
+    `exec ${shellSingleQuote(executable)} "$@"`,
+    "",
+  ].join("\n");
+}
+
+function isManagedShim(path: string): boolean {
+  return existsSync(path) && readFileSync(path, "utf-8").includes(SHIM_MARKER);
+}
+
+function managedShimSourceRoot(path: string): string {
+  const line = readFileSync(path, "utf-8")
+    .split(/\r?\n/)
+    .find((value) => value.startsWith(SHIM_SOURCE_ROOT_PREFIX));
+  return line ? line.slice(SHIM_SOURCE_ROOT_PREFIX.length) : "(unknown)";
+}
+
+function shellSingleQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\"'\"'")}'`;
+}
+
+function isDisposableWorktreePath(path: string): boolean {
+  return (
+    path.split(sep).includes(".codex") && path.split(sep).includes("worktrees")
+  );
 }
 
 function withWorkingDirectory<T>(directory: string, callback: () => T): T {

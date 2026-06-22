@@ -36,6 +36,7 @@ const repoRoot = process.cwd();
 type ParsedCommand = {
   scope?: string;
   command: string;
+  shimCommand?: string;
   profileNames?: string[];
   allProfiles?: boolean;
   configPath: string;
@@ -171,6 +172,15 @@ test("Commander routes scoped hooks commands", () => {
   assert.equal(parsed.scope, "hooks");
   assert.equal(parsed.command, "install");
   assert.equal(parsed.configPath, resolve("custom.json"));
+});
+
+test("Commander routes shim commands", () => {
+  const [parsed] = parseCommand(["shim", "status"]);
+
+  assert.equal(parsed.scope, undefined);
+  assert.equal(parsed.command, "status");
+  assert.equal(parsed.shimCommand, "status");
+  assert.equal(parsed.configPath, join(repoRoot, "ax.config.json"));
 });
 
 test("Runtime invocation context separates source and target roots", () => {
