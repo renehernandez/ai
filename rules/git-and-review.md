@@ -44,6 +44,8 @@ These rules cover Git, GitHub, GitLab, Linear, review routing, and external comm
 
 ## MR and PR Description Maintenance
 
+- For host-neutral requests to create or update a PR, MR, pull request, merge request, change request, or review artifact, use `change-request-create` first. Let it select the artifact provider and description policy, then delegate provider-specific mutation to `github-pr-create` or `glab-mr-create`.
+- Use provider-specific creation skills directly only when the user explicitly asks for GitHub or GitLab, an existing artifact URL fixes the host, or a higher-level workflow has already selected the provider adapter.
 - After any commit that changes an MR or PR's scope, behavior, approach, deployment requirements, or reviewer-facing content, update the description proactively. Do not wait for the user to ask.
 - Reviewers only see the final diff. Keep the description aligned to the current branch, not intermediate approaches or reverted work.
 - Do not narrate intermediate decisions, reverted approaches, or scoped-out work in the description unless there is a lasting consequence a reviewer needs to know, such as a follow-up issue or deliberate coverage gap.

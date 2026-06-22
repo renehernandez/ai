@@ -8,7 +8,7 @@
   - Add `skills/change-request-create/SKILL.md`.
   - Keep the skill guidance-only: no new shared scripts, hosted-status fetchers, provider-neutral CLI helpers, or generic provider framework.
   - Validate with `pnpm run skills:validate`, `pnpm ax skills validate --profile personal`, and `pnpm ax skills validate --profile work`.
-- [ ] 1.3 Align durable rules and provider adapters.
+- [x] 1.3 Align durable rules and provider adapters.
   - Update `rules/git-and-review.md` and any necessary adjacent workflow wording.
   - Update `skills/github-pr-create/SKILL.md` and `skills/glab-mr-create/SKILL.md` so neutral requests delegate to `change-request-create`.
   - Keep direct provider usage supported with minimal safe body guidance.
