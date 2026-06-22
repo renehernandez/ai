@@ -29,7 +29,7 @@
     - `pnpm ax shim install`
     - `pnpm ax shim status`
     - `~/.local/bin/ax status`
-- [ ] 1.3 Define status health and rooting semantics
+- [x] 1.3 Define status health and rooting semantics
   - Deliverable: Extend `ax status` and runtime root resolution for shim health,
     explicit `--config` behavior, target readiness, runtime failures, and
     executable env var precedence.

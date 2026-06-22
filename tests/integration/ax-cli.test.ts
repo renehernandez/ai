@@ -431,11 +431,23 @@ test("global status reports runtime roots and target OpenSpec readiness", () => 
     );
     assert.match(
       result.stdout,
+      new RegExp(`Lock path: ${escapeRegExp(join(repoRoot, "ax.lock.json"))}`),
+    );
+    assert.match(
+      result.stdout,
+      new RegExp(`Cache path: ${escapeRegExp(join(repoRoot, ".ax", "cache"))}`),
+    );
+    assert.match(
+      result.stdout,
       new RegExp(`Target root: ${escapeRegExp(realPathIfPossible(targetDir))}`),
     );
     assert.match(result.stdout, /\[ok\] Executable link:/);
+    assert.match(result.stdout, /Shim/);
+    assert.match(result.stdout, /\[missing\] Managed shim/);
     assert.match(result.stdout, /Reusable script/);
     assert.match(result.stdout, /OpenSpec/);
+    assert.match(result.stdout, /Health/);
+    assert.match(result.stdout, /\[warning\] Managed shim is not installed/);
     assert.match(
       result.stdout,
       /\[missing\] OpenSpec config: openspec\/config.yaml/,
@@ -443,6 +455,149 @@ test("global status reports runtime roots and target OpenSpec readiness", () => 
   } finally {
     rmSync(targetDir, { force: true, recursive: true });
   }
+});
+
+test("global status keeps default lock and cache roots under source root with explicit config", () => {
+  const targetDir = mkdtempSync(join(tmpdir(), "ax-status-target-"));
+  try {
+    withFixture(
+      ({ configPath }) => {
+        const install = runAgentRuntime([
+          "skills",
+          "install",
+          "--all-profiles",
+          "--config",
+          configPath,
+        ]);
+        assert.equal(install.status, 0, install.stderr || install.stdout);
+
+        const result = runAgentRuntimeBin(["status", "--config", configPath], {
+          cwd: targetDir,
+          env: addOpenSpecStub(targetDir),
+        });
+
+        assert.equal(result.status, 0, result.stderr || result.stdout);
+        assert.match(
+          result.stdout,
+          new RegExp(`Config path: ${escapeRegExp(configPath)}`),
+        );
+        assert.match(
+          result.stdout,
+          new RegExp(
+            `Lock path: ${escapeRegExp(join(repoRoot, "ax.lock.json"))}`,
+          ),
+        );
+        assert.match(
+          result.stdout,
+          new RegExp(
+            `Cache path: ${escapeRegExp(join(repoRoot, ".ax", "cache"))}`,
+          ),
+        );
+        assert.match(
+          result.stdout,
+          new RegExp(
+            `Target root: ${escapeRegExp(realPathIfPossible(targetDir))}`,
+          ),
+        );
+      },
+      (config) => {
+        const runtime = config.runtime as Record<string, unknown>;
+        delete runtime.lockFile;
+      },
+    );
+  } finally {
+    rmSync(targetDir, { force: true, recursive: true });
+  }
+});
+
+test("global status honors explicit profile selection", () => {
+  withFixture(({ configPath }) => {
+    const install = runAgentRuntime([
+      "skills",
+      "install",
+      "--profile",
+      "work",
+      "--config",
+      configPath,
+    ]);
+    assert.equal(install.status, 0, install.stderr || install.stdout);
+
+    const result = runAgentRuntime([
+      "status",
+      "--profile",
+      "work",
+      "--config",
+      configPath,
+    ]);
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /AX/);
+    assert.match(result.stdout, /Validated 1 profile/);
+    assert.match(result.stdout, /Profile work/);
+    assert.doesNotMatch(result.stdout, /Profile personal/);
+    assert.match(result.stdout, /Skills/);
+    assert.match(result.stdout, /Instructions/);
+    assert.match(result.stdout, /Hooks/);
+    assert.match(result.stdout, /OpenSpec/);
+    assert.match(result.stdout, /Health/);
+  });
+});
+
+test("global status reports shim target failures with non-zero exit", () => {
+  withTempHome((homeDir) => {
+    const localBin = join(homeDir, ".local", "bin");
+    const shimPath = join(localBin, "ax");
+    const staleRoot = join(homeDir, ".codex", "worktrees", "old", "ai");
+    mkdirSync(localBin, { recursive: true });
+    writeFileSync(
+      shimPath,
+      [
+        "#!/bin/sh",
+        "# AX_MANAGED_SHIM",
+        `# AX_SOURCE_ROOT=${staleRoot}`,
+        `exec '${join(staleRoot, "bin", "ax.mjs")}' "$@"`,
+        "",
+      ].join("\n"),
+      "utf-8",
+    );
+    chmodSync(shimPath, 0o755);
+
+    const result = runAgentRuntimeBin(["status"], {
+      env: {
+        HOME: homeDir,
+        PATH: `${localBin}${delimiter}${process.env.PATH ?? ""}`,
+      },
+    });
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout, /\[stale\] Source root:/);
+    assert.match(result.stdout, /\[detached\] Source root appears/);
+    assert.match(result.stdout, /\[failure\] Managed shim source root/);
+    assert.match(result.stderr, /AX status detected runtime failures/);
+  });
+});
+
+test("global status reports missing reusable script targets as runtime failures", () => {
+  withFixture(({ configPath, runtimeDir }) => {
+    const install = runAgentRuntime([
+      "skills",
+      "install",
+      "--all-profiles",
+      "--config",
+      configPath,
+    ]);
+    assert.equal(install.status, 0, install.stderr || install.stdout);
+    rmSync(join(runtimeDir, "scripts", "nitro-feedback-gate.ts"), {
+      force: true,
+    });
+
+    const status = runAgentRuntime(["status", "--config", configPath]);
+
+    assert.notEqual(status.status, 0);
+    assert.match(status.stdout, /\[missing\] Reusable script/);
+    assert.match(status.stdout, /\[failure\] \[missing\] Reusable script/);
+    assert.match(status.stderr, /AX status detected runtime failures/);
+  });
 });
 
 test("CLI shows global help", () => {

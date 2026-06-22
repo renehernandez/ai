@@ -269,6 +269,11 @@ export type RuntimeInvocationContext = {
   configPath: string;
 };
 
+type RuntimeHealth = {
+  failures: string[];
+  warnings: string[];
+};
+
 type LockedSkill = {
   sourceType?: "git" | "local";
   url?: string;
@@ -408,8 +413,8 @@ export function executeParsedCommand(input: ParsedArgs): void {
   }
 
   if (!scope) {
-    if (command === "status" && !profileNames?.length && !allProfiles) {
-      runRuntimeStatus(config, runtimeContext);
+    if (command === "status") {
+      runRuntimeStatus(config, runtimeContext, { profileNames, allProfiles });
       return;
     }
     const profileSelection = resolveProfileSelection(config, {
@@ -1345,36 +1350,82 @@ function formatOpenSpecPartialStateError(
 function runRuntimeStatus(
   config: Config,
   context: RuntimeInvocationContext,
+  input: { profileNames?: string[]; allProfiles?: boolean } = {},
 ): void {
-  const profileSelection = {
-    profileNames: configuredProfileNames(config),
-    interactive: false,
-  };
+  const profileSelection =
+    input.profileNames?.length || input.allProfiles
+      ? resolveProfileSelection(config, input)
+      : {
+          profileNames: configuredProfileNames(config),
+          interactive: false,
+        };
+  const health = createRuntimeHealth();
 
   console.log("AX");
   console.log(`Source root: ${context.sourceRoot}`);
   console.log(`Config path: ${context.configPath}`);
+  console.log(`Lock path: ${runtimeRootedPath(context, lockFileFor(config))}`);
+  console.log(`Cache path: ${runtimeRootedPath(context, CACHE_DIR)}`);
   console.log(`Target root: ${context.targetRoot}`);
   console.log(`Executable path: ${context.executablePath || "(unknown)"}`);
+  if (!existsSync(context.sourceRoot)) {
+    recordRuntimeFailure(health, `Missing source root: ${context.sourceRoot}`);
+  }
   printExecutableLinkStatus(context);
   console.log("");
 
+  console.log("Shim");
+  statusShim(context, health);
+  console.log("");
+
   console.log("Skills");
-  runSkills("status", config, profileSelection);
+  const skillsOutput = captureConsoleOutput(() =>
+    runSkills("status", config, profileSelection),
+  );
+  printCapturedOutput(skillsOutput);
+  collectRuntimeSurfaceFindings(health, skillsOutput);
   console.log("");
 
   console.log("Instructions");
-  runInstructions("status", config, profileSelection);
+  const instructionsOutput = captureConsoleOutput(() =>
+    runInstructions("status", config, profileSelection),
+  );
+  printCapturedOutput(instructionsOutput);
+  collectRuntimeSurfaceFindings(health, instructionsOutput);
   console.log("");
 
   console.log("Hooks");
-  runHooks("status", config);
+  const hooksOutput = captureConsoleOutput(() => runHooks("status", config));
+  printCapturedOutput(hooksOutput);
+  collectRuntimeSurfaceFindings(health, hooksOutput);
   console.log("");
 
   console.log("OpenSpec");
-  withWorkingDirectory(context.targetRoot, () => {
-    runOpenSpec("status", config);
+  let openSpecError: unknown;
+  const openSpecOutput = captureConsoleOutput(() => {
+    try {
+      withWorkingDirectory(context.targetRoot, () => {
+        runOpenSpec("status", config);
+      });
+    } catch (error) {
+      openSpecError = error;
+    }
   });
+  printCapturedOutput(openSpecOutput);
+  collectRuntimeSurfaceFindings(health, openSpecOutput);
+  if (openSpecError) {
+    const message =
+      openSpecError instanceof Error
+        ? openSpecError.message
+        : String(openSpecError);
+    recordRuntimeFailure(health, `OpenSpec status failed: ${message}`);
+  }
+  printRuntimeHealth(health);
+  if (health.failures.length > 0) {
+    throw new Error(
+      `AX status detected runtime failures:\n${health.failures.map((failure) => `- ${failure}`).join("\n")}`,
+    );
+  }
 }
 
 function printExecutableLinkStatus(context: RuntimeInvocationContext): void {
@@ -1436,7 +1487,10 @@ function uninstallShim(context: RuntimeInvocationContext): void {
   statusShim(context);
 }
 
-function statusShim(context: RuntimeInvocationContext): void {
+function statusShim(
+  context: RuntimeInvocationContext,
+  health?: RuntimeHealth,
+): void {
   const shimPath = managedShimPath();
   const shimDirectory = dirname(shimPath);
   const stats = lstatIfExists(shimPath);
@@ -1456,8 +1510,19 @@ function statusShim(context: RuntimeInvocationContext): void {
   console.log(
     `${stats ? (managed ? "[ok]" : "[unmanaged]") : "[missing]"} Managed shim`,
   );
+  if (!stats) {
+    recordRuntimeWarning(health, `Managed shim is not installed: ${shimPath}`);
+  } else if (!managed) {
+    recordRuntimeFailure(health, `Unmanaged ax file exists at ${shimPath}`);
+  }
   if (stats) {
     console.log(`${executable ? "[ok]" : "[not-executable]"} Executable bit`);
+    if (!executable) {
+      recordRuntimeFailure(
+        health,
+        `Managed shim is not executable: ${shimPath}`,
+      );
+    }
   }
   if (managed) {
     const sourceRoot = managedShimSourceRoot(shimPath);
@@ -1465,12 +1530,26 @@ function statusShim(context: RuntimeInvocationContext): void {
       `${sourceRoot === context.sourceRoot ? "[ok]" : "[stale]"} Source root: ${sourceRoot}`,
     );
     console.log(`Expected source root: ${context.sourceRoot}`);
+    if (sourceRoot !== context.sourceRoot) {
+      recordRuntimeFailure(
+        health,
+        `Managed shim source root does not match this runtime: ${sourceRoot}`,
+      );
+    }
     if (sourceRoot !== "(unknown)" && !existsSync(sourceRoot)) {
       console.log(`[stale] Source root path missing: ${sourceRoot}`);
+      recordRuntimeFailure(
+        health,
+        `Managed shim source root path is missing: ${sourceRoot}`,
+      );
     }
     if (isDisposableWorktreePath(sourceRoot)) {
       console.log(
         `[detached] Source root appears to be a disposable worktree: ${sourceRoot}`,
+      );
+      recordRuntimeFailure(
+        health,
+        `Managed shim source root is a disposable worktree: ${sourceRoot}`,
       );
     }
   }
@@ -1478,6 +1557,7 @@ function statusShim(context: RuntimeInvocationContext): void {
     `${pathEntries.includes(shimDirectory) ? "[ok]" : "[missing]"} PATH includes ${shimDirectory}`,
   );
   if (!pathEntries.includes(shimDirectory)) {
+    recordRuntimeWarning(health, `${shimDirectory} is not on PATH`);
     console.log(
       `Add to your shell profile: export PATH="${shimDirectory}:$PATH"`,
     );
@@ -1499,6 +1579,7 @@ function statusShim(context: RuntimeInvocationContext): void {
   }
   if (firstAx && firstAx !== shimPath) {
     console.log(`[warning] ${firstAx} shadows the managed AX shim.`);
+    recordRuntimeWarning(health, `${firstAx} shadows ${shimPath}`);
   }
 }
 
@@ -1536,6 +1617,86 @@ function isDisposableWorktreePath(path: string): boolean {
   return (
     path.split(sep).includes(".codex") && path.split(sep).includes("worktrees")
   );
+}
+
+function createRuntimeHealth(): RuntimeHealth {
+  return { failures: [], warnings: [] };
+}
+
+function recordRuntimeFailure(
+  health: RuntimeHealth | undefined,
+  finding: string,
+): void {
+  health?.failures.push(finding);
+}
+
+function recordRuntimeWarning(
+  health: RuntimeHealth | undefined,
+  finding: string,
+): void {
+  health?.warnings.push(finding);
+}
+
+function runtimeRootedPath(
+  context: RuntimeInvocationContext,
+  path: string,
+): string {
+  return isAbsolute(path) ? path : resolve(context.sourceRoot, path);
+}
+
+function captureConsoleOutput(callback: () => void): string[] {
+  const originalLog = console.log;
+  const output: string[] = [];
+  console.log = (...args: unknown[]) => {
+    output.push(args.map(String).join(" "));
+  };
+  try {
+    callback();
+  } finally {
+    console.log = originalLog;
+  }
+  return output;
+}
+
+function printCapturedOutput(output: string[]): void {
+  for (const line of output) {
+    console.log(line);
+  }
+}
+
+function collectRuntimeSurfaceFindings(
+  health: RuntimeHealth,
+  output: string[],
+): void {
+  for (const line of output) {
+    if (line.includes("[missing] Hook source")) {
+      recordRuntimeFailure(health, line);
+    }
+    if (line.includes("[missing] Reusable script")) {
+      recordRuntimeFailure(health, line);
+    }
+    if (line.includes("[not-symlink]")) {
+      recordRuntimeFailure(health, line);
+    }
+    if (line.includes("[wrong-target]")) {
+      recordRuntimeFailure(health, line);
+    }
+  }
+}
+
+function printRuntimeHealth(health: RuntimeHealth): void {
+  console.log("");
+  console.log("Health");
+  if (health.failures.length === 0 && health.warnings.length === 0) {
+    console.log("[ok] Runtime health");
+    return;
+  }
+  for (const warning of health.warnings) {
+    console.log(`[warning] ${warning}`);
+  }
+  for (const failure of health.failures) {
+    console.log(`[failure] ${failure}`);
+  }
 }
 
 function withWorkingDirectory<T>(directory: string, callback: () => T): T {
