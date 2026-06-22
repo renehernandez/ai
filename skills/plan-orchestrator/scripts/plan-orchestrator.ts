@@ -322,12 +322,6 @@ function validateResume(input: string): void {
   if (stackArtifacts.length === 0) {
     errors.push("orchestrator_resume.implementation_stack is required");
   }
-  errors.push(
-    ...fullscriptGitLabMergeRequestErrors(
-      stackArtifacts,
-      "delivery_blocked: unsupported stack/review host; orchestrator_resume implementation_stack artifacts must be Fullscript GitLab merge requests",
-    ),
-  );
   if (!roles.includes("planning") || !roles.includes("implementation")) {
     errors.push(
       "orchestrator_resume.implementation_stack must include planning and implementation roles",
