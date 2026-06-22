@@ -26,3 +26,45 @@ for (const file of ["AGENTS.md", "instructions/AGENTS.md"] as const) {
     assert.match(text, /shared skill, agent, instruction, or rule sources/);
   });
 }
+
+for (const file of [
+  "AGENTS.md",
+  "instructions/AGENTS.md",
+  "rules/feature-delivery.md",
+] as const) {
+  test(`${file} pins plan-orchestrator terminal states`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /plan-orchestrator/);
+    assert.match(text, /stack_ready/);
+    assert.match(text, /delivery_blocked/);
+    assert.match(text, /not terminal success/);
+  });
+}
+
+for (const file of [
+  "skills/plan-ready/SKILL.md",
+  "skills/plan-ready/agents/openai.yaml",
+] as const) {
+  test(`${file} keeps readiness separate from orchestrator completion`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /readiness is not terminal completion/i);
+    assert.match(text, /stack_ready/);
+    assert.match(text, /delivery_blocked/);
+  });
+}
+
+for (const file of [
+  "skills/plan-review/SKILL.md",
+  "skills/plan-review/agents/openai.yaml",
+] as const) {
+  test(`${file} keeps planning review separate from orchestrator completion`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /planning_review/);
+    assert.match(text, /not terminal success/i);
+    assert.match(text, /stack_ready/);
+    assert.match(text, /delivery_blocked/);
+  });
+}

@@ -159,18 +159,31 @@ function printResumeTemplate(): void {
 
 \`\`\`yaml
 orchestrator_resume:
-  status: inspected
+  status: resume_ready | delivery_blocked
   intake: ready_plan | openspec_blueprint | existing_openspec | continue_resume
   planning_artifact: <plan file or OpenSpec change>
   planning_review_state: reviewed | missing | blocked
   planning_artifact_ref: <Fullscript GitLab planning MR URL>
   current_stack_tip: <Fullscript GitLab stack-tip MR URL>
   task_state_fingerprint: <sha256 of stack-tip task state>
+  task_state:
+    fingerprint: <sha256 of stack-tip task state>
+    tasks_markdown: |
+      ## 1. Implementation
+
+      - [x] 1.1 Delivered task
+      - [ ] 1.2 Undelivered future task
+  task_artifacts:
+    - task_id: "1.1"
+      artifact: <implementation MR URL for task 1.1>
   implementation_stack:
     - artifact: <Fullscript GitLab planning or implementation MR URL>
       role: planning | implementation
       head_sha: <latest head sha>
       nitro_gate_outcome: passed | blocked | pending
+      predecessor_artifact: <previous stack MR URL or empty for planning>
+      task_delta_validated: true | false
+      cumulative_task_state_valid: true | false
   restack_required: false
   restack_evidence:
     - <evidence no earlier MR changed after descendants>
@@ -227,6 +240,7 @@ stack_ready:
 function validateResume(input: string): void {
   const body = extractYaml(input);
   const section = extractSection(body, "orchestrator_resume");
+  const taskState = extractSection(section, "task_state");
   const errors: string[] = [];
   const status = scalar(section, "status");
   const intake = scalar(section, "intake");
@@ -234,8 +248,14 @@ function validateResume(input: string): void {
   const planningArtifactRef = scalar(section, "planning_artifact_ref");
   const currentStackTip = scalar(section, "current_stack_tip");
   const restackRequired = scalar(section, "restack_required");
+  const tasksMarkdown = blockScalar(taskState, "tasks_markdown");
+  const taskArtifacts = taskArtifactEvidence(section);
   const stackArtifacts = allScalars(section, "artifact");
+  const roles = allScalars(section, "role");
   const nitroStates = allScalars(section, "nitro_gate_outcome");
+  const implementationEntries = implementationStackEntries(section).filter(
+    (entry) => entry.role === "implementation",
+  );
   const restackEvidence = list(section, "restack_evidence");
   const blockers = list(section, "blockers");
 
@@ -256,6 +276,11 @@ function validateResume(input: string): void {
     "orchestrator_resume.current_stack_tip",
     errors,
   );
+  requireValue(
+    scalar(taskState, "fingerprint"),
+    "orchestrator_resume.task_state.fingerprint",
+    errors,
+  );
   requireValue(restackRequired, "orchestrator_resume.restack_required", errors);
   const unsupportedArtifacts = [
     planningArtifactRef,
@@ -268,8 +293,10 @@ function validateResume(input: string): void {
     );
   }
 
-  if (status && status !== "inspected") {
-    errors.push("orchestrator_resume.status must be inspected");
+  if (status && !["resume_ready", "delivery_blocked"].includes(status)) {
+    errors.push(
+      "orchestrator_resume.status must be resume_ready or delivery_blocked",
+    );
   }
   if (
     intake &&
@@ -295,6 +322,11 @@ function validateResume(input: string): void {
   if (stackArtifacts.length === 0) {
     errors.push("orchestrator_resume.implementation_stack is required");
   }
+  if (!roles.includes("planning") || !roles.includes("implementation")) {
+    errors.push(
+      "orchestrator_resume.implementation_stack must include planning and implementation roles",
+    );
+  }
   if (
     nitroStates.some(
       (state) => !["passed", "blocked", "pending"].includes(state),
@@ -310,9 +342,61 @@ function validateResume(input: string): void {
   if (restackEvidence.length === 0) {
     errors.push("orchestrator_resume.restack_evidence is required");
   }
-  if (blockers.length > 0 && planningReviewState === "reviewed") {
+
+  if (status === "resume_ready") {
+    if (planningReviewState !== "reviewed") {
+      errors.push(
+        "orchestrator_resume.planning_review_state must be reviewed when status is resume_ready",
+      );
+    }
+    if (nitroStates.some((state) => state !== "passed")) {
+      errors.push(
+        "orchestrator_resume.implementation_stack nitro_gate_outcome must be passed before resume_ready",
+      );
+    }
+    if (restackRequired !== "false") {
+      errors.push(
+        "orchestrator_resume.restack_required must be false before resume_ready",
+      );
+    }
+    if (blockers.length > 0) {
+      errors.push(
+        "orchestrator_resume.blockers must be empty before resume_ready",
+      );
+    }
+    const missingPredecessorArtifacts = implementationEntries.filter(
+      (entry) => !entry.predecessorArtifact,
+    );
+    if (missingPredecessorArtifacts.length > 0) {
+      errors.push(
+        "orchestrator_resume.implementation_stack predecessor_artifact evidence is required before resume_ready",
+      );
+    }
+    const invalidTaskDeltaEntries = implementationEntries.filter(
+      (entry) => entry.taskDeltaValidated !== "true",
+    );
+    if (invalidTaskDeltaEntries.length > 0) {
+      errors.push(
+        "orchestrator_resume.implementation_stack task_delta_validated must be true for every implementation artifact before resume_ready",
+      );
+    }
+    const invalidCumulativeTaskEntries = implementationEntries.filter(
+      (entry) => entry.cumulativeTaskStateValid !== "true",
+    );
+    if (invalidCumulativeTaskEntries.length > 0) {
+      errors.push(
+        "orchestrator_resume.implementation_stack cumulative_task_state_valid must be true before resume_ready",
+      );
+    }
     errors.push(
-      "orchestrator_resume.blockers must be empty when planning is reviewed",
+      ...validateStackTipTaskState(tasksMarkdown ?? "", taskArtifacts, {
+        context: "orchestrator_resume",
+        requireAllDeliverablesChecked: false,
+      }),
+    );
+  } else if (status === "delivery_blocked" && blockers.length === 0) {
+    errors.push(
+      "orchestrator_resume.blockers must explain why resume is delivery_blocked",
     );
   }
 
@@ -502,6 +586,84 @@ function taskArtifactEvidence(input: string): TaskArtifactEvidence[] {
     const artifact = line.match(/^\s*artifact:\s*(.+?)\s*$/);
     if (artifact && current) {
       current.artifact = cleanInlineScalar(artifact[1]);
+    }
+  }
+
+  if (current) {
+    entries.push(current);
+  }
+
+  return entries;
+}
+
+function implementationStackEntries(input: string): Array<{
+  artifact: string;
+  role?: string;
+  predecessorArtifact?: string;
+  taskDeltaValidated?: string;
+  cumulativeTaskStateValid?: string;
+}> {
+  const stack = extractSection(input, "implementation_stack");
+  const entries: Array<{
+    artifact: string;
+    role?: string;
+    predecessorArtifact?: string;
+    taskDeltaValidated?: string;
+    cumulativeTaskStateValid?: string;
+  }> = [];
+  let current:
+    | {
+        artifact: string;
+        role?: string;
+        predecessorArtifact?: string;
+        taskDeltaValidated?: string;
+        cumulativeTaskStateValid?: string;
+      }
+    | undefined;
+
+  for (const line of stack.split(/\r?\n/)) {
+    const artifact = line.match(/^\s*-\s+artifact:\s*(.+?)\s*$/);
+    if (artifact) {
+      if (current) {
+        entries.push(current);
+      }
+      current = { artifact: cleanInlineScalar(artifact[1]) };
+      continue;
+    }
+
+    if (!current) {
+      continue;
+    }
+
+    const role = line.match(/^\s*role:\s*(.+?)\s*$/);
+    if (role) {
+      current.role = cleanInlineScalar(role[1]);
+      continue;
+    }
+
+    const predecessorArtifact = line.match(
+      /^\s*predecessor_artifact:\s*(.*?)\s*$/,
+    );
+    if (predecessorArtifact) {
+      current.predecessorArtifact = cleanInlineScalar(predecessorArtifact[1]);
+      continue;
+    }
+
+    const taskDeltaValidated = line.match(
+      /^\s*task_delta_validated:\s*(.+?)\s*$/,
+    );
+    if (taskDeltaValidated) {
+      current.taskDeltaValidated = cleanInlineScalar(taskDeltaValidated[1]);
+      continue;
+    }
+
+    const cumulativeTaskStateValid = line.match(
+      /^\s*cumulative_task_state_valid:\s*(.+?)\s*$/,
+    );
+    if (cumulativeTaskStateValid) {
+      current.cumulativeTaskStateValid = cleanInlineScalar(
+        cumulativeTaskStateValid[1],
+      );
     }
   }
 

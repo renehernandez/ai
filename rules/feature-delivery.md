@@ -39,7 +39,10 @@ Review-first plan workflows are the exception to ordinary direct-publish or
 implementation-first handling. When `plan-orchestrator`, `plan-review`, or an
 approved plan workflow requires Nitro-reviewed stacked delivery, create the
 planning MR first, wait for the required Nitro-clean planning-review gate, and
-only then continue to stacked implementation sequencing.
+only then continue to stacked implementation sequencing. A `plan-orchestrator`
+run may finish only with `stack_ready` for the full reviewed stack or
+`delivery_blocked` with evidence. One delivered OpenSpec task, `plan-ready`
+output, or `planning_review` handoff is not terminal success.
 
 When review feedback, CI, or browser checks expose missing coverage, apply the
 Fastest Durable Regression rule in `rules/testing-and-verification.md` before

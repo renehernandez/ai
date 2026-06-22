@@ -1,0 +1,38 @@
+orchestrator_resume:
+  status: delivery_blocked
+  intake: existing_openspec
+  planning_artifact: openspec/changes/example-change
+  planning_review_state: reviewed
+  planning_artifact_ref: https://git.fullscript.io/group/project/-/merge_requests/1
+  current_stack_tip: https://git.fullscript.io/group/project/-/merge_requests/2
+  task_state_fingerprint: feedface
+  task_state:
+    fingerprint: feedface
+    tasks_markdown: |
+      ## 1. Example Change
+
+      - [x] 1.1 First deliverable
+      - [ ] 1.2 Future deliverable
+  task_artifacts:
+    - task_id: "1.1"
+      artifact: https://git.fullscript.io/group/project/-/merge_requests/2
+  implementation_stack:
+    - artifact: https://git.fullscript.io/group/project/-/merge_requests/1
+      role: planning
+      head_sha: def456
+      nitro_gate_outcome: passed
+      predecessor_artifact:
+      task_delta_validated: true
+      cumulative_task_state_valid: true
+    - artifact: https://git.fullscript.io/group/project/-/merge_requests/2
+      role: implementation
+      head_sha: abc789
+      nitro_gate_outcome: passed
+      predecessor_artifact: https://git.fullscript.io/group/project/-/merge_requests/1
+      task_delta_validated: true
+      cumulative_task_state_valid: true
+  restack_required: false
+  restack_evidence:
+    - no earlier MR changed after descendants
+  blockers:
+    - session handoff occurred before stack_ready and must resume from verified predecessor state
