@@ -25,7 +25,7 @@
       already committed source-plan blocking, OpenSpec planning-diff rejection,
       deletion-only diff rejection, and atomic plan acceptance. Depends on 1.2.
 
-- [ ] 1.4 Validate skill quality and refresh runtime surfaces
+- [x] 1.4 Validate skill quality and refresh runtime surfaces
       Run `writing-skills` against the changed planning skill behavior, address
       blocking findings, refresh installed runtime skill surfaces for personal
       and work profiles when live runtime refresh is intended, and verify the
