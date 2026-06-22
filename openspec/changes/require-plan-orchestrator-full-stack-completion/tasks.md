@@ -7,7 +7,7 @@
       with routing evidence. `plan-orchestrator/SKILL.md` must explicitly add
       `delivery_blocked` as an orchestrator-level terminal state, not leave it
       only in the sequencer vocabulary.
-- [ ] 1.2 Define shared stack-state evidence helpers
+- [x] 1.2 Define shared stack-state evidence helpers
       Add or extract shared helpers for OpenSpec task inventory, stack artifact
       parsing, gate evidence, and task-delta validation. Reuse these helpers
       from orchestrator, sequencer, and delivery scripts. Depends on 1.1.

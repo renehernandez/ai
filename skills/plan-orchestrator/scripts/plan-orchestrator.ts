@@ -13,6 +13,11 @@ import {
   scalar,
   validatePlanningReviewContract,
 } from "../../../scripts/planning-contracts.ts";
+import {
+  artifactHostHintFromRemoteText,
+  fullscriptGitLabMergeRequestErrors,
+  isFullscriptGitLabMergeRequest,
+} from "../../../scripts/stack-state.ts";
 
 type Command =
   | "detect"
@@ -87,13 +92,7 @@ function detect(): void {
         branch,
         head_sha: headSha,
         remotes: remotes.split("\n").filter(Boolean),
-        artifact_host_hint:
-          remoteText.includes("gitlab") ||
-          remoteText.includes("git.fullscript.io")
-            ? "gitlab"
-            : remoteText.includes("github")
-              ? "github"
-              : null,
+        artifact_host_hint: artifactHostHintFromRemoteText(remoteText),
         plans_dir_present: existsSync(join(repoRoot, ".agents", "plans")),
         openspec_present: existsSync(join(repoRoot, "openspec")),
       },
@@ -368,14 +367,12 @@ function validateStackReady(input: string): void {
       "stack_ready.stack must include planning and implementation artifacts",
     );
   }
-  const unsupportedArtifacts = [stackTip, ...stackArtifacts].filter(
-    (artifact) => artifact && !isFullscriptGitLabMergeRequest(artifact),
-  );
-  if (unsupportedArtifacts.length > 0) {
-    errors.push(
+  errors.push(
+    ...fullscriptGitLabMergeRequestErrors(
+      [stackTip, ...stackArtifacts],
       "delivery_blocked: unsupported stack/review host; stack_ready.stack artifacts must be Fullscript GitLab merge requests",
-    );
-  }
+    ),
+  );
   if (!roles.includes("planning") || !roles.includes("implementation")) {
     errors.push(
       "stack_ready.stack must include planning and implementation roles",
@@ -441,18 +438,6 @@ function isCommand(command: string | undefined): command is Command {
 function git(args: string[]): string | null {
   const result = spawnSync("git", args, { encoding: "utf8" });
   return result.status === 0 ? result.stdout.trim() : null;
-}
-
-function isFullscriptGitLabMergeRequest(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return (
-      url.hostname === "git.fullscript.io" &&
-      /\/-\/merge_requests\/\d+(?:\/)?$/.test(url.pathname)
-    );
-  } catch {
-    return false;
-  }
 }
 
 function allScalars(input: string, key: string): string[] {

@@ -16,9 +16,9 @@ import {
   scalar,
 } from "../../../scripts/planning-contracts.ts";
 import {
-  parseTasks,
-  validateTasks,
-} from "../../openspec-tasks/scripts/openspec-tasks.ts";
+  artifactHostHintFromRemoteText,
+  validateUnitTaskDelta,
+} from "../../../scripts/stack-state.ts";
 
 const BASELINE_REVIEWERS = [
   "implementation-readiness",
@@ -207,12 +207,7 @@ function detect(): void {
     branch,
     head_sha: headSha,
     remotes: remotes.split("\n").filter(Boolean),
-    artifact_host_hint:
-      remoteText.includes("gitlab") || remoteText.includes("git.fullscript.io")
-        ? "gitlab"
-        : remoteText.includes("github")
-          ? "github"
-          : null,
+    artifact_host_hint: artifactHostHintFromRemoteText(remoteText),
     openspec_present: existsSync(join(repoRoot, "openspec")),
   };
 
@@ -496,102 +491,14 @@ function validateTaskDelta(args: string[]): void {
   const basePath = requiredArg(args, "--base");
   const headPath = requiredArg(args, "--head");
   const expectedTaskId = requiredArg(args, "--task");
-  const errors: string[] = [];
-  const baseTasks = parseTasks(readFileSync(basePath, "utf8"));
-  const headTasks = parseTasks(readFileSync(headPath, "utf8"));
-  const baseErrors = validateTasks(baseTasks);
-  const headErrors = validateTasks(headTasks);
-
-  errors.push(
-    ...baseErrors.map((error) => `base tasks.md: ${error}`),
-    ...headErrors.map((error) => `head tasks.md: ${error}`),
+  const delta = validateUnitTaskDelta(
+    readFileSync(basePath, "utf8"),
+    readFileSync(headPath, "utf8"),
+    expectedTaskId,
   );
-
-  const baseById = new Map(baseTasks.map((task) => [task.id, task]));
-  const headById = new Map(headTasks.map((task) => [task.id, task]));
-  const expectedBaseTask = baseById.get(expectedTaskId);
-  const expectedHeadTask = headById.get(expectedTaskId);
-
-  if (!expectedBaseTask || !expectedHeadTask) {
-    errors.push(
-      `unit_task_delta_unexpected: expected task ${expectedTaskId} must exist in both base and head tasks.md`,
-    );
-  }
-
-  for (const baseTask of baseTasks) {
-    if (!headById.has(baseTask.id)) {
-      errors.push(
-        `unit_task_delta_invalid_tasks: task ${baseTask.id} missing from head tasks.md`,
-      );
-    }
-  }
-
-  for (const headTask of headTasks) {
-    if (!baseById.has(headTask.id)) {
-      errors.push(
-        `unit_task_delta_invalid_tasks: task ${headTask.id} missing from base tasks.md`,
-      );
-    }
-  }
-
-  const newlyChecked = headTasks.filter((headTask) => {
-    const baseTask = baseById.get(headTask.id);
-    return baseTask && !baseTask.checked && headTask.checked;
-  });
-  const newlyCheckedDeliverables = newlyChecked.filter(
-    (task) => task.kind === "deliverable",
-  );
-  const uncheckedPreviouslyChecked = baseTasks.filter((baseTask) => {
-    const headTask = headById.get(baseTask.id);
-    return baseTask.checked && headTask && !headTask.checked;
-  });
-
-  for (const task of uncheckedPreviouslyChecked) {
-    errors.push(
-      `unit_task_delta_invalid_tasks: task ${task.id} was unchecked relative to base`,
-    );
-  }
-
-  if (expectedBaseTask?.checked && expectedHeadTask?.checked) {
-    errors.push(
-      `unit_task_delta_unexpected: expected task ${expectedTaskId} was already checked in base`,
-    );
-  } else if (expectedHeadTask && !expectedHeadTask.checked) {
-    errors.push(
-      `unit_task_delta_missing: expected task ${expectedTaskId} was not checked`,
-    );
-  }
-
-  if (newlyCheckedDeliverables.length > 1) {
-    errors.push(
-      `unit_task_delta_multiple: checked deliverable tasks ${newlyCheckedDeliverables.map((task) => task.id).join(", ")}`,
-    );
-  }
-
-  if (
-    newlyCheckedDeliverables.length === 1 &&
-    newlyCheckedDeliverables[0].id !== expectedTaskId
-  ) {
-    errors.push(
-      `unit_task_delta_unexpected: checked ${newlyCheckedDeliverables[0].id} instead of ${expectedTaskId}`,
-    );
-  }
-
-  const unexpectedNewlyChecked = newlyChecked.filter(
-    (task) => task.id !== expectedTaskId,
-  );
-  if (
-    unexpectedNewlyChecked.length > 0 &&
-    newlyCheckedDeliverables.length <= 1
-  ) {
-    errors.push(
-      `unit_task_delta_unexpected: checked extra tasks ${unexpectedNewlyChecked.map((task) => task.id).join(", ")}`,
-    );
-  }
-
-  if (errors.length > 0) {
+  if (delta.errors.length > 0) {
     console.error(
-      `Invalid unit_task_delta:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+      `Invalid unit_task_delta:\n${delta.errors.map((error) => `- ${error}`).join("\n")}`,
     );
     process.exit(1);
   }
@@ -600,7 +507,7 @@ function validateTaskDelta(args: string[]): void {
     JSON.stringify(
       {
         status: "unit_task_delta_valid",
-        added_task: expectedHeadTask,
+        added_task: delta.addedTask,
       },
       null,
       2,

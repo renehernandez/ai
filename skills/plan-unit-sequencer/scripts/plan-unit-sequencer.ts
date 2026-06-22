@@ -14,6 +14,7 @@ import {
   scalar,
   validatePlanningReviewContract,
 } from "../../../scripts/planning-contracts.ts";
+import { artifactHostHintFromRemoteText } from "../../../scripts/stack-state.ts";
 import {
   firstUncheckedDeliverable,
   parseTasks,
@@ -89,13 +90,7 @@ function detect(): void {
         branch,
         head_sha: headSha,
         remotes: remotes.split("\n").filter(Boolean),
-        artifact_host_hint:
-          remoteText.includes("gitlab") ||
-          remoteText.includes("git.fullscript.io")
-            ? "gitlab"
-            : remoteText.includes("github")
-              ? "github"
-              : null,
+        artifact_host_hint: artifactHostHintFromRemoteText(remoteText),
         openspec_present: existsSync(join(repoRoot, "openspec")),
       },
       null,
