@@ -8,7 +8,7 @@
           "localPath": "skills",
           "resolvedCommit": "701bd5b647007a91a1c6163f592a272ac5414c6e",
           "skillPath": "skills/agent-runtime-cli",
-          "contentHash": "b5451575ac905de1c61e1eeef5e24a7d6b3f953ed4367080e1c0cec7a8742b6a"
+          "contentHash": "c2931c35bc489ac84578e24ab2d583b09903feacdd1bf8ae2ff01ba922dd336e"
         },
         "agents-sdk": {
           "sourceType": "git",
@@ -313,7 +313,7 @@
           "localPath": "skills",
           "resolvedCommit": "701bd5b647007a91a1c6163f592a272ac5414c6e",
           "skillPath": "skills/agent-runtime-cli",
-          "contentHash": "b5451575ac905de1c61e1eeef5e24a7d6b3f953ed4367080e1c0cec7a8742b6a"
+          "contentHash": "c2931c35bc489ac84578e24ab2d583b09903feacdd1bf8ae2ff01ba922dd336e"
         },
         "agents-sdk": {
           "sourceType": "git",

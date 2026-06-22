@@ -5,7 +5,8 @@
     "skillSymlinkTargets": ["~/.claude/skills"],
     "reusableScripts": [
       "scripts/nitro-feedback-gate.ts",
-      "scripts/planning-contracts.ts"
+      "scripts/planning-contracts.ts",
+      "scripts/stack-state.ts"
     ],
     "instructionSymlinkTargets": {
       "agents": "~/.agents",

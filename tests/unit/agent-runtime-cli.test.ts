@@ -202,6 +202,7 @@ test("runtime config manages helper scripts imported by installed planning skill
   for (const helper of [
     "scripts/nitro-feedback-gate.ts",
     "scripts/planning-contracts.ts",
+    "scripts/stack-state.ts",
   ]) {
     assert.ok(reusableScripts.has(helper), `${helper} must be reusable`);
   }

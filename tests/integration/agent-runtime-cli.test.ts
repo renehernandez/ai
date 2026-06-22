@@ -75,6 +75,14 @@ function withFixture(
       sourcePath: join(repoRoot, "scripts/planning-contracts.ts"),
       targetPath: "scripts/planning-contracts.ts",
     },
+    {
+      sourcePath: join(repoRoot, "scripts/nitro-feedback-gate.ts"),
+      targetPath: "scripts/nitro-feedback-gate.ts",
+    },
+    {
+      sourcePath: join(repoRoot, "scripts/stack-state.ts"),
+      targetPath: "scripts/stack-state.ts",
+    },
   ];
   runtime.lockFile = join(runtimeDir, "lock.json");
   runtime.instructionSymlinkTargets = {
@@ -216,6 +224,36 @@ function findBackupManifest(
 function cachePathForUrl(directory: string, url: string): string {
   const hash = createHash("sha256").update(url).digest("hex").slice(0, 16);
   return join(directory, ".agent-runtime", "cache", `skills-${hash}`);
+}
+
+function configureLocalSkillWithScript(
+  config: FixtureConfig,
+  runtimeDir: string,
+  scriptContent: string,
+): void {
+  const localSkillsDir = join(runtimeDir, "local-skills");
+  mkdirSync(join(localSkillsDir, "needs-script", "scripts"), {
+    recursive: true,
+  });
+  writeFileSync(
+    join(localSkillsDir, "needs-script", "SKILL.md"),
+    "---\nname: needs-script\n---\n",
+    "utf-8",
+  );
+  writeFileSync(
+    join(localSkillsDir, "needs-script", "scripts", "entry.ts"),
+    scriptContent,
+    "utf-8",
+  );
+
+  config.blocks = {
+    local: {
+      skills: [{ localPath: localSkillsDir, names: ["needs-script"] }],
+    },
+  };
+  config.profiles = {
+    personal: { include: ["local"], paths: ["AGENTS.md"] },
+  };
 }
 
 function addOpenSpecStub(
@@ -1891,6 +1929,353 @@ process.stdout.write(marker);
       };
       config.profiles = {
         personal: { include: ["local"], paths: ["AGENTS.md"] },
+      };
+    },
+  );
+});
+
+test("CLI validates local skill reusable script imports", () => {
+  withFixture(
+    ({ configPath }) => {
+      const result = runAgentRuntime([
+        "skills",
+        "validate",
+        "--profile",
+        "personal",
+        "--config",
+        configPath,
+      ]);
+
+      assert.notEqual(result.status, 0);
+      assert.match(
+        result.stderr,
+        /Skill needs-script imports reusable runtime script scripts\/nitro-feedback-gate\.ts, but it is not listed in runtime\.reusableScripts/,
+      );
+    },
+    (config, runtimeDir) => {
+      configureLocalSkillWithScript(
+        config,
+        runtimeDir,
+        `import "../../../scripts/nitro-feedback-gate.ts";
+`,
+      );
+
+      const runtime = config.runtime as Record<string, unknown>;
+      runtime.reusableScripts = [
+        {
+          sourcePath: join(repoRoot, "scripts/planning-contracts.ts"),
+          targetPath: "scripts/planning-contracts.ts",
+        },
+      ];
+    },
+  );
+});
+
+test("CLI validates multi-line local skill reusable script imports", () => {
+  withFixture(
+    ({ configPath }) => {
+      const result = runAgentRuntime([
+        "skills",
+        "validate",
+        "--profile",
+        "personal",
+        "--config",
+        configPath,
+      ]);
+
+      assert.notEqual(result.status, 0);
+      assert.match(
+        result.stderr,
+        /Skill needs-script imports reusable runtime script scripts\/nitro-feedback-gate\.ts, but it is not listed in runtime\.reusableScripts/,
+      );
+    },
+    (config, runtimeDir) => {
+      configureLocalSkillWithScript(
+        config,
+        runtimeDir,
+        `import {
+  normalizeFeedback
+} from "../../../scripts/nitro-feedback-gate.ts";
+`,
+      );
+
+      const runtime = config.runtime as Record<string, unknown>;
+      runtime.reusableScripts = [];
+    },
+  );
+});
+
+test("CLI validates local skill reusable script re-exports", () => {
+  withFixture(
+    ({ configPath }) => {
+      const result = runAgentRuntime([
+        "skills",
+        "validate",
+        "--profile",
+        "personal",
+        "--config",
+        configPath,
+      ]);
+
+      assert.notEqual(result.status, 0);
+      assert.match(
+        result.stderr,
+        /Skill needs-script imports reusable runtime script scripts\/nitro-feedback-gate\.ts, but it is not listed in runtime\.reusableScripts/,
+      );
+    },
+    (config, runtimeDir) => {
+      configureLocalSkillWithScript(
+        config,
+        runtimeDir,
+        `export { normalizeFeedback } from "../../../scripts/nitro-feedback-gate.ts";
+`,
+      );
+
+      const runtime = config.runtime as Record<string, unknown>;
+      runtime.reusableScripts = [];
+    },
+  );
+});
+
+test("CLI accepts declared local skill reusable script imports", () => {
+  withFixture(
+    ({ configPath }) => {
+      const result = runAgentRuntime([
+        "skills",
+        "validate",
+        "--profile",
+        "personal",
+        "--config",
+        configPath,
+      ]);
+
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+    },
+    (config, runtimeDir) => {
+      configureLocalSkillWithScript(
+        config,
+        runtimeDir,
+        `import "../../../scripts/nitro-feedback-gate.ts";
+`,
+      );
+
+      const runtime = config.runtime as Record<string, unknown>;
+      runtime.reusableScripts = [
+        {
+          sourcePath: join(repoRoot, "scripts/nitro-feedback-gate.ts"),
+          targetPath: "./scripts/../scripts/nitro-feedback-gate.ts",
+        },
+      ];
+    },
+  );
+});
+
+test("CLI accepts normalized local skill reusable script imports", () => {
+  withFixture(
+    ({ configPath }) => {
+      const result = runAgentRuntime([
+        "skills",
+        "validate",
+        "--profile",
+        "personal",
+        "--config",
+        configPath,
+      ]);
+
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+    },
+    (config, runtimeDir) => {
+      configureLocalSkillWithScript(
+        config,
+        runtimeDir,
+        `import "../../../scripts/helpers/../nitro-feedback-gate.ts";
+`,
+      );
+
+      const runtime = config.runtime as Record<string, unknown>;
+      runtime.reusableScripts = [
+        {
+          sourcePath: join(repoRoot, "scripts/nitro-feedback-gate.ts"),
+          targetPath: "scripts/nitro-feedback-gate.ts",
+        },
+      ];
+    },
+  );
+});
+
+test("CLI rejects local skill reusable script imports that escape scripts", () => {
+  withFixture(
+    ({ configPath }) => {
+      const result = runAgentRuntime([
+        "skills",
+        "validate",
+        "--profile",
+        "personal",
+        "--config",
+        configPath,
+      ]);
+
+      assert.notEqual(result.status, 0);
+      assert.match(
+        result.stderr,
+        /Skill needs-script imports reusable runtime script escaped\.ts, but it is not listed in runtime\.reusableScripts/,
+      );
+    },
+    (config, runtimeDir) => {
+      configureLocalSkillWithScript(
+        config,
+        runtimeDir,
+        `import "../../../scripts/helpers/../../escaped.ts";
+`,
+      );
+
+      const runtime = config.runtime as Record<string, unknown>;
+      runtime.reusableScripts = [
+        {
+          sourcePath: join(repoRoot, "scripts/nitro-feedback-gate.ts"),
+          targetPath: "scripts/nitro-feedback-gate.ts",
+        },
+      ];
+    },
+  );
+});
+
+test("CLI ignores reusable script references in comments and strings", () => {
+  withFixture(
+    ({ configPath }) => {
+      const result = runAgentRuntime([
+        "skills",
+        "validate",
+        "--profile",
+        "personal",
+        "--config",
+        configPath,
+      ]);
+
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+    },
+    (config, runtimeDir) => {
+      configureLocalSkillWithScript(
+        config,
+        runtimeDir,
+        `// import "../../../scripts/missing-comment.ts";
+/* export { marker } from "../../../scripts/missing-block.ts"; */
+const example = 'import "../../../scripts/missing-string.ts";';
+const template = \`
+import "../../../scripts/missing-template.ts";
+\`;
+`,
+      );
+
+      const runtime = config.runtime as Record<string, unknown>;
+      runtime.reusableScripts = [];
+    },
+  );
+});
+
+test("CLI install rejects undeclared local skill reusable script imports", () => {
+  withFixture(
+    ({ configPath, runtimeDir }) => {
+      const result = runAgentRuntime([
+        "skills",
+        "install",
+        "--profile",
+        "personal",
+        "--config",
+        configPath,
+      ]);
+
+      assert.notEqual(result.status, 0);
+      assert.match(
+        result.stderr,
+        /Skill needs-script imports reusable runtime script scripts\/nitro-feedback-gate\.ts, but it is not listed in runtime\.reusableScripts/,
+      );
+      assert.equal(
+        existsSync(join(runtimeDir, "skills", "needs-script")),
+        false,
+      );
+    },
+    (config, runtimeDir) => {
+      configureLocalSkillWithScript(
+        config,
+        runtimeDir,
+        `import "../../../scripts/nitro-feedback-gate.ts";
+`,
+      );
+
+      const runtime = config.runtime as Record<string, unknown>;
+      runtime.reusableScripts = [];
+    },
+  );
+});
+
+test("CLI update rejects undeclared local skill reusable script imports", () => {
+  withFixture(
+    ({ configPath, runtimeDir }) => {
+      const result = runAgentRuntime([
+        "skills",
+        "update",
+        "--profile",
+        "personal",
+        "--config",
+        configPath,
+      ]);
+
+      assert.notEqual(result.status, 0);
+      assert.match(
+        result.stderr,
+        /Skill needs-script imports reusable runtime script scripts\/nitro-feedback-gate\.ts, but it is not listed in runtime\.reusableScripts/,
+      );
+      assert.equal(
+        existsSync(join(runtimeDir, "skills", "needs-script")),
+        false,
+      );
+    },
+    (config, runtimeDir) => {
+      configureLocalSkillWithScript(
+        config,
+        runtimeDir,
+        `import "../../../scripts/nitro-feedback-gate.ts";
+`,
+      );
+
+      const runtime = config.runtime as Record<string, unknown>;
+      runtime.reusableScripts = [];
+    },
+  );
+});
+
+test("CLI ignores remote skill sources for reusable script import validation", () => {
+  withFixture(
+    ({ configPath }) => {
+      const result = runAgentRuntime([
+        "skills",
+        "validate",
+        "--profile",
+        "personal",
+        "--config",
+        configPath,
+      ]);
+
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+    },
+    (config) => {
+      const runtime = config.runtime as Record<string, unknown>;
+      runtime.reusableScripts = [];
+      config.blocks = {
+        remote: {
+          skills: [
+            {
+              url: "https://example.com/skills.git",
+              ref: "main",
+              basePath: "skills",
+              names: ["remote-needs-script"],
+            },
+          ],
+        },
+      };
+      config.profiles = {
+        personal: { include: ["remote"], paths: ["AGENTS.md"] },
       };
     },
   );
