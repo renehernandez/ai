@@ -11,7 +11,7 @@
       Add or extract shared helpers for OpenSpec task inventory, stack artifact
       parsing, gate evidence, and task-delta validation. Reuse these helpers
       from orchestrator, sequencer, and delivery scripts. Depends on 1.1.
-- [ ] 1.3 Add full-stack completion validation
+- [x] 1.3 Add full-stack completion validation
       Extend `validate-stack-ready` so it parses concrete stack-tip `tasks.md`
       evidence, requires task-to-artifact evidence, rejects self-attested
       completion booleans, rejects checked future tasks without artifacts, and

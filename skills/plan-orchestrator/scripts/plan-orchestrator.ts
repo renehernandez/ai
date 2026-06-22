@@ -17,6 +17,8 @@ import {
   artifactHostHintFromRemoteText,
   fullscriptGitLabMergeRequestErrors,
   isFullscriptGitLabMergeRequest,
+  type TaskArtifactEvidence,
+  validateStackTipTaskState,
 } from "../../../scripts/stack-state.ts";
 
 type Command =
@@ -192,8 +194,17 @@ stack_ready:
   target_branch: main
   stack_tip: <Fullscript GitLab latest implementation MR URL>
   task_state:
-    all_deliverable_tasks_checked: true
     fingerprint: <sha256 of stack-tip task state>
+    tasks_markdown: |
+      ## 1. Implementation
+
+      - [x] 1.1 First deliverable
+      - [x] 1.2 Second deliverable
+  task_artifacts:
+    - task_id: "1.1"
+      artifact: <implementation MR URL for task 1.1>
+    - task_id: "1.2"
+      artifact: <implementation MR URL for task 1.2>
   stack:
     - artifact: <planning MR URL>
       role: planning
@@ -324,6 +335,8 @@ function validateStackReady(input: string): void {
   const restackRequired = scalar(section, "restack_required");
   const allTasksChecked = scalar(taskState, "all_deliverable_tasks_checked");
   const stackTip = scalar(section, "stack_tip");
+  const tasksMarkdown = blockScalar(taskState, "tasks_markdown");
+  const taskArtifacts = taskArtifactEvidence(section);
   const stackArtifacts = allScalars(section, "artifact");
   const roles = allScalars(section, "role");
   const nitroStates = allScalars(section, "nitro_gate_outcome");
@@ -343,11 +356,6 @@ function validateStackReady(input: string): void {
   );
   requireValue(stackTip, "stack_ready.stack_tip", errors);
   requireValue(
-    allTasksChecked,
-    "stack_ready.task_state.all_deliverable_tasks_checked",
-    errors,
-  );
-  requireValue(
     scalar(taskState, "fingerprint"),
     "stack_ready.task_state.fingerprint",
     errors,
@@ -357,11 +365,12 @@ function validateStackReady(input: string): void {
   if (status && status !== "ready") {
     errors.push("stack_ready.status must be ready");
   }
-  if (allTasksChecked !== "true") {
+  if (allTasksChecked !== undefined) {
     errors.push(
-      "stack_ready.task_state.all_deliverable_tasks_checked must be true",
+      "stack_ready.task_state.all_deliverable_tasks_checked is self-attested; provide tasks_markdown instead",
     );
   }
+  errors.push(...validateStackTipTaskState(tasksMarkdown ?? "", taskArtifacts));
   if (stackArtifacts.length < 2) {
     errors.push(
       "stack_ready.stack must include planning and implementation artifacts",
@@ -443,4 +452,66 @@ function git(args: string[]): string | null {
 function allScalars(input: string, key: string): string[] {
   const pattern = new RegExp(`^\\s*(?:-\\s*)?${key}:\\s*(.+?)\\s*$`, "gm");
   return [...input.matchAll(pattern)].map((match) => match[1].trim());
+}
+
+function blockScalar(input: string, key: string): string | undefined {
+  const lines = input.split(/\r?\n/);
+  const keyIndex = lines.findIndex((line) =>
+    line.match(new RegExp(`^\\s*${key}:\\s*\\|\\s*$`)),
+  );
+  if (keyIndex === -1) {
+    return undefined;
+  }
+
+  const keyIndent = lines[keyIndex].match(/^(\s*)/)?.[1].length ?? 0;
+  const blockLines: string[] = [];
+  let blockIndent: number | undefined;
+  for (const line of lines.slice(keyIndex + 1)) {
+    if (line.trim() === "") {
+      blockLines.push("");
+      continue;
+    }
+
+    const indent = line.match(/^(\s*)/)?.[1].length ?? 0;
+    if (indent <= keyIndent) {
+      break;
+    }
+
+    blockIndent ??= indent;
+    blockLines.push(line.slice(Math.min(indent, blockIndent)));
+  }
+
+  return blockLines.join("\n").trimEnd();
+}
+
+function taskArtifactEvidence(input: string): TaskArtifactEvidence[] {
+  const taskArtifacts = extractSection(input, "task_artifacts");
+  const entries: TaskArtifactEvidence[] = [];
+  let current: TaskArtifactEvidence | undefined;
+
+  for (const line of taskArtifacts.split(/\r?\n/)) {
+    const taskId = line.match(/^\s*-\s+task_id:\s*(.+?)\s*$/);
+    if (taskId) {
+      if (current) {
+        entries.push(current);
+      }
+      current = { taskId: cleanInlineScalar(taskId[1]), artifact: "" };
+      continue;
+    }
+
+    const artifact = line.match(/^\s*artifact:\s*(.+?)\s*$/);
+    if (artifact && current) {
+      current.artifact = cleanInlineScalar(artifact[1]);
+    }
+  }
+
+  if (current) {
+    entries.push(current);
+  }
+
+  return entries;
+}
+
+function cleanInlineScalar(value: string): string {
+  return value.trim().replace(/^['"]|['"]$/g, "");
 }

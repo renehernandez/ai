@@ -130,8 +130,17 @@ const stackReady = `stack_ready:
   target_branch: main
   stack_tip: https://git.fullscript.io/group/project/-/merge_requests/2
   task_state:
-    all_deliverable_tasks_checked: true
     fingerprint: feedface
+    tasks_markdown: |
+      ## 1. Example Change
+
+      - [x] 1.1 First deliverable
+      - [x] 1.2 Second deliverable
+  task_artifacts:
+    - task_id: "1.1"
+      artifact: https://git.fullscript.io/group/project/-/merge_requests/2
+    - task_id: "1.2"
+      artifact: https://git.fullscript.io/group/project/-/merge_requests/3
   stack:
     - artifact: https://git.fullscript.io/group/project/-/merge_requests/1
       role: planning
@@ -142,6 +151,11 @@ const stackReady = `stack_ready:
       role: implementation
       base_sha: def456
       head_sha: abc789
+      nitro_gate_outcome: passed
+    - artifact: https://git.fullscript.io/group/project/-/merge_requests/3
+      role: implementation
+      base_sha: abc789
+      head_sha: beef123
       nitro_gate_outcome: passed
   restack_required: false
   integrity_evidence:
@@ -275,6 +289,51 @@ test("validate-stack-ready rejects pending Nitro gates", () => {
 
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /nitro_gate_outcome must be passed/);
+});
+
+test("validate-stack-ready rejects self-attested task completion booleans", () => {
+  const result = runPlanOrchestrator(
+    "validate-stack-ready",
+    stackReady.replace(
+      "  task_state:\n    fingerprint: feedface",
+      "  task_state:\n    all_deliverable_tasks_checked: true\n    fingerprint: feedface",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /self-attested/);
+});
+
+test("validate-stack-ready rejects partial stacks with unchecked deliverables", () => {
+  const result = runPlanOrchestrator(
+    "validate-stack-ready",
+    stackReady.replace(
+      "- [x] 1.2 Second deliverable",
+      "- [ ] 1.2 Second deliverable",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /partial stack: unchecked deliverable tasks 1\.2/,
+  );
+});
+
+test("validate-stack-ready rejects checked tasks without artifact evidence", () => {
+  const result = runPlanOrchestrator(
+    "validate-stack-ready",
+    stackReady.replace(
+      '    - task_id: "1.2"\n      artifact: https://git.fullscript.io/group/project/-/merge_requests/3\n',
+      "",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /missing implementation artifact evidence for checked deliverable tasks 1\.2/,
+  );
 });
 
 test("validate-stack-ready blocks unsupported stack hosts", () => {
