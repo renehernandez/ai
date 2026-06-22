@@ -13,6 +13,15 @@ state after materialization.
   plan-to-OpenSpec path.
 - Require `plan-orchestrator` to delete the primary source plan only after the
   OpenSpec change is created and strict validation passes.
+- Require cleanup to delete only an explicitly expected source-plan path from
+  the current plan-to-OpenSpec conversion context; arbitrary `.agents/plans/**`
+  paths in the same worktree are not valid cleanup targets.
+- Require the cleanup helper contract to carry the expected source-plan path
+  separately from the deletion target, so `--source-plan` cannot authorize
+  itself.
+- Add a machine-readable `openspec_blueprint.source_plan.ref` carrier and
+  validator/prompt updates so `plan-orchestrator` can pass the expected path to
+  cleanup from reviewed readiness output.
 - Preserve the source plan when OpenSpec creation or validation fails.
 - Block plan-to-OpenSpec publication when the primary source plan has already
   been committed.
@@ -20,6 +29,8 @@ state after materialization.
   contain any `.agents/plans/**` path.
 - Keep atomic plan review behavior unchanged for `artifact_type: plan`.
 - Verify updated skill docs, prompts, scripts, tests, and runtime surfaces.
+- Cover cleanup helper tests with freshly-created disposable source-plan
+  fixtures so regression tests cannot delete unrelated planning artifacts.
 
 ## Capabilities
 
@@ -30,7 +41,8 @@ None.
 ### Modified Capabilities
 
 - `review-first-plan-orchestration`: add source-plan cleanup and OpenSpec
-  planning-diff invariants to the reviewed planning workflow.
+  planning-diff invariants to the reviewed planning workflow, including the
+  readiness blueprint source-plan carrier.
 - `ax-cli`: require runtime validation to prove installed planning skills and
   prompts agree on the source-plan cleanup contract.
 

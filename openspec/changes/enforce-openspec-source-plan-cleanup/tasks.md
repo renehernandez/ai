@@ -32,3 +32,18 @@
       installed `plan-orchestrator` and `plan-review` surfaces agree with the
       repo source. Account for any lockfile or generated runtime-surface changes
       before delivery. Depends on 1.3.
+
+- [ ] 1.5 Bind cleanup to expected source-plan context
+      Add `openspec_blueprint.source_plan.ref` to the `plan-ready` blueprint
+      template and validator for plan-file-backed OpenSpec blueprints. Update
+      `plan-orchestrator` cleanup behavior so `cleanup-source-plan` requires a
+      separate `--expected-source-plan` value from that conversion context, and
+      the cleanup target must match the expected path for the same change id.
+      Being untracked, staged, or under `.agents/plans/**` must not be
+      sufficient authority to delete a file. Add regression coverage for
+      missing expected-source input, mismatched expected path, wrong change id,
+      normalized path equivalence, path escape rejection, tracked source-plan
+      states, preservation of an unrelated `.agents/plans/**` file in the same
+      worktree, and freshly-created disposable cleanup fixtures. Update
+      `plan-ready` and `plan-orchestrator` skill docs/prompts, runtime surfaces,
+      and validation evidence as needed. Depends on 1.4.
