@@ -1,4 +1,0 @@
-interface:
-  display_name: "Agent Runtime CLI"
-  short_description: "Use the agent-runtime CLI correctly"
-  default_prompt: "Use $agent-runtime-cli to choose and validate the right agent-runtime command."

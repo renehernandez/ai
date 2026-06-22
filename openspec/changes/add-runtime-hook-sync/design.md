@@ -1,6 +1,6 @@
 ## Context
 
-`agent-runtime` currently manages skills, instructions, reusable scripts, and
+`ax` currently manages skills, instructions, reusable scripts, and
 repo-local OpenSpec scaffolding. Those flows can replace directories, files,
 and symlinks directly. The repo also has user-level hooks under `hooks/`, but
 hook installation and Codex/Claude startup registration are still manual and
@@ -49,7 +49,7 @@ scope, then the startup Git hook and config registration are enabled.
 
 3. Hook management is separate from startup Git behavior.
 
-   `agent-runtime hooks install|update|validate|status` should first make hook
+   `ax hooks install|update|validate|status` should first make hook
    paths and symlinks observable. The Git sync hook then builds on stable paths.
    Codex and Claude config registration comes last because those formats are
    harness-specific and more likely to drift.

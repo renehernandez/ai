@@ -1,11 +1,11 @@
 ## Context
 
-`agent-runtime` is currently invoked as a package script from the AI repo:
-`pnpm agent-runtime ...`. That makes centralized runtime behavior easy inside
+`ax` is currently invoked as a package script from the AI repo:
+`pnpm ax ...`. That makes centralized runtime behavior easy inside
 the repo but awkward from arbitrary target projects, where agents can drift
 into direct script execution against the AI checkout.
 
-`agent-runtime` already has an OpenSpec scope that invokes upstream
+`ax` already has an OpenSpec scope that invokes upstream
 `openspec init . --tools codex,claude`, normalizes generated skills into
 `.agents/skills`, normalizes Claude commands into `.agents/commands`, and
 validates symlink state.
@@ -21,9 +21,9 @@ delivery, and workflows.
 
 **Goals:**
 
-- Add globally linked `agent-runtime` packaging backed by the durable AI repo.
+- Add globally linked `ax` packaging backed by the durable AI repo.
 - Resolve source root, config path, target root, and executable path explicitly.
-- Add read-only top-level `agent-runtime status` for global installation health
+- Add read-only top-level `ax status` for global installation health
   and current target project readiness.
 - Add shared OpenSpec state classification for missing, configured, and partial
   setup before any backup or mutation.
@@ -39,7 +39,7 @@ delivery, and workflows.
 - Install or update the global `@fission-ai/openspec` package.
 - Manage multiple repositories in one command.
 - Discover or honor per-repo `agent-runtime.config.json` by default.
-- Publish `agent-runtime` to a package registry.
+- Publish `ax` to a package registry.
 - Compile a `dist` build for the global CLI.
 - Create project-local OpenSpec schemas.
 - Change upstream OpenSpec templates.
@@ -50,7 +50,7 @@ delivery, and workflows.
 
 ### Use A Globally Linked Runtime Command
 
-Expose `agent-runtime` as a globally linkable package bin from the durable AI
+Expose `ax` as a globally linkable package bin from the durable AI
 repo. Global invocations use the AI repo implementation and default
 `agent-runtime.config.json`, while repo-local scopes such as `openspec` target
 `process.cwd()`.
@@ -74,7 +74,7 @@ the mental model simple and avoids hidden per-repo behavior.
 
 ### Add A Top-Level Runtime Status
 
-Top-level `agent-runtime status` should be read-only and report global runtime
+Top-level `ax status` should be read-only and report global runtime
 health: roots, executable/link state, profiles, instructions, skills, reusable
 scripts, hooks, and current target OpenSpec state. Missing OpenSpec in the
 target project is actionable target readiness, not a broken global runtime.
@@ -172,7 +172,7 @@ modes.
 7. Extend validation and docs after command behavior stabilizes.
 
 Rollback is local to the repo: revert the implementation commits and regenerate
-OpenSpec assets through the current `agent-runtime openspec install|update`
+OpenSpec assets through the current `ax openspec install|update`
 behavior.
 
 ## Open Questions

@@ -19,7 +19,7 @@ the desired responsibilities.
   review-first planning.
 - Add shared planning-contract validation helpers to avoid duplicating YAML
   parsing and handoff validation across plan skills.
-- Update agent runtime skill installation so renamed skills do not leave stale
+- Update Agents Experience skill installation so renamed skills do not leave stale
   installed old-name surfaces callable.
 
 ## Capabilities
@@ -45,5 +45,5 @@ None.
 - Plan skill scripts and tests gain shared planning-contract helpers.
 - Repo-level agent rules document the hosted planning-review exception to
   direct-publish guidance.
-- `scripts/agent-runtime.ts`, `agent-runtime.lock.json`, and integration tests
+- `scripts/ax.ts`, `agent-runtime.lock.json`, and integration tests
   cover cleanup of stale installed skill names after renames.

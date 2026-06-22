@@ -1,14 +1,14 @@
-# agent-runtime-cli Specification
+# ax-cli Specification
 
 ## Purpose
 TBD - created by archiving change guide-openspec-runtime-setup. Update Purpose after archive.
 ## Requirements
 ### Requirement: Globally linked runtime command
-The system SHALL provide an `agent-runtime` command that can be globally linked
+The system SHALL provide an `ax` command that can be globally linked
 from the durable AI repo and invoked from arbitrary target projects.
 
 #### Scenario: Global command resolves durable source root
-- **WHEN** a globally linked `agent-runtime` command is invoked outside the AI repo
+- **WHEN** a globally linked `ax` command is invoked outside the AI repo
 - **THEN** the runtime source root resolves to the durable AI repo checkout
 - **AND** the command uses the AI repo implementation
 

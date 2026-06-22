@@ -1,16 +1,16 @@
 ---
-name: agent-runtime-cli
-description: Use when managing local agent runtime assets with the agent-runtime CLI, including shared skills, AGENTS.md/rules instructions, hooks, runtime profiles, repo-local OpenSpec scaffolding, or validation after changing shared agent assets.
+name: ax-cli
+description: Use when managing local Agents Experience assets with the ax CLI, including shared skills, AGENTS.md/rules instructions, hooks, runtime profiles, repo-local OpenSpec scaffolding, or validation after changing shared agent assets.
 allowed-tools: Read, Grep, Bash(git:*), Bash(pnpm:*)
 ---
 
-# Agent Runtime CLI
+# AX CLI
 
 ## Overview
 
 Use the runtime CLI as the entrypoint for shared runtime assets. Inside this AI
-repo, use `pnpm agent-runtime ...`. From another target project, use the
-globally linked `agent-runtime ...` binary when available. Prefer the wrapper
+repo, use `pnpm ax ...`. From another target project, use the
+globally linked `ax ...` binary when available. Prefer the wrapper
 over direct script execution, direct filesystem edits to installed runtime
 copies, or raw upstream OpenSpec setup.
 
@@ -22,16 +22,16 @@ copies, or raw upstream OpenSpec setup.
    ```
 2. Choose the narrowest runtime scope that matches the work.
 3. Inspect that scope before mutating it:
-   - whole runtime from any target repo: `agent-runtime status`;
-   - profile-managed runtime assets: `pnpm agent-runtime status --profile <name>`;
-   - skills only: `pnpm agent-runtime skills status --profile <name>`;
-   - instructions only: `pnpm agent-runtime instructions status --profile <name>`;
-   - hooks only: `pnpm agent-runtime hooks status`;
-   - OpenSpec only: `pnpm agent-runtime openspec status`.
+   - whole runtime from any target repo: `ax status`;
+   - profile-managed runtime assets: `pnpm ax status --profile <name>`;
+   - skills only: `pnpm ax skills status --profile <name>`;
+   - instructions only: `pnpm ax instructions status --profile <name>`;
+   - hooks only: `pnpm ax hooks status`;
+   - OpenSpec only: `pnpm ax openspec status`.
 4. Run `validate` after every install or update.
 5. For unfamiliar options, check current help instead of guessing:
    ```bash
-   pnpm agent-runtime <scope> <command> --help
+   pnpm ax <scope> <command> --help
    ```
 
 ## Command Selection
@@ -64,7 +64,7 @@ Runtime profiles select installed skill and instruction surfaces such as
 `--config <path>` is the shared override when a non-default
 `agent-runtime.config.json` is required.
 
-When invoked through the globally linked `agent-runtime` binary, source root and
+When invoked through the globally linked `ax` binary, source root and
 default config path resolve to the durable AI repo. Repo-local scopes such as
 `openspec` target the current working directory. Do not silently run AI repo
 package scripts against a target repo to simulate global usage; use the linked
@@ -75,10 +75,10 @@ binary or explicitly explain the source/config/target roots before proceeding.
 Do not run raw `openspec init` for repo-local managed setup. Use:
 
 ```bash
-pnpm agent-runtime openspec status
-pnpm agent-runtime openspec install --context-file ./openspec-context.md
-pnpm agent-runtime openspec update
-pnpm agent-runtime openspec validate
+pnpm ax openspec status
+pnpm ax openspec install --context-file ./openspec-context.md
+pnpm ax openspec update
+pnpm ax openspec validate
 ```
 
 State rules:
@@ -113,19 +113,19 @@ update, or accepted config review.
 Refresh every affected installed surface before treating source edits as live:
 
 - `skills/**`: update and validate both `personal` and `work` with
-  `pnpm agent-runtime skills ... --profile <name>`.
+  `pnpm ax skills ... --profile <name>`.
 - `instructions/**`, `rules/**`, or `AGENTS.md`: update and validate both
-  profiles with `pnpm agent-runtime instructions ... --profile <name>`.
-- `hooks/**`: use `pnpm agent-runtime hooks update`, then
-  `pnpm agent-runtime hooks validate`.
-- generated OpenSpec skills or commands: use `pnpm agent-runtime openspec
-  update`, then `pnpm agent-runtime openspec validate`.
+  profiles with `pnpm ax instructions ... --profile <name>`.
+- `hooks/**`: use `pnpm ax hooks update`, then
+  `pnpm ax hooks validate`.
+- generated OpenSpec skills or commands: use `pnpm ax openspec
+  update`, then `pnpm ax openspec validate`.
 
 Skills and top-level runtime validation also check local managed skill imports
 of reusable runtime scripts. When a managed skill imports
 `../../../scripts/<file>.ts`, declare that file in `runtime.reusableScripts`;
-otherwise `pnpm agent-runtime skills validate ...` and
-`pnpm agent-runtime validate ...` fail before install or update.
+otherwise `pnpm ax skills validate ...` and
+`pnpm ax validate ...` fail before install or update.
 
 If an update changes installed files, rerun the matching `status` or `validate`
 command before finishing.
@@ -134,14 +134,14 @@ command before finishing.
 
 | Mistake | Fix |
 | --- | --- |
-| Running raw `openspec init` in a managed repo | Use `pnpm agent-runtime openspec install` only for missing setup. |
+| Running raw `openspec init` in a managed repo | Use `pnpm ax openspec install` only for missing setup. |
 | Running headless OpenSpec install without confirmed context | Provide `--context-file <path>`; do not use unsupported `--accept-inferred-config`. |
 | Passing `--profile` to `openspec` or `hooks` | Use profile flags only on top-level, `skills`, and `instructions` commands. |
 | Running `install` on an existing OpenSpec footprint | Run `status` and `validate`; use `update` for configured scaffolding. |
 | Expecting normal `openspec update` to rewrite config | Use `update --review-config`, and add `--accept-config-changes` only for accepted headless writes. |
-| Editing installed runtime copies directly | Edit source in this repo, then run the matching `agent-runtime ... update`. |
+| Editing installed runtime copies directly | Edit source in this repo, then run the matching `ax ... update`. |
 | Calling work complete after source edits only | Refresh installed copies and run profile validation. |
-| Guessing flags from memory | Run `pnpm agent-runtime <scope> <command> --help`. |
+| Guessing flags from memory | Run `pnpm ax <scope> <command> --help`. |
 
 ## Test Evidence
 

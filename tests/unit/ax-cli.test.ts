@@ -29,7 +29,7 @@ import {
   registerClaudeStartupHook,
   registerCodexStartupHook,
   renderOpenSpecConfigYaml,
-} from "../../scripts/agent-runtime.ts";
+} from "../../scripts/ax.ts";
 
 const repoRoot = process.cwd();
 
@@ -47,7 +47,7 @@ function parseCommand(args: string[]): ParsedCommand[] {
     commands.push(input);
   });
   configureProgramForTest(program);
-  program.parse(["node", "agent-runtime", ...args], { from: "node" });
+  program.parse(["node", "ax", ...args], { from: "node" });
   return commands;
 }
 
@@ -56,7 +56,7 @@ function parseInvalidCommand(args: string[]): Error {
   configureProgramForTest(program);
 
   try {
-    program.parse(["node", "agent-runtime", ...args], { from: "node" });
+    program.parse(["node", "ax", ...args], { from: "node" });
   } catch (error) {
     assert.ok(error instanceof Error);
     return error;
@@ -76,7 +76,7 @@ function configureProgramForTest(command: Command): void {
 }
 
 function withTempDir(callback: (directory: string) => void): void {
-  const directory = mkdtempSync(join(tmpdir(), "agent-runtime-unit-"));
+  const directory = mkdtempSync(join(tmpdir(), "ax-unit-"));
   try {
     callback(directory);
   } finally {

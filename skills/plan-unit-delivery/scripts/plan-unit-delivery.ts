@@ -35,7 +35,7 @@ const OPTIONAL_REVIEWERS = [
   "infra-and-cloud",
   "docs-and-agent-alignment",
   "performance-and-scale",
-  "agent-runtime-and-skill-compatibility",
+  "ax-and-skill-compatibility",
 ] as const;
 
 const REVIEW_PASSES = [

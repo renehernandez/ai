@@ -7,7 +7,7 @@ const sourceRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const tsxLoader = pathToFileURL(
   join(sourceRoot, "node_modules", "tsx", "dist", "loader.mjs"),
 ).href;
-const runtimeScript = join(sourceRoot, "scripts", "agent-runtime.ts");
+const runtimeScript = join(sourceRoot, "scripts", "ax.ts");
 
 const result = spawnSync(
   process.execPath,

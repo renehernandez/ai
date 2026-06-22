@@ -5,7 +5,7 @@ Agent-runtime SHALL expose a `hooks` scope with `install`, `update`,
 `validate`, and `status` commands.
 
 #### Scenario: Hooks commands are routed
-- **WHEN** a user runs `agent-runtime hooks install`, `update`, `validate`, or
+- **WHEN** a user runs `ax hooks install`, `update`, `validate`, or
   `status`
 - **THEN** the CLI routes the command to hook-specific runtime handling
 

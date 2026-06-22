@@ -372,6 +372,7 @@ const PROJECT_SIGNAL_SECRET_PATTERNS = [
   /credential/i,
 ] as const;
 const RETIRED_MANAGED_SKILL_NAMES = [
+  "agent-runtime-cli",
   "plan-to-review",
   "plan-coordinate",
   "plan-delivery",
@@ -435,11 +436,11 @@ export function createProgram(
 ): Command {
   const program = new Command();
   program
-    .name("agent-runtime")
-    .description("Manage reusable local agent runtime assets")
+    .name("ax")
+    .description("Manage reusable local Agents Experience assets")
     .showHelpAfterError("(add --help for additional information)")
     .configureHelp({ sortSubcommands: true })
-    .option("--config <path>", "Path to agent runtime config", CONFIG_FILE);
+    .option("--config <path>", "Path to Agents Experience config", CONFIG_FILE);
 
   for (const command of runtimeCommands()) {
     addWrapperCommand(program, command, execute);
@@ -467,7 +468,7 @@ function addWrapperCommand(
       collectOption,
     )
     .option("--all-profiles", "Apply work to all profiles")
-    .option("--config <path>", "Path to agent runtime config", CONFIG_FILE)
+    .option("--config <path>", "Path to Agents Experience config", CONFIG_FILE)
     .action((first: CommandOptions | Command, second?: Command) => {
       const { options, commandObject } = actionContext(first, second);
       execute({
@@ -493,7 +494,11 @@ function addSkillsCommands(program: Command, execute: CommandExecutor): void {
         collectOption,
       )
       .option("--all-profiles", "Apply the command to all profiles")
-      .option("--config <path>", "Path to agent runtime config", CONFIG_FILE)
+      .option(
+        "--config <path>",
+        "Path to Agents Experience config",
+        CONFIG_FILE,
+      )
       .action((first: CommandOptions | Command, second?: Command) => {
         const { options, commandObject } = actionContext(first, second);
         execute({
@@ -524,7 +529,11 @@ function addInstructionsCommands(
         collectOption,
       )
       .option("--all-profiles", "Apply the command to all profiles")
-      .option("--config <path>", "Path to agent runtime config", CONFIG_FILE)
+      .option(
+        "--config <path>",
+        "Path to Agents Experience config",
+        CONFIG_FILE,
+      )
       .action((first: CommandOptions | Command, second?: Command) => {
         const { options, commandObject } = actionContext(first, second);
         execute({
@@ -548,7 +557,11 @@ function addOpenSpecCommands(program: Command, execute: CommandExecutor): void {
       .description(
         `${labelForCommand(command)} repo-local OpenSpec scaffolding`,
       )
-      .option("--config <path>", "Path to agent runtime config", CONFIG_FILE);
+      .option(
+        "--config <path>",
+        "Path to Agents Experience config",
+        CONFIG_FILE,
+      );
     if (command === "install") {
       scopedCommand.option(
         "--context-file <path>",
@@ -591,7 +604,11 @@ function addHooksCommands(program: Command, execute: CommandExecutor): void {
     hooks
       .command(command)
       .description(`${labelForCommand(command)} managed hooks`)
-      .option("--config <path>", "Path to agent runtime config", CONFIG_FILE)
+      .option(
+        "--config <path>",
+        "Path to Agents Experience config",
+        CONFIG_FILE,
+      )
       .action((first: CommandOptions | Command, second?: Command) => {
         const { options, commandObject } = actionContext(first, second);
         execute({
@@ -1257,7 +1274,7 @@ function assertOpenSpecCommandBoundary(
     }
     if (stateReport.state === "configured") {
       throw new Error(
-        "Repo-local OpenSpec is already configured. Use `agent-runtime openspec update` to refresh generated assets.",
+        "Repo-local OpenSpec is already configured. Use `ax openspec update` to refresh generated assets.",
       );
     }
     throw new Error(formatOpenSpecPartialStateError("install", stateReport));
@@ -1269,7 +1286,7 @@ function assertOpenSpecCommandBoundary(
     }
     if (stateReport.state === "missing") {
       throw new Error(
-        "Repo-local OpenSpec is not configured. Use `agent-runtime openspec install` to create the initial scaffolding.",
+        "Repo-local OpenSpec is not configured. Use `ax openspec install` to create the initial scaffolding.",
       );
     }
     throw new Error(formatOpenSpecPartialStateError("update", stateReport));
@@ -1285,7 +1302,7 @@ function formatOpenSpecPartialStateError(
       ? stateReport.findings
       : ["OpenSpec setup has an incomplete generated asset footprint."];
   return [
-    `Repo-local OpenSpec setup is partial. Repair these findings before running \`agent-runtime openspec ${command}\`:`,
+    `Repo-local OpenSpec setup is partial. Repair these findings before running \`ax openspec ${command}\`:`,
     ...findings.map((finding) => `- ${finding}`),
   ].join("\n");
 }
@@ -1299,7 +1316,7 @@ function runRuntimeStatus(
     interactive: false,
   };
 
-  console.log("Agent Runtime");
+  console.log("AX");
   console.log(`Source root: ${context.sourceRoot}`);
   console.log(`Config path: ${context.configPath}`);
   console.log(`Target root: ${context.targetRoot}`);
@@ -1850,7 +1867,7 @@ function runOpenSpecGeneration(
   config: ResolvedOpenSpecConfig,
   args: string[],
 ): void {
-  const configHome = mkdtempSync(join(tmpdir(), "agent-runtime-openspec-"));
+  const configHome = mkdtempSync(join(tmpdir(), "ax-openspec-"));
   const openSpecConfigDir = join(configHome, "openspec");
   mkdirSync(openSpecConfigDir, { recursive: true });
   writeFileSync(

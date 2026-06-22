@@ -64,7 +64,7 @@ Baseline reviewers always run:
 Optional reviewers must come from the bundled reviewer catalog. Select
 `docs-and-agent-alignment` for workflow, docs, skills, rules, automation prompt,
 review rubric, or PR/MR description contract changes. Select
-`agent-runtime-and-skill-compatibility` for skill metadata, scripts, adapter
+`ax-and-skill-compatibility` for skill metadata, scripts, adapter
 prompts, install/update behavior, or runtime compatibility changes.
 
 Use `scripts/plan-ready.ts reviewer-template` and validate the judge output with

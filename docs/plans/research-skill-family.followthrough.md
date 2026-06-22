@@ -48,8 +48,8 @@ plan_followthrough_ledger:
 - `pnpm exec tsx skills/plan-followthrough/scripts/plan-followthrough.ts validate-ledger --file docs/plans/research-skill-family.followthrough.md`
 - `pnpm exec biome check tests/unit/research-skills.test.ts`
 - `pnpm test:unit`
-- `pnpm agent-runtime skills update --profile personal`
-- `pnpm agent-runtime skills status --profile personal`
-- `pnpm agent-runtime validate --all-profiles`
+- `pnpm ax skills update --profile personal`
+- `pnpm ax skills status --profile personal`
+- `pnpm ax validate --all-profiles`
 - `git diff --check`
 - `pnpm test`

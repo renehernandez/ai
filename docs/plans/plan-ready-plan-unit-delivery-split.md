@@ -111,7 +111,7 @@ Before reviewer fanout, `plan-ready` runs an LLM-as-judge reviewer-selection ste
 - `infra-and-cloud`
 - `docs-and-agent-alignment`
 - `performance-and-scale`
-- `agent-runtime-and-skill-compatibility`
+- `ax-and-skill-compatibility`
 
 The judge must return structured output:
 
@@ -133,7 +133,7 @@ The main agent may not remove baseline reviewers or judge-selected optional revi
 Selection rules:
 
 - Select `docs-and-agent-alignment` for changes to reusable workflows, docs, skills, rules, automation prompts, background review expectations, or PR/MR description contracts.
-- Select `agent-runtime-and-skill-compatibility` for changes to skill folder structure, skill metadata, bundled scripts, Codex adapter files, same-harness subagent routing, install/update behavior, or agent runtime behavior.
+- Select `ax-and-skill-compatibility` for changes to skill folder structure, skill metadata, bundled scripts, Codex adapter files, same-harness subagent routing, install/update behavior, or Agents Experience behavior.
 - Validate the judge output before reviewer fanout. The selection is not ready if the judge invents reviewer names or chooses `baseline_sufficient` while listing optional reviewers.
 - Run reviewer agents with the internal subagent tool exposed by the current harness.
 
@@ -264,7 +264,7 @@ Use `writing-skills` validation before shipping.
 Pressure scenarios:
 
 1. Missing handoff: invoke `plan-unit-delivery` with only a fuzzy feature request. It must stop and ask for `plan-ready`.
-2. Optional reviewer needed: plan changes skill/runtime behavior. The reviewer-selection judge should add `agent-runtime-and-skill-compatibility` and `docs-and-agent-alignment`.
+2. Optional reviewer needed: plan changes skill/runtime behavior. The reviewer-selection judge should add `ax-and-skill-compatibility` and `docs-and-agent-alignment`.
 3. Unresolved blocker: a plan reviewer returns `user_decision`. `plan-ready` must ask the user and must not emit `status: ready` until resolved.
 4. Plan-to-implementation boundary: after `plan-ready` emits a valid handoff, it must stop for user verification and must not start coding.
 5. Handoff validation: `plan-unit-delivery` receives a handoff with `scrutiny_verdict: fix-then-ship`. It must block before implementation.
@@ -274,8 +274,8 @@ Pressure scenarios:
 - RED: baseline plan-ready subagent `019eb39e-5890-76c0-a967-f287d449de7a` inspected committed pre-edit files and failed as expected. It treated reviewer fanout as external harness work instead of internal subagents.
 - RED: baseline plan-unit-delivery subagent `019eb39e-7a2b-7453-81b0-37fb35df9005` inspected committed pre-edit files and failed as expected. It cited `Run local PR/diff review with diff-review`, `Run scrutinize on the implementation diff`, `Run the pre-commit quality gate`, and adapter text `run local verification, implementation review, $scrutinize...`; its rationalization was: `inline helper-skill review satisfies the workflow; nothing says I must launch internal Codex reviewer subagents or report each reviewer's final outcome`.
 - GREEN: missing handoff pressure passed. A subagent found that `plan-unit-delivery` requires exactly one valid `plan_ready_handoff`, rejects fuzzy ideas, and tells the user to run `plan-ready` or paste a handoff before implementation.
-- RED/GREEN: optional reviewer pressure initially failed because `plan-ready` listed the optional catalog but did not make `docs-and-agent-alignment` and `agent-runtime-and-skill-compatibility` likely enough for skill/runtime changes. The skill and script now include selection rules for reusable workflow/docs/skills/rules changes and skill metadata/script/runtime changes.
-- GREEN: reviewer-selection validation now accepts `docs-and-agent-alignment` plus `agent-runtime-and-skill-compatibility`, rejects invented optional reviewer names, and rejects invented baseline reviewer names.
+- RED/GREEN: optional reviewer pressure initially failed because `plan-ready` listed the optional catalog but did not make `docs-and-agent-alignment` and `ax-and-skill-compatibility` likely enough for skill/runtime changes. The skill and script now include selection rules for reusable workflow/docs/skills/rules changes and skill metadata/script/runtime changes.
+- GREEN: reviewer-selection validation now accepts `docs-and-agent-alignment` plus `ax-and-skill-compatibility`, rejects invented optional reviewer names, and rejects invented baseline reviewer names.
 - GREEN: unresolved blocker pressure passed. `plan-ready` requires `user_decision` blockers to ask the user, and both scripts reject handoffs with non-empty `unresolved_blockers`.
 - GREEN: phase boundary pressure passed. `plan-ready` stops after handoff and does not invoke `plan-unit-delivery`, start implementation, create branches, push, open PRs/MRs, or request hosted review.
 - GREEN: invalid scrutiny pressure passed. `plan-unit-delivery` and its script reject handoffs where `scrutiny_verdict` is not `ship`.

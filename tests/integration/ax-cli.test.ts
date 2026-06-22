@@ -33,8 +33,8 @@ type BackupManifest = {
 };
 
 const repoRoot = process.cwd();
-const runtimeScript = join(repoRoot, "scripts/agent-runtime.ts");
-const runtimeBin = join(repoRoot, "bin", "agent-runtime.mjs");
+const runtimeScript = join(repoRoot, "scripts/ax.ts");
+const runtimeBin = join(repoRoot, "bin", "ax.mjs");
 const tsxLoader = pathToFileURL(
   join(repoRoot, "node_modules", "tsx", "dist", "loader.mjs"),
 ).href;
@@ -61,7 +61,7 @@ function withFixture(
   configureConfig: (config: FixtureConfig, runtimeDir: string) => void = () =>
     undefined,
 ): void {
-  const runtimeDir = mkdtempSync(join(tmpdir(), "agent-runtime-cli-"));
+  const runtimeDir = mkdtempSync(join(tmpdir(), "ax-cli-"));
   const configPath = join(runtimeDir, "config.json");
   const config = JSON.parse(
     readFileSync(join(repoRoot, "agent-runtime.config.json"), "utf-8"),
@@ -158,7 +158,7 @@ function assertSafeRuntimeArgs(args: string[]): void {
     assert.equal(
       args.some((arg) => arg === "install" || arg === "update"),
       false,
-      "mutating agent-runtime integration tests must pass an explicit fixture --config",
+      "mutating ax integration tests must pass an explicit fixture --config",
     );
   }
 }
@@ -369,7 +369,7 @@ test("CLI accepts global config before the command", () => {
 });
 
 test("global bin uses central config and target cwd for repo-local scope", () => {
-  const targetDir = mkdtempSync(join(tmpdir(), "agent-runtime-target-"));
+  const targetDir = mkdtempSync(join(tmpdir(), "ax-target-"));
   try {
     writeFileSync(
       join(targetDir, "agent-runtime.config.json"),
@@ -393,7 +393,7 @@ test("global bin uses central config and target cwd for repo-local scope", () =>
 });
 
 test("global status reports runtime roots and target OpenSpec readiness", () => {
-  const targetDir = mkdtempSync(join(tmpdir(), "agent-runtime-status-"));
+  const targetDir = mkdtempSync(join(tmpdir(), "ax-status-"));
   try {
     writeFileSync(
       join(targetDir, "agent-runtime.config.json"),
@@ -406,7 +406,7 @@ test("global status reports runtime roots and target OpenSpec readiness", () => 
     });
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
-    assert.match(result.stdout, /Agent Runtime/);
+    assert.match(result.stdout, /AX/);
     assert.match(
       result.stdout,
       new RegExp(`Source root: ${escapeRegExp(repoRoot)}`),
@@ -437,7 +437,7 @@ test("CLI shows global help", () => {
   const result = runAgentRuntime(["--help"]);
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /Usage: agent-runtime/);
+  assert.match(result.stdout, /Usage: ax/);
   assert.match(result.stdout, /Commands:/);
   assert.doesNotMatch(result.stdout, /\bagents\b/);
   assert.match(result.stdout, /hooks/);
@@ -450,7 +450,7 @@ test("CLI shows OpenSpec scope help", () => {
   const result = runAgentRuntime(["openspec", "--help"]);
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /Usage: agent-runtime openspec/);
+  assert.match(result.stdout, /Usage: ax openspec/);
   assert.match(result.stdout, /install/);
   assert.match(result.stdout, /status/);
   assert.match(result.stdout, /update/);
@@ -461,7 +461,7 @@ test("CLI shows hooks scope help", () => {
   const result = runAgentRuntime(["hooks", "--help"]);
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /Usage: agent-runtime hooks/);
+  assert.match(result.stdout, /Usage: ax hooks/);
   assert.match(result.stdout, /install/);
   assert.match(result.stdout, /status/);
   assert.match(result.stdout, /update/);
@@ -475,7 +475,7 @@ test("CLI installs missing OpenSpec scaffolding and updates configured projects"
     const contextFile = join(runtimeDir, "openspec-context.md");
     writeFileSync(
       contextFile,
-      "Confirmed context: use OpenSpec for agent runtime planning.\n",
+      "Confirmed context: use OpenSpec for Agents Experience planning.\n",
       "utf-8",
     );
 
@@ -966,7 +966,7 @@ test("CLI refuses OpenSpec install when setup is already configured", () => {
 
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /already configured/);
-    assert.match(result.stderr, /agent-runtime openspec update/);
+    assert.match(result.stderr, /ax openspec update/);
     assert.doesNotMatch(result.stderr, /npm install -g/);
     assert.equal(collectBackupManifests(join(runtimeDir, "backups")).length, 0);
     assert.equal(
@@ -988,7 +988,7 @@ test("CLI refuses OpenSpec update when setup is missing", () => {
 
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /not configured/);
-    assert.match(result.stderr, /agent-runtime openspec install/);
+    assert.match(result.stderr, /ax openspec install/);
     assert.doesNotMatch(result.stderr, /npm install -g/);
     assert.equal(
       existsSync(join(runtimeDir, "openspec", "config.yaml")),
@@ -1497,7 +1497,7 @@ test("CLI shows command-specific help", () => {
   const result = runAgentRuntime(["status", "--help"]);
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /Usage: agent-runtime status/);
+  assert.match(result.stdout, /Usage: ax status/);
   assert.doesNotMatch(result.stdout, /--agent <name>/);
   assert.match(result.stdout, /--all-profiles/);
   assert.match(result.stdout, /--profile <name>/);
@@ -1746,21 +1746,18 @@ test("CLI installs discovered local skills from wildcard sources", () => {
 test("CLI prunes stale installed retired skill names", () => {
   withFixture(
     ({ configPath, runtimeDir }) => {
-      const staleCanonical = join(runtimeDir, "skills", "plan-to-review");
-      const staleSymlink = join(
-        runtimeDir,
-        "claude",
-        "skills",
-        "plan-to-review",
-      );
-      mkdirSync(staleCanonical, { recursive: true });
       mkdirSync(join(runtimeDir, "claude", "skills"), { recursive: true });
-      writeFileSync(
-        join(staleCanonical, "SKILL.md"),
-        "---\nname: plan-to-review\n---\n",
-        "utf-8",
-      );
-      symlinkSync(staleCanonical, staleSymlink);
+      for (const retiredName of ["agent-runtime-cli", "plan-to-review"]) {
+        const staleCanonical = join(runtimeDir, "skills", retiredName);
+        const staleSymlink = join(runtimeDir, "claude", "skills", retiredName);
+        mkdirSync(staleCanonical, { recursive: true });
+        writeFileSync(
+          join(staleCanonical, "SKILL.md"),
+          `---\nname: ${retiredName}\n---\n`,
+          "utf-8",
+        );
+        symlinkSync(staleCanonical, staleSymlink);
+      }
       writeFileSync(
         join(runtimeDir, "lock.json"),
         JSON.stringify(
@@ -1769,6 +1766,12 @@ test("CLI prunes stale installed retired skill names", () => {
             skillsets: {
               personal: {
                 skills: {
+                  "agent-runtime-cli": {
+                    sourceType: "local",
+                    localPath: "skills",
+                    skillPath: "skills/agent-runtime-cli",
+                    contentHash: "stale",
+                  },
                   "plan-to-review": {
                     sourceType: "local",
                     localPath: "skills",
@@ -1795,8 +1798,16 @@ test("CLI prunes stale installed retired skill names", () => {
       ]);
       assert.equal(update.status, 0, update.stderr || update.stdout);
 
-      assert.equal(existsSync(staleCanonical), false);
-      assert.equal(existsSync(staleSymlink), false);
+      for (const retiredName of ["agent-runtime-cli", "plan-to-review"]) {
+        assert.equal(
+          existsSync(join(runtimeDir, "skills", retiredName)),
+          false,
+        );
+        assert.equal(
+          existsSync(join(runtimeDir, "claude", "skills", retiredName)),
+          false,
+        );
+      }
       assert.equal(existsSync(join(runtimeDir, "skills", "plan-review")), true);
       assert.equal(
         existsSync(join(runtimeDir, "skills", "plan-unit-sequencer")),
@@ -1808,6 +1819,10 @@ test("CLI prunes stale installed retired skill names", () => {
       ) as {
         skillsets: Record<string, { skills: Record<string, unknown> }>;
       };
+      assert.equal(
+        "agent-runtime-cli" in lock.skillsets.personal.skills,
+        false,
+      );
       assert.equal("plan-to-review" in lock.skillsets.personal.skills, false);
       assert.equal("plan-review" in lock.skillsets.personal.skills, true);
       assert.equal(
@@ -2333,10 +2348,10 @@ test("CLI install fetches a locked remote commit missing from a stale cache", ()
 
       runGit(["init", "--bare", remoteDir]);
       runGit(["init", sourceDir]);
-      runGit(["config", "user.email", "agent-runtime@example.test"], {
+      runGit(["config", "user.email", "ax@example.test"], {
         cwd: sourceDir,
       });
-      runGit(["config", "user.name", "Agent Runtime Test"], { cwd: sourceDir });
+      runGit(["config", "user.name", "AX Test"], { cwd: sourceDir });
       runGit(["remote", "add", "origin", remoteUrl], { cwd: sourceDir });
 
       writeFileSync(

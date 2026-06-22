@@ -428,7 +428,7 @@ Build the narrow end-to-end proof for the research family:
 - Forward-test the two generic research prompts from the Implementation
   Discipline section and record the result.
 - Run skill validation and runtime update/validation.
-- Run `pnpm agent-runtime skills status --profile personal` after the skills
+- Run `pnpm ax skills status --profile personal` after the skills
   update and record whether `agent-runtime.lock.json` changed.
 
 #### Acceptance Criteria
@@ -486,7 +486,7 @@ Only after Slice 1 is used:
 
 - `docs-and-agent-alignment`, because this plan adds reusable workflow skills
   and downstream skill routing expectations.
-- `agent-runtime-and-skill-compatibility`, because this plan adds skill folders,
+- `ax-and-skill-compatibility`, because this plan adds skill folders,
   adapter metadata, and runtime-managed skill artifacts.
 
 Baseline reviewers still run:
@@ -503,13 +503,13 @@ Expected first-slice verification:
 ```bash
 pnpm exec biome check <touched scripts/tests if any>
 pnpm test:unit
-pnpm agent-runtime skills update --profile personal
-pnpm agent-runtime skills status --profile personal
-pnpm agent-runtime validate --all-profiles
+pnpm ax skills update --profile personal
+pnpm ax skills status --profile personal
+pnpm ax validate --all-profiles
 ```
 
 If the broad runtime update path hits unrelated non-symlink instruction targets,
-use the narrower `pnpm agent-runtime skills update --profile personal` path and
+use the narrower `pnpm ax skills update --profile personal` path and
 report the skipped broader update.
 
 ## Open Questions

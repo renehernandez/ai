@@ -1,6 +1,6 @@
 ## Context
 
-`agent-runtime` currently manages shared skills, generated agents, and
+`ax` currently manages shared skills, generated agents, and
 installed instruction files. OpenSpec assets have a different lifecycle:
 `openspec init . --tools codex,claude` generates repo-local skills and commands
 inside the repository that is adopting OpenSpec.
@@ -15,7 +15,7 @@ repo while making one local `.agents` copy canonical.
 
 **Goals:**
 
-- Add an `openspec` scope to `agent-runtime` with `install`, `update`,
+- Add an `openspec` scope to `ax` with `install`, `update`,
   `validate`, and `status`.
 - Use OpenSpec's own generator as the source for repo-local assets.
 - Normalize generated OpenSpec skills into `.agents/skills`.
@@ -36,13 +36,13 @@ repo while making one local `.agents` copy canonical.
 
 ### Use OpenSpec as the Generator
 
-`agent-runtime openspec install` should invoke
-`openspec init . --tools codex,claude`. `agent-runtime openspec update` should
+`ax openspec install` should invoke
+`openspec init . --tools codex,claude`. `ax openspec update` should
 invoke `openspec update .` for initialized repos and fall back to install
 behavior when the repo is missing OpenSpec scaffolding.
 
 Alternative considered: reimplement OpenSpec template generation inside
-`agent-runtime`. That would couple this repo to OpenSpec internals and drift
+`ax`. That would couple this repo to OpenSpec internals and drift
 from upstream generated content.
 
 ### Normalize After Generation

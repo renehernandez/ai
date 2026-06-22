@@ -17,10 +17,10 @@ import {
   lstatIfExists,
   replaceSafeSymlink,
   validateSafeSymlinkTargets,
-} from "../../scripts/agent-runtime.ts";
+} from "../../scripts/ax.ts";
 
 function withTempDir(callback: (directory: string) => void): void {
-  const directory = mkdtempSync(join(tmpdir(), "agent-runtime-symlink-"));
+  const directory = mkdtempSync(join(tmpdir(), "ax-symlink-"));
   try {
     callback(directory);
   } finally {

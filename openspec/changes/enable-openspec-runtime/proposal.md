@@ -7,7 +7,7 @@ harder for agents to repeat.
 
 ## What Changes
 
-- Add an `openspec` scope to `agent-runtime` with `install`, `update`,
+- Add an `openspec` scope to `ax` with `install`, `update`,
   `validate`, and `status` commands.
 - Run OpenSpec generation for Codex and Claude against the current repository.
 - Normalize generated OpenSpec skills into repo-local `.agents/skills` and
@@ -23,8 +23,8 @@ harder for agents to repeat.
 
 ### New Capabilities
 
-- `agent-runtime-openspec`: repo-local OpenSpec initialization, update,
-  normalization, status, and validation through `agent-runtime`.
+- `ax-openspec`: repo-local OpenSpec initialization, update,
+  normalization, status, and validation through `ax`.
 
 ### Modified Capabilities
 
@@ -32,7 +32,7 @@ None.
 
 ## Impact
 
-- `scripts/agent-runtime.ts` gains a new runtime scope and OpenSpec-specific
+- `scripts/ax.ts` gains a new runtime scope and OpenSpec-specific
   normalization helpers.
 - `agent-runtime.config.json` declares the repo-local OpenSpec tool targets and
   canonical `.agents` folders.

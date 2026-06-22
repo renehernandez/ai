@@ -1,0 +1,4 @@
+interface:
+  display_name: "AX CLI"
+  short_description: "Use the ax CLI correctly"
+  default_prompt: "Use $ax-cli to choose and validate the right ax command."

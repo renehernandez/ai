@@ -31,7 +31,7 @@ None.
 - `review-first-plan-orchestration`: full-stack orchestrator completion,
   concrete stack-ready evidence, caller-aware sequencing, resume predecessor
   verification, and adjacent skill/rule alignment.
-- `agent-runtime-cli`: reusable runtime script installation and installed-script
+- `ax-cli`: reusable runtime script installation and installed-script
   execution checks for planning skills.
 
 ## Impact

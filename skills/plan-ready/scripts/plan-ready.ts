@@ -42,7 +42,7 @@ const OPTIONAL_REVIEWER_DESCRIPTIONS = {
     "docs, agent instructions, skill/rule updates, automation prompts, background-review rubrics, PR description expectations",
   "performance-and-scale":
     "hot paths, concurrency, caching, queues, rate limits, batch behavior, operational limits",
-  "agent-runtime-and-skill-compatibility":
+  "ax-and-skill-compatibility":
     "skill structure, SKILL.md conventions, adapter prompts, install/update paths, bundled scripts, internal subagent routing, runtime compatibility",
 } as const;
 
@@ -189,7 +189,7 @@ ${OPTIONAL_REVIEWERS.map((reviewer) => `    - ${reviewer}: ${OPTIONAL_REVIEWER_D
 
 selection_rules:
   - Select docs-and-agent-alignment for reusable workflow, docs, skills, rules, automation prompt, background review, or PR/MR description contract changes.
-  - Select agent-runtime-and-skill-compatibility for skill folder structure, skill metadata, bundled script, adapter prompt, internal subagent routing, install/update, or agent runtime changes.
+  - Select ax-and-skill-compatibility for skill folder structure, skill metadata, bundled script, adapter prompt, internal subagent routing, install/update, or Agents Experience changes.
   - Select only from optional_reviewer_catalog; do not invent reviewer names.
   - Use baseline_sufficient only after explaining why no optional catalog reviewer is needed.
 `);

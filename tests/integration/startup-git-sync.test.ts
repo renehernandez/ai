@@ -65,8 +65,8 @@ function runGit(args: string[], cwd: string): string {
 }
 
 function configureUser(cwd: string): void {
-  runGit(["config", "user.email", "agent-runtime@example.test"], cwd);
-  runGit(["config", "user.name", "Agent Runtime Test"], cwd);
+  runGit(["config", "user.email", "ax@example.test"], cwd);
+  runGit(["config", "user.name", "AX Test"], cwd);
 }
 
 function commitFile(

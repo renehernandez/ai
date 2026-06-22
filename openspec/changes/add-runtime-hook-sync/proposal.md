@@ -1,7 +1,7 @@
 ## Why
 
 Startup hooks and runtime-managed user assets are becoming shared infrastructure
-for Codex, Claude, and the local agent runtime. The current setup relies on
+for Codex, Claude, and the local Agents Experience. The current setup relies on
 manual hook registration and unsafe Git-sync behavior, while runtime mutations
 can replace files or symlinks without a verified backup.
 
@@ -11,7 +11,7 @@ can replace files or symlinks without a verified backup.
   explicit missing-target handling.
 - Integrate backup-before-mutation behavior into existing runtime-managed
   mutation paths before adding new hook behavior.
-- Add a managed `hooks` scope to `agent-runtime` with `install`, `update`,
+- Add a managed `hooks` scope to `ax` with `install`, `update`,
   `validate`, and `status` commands.
 - Manage canonical hook and Codex/Claude hook symlink targets with
   backup-gated migration from existing real directories.
@@ -30,7 +30,7 @@ can replace files or symlinks without a verified backup.
   verification for runtime-managed files, directories, and symlinks.
 - `runtime-hooks`: managed hook installation, update, validation, status,
   symlink targets, and Codex/Claude config registration through
-  `agent-runtime`.
+  `ax`.
 - `startup-git-sync`: conservative startup Git synchronization behavior for
   primary default-branch checkouts and safe current-worktree rebases.
 
@@ -40,7 +40,7 @@ None.
 
 ## Impact
 
-- `scripts/agent-runtime.ts`
+- `scripts/ax.ts`
 - `agent-runtime.config.json`
 - `hooks/`
 - `hooks/README.md`

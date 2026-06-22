@@ -18,12 +18,12 @@ requirement justifies another language.
 
 ## Managed Runtime Flow
 
-Use `agent-runtime` to manage hook symlinks and startup registration:
+Use `ax` to manage hook symlinks and startup registration:
 
 ```sh
-pnpm agent-runtime hooks update
-pnpm agent-runtime hooks validate
-pnpm agent-runtime hooks status
+pnpm ax hooks update
+pnpm ax hooks validate
+pnpm ax hooks status
 ```
 
 `hooks install` and `hooks update` replace managed hook directories with
@@ -42,8 +42,8 @@ app records trust for the registered startup hook.
 The top-level wrapper commands include hook handling:
 
 ```sh
-pnpm agent-runtime update --profile personal
-pnpm agent-runtime validate --profile personal
+pnpm ax update --profile personal
+pnpm ax validate --profile personal
 ```
 
 Scoped `hooks validate` enforces hook symlink and registration correctness.
@@ -88,7 +88,7 @@ pnpm exec tsx /Users/rene.hernandez/.agents/hooks/block-node-modules-bin.ts --he
 
 ## Codex Registration
 
-`agent-runtime hooks update` manages startup Git sync registration in
+`ax hooks update` manages startup Git sync registration in
 `~/.codex/hooks.json`. Older manual hook snippets may still exist in
 `~/.codex/config.toml` for other hook types, but startup registration should be
 managed through `hooks.json`.

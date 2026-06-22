@@ -15,5 +15,5 @@
 
 ## 4. Runtime Cleanup
 
-- [x] 4.1 Update `agent-runtime` skill installation to prune stale installed old-name skill directories or symlinks after plan skill renames.
+- [x] 4.1 Update `ax` skill installation to prune stale installed old-name skill directories or symlinks after plan skill renames.
 - [x] 4.2 Refresh personal and work runtime profiles, validate installed surfaces, and prove stale retired skill names are absent from repo and installed runtime surfaces.

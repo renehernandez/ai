@@ -351,8 +351,8 @@ Required local verification:
 
 Runtime compatibility verification:
 
-- Run `pnpm agent-runtime skills validate --all-profiles` or a narrower selected profile set after adding the skill.
-- Run the appropriate `pnpm agent-runtime update --profile <name>` or `pnpm agent-runtime update --all-profiles` command when managed skill, agent, or instruction runtime artifacts need refresh.
+- Run `pnpm ax skills validate --all-profiles` or a narrower selected profile set after adding the skill.
+- Run the appropriate `pnpm ax update --profile <name>` or `pnpm ax update --all-profiles` command when managed skill, agent, or instruction runtime artifacts need refresh.
 - Expect `agent-runtime.lock.json` or runtime managed artifacts to change only when the runtime update command requires it; do not hand-edit runtime lock artifacts.
 
 ## Success Criteria

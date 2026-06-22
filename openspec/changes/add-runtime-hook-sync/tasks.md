@@ -9,7 +9,7 @@
 
 ## 2. Managed Hooks Runtime Scope
 
-- [x] 2.1 Add hook runtime configuration, `agent-runtime hooks
+- [x] 2.1 Add hook runtime configuration, `ax hooks
   install|update|validate|status`, wrapper inclusion, and backup-gated symlink
   migration for canonical, Codex, and Claude hook paths.
 

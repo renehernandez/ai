@@ -23,9 +23,9 @@ Portable user-level instructions that are installed into runtime profiles live i
 - In brainstorming or planning threads, treat agreement as design confirmation only. Do not edit files, generate migrations, or start implementation from scope agreement alone; wait for an explicit implementation trigger such as "implement this", "make the changes", "start the PR", "go ahead and code it", or "apply the plan".
 - When the user says they dislike a proposed name, structure, or design shape, provide alternatives and tradeoffs before changing files, even if they did not explicitly ask for alternatives.
 - For JavaScript and TypeScript projects, invoke package-managed commands through the package manager, such as `pnpm exec`, `pnpm dlx`, or `pnpm run`; never call binaries inside `node_modules` directly.
-- After changing shared skill, agent, instruction, or rule sources in this repo, run `writing-skills` against the changed agent behavior before committing. For shared skill changes, refresh the installed runtime copies before treating the change as live with `pnpm agent-runtime skills update --profile <name>`, and confirm the active runtime surface with `pnpm agent-runtime skills status --profile <name>` or `pnpm agent-runtime validate --profile <name>`.
+- After changing shared skill, agent, instruction, or rule sources in this repo, run `writing-skills` against the changed agent behavior before committing. For shared skill changes, refresh the installed runtime copies before treating the change as live with `pnpm ax skills update --profile <name>`, and confirm the active runtime surface with `pnpm ax skills status --profile <name>` or `pnpm ax validate --profile <name>`.
 - Write agent and Codex hooks in TypeScript unless there is a specific runtime requirement that makes another language a better fit.
-- After changing hook sources or hook registration behavior, run `pnpm agent-runtime hooks update` for the affected machine when live runtime refresh is intended, then use `pnpm agent-runtime hooks validate` or `pnpm agent-runtime hooks status` to confirm symlinks, startup registration, Codex trust state, and selected remote reporting.
+- After changing hook sources or hook registration behavior, run `pnpm ax hooks update` for the affected machine when live runtime refresh is intended, then use `pnpm ax hooks validate` or `pnpm ax hooks status` to confirm symlinks, startup registration, Codex trust state, and selected remote reporting.
 - In troubleshooting mode, diagnose and report before editing or fixing anything.
 - For multi-file implementation requests, work in the current agent session unless the user explicitly asks to use a subagent or the active workflow launches available subagents for bounded work or verification.
 - For review work, use the relevant review skill or adapter in the current session. Skills may delegate to available local, cloud, or custom subagents when the workflow benefits from independent review lanes.
@@ -58,23 +58,23 @@ Portable user-level instructions that are installed into runtime profiles live i
 
 ### OpenSpec Runtime
 
-- Use `pnpm agent-runtime openspec install|update|validate|status` to manage
+- Use `pnpm ax openspec install|update|validate|status` to manage
   repo-local OpenSpec scaffolding.
-- When invoked as a globally linked `agent-runtime` command from another repo,
+- When invoked as a globally linked `ax` command from another repo,
   the runtime source/config root remains this AI repo by default, while
   repo-local scopes such as `openspec` target the invocation current working
-  directory. Use top-level `agent-runtime status` to verify source root, config
+  directory. Use top-level `ax status` to verify source root, config
   path, target root, executable link health, managed runtime surfaces, hooks,
   and target OpenSpec readiness.
-- Run `agent-runtime openspec install` only for missing OpenSpec setup. Headless
+- Run `ax openspec install` only for missing OpenSpec setup. Headless
   install requires `--context-file <path>` with confirmed project context before
   writing `openspec/config.yaml`; interactive install previews inferred config
   and asks for confirmation. Do not use `--accept-inferred-config`.
-- Run `agent-runtime openspec update` for configured projects. Normal update is
+- Run `ax openspec update` for configured projects. Normal update is
   asset-focused and skips mutation when validation reports generated assets are
   current. Use `--review-config` to review inferred context/rule changes, and
   use `--accept-config-changes` only when applying those changes headlessly.
-- Run `agent-runtime openspec validate` after install, update, or config review;
+- Run `ax openspec validate` after install, update, or config review;
   validation checks repo config quality, generated asset targets, reusable
   runtime scripts, and symlink normalization.
 - OpenSpec-generated skills are canonical under `.agents/skills/openspec-*` for

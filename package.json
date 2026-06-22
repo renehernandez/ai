@@ -1,12 +1,12 @@
 {
-  "name": "agent-runtime",
+  "name": "ax",
   "private": true,
   "type": "module",
   "bin": {
-    "agent-runtime": "bin/agent-runtime.mjs"
+    "ax": "bin/ax.mjs"
   },
   "scripts": {
-    "agent-runtime": "tsx scripts/agent-runtime.ts",
+    "ax": "tsx scripts/ax.ts",
     "biome:check": "biome check --staged --no-errors-on-unmatched",
     "biome:check:all": "biome check .",
     "biome:write": "biome check --write .",

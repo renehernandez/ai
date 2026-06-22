@@ -69,9 +69,9 @@ Implement the first usable version:
   required `slice_plan_review` companion block.
 - Update `tests/unit/plan-ready-script.test.ts` for the new enforcement.
 - Run the repo-managed skill install or update path for the intended profile,
-  prefer `pnpm agent-runtime skills install --profile personal`, record any
+  prefer `pnpm ax skills install --profile personal`, record any
   `agent-runtime.lock.json` change, and verify with the matching
-  `agent-runtime` status and validation commands.
+  `ax` status and validation commands.
 - Update runtime or docs surfaces only when needed for discoverability.
 
 ## Non-Goals
@@ -221,10 +221,10 @@ Build the vertical path that makes slice review mandatory:
 - Add RED/GREEN/REFACTOR pressure-test evidence to
   `skills/plan-slices/SKILL.md` before treating the skill as ready.
 - Run the repo-managed skill sync path, such as
-  `pnpm agent-runtime skills install --profile personal`, and record any
+  `pnpm ax skills install --profile personal`, and record any
   `agent-runtime.lock.json` change.
-- Verify runtime visibility with `pnpm agent-runtime skills status --profile
-  personal` and `pnpm agent-runtime validate --all-profiles`, reporting any
+- Verify runtime visibility with `pnpm ax skills status --profile
+  personal` and `pnpm ax validate --all-profiles`, reporting any
   Fullscript-only credential or tooling gap separately.
 
 Acceptance criteria:
@@ -303,9 +303,9 @@ pnpm exec tsx skills/plan-slices/scripts/plan-slices.ts validate-review --file <
 pnpm exec tsx skills/plan-ready/scripts/plan-ready.ts validate-handoff --file <fixture>
 pnpm test -- tests/unit/plan-slices-script.test.ts tests/unit/plan-ready-script.test.ts
 pnpm test
-pnpm agent-runtime skills install --profile personal
-pnpm agent-runtime skills status --profile personal
-pnpm agent-runtime validate --all-profiles
+pnpm ax skills install --profile personal
+pnpm ax skills status --profile personal
+pnpm ax validate --all-profiles
 ```
 
 Skill-authoring validation must follow RED/GREEN/REFACTOR:
@@ -333,10 +333,10 @@ reviewer_selection_judge:
     - refactoring-opportunities
   selected_optional_reviewers:
     - docs-and-agent-alignment
-    - agent-runtime-and-skill-compatibility
+    - ax-and-skill-compatibility
   rationale:
     docs-and-agent-alignment: The plan changes reusable workflow docs, skill instructions, adapter prompts, and plan-ready gate behavior.
-    agent-runtime-and-skill-compatibility: The plan adds a new skill folder, bundled script, adapter prompt, validation contract, and runtime-facing discoverability.
+    ax-and-skill-compatibility: The plan adds a new skill folder, bundled script, adapter prompt, validation contract, and runtime-facing discoverability.
 ```
 
 ## Plan-Ready Handoff Target

@@ -295,10 +295,10 @@ Observable result:
 
 Includes:
 
-- Run `pnpm agent-runtime skills update --profile personal`.
-- Run `pnpm agent-runtime skills update --profile work`.
-- Confirm with `pnpm agent-runtime skills status --profile personal` and
-  `pnpm agent-runtime skills status --profile work`.
+- Run `pnpm ax skills update --profile personal`.
+- Run `pnpm ax skills update --profile work`.
+- Confirm with `pnpm ax skills status --profile personal` and
+  `pnpm ax skills status --profile work`.
 - Inspect the current dirty-file inventory before editing and record which
   existing hunks are reused or discarded.
 - Review `agent-runtime.lock.json` after profile updates and confirm the lock
@@ -329,7 +329,7 @@ Delivery expectation:
 ### Refactoring / Reuse
 
 - Preparatory refactor: none.
-- Reusable surface: existing agent-runtime update/status commands.
+- Reusable surface: existing ax update/status commands.
 - First consumer: installed Codex and agent skill surfaces.
 - Later consumers: any future plan-ready or brainstorming runs on this machine.
 - Behavior-preserving verification: runtime status confirms installed skills are
@@ -347,8 +347,8 @@ After the approved implementation slice completes, run:
 - focused Biome checks on changed TypeScript files
 - `mise run check`, or report the exact blocker if `mise` trust or detached
   worktree state prevents the repo gate from running
-- `pnpm agent-runtime skills status --profile personal`
-- `pnpm agent-runtime skills status --profile work`
+- `pnpm ax skills status --profile personal`
+- `pnpm ax skills status --profile work`
 - `git diff -- agent-runtime.lock.json`
 - final `git status --short --branch`
 
