@@ -153,6 +153,17 @@ planning_review:
   review:
     evidence:
       - planning MR latest-head Nitro feedback completed cleanly
+  planning_feedback_disposition:
+    status: complete
+    evidence:
+      - Nitro planning feedback was enumerated by note ID and disposition.
+    items:
+      - note_id: "3330306"
+        discussion_id: abc123
+        resolvable: true
+        resolved: true
+        disposition: fixed_in_planning
+        evidence: planning MR commit addressed the comment
   blockers: []
 `;
 
@@ -233,6 +244,52 @@ test("validate-planning-review rejects missing Nitro gate", () => {
 
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /nitro_feedback_gate.artifact/);
+});
+
+test("validate-planning-review rejects missing planning feedback disposition", () => {
+  const result = runPlanReview(
+    "validate-planning-review",
+    planningReview.replace(
+      / {2}planning_feedback_disposition:[\s\S]*? {2}blockers: \[\]/,
+      "  blockers: []",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /planning_review\.planning_feedback_disposition\.status/,
+  );
+});
+
+test("validate-planning-review rejects unresolved feedback without disposition rationale", () => {
+  const result = runPlanReview(
+    "validate-planning-review",
+    planningReview
+      .replace("        resolved: true", "        resolved: false")
+      .replace(
+        "        disposition: fixed_in_planning",
+        "        disposition: blocked",
+      ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /disposition blocked prevents implementation/);
+});
+
+test("validate-planning-review accepts unresolved feedback deferred to a task", () => {
+  const result = runPlanReview(
+    "validate-planning-review",
+    planningReview
+      .replace("        resolved: true", "        resolved: false")
+      .replace(
+        "        disposition: fixed_in_planning",
+        '        disposition: deferred_to_task\n        implementation_task: "1.7"',
+      ),
+  );
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /planning_review valid/);
 });
 
 test("validate-planning-review rejects legacy planning modes", () => {
