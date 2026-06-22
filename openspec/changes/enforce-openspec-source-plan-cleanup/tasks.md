@@ -1,6 +1,6 @@
 ## 1. Source-Plan Cleanup Contract
 
-- [ ] 1.1 Document source-plan cleanup in planning skills
+- [x] 1.1 Document source-plan cleanup in planning skills
       Update `skills/plan-orchestrator`, `skills/plan-review`, their agent
       prompts, and relevant normative planning specs or rules so
       plan-to-OpenSpec conversion treats `.agents/plans/**` files as scratch
