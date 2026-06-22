@@ -9,10 +9,10 @@ allowed-tools: Read, Grep, Bash(git:*), Bash(pnpm:*)
 ## Overview
 
 Use the runtime CLI as the entrypoint for shared runtime assets. Inside this AI
-repo, use `pnpm ax ...`. From another target project, use the
-globally linked `ax ...` binary when available. Prefer the wrapper
-over direct script execution, direct filesystem edits to installed runtime
-copies, or raw upstream OpenSpec setup.
+repo, use `pnpm ax ...`. From another target project, use the AX-managed
+`~/.local/bin/ax` shim when available. Prefer the wrapper over direct script
+execution, direct filesystem edits to installed runtime copies, or raw upstream
+OpenSpec setup.
 
 ## First Move
 
@@ -58,27 +58,27 @@ Runtime profiles select installed skill and instruction surfaces such as
 | Top-level `install|update|status|validate` | Yes | Applies to skills and instructions; hooks run as configured. |
 | `skills` | Yes | Use after changing `skills/**`. |
 | `instructions` | Yes | Use after changing `AGENTS.md`, `instructions/**`, or `rules/**`. |
-| `hooks` | No | Hook targets come from `agent-runtime.config.json`. |
+| `hooks` | No | Hook targets come from `ax.config.json`. |
 | `openspec` | No | OpenSpec scaffolding is repo-local, not profile-local. |
 
 `--config <path>` is the shared override when a non-default
-`agent-runtime.config.json` is required.
+`ax.config.json` is required.
 
-When invoked through the globally linked `ax` binary, source root and
-default config path resolve to the durable AI repo. Repo-local scopes such as
-`openspec` target the current working directory. Do not silently run AI repo
-package scripts against a target repo to simulate global usage; use the linked
-binary or explicitly explain the source/config/target roots before proceeding.
+When invoked through the managed `~/.local/bin/ax` shim, source root and default
+config path resolve to the durable AI repo. Repo-local scopes such as `openspec`
+target the current working directory. Do not silently run AI repo package
+scripts against a target repo to simulate global usage; use the managed shim or
+explicitly explain the source/config/target roots before proceeding.
 
 ## OpenSpec Setup
 
 Do not run raw `openspec init` for repo-local managed setup. Use:
 
 ```bash
-pnpm ax openspec status
-pnpm ax openspec install --context-file ./openspec-context.md
-pnpm ax openspec update
-pnpm ax openspec validate
+ax openspec status
+ax openspec install --context-file ./openspec-context.md
+ax openspec update
+ax openspec validate
 ```
 
 State rules:
@@ -135,6 +135,7 @@ command before finishing.
 | Mistake | Fix |
 | --- | --- |
 | Running raw `openspec init` in a managed repo | Use `pnpm ax openspec install` only for missing setup. |
+| Recommending `pnpm link` for global access | Use `pnpm ax shim install` and verify with `ax status`. |
 | Running headless OpenSpec install without confirmed context | Provide `--context-file <path>`; do not use unsupported `--accept-inferred-config`. |
 | Passing `--profile` to `openspec` or `hooks` | Use profile flags only on top-level, `skills`, and `instructions` commands. |
 | Running `install` on an existing OpenSpec footprint | Run `status` and `validate`; use `update` for configured scaffolding. |

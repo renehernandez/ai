@@ -37,7 +37,7 @@ These rules apply to command execution, network access, and tool installation ac
 - Use either `--all-profiles` or one or more `--profile <name>` flags for non-interactive skills commands.
 - After changing any managed skill source under `skills/`, run `writing-skills` against the changed skill before committing, then run `pnpm ax skills update --profile <name>` before treating the change as live. Repo source files and installed runtime copies can drift until the update runs.
 - After refreshing a changed skill, verify the active runtime surface with `pnpm ax skills status --profile <name>`. Use `pnpm ax skills validate --profile <name>` or `pnpm ax validate --all-profiles` when the change affects shared workflow contracts, agent prompts, or cross-profile behavior.
-- If a managed skill depends on a shared script outside its own skill directory, declare that file under `runtime.reusableScripts` in `agent-runtime.config.json` and refresh the affected profile with `pnpm ax skills update --profile <name>`.
+- If a managed skill depends on a shared script outside its own skill directory, declare that file under `runtime.reusableScripts` in `ax.config.json` and refresh the affected profile with `pnpm ax skills update --profile <name>`.
 - Do not manually create skill symlinks or hand-copy managed skills into runtime folders.
 - Do not use `npx skills`; this repo manages skills through the internal `pnpm ax` CLI.
 
@@ -70,4 +70,5 @@ These rules apply to command execution, network access, and tool installation ac
 
 - Use `pnpm ax install --profile <name>` or `pnpm ax update --profile <name>` to refresh skills, instructions, and hooks.
 - Use `pnpm ax validate --profile <name>` or `pnpm ax status --profile <name>` to validate skills and instructions while reporting hook state. Use scoped `pnpm ax hooks validate` when hook symlink and startup registration failures should block.
+- Use `pnpm ax shim install|status|uninstall` to manage the global `~/.local/bin/ax` entrypoint; do not use `pnpm link` as the supported global access path.
 - Add `--help` to the root command, wrapper commands, scoped commands, or scoped subcommands to inspect available options before running a command.

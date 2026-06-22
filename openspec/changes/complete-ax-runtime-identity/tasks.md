@@ -44,7 +44,7 @@
     - `pnpm test:integration`
     - `pnpm ax status --all-profiles`
     - `node bin/ax.mjs status`
-- [ ] 1.4 Update active AX docs specs and tests
+- [x] 1.4 Update active AX docs specs and tests
   - Deliverable: Update runtime-facing docs, shared skills, rules,
     instructions, active OpenSpec specs, tests, and legacy-reference audit
     expectations for supported AX naming and the managed-shim path.

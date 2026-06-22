@@ -35,7 +35,7 @@ Codex and Claude startup hook configs. Config files are backed up under
 symlink state, Codex and Claude startup registration state, Codex trust state,
 and the selected startup Git sync remote URL. The remote line warns when the
 selected remote URL differs from `runtime.hooks.startupRemote.expectedUrl` in
-`agent-runtime.config.json`; this check is evaluated in the current Git
+`ax.config.json`; this check is evaluated in the current Git
 repository where the command runs. Codex may still report untrusted until the
 app records trust for the registered startup hook.
 

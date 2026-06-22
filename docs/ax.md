@@ -7,10 +7,18 @@ repo. Inside this repo, use the package script:
 pnpm ax <scope> <command>
 ```
 
-From another project, use the globally linked `ax` binary when it is
-installed. The global binary still uses this repo as the source root and this
-repo's `agent-runtime.config.json` by default. Repo-local scopes such as
-`openspec` target the current working directory where the command is invoked.
+From another project, use the AX-managed shim at `~/.local/bin/ax` when it is
+installed. The shim uses this repo as the source root and this repo's
+`ax.config.json` by default. Repo-local scopes such as `openspec` target the
+current working directory where the command is invoked.
+
+Install or inspect the managed shim with:
+
+```bash
+pnpm ax shim install
+pnpm ax shim status
+pnpm ax shim uninstall
+```
 
 Run the top-level status command from any target repo to verify the whole
 installation:
@@ -19,8 +27,9 @@ installation:
 ax status
 ```
 
-It reports source root, config path, target root, executable link health,
-skills, instructions, reusable scripts, hooks, and target OpenSpec readiness.
+It reports source root, config path, lock path, cache path, target root,
+executable link health, managed shim health, skills, instructions, reusable
+scripts, hooks, and target OpenSpec readiness.
 
 ## OpenSpec Lifecycle
 

@@ -61,7 +61,7 @@ Portable user-level instructions that are installed into runtime profiles live i
 
 - Use `pnpm ax openspec install|update|validate|status` to manage
   repo-local OpenSpec scaffolding.
-- When invoked as a globally linked `ax` command from another repo,
+- When invoked through the managed `~/.local/bin/ax` shim from another repo,
   the runtime source/config root remains this AI repo by default, while
   repo-local scopes such as `openspec` target the invocation current working
   directory. Use top-level `ax status` to verify source root, config
