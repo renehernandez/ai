@@ -302,9 +302,9 @@ type LockFile = {
   >;
 };
 
-const CONFIG_FILE = "agent-runtime.config.json";
-const LOCK_FILE = "agent-runtime.lock.json";
-const CACHE_DIR = ".agent-runtime/cache";
+const CONFIG_FILE = "ax.config.json";
+const LOCK_FILE = "ax.lock.json";
+const CACHE_DIR = ".ax/cache";
 const OPENSPEC_INSTALL_COMMAND = "npm install -g @fission-ai/openspec@latest";
 const DEFAULT_OPENSPEC_SCHEMA = "spec-driven";
 const DEFAULT_OPENSPEC_PROFILE = "custom";
@@ -344,7 +344,7 @@ const PROJECT_SIGNAL_DOC_FILES = [
   "CLAUDE.md",
 ] as const;
 const PROJECT_SIGNAL_IGNORED_NAMES = new Set([
-  ".agent-runtime",
+  ".ax",
   ".cache",
   ".codex",
   ".git",
@@ -359,7 +359,7 @@ const PROJECT_SIGNAL_IGNORED_NAMES = new Set([
   "node_modules",
   "openspec",
   "tmp",
-  "agent-runtime.lock.json",
+  "ax.lock.json",
   "package-lock.json",
   "pnpm-lock.yaml",
   "yarn.lock",
@@ -657,8 +657,8 @@ export function createRuntimeInvocationContext(
     sourceRoot: runtimeSourceRoot(),
     targetRoot: process.cwd(),
     executablePath:
-      process.env.AGENT_RUNTIME_EXECUTABLE_PATH || process.argv[1]
-        ? resolve(process.env.AGENT_RUNTIME_EXECUTABLE_PATH || process.argv[1])
+      process.env.AX_EXECUTABLE_PATH || process.argv[1]
+        ? resolve(process.env.AX_EXECUTABLE_PATH || process.argv[1])
         : "",
     configPath: resolve(configPath),
   };
@@ -3113,7 +3113,7 @@ function runSkills(
   backupRuntimeTarget(lockFile, {
     assetKind: "config",
     backupsRoot,
-    targetName: "agent-runtime-lock",
+    targetName: "ax-lock",
   });
   writeJson(lockFile, lock);
 }

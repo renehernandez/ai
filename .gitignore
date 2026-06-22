@@ -2,7 +2,7 @@ automations/.run-jitter-salt
 automations/**/memory.md
 automations/**/state.json
 automations/**/*.log
-.agent-runtime/cache/
+.ax/cache/
 agents/claude/
 agents/codex/
 agents/opencode/
