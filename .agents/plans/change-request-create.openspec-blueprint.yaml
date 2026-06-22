@@ -1,0 +1,122 @@
+openspec_blueprint:
+  status: ready_for_openspec
+  change:
+    suggested_id: add-change-request-create
+    title: Managed change request creation
+    objective: Create a managed host-neutral change-request-create workflow that routes GitHub PR and GitLab MR creation or update through existing provider adapters while preserving project templates and producing reviewer-facing descriptions without unnecessary internal process or tooling references.
+  scope:
+    in:
+      - Add a new change-request-creation OpenSpec capability and narrow review-first-plan-orchestration alignment for shared rule and runtime gates.
+      - Add a contract-only change-request-create skill as the host-neutral entrypoint for PR/MR creation and update.
+      - Align durable review rules and provider adapter guidance so host-neutral flows delegate through change-request-create while direct provider requests remain supported.
+      - Add RED/GREEN pressure scenarios for route selection, template preservation, existing body updates, description scrubbing, and hosted status inclusion.
+    out:
+      - New provider-neutral CLI scripts or a generic adapter framework.
+      - Changes to Nitro review request semantics or hosted feedback parsing.
+      - Changes to review-feedback-routing route semantics beyond documenting how the new router consumes existing routing.
+      - Mechanical rewriting of existing hosted PR/MR descriptions outside requested update flows.
+  specs:
+    affected_or_new:
+      - change-request-creation
+      - review-first-plan-orchestration
+    proposed_requirements:
+      - Change request creation SHALL route by existing artifact URL, explicit user host, configured review routing, then target push remote, and SHALL ask or block when still ambiguous.
+      - Change request creation SHALL consume review-feedback-routing as the configured artifact route source and delegate to provider-specific artifact.create_adapter skills.
+      - Change request creation SHALL preserve project PR/MR templates and existing user-authored or reviewer-authored body content when updating hosted artifacts.
+      - Change request descriptions SHALL omit unnecessary internal process and tooling references anywhere in the body and omit routine validation already represented by CI or hooks.
+      - Change request descriptions SHALL include targeted behavior evidence, hosted failures, missing checks, required reviewer status, or stale hosted review state only when those facts affect review or merge confidence.
+      - Provider adapters SHALL delegate host-neutral creation/update requests to change-request-create and keep only provider mechanics plus minimal direct-use fallback body guidance.
+      - Shared review rules SHALL expose the same reviewer-facing description contract outside local-only skill discovery.
+  tasks:
+    - id: 1.1
+      title: Define OpenSpec contract and route boundaries
+      deliverable: Materialize the OpenSpec change with a new change-request-creation spec and a narrow review-first-plan-orchestration delta for shared rule and runtime alignment.
+      acceptance:
+        - Given mixed GitHub and GitLab remotes, the spec defines observable route precedence and ask/block behavior.
+        - Given review routing policy, the spec says change-request-create consumes review-feedback-routing and delegates to provider create_adapter skills.
+        - Given hosted feedback concerns, the spec keeps Nitro routing, hosted feedback parsing, and generic adapter frameworks out of scope.
+        - Given template, update, scrub, and hosted-failure cases, the spec includes Given/When/Then scenarios for each behavior.
+      verification:
+        - pnpm ax openspec validate
+      dependencies: []
+    - id: 1.2
+      title: Add contract-only host-neutral skill
+      deliverable: Add skills/change-request-create/SKILL.md with routing, description policy, template preservation, context gathering, ambiguity handling, and provider delegation guidance.
+      acceptance:
+        - The skill frontmatter names change-request-create and uses a Use when description with supported keys only.
+        - The skill delegates GitHub PR and GitLab MR creation/update through existing provider adapter skills.
+        - The skill contains the shared description scrub policy and reviewer-facing evidence rules.
+        - The skill does not add shared scripts, hosted-status fetchers, provider-neutral CLI helpers, or a generic provider framework.
+      verification:
+        - pnpm run skills:validate
+        - pnpm ax skills validate --profile personal
+        - pnpm ax skills validate --profile work
+      dependencies:
+        - 1.1
+    - id: 1.3
+      title: Align durable rules and provider adapters
+      deliverable: Update rules/git-and-review.md plus any required feature-delivery or skill trigger wording, and align github-pr-create and glab-mr-create with the router boundary.
+      acceptance:
+        - Durable rules identify change-request-create as the artifact-host-neutral create/update entrypoint.
+        - Provider adapters delegate neutral requests to change-request-create while retaining direct GitHub-only and GitLab-only use cases.
+        - Provider adapters retain minimal direct-use body guidance without duplicating the full router policy.
+        - Provider adapters use the safest provider-supported body transport when receiving a composed body.
+      verification:
+        - pnpm run skills:validate
+        - pnpm ax skills validate --profile personal
+        - pnpm ax skills validate --profile work
+      dependencies:
+        - 1.2
+    - id: 1.4
+      title: Add pressure scenarios and validation coverage
+      deliverable: Add documented RED/GREEN pressure scenarios or fixtures for routing, description scrubbing, template preservation, existing artifact updates, and hosted status inclusion.
+      acceptance:
+        - A GitLab MR leak scenario rejects internal process labels, local paths, and routine validation commands.
+        - A GitHub PR template scenario preserves template structure while omitting unnecessary internal tooling and routine validation details.
+        - An existing PR/MR update scenario preserves hand-authored reviewer notes, resolved checklist state, and manual links.
+        - Ambiguous remote and multi-template scenarios ask or block instead of guessing.
+        - A hosted failure scenario includes the relevant failing check, while routine green checks and covered local typechecks are omitted.
+      verification:
+        - RED/GREEN pressure-test transcript or fixture evidence for the listed scenarios
+        - pnpm run skills:validate
+        - pnpm test:unit
+        - pnpm test
+      dependencies:
+        - 1.3
+    - id: 1.5
+      title: Run shared skill review and runtime gates
+      deliverable: Complete shared-skill review and installed-surface verification for the changed skills and rules.
+      acceptance:
+        - writing-skills review has no unresolved actionable findings for changed skill behavior.
+        - Personal and work skill validation passes.
+        - When live refresh is intended, installed skill copies are refreshed and status confirms the active surfaces.
+      verification:
+        - pnpm ax skills validate --profile personal
+        - pnpm ax skills validate --profile work
+        - pnpm ax skills update --profile personal
+        - pnpm ax skills update --profile work
+        - pnpm ax skills status --profile personal
+        - pnpm ax skills status --profile work
+      dependencies:
+        - 1.4
+  recommended_first_task: 1.1
+  review:
+    reviewers_used:
+      - implementation-readiness
+      - edge-cases-and-risks
+      - simplification-and-scope-control
+      - refactoring-opportunities
+      - docs-and-agent-alignment
+      - ax-and-skill-compatibility
+    findings:
+      - Reviewers required explicit route precedence, review-feedback-routing ownership, and provider adapter delegation boundaries before OpenSpec materialization.
+      - Reviewers required existing artifact update preservation, source-specific template behavior, and scenario-observable acceptance criteria.
+      - Reviewers required durable rule alignment, writing-skills review, and ax skill validation/update/status gates for shared skill behavior.
+      - Reviewers required pressure scenarios because static skill validation does not prove description-scrubbing behavior.
+  risks:
+    - Over-scrubbing could remove useful targeted evidence unless the keep/drop rubric is applied consistently.
+    - Existing PR/MR updates could destroy reviewer context unless managed sections are detected or replacement is explicitly approved.
+    - Mixed GitHub/GitLab remotes could route incorrectly unless explicit URL and review-routing precedence is followed.
+    - Provider adapters could drift from the router if they duplicate the full shared body policy.
+  blockers: []
+  next_action: create_openspec_change

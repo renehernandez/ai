@@ -1,0 +1,21 @@
+## 1. Change Request Creation
+
+- [x] 1.1 Define OpenSpec contract and route boundaries.
+  - Add the `change-request-creation` spec delta.
+  - Add the narrow `review-first-plan-orchestration` delta for shared rule and runtime alignment.
+  - Validate with `pnpm ax openspec validate`.
+- [ ] 1.2 Add contract-only host-neutral skill.
+  - Add `skills/change-request-create/SKILL.md`.
+  - Keep the skill guidance-only: no new shared scripts, hosted-status fetchers, provider-neutral CLI helpers, or generic provider framework.
+  - Validate with `pnpm run skills:validate`, `pnpm ax skills validate --profile personal`, and `pnpm ax skills validate --profile work`.
+- [ ] 1.3 Align durable rules and provider adapters.
+  - Update `rules/git-and-review.md` and any necessary adjacent workflow wording.
+  - Update `skills/github-pr-create/SKILL.md` and `skills/glab-mr-create/SKILL.md` so neutral requests delegate to `change-request-create`.
+  - Keep direct provider usage supported with minimal safe body guidance.
+- [ ] 1.4 Add pressure scenarios and validation coverage.
+  - Add documented RED/GREEN pressure scenarios or fixtures for GitLab leak rejection, GitHub template preservation, existing artifact update, ambiguous routing, multi-template selection, and hosted failure inclusion.
+  - Run `pnpm run skills:validate`, `pnpm test:unit`, and `pnpm test`.
+- [ ] 1.5 Run shared skill review and runtime gates.
+  - Run `writing-skills` review against the changed shared skill behavior.
+  - Run `pnpm ax skills validate --profile personal` and `pnpm ax skills validate --profile work`.
+  - If live runtime refresh is intended, run `pnpm ax skills update --profile personal`, `pnpm ax skills update --profile work`, `pnpm ax skills status --profile personal`, and `pnpm ax skills status --profile work`.
