@@ -191,7 +191,7 @@ stack_ready:
   status: ready
   planning_artifact: <plan file or OpenSpec change>
   target_branch: main
-  stack_tip: <latest implementation MR URL or branch>
+  stack_tip: <Fullscript GitLab latest implementation MR URL>
   task_state:
     all_deliverable_tasks_checked: true
     fingerprint: <sha256 of stack-tip task state>
