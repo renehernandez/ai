@@ -404,6 +404,19 @@ test("validate-resume blocks checked predecessor tasks without artifact evidence
   );
 });
 
+test("validate-resume blocks delivery-blocked reports without blockers", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport.replace("status: resume_ready", "status: delivery_blocked"),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /blockers must explain why resume is delivery_blocked/,
+  );
+});
+
 test("validate-stack-ready accepts a clean reviewed stack", () => {
   const result = runPlanOrchestrator("validate-stack-ready", stackReady);
 
