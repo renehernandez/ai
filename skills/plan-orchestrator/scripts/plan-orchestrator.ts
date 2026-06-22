@@ -162,11 +162,11 @@ orchestrator_resume:
   intake: ready_plan | openspec_blueprint | existing_openspec | continue_resume
   planning_artifact: <plan file or OpenSpec change>
   planning_review_state: reviewed | missing | blocked
-  planning_artifact_ref: <planning MR URL or branch>
-  current_stack_tip: <MR URL or branch>
+  planning_artifact_ref: <Fullscript GitLab planning MR URL>
+  current_stack_tip: <Fullscript GitLab stack-tip MR URL>
   task_state_fingerprint: <sha256 of stack-tip task state>
   implementation_stack:
-    - artifact: <planning or implementation MR URL>
+    - artifact: <Fullscript GitLab planning or implementation MR URL>
       role: planning | implementation
       head_sha: <latest head sha>
       nitro_gate_outcome: passed | blocked | pending
