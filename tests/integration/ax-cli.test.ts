@@ -16,7 +16,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, sep } from "node:path";
+import { delimiter, dirname, join, sep } from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
 
@@ -116,6 +116,15 @@ function withFixture(
   }
 }
 
+function withTempHome(callback: (homeDir: string) => void): void {
+  const homeDir = mkdtempSync(join(tmpdir(), "ax-home-"));
+  try {
+    callback(homeDir);
+  } finally {
+    rmSync(homeDir, { force: true, recursive: true });
+  }
+}
+
 function runAgentRuntime(
   args: string[],
   options: RunOptions = {},
@@ -154,6 +163,9 @@ function runAgentRuntimeBin(
 }
 
 function assertSafeRuntimeArgs(args: string[]): void {
+  if (args[0] === "shim") {
+    return;
+  }
   if (!args.some((arg) => arg === "--config")) {
     assert.equal(
       args.some((arg) => arg === "install" || arg === "update"),
@@ -443,6 +455,7 @@ test("CLI shows global help", () => {
   assert.match(result.stdout, /hooks/);
   assert.match(result.stdout, /instructions/);
   assert.match(result.stdout, /openspec/);
+  assert.match(result.stdout, /shim/);
   assert.match(result.stdout, /skills/);
 });
 
@@ -466,6 +479,157 @@ test("CLI shows hooks scope help", () => {
   assert.match(result.stdout, /status/);
   assert.match(result.stdout, /update/);
   assert.match(result.stdout, /validate/);
+});
+
+test("CLI installs, reports, and uninstalls managed AX shim", () => {
+  withTempHome((homeDir) => {
+    const localBin = join(homeDir, ".local", "bin");
+    const shimPath = join(localBin, "ax");
+    const env = {
+      HOME: homeDir,
+      PATH: `${localBin}${delimiter}${process.env.PATH ?? ""}`,
+    };
+
+    const install = runAgentRuntime(["shim", "install"], { env });
+    assert.equal(install.status, 0, install.stderr || install.stdout);
+    assert.equal(existsSync(shimPath), true);
+    assert.match(readFileSync(shimPath, "utf-8"), /AX_MANAGED_SHIM/);
+    assert.match(install.stdout, /Installed managed AX shim/);
+    assert.match(install.stdout, /\[ok\] Managed shim/);
+    assert.match(install.stdout, /\[ok\] Executable bit/);
+    assert.match(install.stdout, /\[ok\] PATH includes/);
+    assert.match(install.stdout, /\[ok\] PATH ax entry:/);
+
+    const status = runAgentRuntime(["shim", "status"], { env });
+    assert.equal(status.status, 0, status.stderr || status.stdout);
+    assert.match(status.stdout, /\[ok\] Managed shim/);
+    assert.match(status.stdout, /\[ok\] Executable bit/);
+    assert.match(status.stdout, /\[ok\] Source root:/);
+    assert.match(status.stdout, new RegExp(escapeRegExp(repoRoot)));
+
+    const missingPathStatus = runAgentRuntime(["shim", "status"], {
+      env: { HOME: homeDir, PATH: process.env.PATH ?? "" },
+    });
+    assert.equal(
+      missingPathStatus.status,
+      0,
+      missingPathStatus.stderr || missingPathStatus.stdout,
+    );
+    assert.match(missingPathStatus.stdout, /\[missing\] PATH includes/);
+    assert.match(missingPathStatus.stdout, /export PATH=/);
+
+    const shadowBin = join(homeDir, "shadow-bin");
+    mkdirSync(shadowBin, { recursive: true });
+    writeFileSync(join(shadowBin, "ax"), "#!/bin/sh\nexit 0\n", "utf-8");
+    chmodSync(join(shadowBin, "ax"), 0o755);
+    const shadowedStatus = runAgentRuntime(["shim", "status"], {
+      env: {
+        HOME: homeDir,
+        PATH: `${shadowBin}${delimiter}${localBin}${delimiter}${process.env.PATH ?? ""}`,
+      },
+    });
+    assert.equal(
+      shadowedStatus.status,
+      0,
+      shadowedStatus.stderr || shadowedStatus.stdout,
+    );
+    assert.match(shadowedStatus.stdout, /\[shadowing\] PATH ax entry:/);
+    assert.match(shadowedStatus.stdout, /\[shadowed\] PATH ax entry:/);
+    assert.match(shadowedStatus.stdout, /shadows the managed AX shim/);
+
+    const uninstall = runAgentRuntime(["shim", "uninstall"], { env });
+    assert.equal(uninstall.status, 0, uninstall.stderr || uninstall.stdout);
+    assert.equal(existsSync(shimPath), false);
+    assert.match(uninstall.stdout, /Removed managed AX shim/);
+  });
+});
+
+test("CLI reports non-executable managed AX shim state", () => {
+  withTempHome((homeDir) => {
+    const localBin = join(homeDir, ".local", "bin");
+    const shimPath = join(localBin, "ax");
+    mkdirSync(localBin, { recursive: true });
+    writeFileSync(
+      shimPath,
+      [
+        "#!/bin/sh",
+        "# AX_MANAGED_SHIM",
+        `# AX_SOURCE_ROOT=${repoRoot}`,
+        `exec '${runtimeBin}' "$@"`,
+        "",
+      ].join("\n"),
+      "utf-8",
+    );
+    chmodSync(shimPath, 0o644);
+
+    const status = runAgentRuntime(["shim", "status"], {
+      env: {
+        HOME: homeDir,
+        PATH: `${localBin}${delimiter}${process.env.PATH ?? ""}`,
+      },
+    });
+
+    assert.equal(status.status, 0, status.stderr || status.stdout);
+    assert.match(status.stdout, /\[ok\] Managed shim/);
+    assert.match(status.stdout, /\[not-executable\] Executable bit/);
+  });
+});
+
+test("CLI refuses unmanaged AX shim replacement and removal", () => {
+  withTempHome((homeDir) => {
+    const localBin = join(homeDir, ".local", "bin");
+    const shimPath = join(localBin, "ax");
+    mkdirSync(localBin, { recursive: true });
+    writeFileSync(shimPath, "#!/bin/sh\nexit 0\n", "utf-8");
+    chmodSync(shimPath, 0o755);
+    const env = {
+      HOME: homeDir,
+      PATH: `${localBin}${delimiter}${process.env.PATH ?? ""}`,
+    };
+
+    const install = runAgentRuntime(["shim", "install"], { env });
+    assert.notEqual(install.status, 0);
+    assert.match(install.stderr, /Refusing to overwrite unmanaged ax shim/);
+
+    const uninstall = runAgentRuntime(["shim", "uninstall"], { env });
+    assert.notEqual(uninstall.status, 0);
+    assert.match(uninstall.stderr, /Refusing to remove unmanaged ax shim/);
+    assert.equal(existsSync(shimPath), true);
+  });
+});
+
+test("CLI reports stale and detached managed AX shim targets", () => {
+  withTempHome((homeDir) => {
+    const localBin = join(homeDir, ".local", "bin");
+    const shimPath = join(localBin, "ax");
+    const detachedRoot = join(homeDir, ".codex", "worktrees", "old", "ai");
+    mkdirSync(localBin, { recursive: true });
+    writeFileSync(
+      shimPath,
+      [
+        "#!/bin/sh",
+        "# AX_MANAGED_SHIM",
+        `# AX_SOURCE_ROOT=${detachedRoot}`,
+        `exec '${join(detachedRoot, "bin", "ax.mjs")}' "$@"`,
+        "",
+      ].join("\n"),
+      "utf-8",
+    );
+    chmodSync(shimPath, 0o755);
+
+    const status = runAgentRuntime(["shim", "status"], {
+      env: {
+        HOME: homeDir,
+        PATH: `${localBin}${delimiter}${process.env.PATH ?? ""}`,
+      },
+    });
+
+    assert.equal(status.status, 0, status.stderr || status.stdout);
+    assert.match(status.stdout, /\[ok\] Managed shim/);
+    assert.match(status.stdout, /\[stale\] Source root:/);
+    assert.match(status.stdout, /\[stale\] Source root path missing/);
+    assert.match(status.stdout, /\[detached\] Source root appears/);
+  });
 });
 
 test("CLI installs missing OpenSpec scaffolding and updates configured projects", () => {

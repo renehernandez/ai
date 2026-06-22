@@ -14,7 +14,7 @@
     - `pnpm test:unit`
     - `pnpm test:integration`
     - `pnpm ax status`
-- [ ] 1.2 Add managed AX shim lifecycle
+- [x] 1.2 Add managed AX shim lifecycle
   - Deliverable: Add `pnpm ax shim install|status|uninstall` for
     `~/.local/bin/ax` with managed marker, no-overwrite behavior, PATH
     diagnostics, and safe cleanup rules.
