@@ -707,11 +707,26 @@ function parseAxCommitArgs(args: string[]): {
     "--only",
     "-o",
     "--no-verify",
+    "--fixup",
+    "--squash",
+    "-C",
+    "-c",
+    "--reuse-message",
+    "--reedit-message",
   ]);
+  const unsupportedPrefixes = [
+    "--fixup=",
+    "--squash=",
+    "--reuse-message=",
+    "--reedit-message=",
+  ];
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
-    if (unsupported.has(arg)) {
+    if (
+      unsupported.has(arg) ||
+      unsupportedPrefixes.some((prefix) => arg.startsWith(prefix))
+    ) {
       errors.push(`Unsupported ax commit mode: ${arg}`);
       continue;
     }

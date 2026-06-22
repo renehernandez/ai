@@ -601,6 +601,7 @@ test("review-gate validate-commit rejects stale active review results", () => {
 
     assert.equal(result.status, 1);
     assert.match(result.stderr, /Stale review pass/);
+    assert.match(result.stderr, /completed_review_passes: \(none\)/);
     assert.match(result.stderr, /Review gate staged diff hash is stale/);
     assert.match(result.stderr, /rerun required local reviews/);
   } finally {
@@ -754,6 +755,28 @@ test("ax commit rejects commit-shape-mutating flags", () => {
 
     assert.equal(result.status, 1);
     assert.match(result.stderr, /Unsupported ax commit mode: --amend/);
+    assert.equal(runGit(["status", "--short"], { cwd }), "A  file.txt");
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("ax commit rejects autosquash and message-reuse commit modes", () => {
+  const cwd = createGitFixture("ax-commit-rejects-autosquash-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+
+    for (const args of [
+      ["commit", "--fixup=HEAD", "-m", "fixup"],
+      ["commit", "--squash", "HEAD", "-m", "squash"],
+      ["commit", "-C", "HEAD"],
+      ["commit", "-c", "HEAD"],
+    ]) {
+      const result = runAgentRuntime(args, { cwd });
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /Unsupported ax commit mode/);
+    }
     assert.equal(runGit(["status", "--short"], { cwd }), "A  file.txt");
   } finally {
     rmSync(cwd, { force: true, recursive: true });

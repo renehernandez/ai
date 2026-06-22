@@ -114,9 +114,10 @@ export function validateReviewGateForCommit(
   const schemaErrors = normalized.errors;
   const requiredReviewPasses = normalized.requiredReviewPasses;
   const results = normalized.results;
-  const completedReviewPasses = requiredReviewPasses.filter(
-    (reviewPass) => results[reviewPass]?.status === "passed",
-  );
+  const completedReviewPasses = requiredReviewPasses.filter((reviewPass) => {
+    const result = results[reviewPass];
+    return result?.status === "passed" && result.diffHash === currentDiffHash;
+  });
   const missingReviewPasses = requiredReviewPasses.filter(
     (reviewPass) => !results[reviewPass],
   );
