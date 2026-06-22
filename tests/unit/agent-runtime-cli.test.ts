@@ -193,6 +193,20 @@ test("Runtime invocation context separates source and target roots", () => {
   });
 });
 
+test("runtime config manages helper scripts imported by installed planning skills", () => {
+  const config = JSON.parse(
+    readFileSync(join(repoRoot, "agent-runtime.config.json"), "utf-8"),
+  ) as { runtime?: { reusableScripts?: string[] } };
+  const reusableScripts = new Set(config.runtime?.reusableScripts ?? []);
+
+  for (const helper of [
+    "scripts/nitro-feedback-gate.ts",
+    "scripts/planning-contracts.ts",
+  ]) {
+    assert.ok(reusableScripts.has(helper), `${helper} must be reusable`);
+  }
+});
+
 test("OpenSpec install setup infers project defaults", () => {
   withTempCwd(() => {
     writeFileSync(

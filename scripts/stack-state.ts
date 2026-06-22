@@ -9,6 +9,11 @@ export type UnitTaskDelta = {
   addedTask?: OpenSpecTask;
 };
 
+export type TaskArtifactEvidence = {
+  taskId: string;
+  artifact: string;
+};
+
 export function artifactHostHintFromRemoteText(
   remoteText: string,
 ): "gitlab" | "github" | null {
@@ -156,4 +161,71 @@ export function validateUnitTaskDelta(
       (task) => task.id === expectedTaskId,
     ),
   };
+}
+
+export function validateStackTipTaskState(
+  tasksMarkdown: string,
+  taskArtifacts: TaskArtifactEvidence[],
+  options: { context?: string; requireAllDeliverablesChecked?: boolean } = {},
+): string[] {
+  const errors: string[] = [];
+  const context = options.context ?? "stack_ready";
+
+  if (tasksMarkdown.trim().length === 0) {
+    return [`${context}.task_state.tasks_markdown is required`];
+  }
+
+  const tasks = parseTasks(tasksMarkdown);
+  errors.push(...validateTasks(tasks).map((error) => `tasks.md: ${error}`));
+
+  const tasksById = new Map(tasks.map((task) => [task.id, task]));
+  const artifactByTask = new Map<string, string>();
+  for (const evidence of taskArtifacts) {
+    if (!evidence.taskId || !evidence.artifact) {
+      errors.push(
+        `${context}.task_artifacts entries must include task_id and artifact`,
+      );
+      continue;
+    }
+
+    if (!tasksById.has(evidence.taskId)) {
+      errors.push(
+        `${context}.task_artifacts references unknown task ${evidence.taskId}`,
+      );
+    }
+
+    if (artifactByTask.has(evidence.taskId)) {
+      errors.push(
+        `${context}.task_artifacts has duplicate evidence for task ${evidence.taskId}`,
+      );
+    }
+
+    artifactByTask.set(evidence.taskId, evidence.artifact);
+  }
+
+  const uncheckedDeliverables = tasks.filter(
+    (task) => task.kind === "deliverable" && !task.checked,
+  );
+  if (
+    options.requireAllDeliverablesChecked !== false &&
+    uncheckedDeliverables.length > 0
+  ) {
+    errors.push(
+      `${context} partial stack: unchecked deliverable tasks ${uncheckedDeliverables.map((task) => task.id).join(", ")}`,
+    );
+  }
+
+  const checkedDeliverablesMissingArtifacts = tasks.filter(
+    (task) =>
+      task.kind === "deliverable" &&
+      task.checked &&
+      !artifactByTask.has(task.id),
+  );
+  if (checkedDeliverablesMissingArtifacts.length > 0) {
+    errors.push(
+      `${context}.task_artifacts missing implementation artifact evidence for checked deliverable tasks ${checkedDeliverablesMissingArtifacts.map((task) => task.id).join(", ")}`,
+    );
+  }
+
+  return errors;
 }

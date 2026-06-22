@@ -34,6 +34,7 @@ const LEDGER_GATES = [
   "review_feedback_routing",
   "artifact_creation_update",
   "artifact_host_inspection",
+  "planning_feedback_disposition",
   "automated_feedback",
   "developer_review",
   "no_implementation",
@@ -237,6 +238,17 @@ planning_review:
   review:
     evidence:
       - planning PR or MR latest-head feedback completed with no unresolved actionable findings
+  planning_feedback_disposition:
+    status: complete
+    evidence:
+      - Every Nitro-authored planning note and discussion across review rounds was enumerated by note ID and disposition.
+    items:
+      - note_id: <Nitro planning note id>
+        discussion_id: <discussion id when present, or omitted for individual non-resolvable notes>
+        resolvable: false
+        resolved: false
+        disposition: fixed_in_planning
+        evidence: <planning commit, implementation task deferral, non-actionable rationale, or blocked reason>
   blockers: []
 \`\`\`
 `);

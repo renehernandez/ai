@@ -24,6 +24,12 @@ import {
 const ROUTES = ["atomic_plan", "openspec_task"] as const;
 const ARTIFACT_TYPES = ["plan", "openspec", "linear"] as const;
 const EXPECTED_HOSTS = ["github_pr", "gitlab_mr"] as const;
+const CALLERS = ["direct", "plan_orchestrator"] as const;
+const DELIVERY_GOALS = [
+  "next_task",
+  "complete_change",
+  "bounded_sequence",
+] as const;
 const BASELINE_REVIEWERS = [
   "implementation-readiness",
   "edge-cases-and-risks",
@@ -37,13 +43,15 @@ type Command =
   | "handoff-template"
   | "validate-handoff"
   | "select-next-task";
+type Caller = (typeof CALLERS)[number];
+type DeliveryGoal = (typeof DELIVERY_GOALS)[number];
 
 function main(): void {
   const [command, ...args] = process.argv.slice(2);
 
   if (!isCommand(command)) {
     fail(
-      "Usage: plan-unit-sequencer.ts <detect|planning-review-template|validate-planning-review|handoff-template|validate-handoff|select-next-task> [--file path|tasks.md]",
+      "Usage: plan-unit-sequencer.ts <detect|planning-review-template|validate-planning-review|handoff-template|validate-handoff|select-next-task> [--file path|tasks.md] [--caller direct|plan_orchestrator] [--goal next_task|complete_change|bounded_sequence]",
     );
   }
 
@@ -63,7 +71,7 @@ function main(): void {
   }
 
   if (command === "select-next-task") {
-    selectNextTask(args[0]);
+    selectNextTask(args);
     return;
   }
 
@@ -301,7 +309,9 @@ function validateHandoff(input: string): void {
   console.log("plan_delivery_handoff valid");
 }
 
-function selectNextTask(path: string | undefined): void {
+function selectNextTask(args: string[]): void {
+  const options = parseSelectOptions(args);
+  const path = options.path;
   if (!path) {
     fail("select-next-task requires tasks.md path");
   }
@@ -316,14 +326,42 @@ function selectNextTask(path: string | undefined): void {
   }
 
   const task = firstUncheckedDeliverable(tasks);
+  const effectiveGoal =
+    options.caller === "plan_orchestrator" ? "complete_change" : options.goal;
+  const completionTarget =
+    effectiveGoal === "next_task" ? "one_task" : "all_deliverable_tasks";
+
   if (!task) {
     console.log(
-      JSON.stringify({ status: "complete", next_task: null }, null, 2),
+      JSON.stringify(
+        {
+          status:
+            effectiveGoal === "next_task" ? "complete" : "openspec_complete",
+          caller: options.caller,
+          delivery_goal: effectiveGoal,
+          completion_target: completionTarget,
+          next_task: null,
+        },
+        null,
+        2,
+      ),
     );
     return;
   }
 
-  console.log(JSON.stringify({ status: "ready", next_task: task }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        status: "ready",
+        caller: options.caller,
+        delivery_goal: effectiveGoal,
+        completion_target: completionTarget,
+        next_task: task,
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 function parseHandoff(input: string): {
@@ -397,6 +435,53 @@ function isCommand(command: string | undefined): command is Command {
 function git(args: string[]): string | null {
   const result = spawnSync("git", args, { encoding: "utf8" });
   return result.status === 0 ? result.stdout.trim() : null;
+}
+
+function parseSelectOptions(args: string[]): {
+  caller: Caller;
+  goal: DeliveryGoal;
+  path?: string;
+} {
+  let caller: Caller = "direct";
+  let goal: DeliveryGoal = "next_task";
+  let path: string | undefined;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--caller") {
+      caller = parseOptionValue(args[index + 1], CALLERS, "--caller");
+      index += 1;
+      continue;
+    }
+    if (arg === "--goal") {
+      goal = parseOptionValue(args[index + 1], DELIVERY_GOALS, "--goal");
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("--")) {
+      fail(`unknown select-next-task option: ${arg}`);
+    }
+    if (path) {
+      fail("select-next-task accepts exactly one tasks.md path");
+    }
+    path = arg;
+  }
+
+  return { caller, goal, path };
+}
+
+function parseOptionValue<const T extends readonly string[]>(
+  value: string | undefined,
+  allowed: T,
+  flag: string,
+): T[number] {
+  if (!value) {
+    fail(`${flag} requires a value`);
+  }
+  if (!includes(allowed, value)) {
+    fail(`${flag} must be one of: ${allowed.join(", ")}`);
+  }
+  return value;
 }
 
 main();

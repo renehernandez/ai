@@ -1,9 +1,16 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+
+function fixture(name: string): string {
+  return readFileSync(
+    join(process.cwd(), "tests/fixtures/plan-orchestrator", name),
+    "utf8",
+  );
+}
 
 function withTempFile(content: string, callback: (path: string) => void): void {
   const directory = mkdtempSync(join(tmpdir(), "plan-orchestrator-script-"));
@@ -98,26 +105,53 @@ const planningReview = `planning_review:
   review:
     evidence:
       - planning PR latest-head Nitro feedback completed cleanly
+  planning_feedback_disposition:
+    status: complete
+    evidence:
+      - Nitro planning feedback was enumerated by note ID and disposition.
+    items:
+      - note_id: "3330306"
+        discussion_id: abc123
+        resolvable: true
+        resolved: true
+        disposition: fixed_in_planning
+        evidence: planning MR commit addressed the comment
   blockers: []
 `;
 
 const resumeReport = `orchestrator_resume:
-  status: inspected
+  status: resume_ready
   intake: existing_openspec
   planning_artifact: openspec/changes/example-change
   planning_review_state: reviewed
   planning_artifact_ref: https://git.fullscript.io/group/project/-/merge_requests/1
   current_stack_tip: https://git.fullscript.io/group/project/-/merge_requests/2
   task_state_fingerprint: feedface
+  task_state:
+    fingerprint: feedface
+    tasks_markdown: |
+      ## 1. Example Change
+
+      - [x] 1.1 First deliverable
+      - [ ] 1.2 Future deliverable
+  task_artifacts:
+    - task_id: "1.1"
+      artifact: https://git.fullscript.io/group/project/-/merge_requests/2
   implementation_stack:
     - artifact: https://git.fullscript.io/group/project/-/merge_requests/1
       role: planning
       head_sha: def456
       nitro_gate_outcome: passed
+      predecessor_artifact:
+      task_delta_validated: true
+      cumulative_task_state_valid: true
     - artifact: https://git.fullscript.io/group/project/-/merge_requests/2
       role: implementation
       head_sha: abc789
       nitro_gate_outcome: passed
+      predecessor_artifact: https://git.fullscript.io/group/project/-/merge_requests/1
+      task_delta_validated: true
+      cumulative_task_state_valid: true
   restack_required: false
   restack_evidence:
     - no earlier MR changed after descendants
@@ -130,8 +164,17 @@ const stackReady = `stack_ready:
   target_branch: main
   stack_tip: https://git.fullscript.io/group/project/-/merge_requests/2
   task_state:
-    all_deliverable_tasks_checked: true
     fingerprint: feedface
+    tasks_markdown: |
+      ## 1. Example Change
+
+      - [x] 1.1 First deliverable
+      - [x] 1.2 Second deliverable
+  task_artifacts:
+    - task_id: "1.1"
+      artifact: https://git.fullscript.io/group/project/-/merge_requests/2
+    - task_id: "1.2"
+      artifact: https://git.fullscript.io/group/project/-/merge_requests/3
   stack:
     - artifact: https://git.fullscript.io/group/project/-/merge_requests/1
       role: planning
@@ -142,6 +185,11 @@ const stackReady = `stack_ready:
       role: implementation
       base_sha: def456
       head_sha: abc789
+      nitro_gate_outcome: passed
+    - artifact: https://git.fullscript.io/group/project/-/merge_requests/3
+      role: implementation
+      base_sha: abc789
+      head_sha: beef123
       nitro_gate_outcome: passed
   restack_required: false
   integrity_evidence:
@@ -170,6 +218,8 @@ test("resume-template emits a readable summary before YAML", () => {
     result.stdout.indexOf("## Readable Summary") <
       result.stdout.indexOf("orchestrator_resume:"),
   );
+  assert.match(result.stdout, /status: resume_ready \| delivery_blocked/);
+  assert.doesNotMatch(result.stdout, /status: inspected/);
 });
 
 test("stack-ready-template emits a readable summary before YAML", () => {
@@ -257,6 +307,191 @@ test("validate-resume blocks unsupported stack hosts", () => {
   );
 });
 
+test("validate-resume blocks resume-ready with stale predecessor gates", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport.replace(
+      "nitro_gate_outcome: passed",
+      "nitro_gate_outcome: pending",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /nitro_gate_outcome must be passed before resume_ready/,
+  );
+});
+
+test("validate-resume blocks resume-ready with invalid cumulative task state", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport.replace(
+      "      predecessor_artifact: https://git.fullscript.io/group/project/-/merge_requests/1\n      task_delta_validated: true\n      cumulative_task_state_valid: true",
+      "      predecessor_artifact: https://git.fullscript.io/group/project/-/merge_requests/1\n      task_delta_validated: true\n      cumulative_task_state_valid: false",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /cumulative_task_state_valid must be true before resume_ready/,
+  );
+});
+
+test("validate-resume blocks implementation entries without predecessor artifacts", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport.replace(
+      "      predecessor_artifact: https://git.fullscript.io/group/project/-/merge_requests/1",
+      "      predecessor_artifact:",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /predecessor_artifact evidence is required before resume_ready/,
+  );
+});
+
+test("validate-resume blocks implementation entries without task-delta evidence", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport.replace(
+      "      predecessor_artifact: https://git.fullscript.io/group/project/-/merge_requests/1\n      task_delta_validated: true",
+      "      predecessor_artifact: https://git.fullscript.io/group/project/-/merge_requests/1",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /task_delta_validated must be true for every implementation artifact before resume_ready/,
+  );
+});
+
+test("validate-resume blocks later implementation entries without predecessor artifacts", () => {
+  const twoImplementationResume = resumeReport.replace(
+    `    - artifact: https://git.fullscript.io/group/project/-/merge_requests/2
+      role: implementation
+      head_sha: abc789
+      nitro_gate_outcome: passed
+      predecessor_artifact: https://git.fullscript.io/group/project/-/merge_requests/1
+      task_delta_validated: true
+      cumulative_task_state_valid: true`,
+    `    - artifact: https://git.fullscript.io/group/project/-/merge_requests/2
+      role: implementation
+      head_sha: abc789
+      nitro_gate_outcome: passed
+      predecessor_artifact: https://git.fullscript.io/group/project/-/merge_requests/1
+      task_delta_validated: true
+      cumulative_task_state_valid: true
+    - artifact: https://git.fullscript.io/group/project/-/merge_requests/3
+      role: implementation
+      head_sha: beef123
+      nitro_gate_outcome: passed
+      task_delta_validated: true
+      cumulative_task_state_valid: true`,
+  );
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    twoImplementationResume,
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /predecessor_artifact evidence is required before resume_ready/,
+  );
+});
+
+test("validate-resume blocks checked predecessor tasks without artifact evidence", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport.replace(
+      '    - task_id: "1.1"\n      artifact: https://git.fullscript.io/group/project/-/merge_requests/2\n',
+      "",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /orchestrator_resume\.task_artifacts missing implementation artifact evidence for checked deliverable tasks 1\.1/,
+  );
+});
+
+test("validate-resume blocks resume-ready without reviewed planning", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport.replace(
+      "planning_review_state: reviewed",
+      "planning_review_state: blocked",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /planning_review_state must be reviewed when status is resume_ready/,
+  );
+});
+
+test("validate-resume blocks resume-ready when restack is required", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport.replace("restack_required: false", "restack_required: true"),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /restack_required must be false before resume_ready/,
+  );
+});
+
+test("validate-resume blocks resume-ready reports with blockers", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport.replace(
+      "  blockers: []",
+      "  blockers:\n    - waiting on predecessor MR",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /blockers must be empty before resume_ready/);
+});
+
+test("validate-resume blocks delivery-blocked reports without blockers", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport.replace("status: resume_ready", "status: delivery_blocked"),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /blockers must explain why resume is delivery_blocked/,
+  );
+});
+
+test("validate-resume accepts delivery-blocked reports with blockers", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport
+      .replace("status: resume_ready", "status: delivery_blocked")
+      .replace(
+        "  blockers: []",
+        "  blockers:\n    - waiting on predecessor MR",
+      ),
+  );
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /orchestrator_resume valid/);
+});
+
 test("validate-stack-ready accepts a clean reviewed stack", () => {
   const result = runPlanOrchestrator("validate-stack-ready", stackReady);
 
@@ -275,6 +510,51 @@ test("validate-stack-ready rejects pending Nitro gates", () => {
 
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /nitro_gate_outcome must be passed/);
+});
+
+test("validate-stack-ready rejects self-attested task completion booleans", () => {
+  const result = runPlanOrchestrator(
+    "validate-stack-ready",
+    stackReady.replace(
+      "  task_state:\n    fingerprint: feedface",
+      "  task_state:\n    all_deliverable_tasks_checked: true\n    fingerprint: feedface",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /self-attested/);
+});
+
+test("validate-stack-ready rejects partial stacks with unchecked deliverables", () => {
+  const result = runPlanOrchestrator(
+    "validate-stack-ready",
+    stackReady.replace(
+      "- [x] 1.2 Second deliverable",
+      "- [ ] 1.2 Second deliverable",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /partial stack: unchecked deliverable tasks 1\.2/,
+  );
+});
+
+test("validate-stack-ready rejects checked tasks without artifact evidence", () => {
+  const result = runPlanOrchestrator(
+    "validate-stack-ready",
+    stackReady.replace(
+      '    - task_id: "1.2"\n      artifact: https://git.fullscript.io/group/project/-/merge_requests/3\n',
+      "",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /missing implementation artifact evidence for checked deliverable tasks 1\.2/,
+  );
 });
 
 test("validate-stack-ready blocks unsupported stack hosts", () => {
@@ -309,6 +589,71 @@ test("validate-stack-ready blocks unsupported stack tip hosts", () => {
   );
 });
 
+test("fixture rejects partial stack-ready state", () => {
+  const result = runPlanOrchestrator(
+    "validate-stack-ready",
+    fixture("partial-stack-ready.yaml"),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /partial stack: unchecked deliverable tasks 1\.2/,
+  );
+});
+
+test("fixture rejects resume without predecessor artifacts", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    fixture("resume-missing-predecessor.yaml"),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /predecessor_artifact evidence is required before resume_ready/,
+  );
+});
+
+test("fixture rejects resume with stale predecessor gates", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    fixture("resume-stale-gate.yaml"),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /nitro_gate_outcome must be passed before resume_ready/,
+  );
+});
+
+test("fixture rejects resume with invalid cumulative task state", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    fixture("resume-invalid-cumulative-state.yaml"),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /cumulative_task_state_valid must be true before resume_ready/,
+  );
+});
+
+test("fixture blocks unsupported host stack-ready state", () => {
+  const result = runPlanOrchestrator(
+    "validate-stack-ready",
+    fixture("unsupported-host-stack-ready.yaml"),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /delivery_blocked: unsupported stack\/review host/,
+  );
+});
+
 test("validate-stack-ready reports missing stack tip without unsupported host noise", () => {
   const result = runPlanOrchestrator(
     "validate-stack-ready",
@@ -324,4 +669,14 @@ test("validate-stack-ready reports missing stack tip without unsupported host no
     result.stderr,
     /delivery_blocked: unsupported stack\/review host/,
   );
+});
+
+test("fixture treats session handoff before stack-ready as delivery-blocked", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    fixture("session-handoff-blocked.yaml"),
+  );
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /orchestrator_resume valid/);
 });
