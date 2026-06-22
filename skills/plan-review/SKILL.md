@@ -107,14 +107,23 @@ and next action.
     record it as a follow-up or blocker; do not start coding.
 12. If the branch head changes after feedback fixes, rerun artifact validation,
     push, and wait for latest-head automated feedback again.
-13. Before finishing, generate `scripts/plan-review.ts gate-template`, fill
-    it, and validate it with `validate-ledger` as internal evidence.
-14. Emit `planning_review` with `scripts/plan-review.ts
+13. Before finishing, enumerate all Nitro-authored planning comments and
+    discussions on the planning PR/MR across every review round. Record each
+    note ID, discussion ID when present, whether the discussion is resolvable
+    and currently resolved, and disposition: `fixed_in_planning`,
+    `deferred_to_task`, `non_actionable`, or `blocked`. Unresolved actionable
+    planning feedback blocks implementation sequencing unless it is explicitly
+    deferred to a specific implementation task or marked non-actionable with
+    rationale.
+14. Generate `scripts/plan-review.ts gate-template`, fill it, and validate it
+    with `validate-ledger` as internal evidence.
+15. Emit `planning_review` with `scripts/plan-review.ts
     planning-review-template`, fill it with the hosted review evidence and a
-    passed `nitro_feedback_gate`, and validate it with
-    `validate-planning-review`.
-15. Finish only when the planning MR has latest-head Nitro feedback completed
-    cleanly and the reviewed head is recorded as the implementation stack base.
+    passed `nitro_feedback_gate` plus `planning_feedback_disposition`, and
+    validate it with `validate-planning-review`.
+16. Finish only when the planning MR has latest-head Nitro feedback completed
+    cleanly, every prior Nitro planning item has explicit disposition, and the
+    reviewed head is recorded as the implementation stack base.
 
 ## Gate Rules
 
@@ -127,6 +136,7 @@ and next action.
 | Review feedback routing | Artifact and feedback adapters are selected, or ambiguity is blocked |
 | Artifact creation/update | Draft PR/MR exists for the latest planning-only branch |
 | Artifact-host inspection | Host metadata, discussions, and check state are inspected |
+| Planning feedback disposition | Every Nitro planning comment or discussion is enumerated by note/discussion ID with explicit disposition |
 | Automated feedback | Routed automated feedback is resolved, pending, unavailable, or waived with evidence |
 | Developer review | Human developer review is requested or pending on the hosted artifact |
 | No implementation | No implementation work starts in this workflow |
@@ -192,6 +202,17 @@ planning_review:
   review:
     evidence:
       - planning MR latest-head Nitro feedback completed cleanly
+  planning_feedback_disposition:
+    status: complete
+    evidence:
+      - every Nitro planning item was enumerated and dispositioned by note ID
+    items:
+      - note_id: <Nitro note id>
+        discussion_id: <discussion id when present>
+        resolvable: true
+        resolved: true
+        disposition: fixed_in_planning
+        evidence: <planning commit, deferred task id, non-actionable rationale, or blocked reason>
   blockers: []
 ```
 
@@ -206,6 +227,7 @@ planning_review:
 | Requesting Nitro repeatedly when a fresh latest-head Nitro review is already pending | Stop polling after recording the pending review state, MR head, and request evidence |
 | Calling pending developer review a pass | Report it as published and pending with the PR/MR URL |
 | Applying code changes from review feedback | Convert implementation requests into plan changes or follow-ups |
+| Treating latest-head Nitro clean as enough when prior planning comments exist | Enumerate prior Nitro planning comments and record explicit disposition before emitting `planning_review` |
 | Returning gate YAML instead of `planning_review` | Emit and validate `planning_review` before handing off |
 | Returning YAML without a readable thread summary | Add `## Readable Summary` before the YAML |
 

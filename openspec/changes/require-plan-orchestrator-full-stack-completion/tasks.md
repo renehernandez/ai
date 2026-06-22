@@ -32,7 +32,7 @@
       implementation artifact URL/ref, implementation head SHA, task-delta
       validation command/output, CI evidence, Nitro evidence, and restack state.
       Depends on 1.2.
-- [ ] 1.7 Add planning feedback disposition gate
+- [x] 1.7 Add planning feedback disposition gate
       Update planning-review gate helpers, templates, validators, and prompts so
       ledgers enumerate prior Nitro planning feedback by note/discussion ID and
       disposition each item as fixed in planning, deferred to a specific

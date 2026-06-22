@@ -172,6 +172,17 @@ const planningReview = `planning_review:
   review:
     evidence:
       - feedback addressed and latest-head Nitro gate passed
+  planning_feedback_disposition:
+    status: complete
+    evidence:
+      - Nitro planning feedback was enumerated by note ID and disposition.
+    items:
+      - note_id: "3330306"
+        discussion_id: abc123
+        resolvable: true
+        resolved: true
+        disposition: fixed_in_planning
+        evidence: planning MR commit addressed the comment
   blockers: []
 `;
 
