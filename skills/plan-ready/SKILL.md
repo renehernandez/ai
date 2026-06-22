@@ -122,6 +122,9 @@ Use `scripts/plan-ready.ts blueprint-template` and validate with
 ```yaml
 openspec_blueprint:
   status: ready_for_openspec
+  source_plan:
+    ref: .agents/plans/example.md
+    change_id: <verb-noun-change-id>
   change:
     suggested_id: <verb-noun-change-id>
     title: <OpenSpec change title>
@@ -163,7 +166,11 @@ openspec_blueprint:
 The blueprint is the successful complex-plan output. It should make OpenSpec
 creation mostly mechanical: `proposal.md` takes the objective and scope,
 `tasks.md` takes the reviewed deliverables, spec deltas take proposed
-requirements, and `design.md` captures tradeoffs when needed.
+requirements, and `design.md` captures tradeoffs when needed. When the
+blueprint comes from a `.agents/plans/**` artifact, `source_plan.ref` and
+`source_plan.change_id` are the machine-readable cleanup authority that
+`plan-orchestrator` must pass as `--expected-source-plan` and
+`--expected-change-id` during source-plan cleanup.
 
 Legacy `slice_plan_review`, `reviewed_slices`,
 `plan_ready_handoff`, `plan_followthrough_slice_handoff`, and

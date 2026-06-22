@@ -101,6 +101,9 @@ function validHandoff(artifactRef: string, fingerprint: string): string {
 function validBlueprint(): string {
   return `openspec_blueprint:
   status: ready_for_openspec
+  source_plan:
+    ref: .agents/plans/example.md
+    change_id: add-plan-blueprints
   change:
     suggested_id: add-plan-blueprints
     title: Add PlanReady OpenSpec blueprints
@@ -280,6 +283,71 @@ test("validate-blueprint accepts a reviewed OpenSpec blueprint", () => {
 
   assert.equal(result.status, 0);
   assert.match(result.stdout, /openspec_blueprint valid/);
+});
+
+test("validate-blueprint requires source plan ref", () => {
+  const result = runPlanReady(
+    "validate-blueprint",
+    validBlueprint().replace(
+      "  source_plan:\n    ref: .agents/plans/example.md\n",
+      "",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /source_plan.ref/);
+});
+
+test("validate-blueprint requires source plan change id", () => {
+  const result = runPlanReady(
+    "validate-blueprint",
+    validBlueprint().replace("    change_id: add-plan-blueprints\n", ""),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /source_plan.change_id/);
+});
+
+test("validate-blueprint requires source plan change id to match suggested id", () => {
+  const result = runPlanReady(
+    "validate-blueprint",
+    validBlueprint().replace(
+      "    change_id: add-plan-blueprints",
+      "    change_id: other-change",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /source_plan.change_id must match change.suggested_id/,
+  );
+});
+
+test("validate-blueprint requires source plan ref under agents plans", () => {
+  const result = runPlanReady(
+    "validate-blueprint",
+    validBlueprint().replace(
+      "    ref: .agents/plans/example.md",
+      "    ref: docs/plans/example.md",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /source_plan.ref must be under .agents\/plans/);
+});
+
+test("validate-blueprint rejects escaped source plan refs", () => {
+  const result = runPlanReady(
+    "validate-blueprint",
+    validBlueprint().replace(
+      "    ref: .agents/plans/example.md",
+      "    ref: .agents/plans/../../outside.md",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /source_plan.ref must be under .agents\/plans/);
 });
 
 test("validate-blueprint requires the recommended first task to exist", () => {

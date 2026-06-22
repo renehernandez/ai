@@ -107,16 +107,19 @@ addition is necessary but insufficient.
 
 The helper contract carries that reference separately from the deletion target:
 `cleanup-source-plan --source-plan <delete-target> --expected-source-plan
-<recorded-source-plan> --change-id <change-id>`. The `--expected-source-plan`
-value is populated from the source plan that `plan-orchestrator` just converted
-into the OpenSpec change. It must not default to `--source-plan`, and the helper
-must fail when the expected-source-plan value is absent.
+<recorded-source-plan> --expected-change-id <recorded-change-id> --change-id
+<change-id>`. The expected values are populated from the source plan context
+that `plan-orchestrator` just converted into the OpenSpec change. They must not
+default to `--source-plan` or `--change-id`, and the helper must fail when
+either expected value is absent.
 
-The machine-readable carrier is `openspec_blueprint.source_plan.ref`, emitted
-by `plan-ready` when the blueprint originates from a `.agents/plans/**` file.
-`plan-ready` validation requires the field for plan-file-backed OpenSpec
-blueprints. `plan-orchestrator` reads that field from the reviewed blueprint or
-conversion handoff and passes it as `--expected-source-plan`; the subsequent
+The machine-readable carrier is `openspec_blueprint.source_plan.ref` plus
+`openspec_blueprint.source_plan.change_id`, emitted by `plan-ready` when the
+blueprint originates from a `.agents/plans/**` file. `plan-ready` validation
+requires these fields for plan-file-backed OpenSpec blueprints and requires
+`source_plan.change_id` to match `change.suggested_id`. `plan-orchestrator`
+reads those fields from the reviewed blueprint or conversion handoff and passes
+them as `--expected-source-plan` and `--expected-change-id`; the subsequent
 `plan_review_request` continues to point at the OpenSpec artifact and does not
 publish the source plan.
 

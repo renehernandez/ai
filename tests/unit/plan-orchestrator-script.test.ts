@@ -162,6 +162,23 @@ function runGit(directory: string, args: string[]): string {
   return result.stdout.trim();
 }
 
+function cleanupArgs(
+  sourcePlan: string,
+  changeId = "enforce-openspec-source-plan-cleanup",
+): string[] {
+  return [
+    "cleanup-source-plan",
+    "--source-plan",
+    sourcePlan,
+    "--expected-source-plan",
+    sourcePlan,
+    "--expected-change-id",
+    changeId,
+    "--change-id",
+    changeId,
+  ];
+}
+
 const planningReview = `planning_review:
   status: reviewed
   artifact_type: plan
@@ -321,13 +338,7 @@ test("cleanup-source-plan deletes untracked source plans after validation", () =
     writeFileSync(sourcePlan, "Plan intake", "utf8");
 
     const result = runPlanOrchestratorArgs(
-      [
-        "cleanup-source-plan",
-        "--source-plan",
-        ".agents/plans/source.md",
-        "--change-id",
-        "enforce-openspec-source-plan-cleanup",
-      ],
+      cleanupArgs(".agents/plans/source.md"),
       directory,
     );
 
@@ -345,13 +356,7 @@ test("cleanup-source-plan removes staged source plans from index and disk", () =
     runGit(directory, ["add", ".agents/plans/source.md"]);
 
     const result = runPlanOrchestratorArgs(
-      [
-        "cleanup-source-plan",
-        "--source-plan",
-        ".agents/plans/source.md",
-        "--change-id",
-        "enforce-openspec-source-plan-cleanup",
-      ],
+      cleanupArgs(".agents/plans/source.md"),
       directory,
     );
 
@@ -368,13 +373,7 @@ test("cleanup-source-plan preserves source plans when OpenSpec validation fails"
     writeFileSync(sourcePlan, "Plan intake", "utf8");
 
     const result = runPlanOrchestratorArgs(
-      [
-        "cleanup-source-plan",
-        "--source-plan",
-        ".agents/plans/source.md",
-        "--change-id",
-        "missing-change",
-      ],
+      cleanupArgs(".agents/plans/source.md", "missing-change"),
       directory,
     );
 
@@ -391,6 +390,45 @@ test("cleanup-source-plan blocks already committed source plans", () => {
     runGit(directory, ["commit", "-m", "commit source plan"]);
 
     const result = runPlanOrchestratorArgs(
+      cleanupArgs(".agents/plans/source.md"),
+      directory,
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /source_plan_committed/);
+    assert.equal(existsSync(sourcePlan), true);
+  });
+});
+
+test("cleanup-source-plan blocks source plans tracked in target base", () => {
+  withTempOpenSpecRepo((directory) => {
+    const sourcePlan = join(directory, ".agents/plans/source.md");
+    writeFileSync(sourcePlan, "Plan intake", "utf8");
+    runGit(directory, ["add", ".agents/plans/source.md"]);
+    runGit(directory, ["commit", "-m", "target base has source plan"]);
+    const targetBase = runGit(directory, ["rev-parse", "HEAD"]);
+    runGit(directory, ["rm", ".agents/plans/source.md"]);
+    runGit(directory, ["commit", "-m", "remove source plan from head"]);
+    mkdirSync(join(directory, ".agents/plans"), { recursive: true });
+    writeFileSync(sourcePlan, "Plan intake", "utf8");
+
+    const result = runPlanOrchestratorArgs(
+      [...cleanupArgs(".agents/plans/source.md"), "--target-base", targetBase],
+      directory,
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /source_plan_committed/);
+    assert.equal(existsSync(sourcePlan), true);
+  });
+});
+
+test("cleanup-source-plan requires expected source plan context", () => {
+  withTempOpenSpecRepo((directory) => {
+    const sourcePlan = join(directory, ".agents/plans/source.md");
+    writeFileSync(sourcePlan, "Plan intake", "utf8");
+
+    const result = runPlanOrchestratorArgs(
       [
         "cleanup-source-plan",
         "--source-plan",
@@ -402,7 +440,137 @@ test("cleanup-source-plan blocks already committed source plans", () => {
     );
 
     assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /source_plan_committed/);
+    assert.match(result.stderr, /--expected-source-plan is required/);
+    assert.equal(existsSync(sourcePlan), true);
+  });
+});
+
+test("cleanup-source-plan preserves unrelated same-worktree plans", () => {
+  withTempOpenSpecRepo((directory) => {
+    const sourcePlan = join(directory, ".agents/plans/source.md");
+    const unrelatedPlan = join(directory, ".agents/plans/unrelated.md");
+    writeFileSync(sourcePlan, "Plan intake", "utf8");
+    writeFileSync(unrelatedPlan, "Other thread plan", "utf8");
+
+    const result = runPlanOrchestratorArgs(
+      [
+        "cleanup-source-plan",
+        "--source-plan",
+        ".agents/plans/unrelated.md",
+        "--expected-source-plan",
+        ".agents/plans/source.md",
+        "--expected-change-id",
+        "enforce-openspec-source-plan-cleanup",
+        "--change-id",
+        "enforce-openspec-source-plan-cleanup",
+      ],
+      directory,
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /source_plan_context_mismatch/);
+    assert.equal(existsSync(sourcePlan), true);
+    assert.equal(existsSync(unrelatedPlan), true);
+  });
+});
+
+test("cleanup-source-plan rejects wrong expected change id", () => {
+  withTempOpenSpecRepo((directory) => {
+    const sourcePlan = join(directory, ".agents/plans/source.md");
+    writeFileSync(sourcePlan, "Plan intake", "utf8");
+
+    const result = runPlanOrchestratorArgs(
+      [
+        "cleanup-source-plan",
+        "--source-plan",
+        ".agents/plans/source.md",
+        "--expected-source-plan",
+        ".agents/plans/source.md",
+        "--expected-change-id",
+        "other-change",
+        "--change-id",
+        "enforce-openspec-source-plan-cleanup",
+      ],
+      directory,
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /source_plan_context_mismatch/);
+    assert.equal(existsSync(sourcePlan), true);
+  });
+});
+
+test("cleanup-source-plan requires expected change id", () => {
+  withTempOpenSpecRepo((directory) => {
+    const sourcePlan = join(directory, ".agents/plans/source.md");
+    writeFileSync(sourcePlan, "Plan intake", "utf8");
+
+    const result = runPlanOrchestratorArgs(
+      [
+        "cleanup-source-plan",
+        "--source-plan",
+        ".agents/plans/source.md",
+        "--expected-source-plan",
+        ".agents/plans/source.md",
+        "--change-id",
+        "enforce-openspec-source-plan-cleanup",
+      ],
+      directory,
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /--expected-change-id is required/);
+    assert.equal(existsSync(sourcePlan), true);
+  });
+});
+
+test("cleanup-source-plan accepts normalized equivalent expected paths", () => {
+  withTempOpenSpecRepo((directory) => {
+    const sourcePlan = join(directory, ".agents/plans/source.md");
+    writeFileSync(sourcePlan, "Plan intake", "utf8");
+
+    const result = runPlanOrchestratorArgs(
+      [
+        "cleanup-source-plan",
+        "--source-plan",
+        "./.agents/plans/source.md",
+        "--expected-source-plan",
+        ".agents/plans/nested/../source.md",
+        "--expected-change-id",
+        "enforce-openspec-source-plan-cleanup",
+        "--change-id",
+        "enforce-openspec-source-plan-cleanup",
+      ],
+      directory,
+    );
+
+    assert.equal(result.status, 0);
+    assert.equal(existsSync(sourcePlan), false);
+  });
+});
+
+test("cleanup-source-plan rejects path escapes", () => {
+  withTempOpenSpecRepo((directory) => {
+    const sourcePlan = join(directory, ".agents/plans/source.md");
+    writeFileSync(sourcePlan, "Plan intake", "utf8");
+
+    const result = runPlanOrchestratorArgs(
+      [
+        "cleanup-source-plan",
+        "--source-plan",
+        ".agents/plans/source.md",
+        "--expected-source-plan",
+        ".agents/plans/../../outside.md",
+        "--expected-change-id",
+        "enforce-openspec-source-plan-cleanup",
+        "--change-id",
+        "enforce-openspec-source-plan-cleanup",
+      ],
+      directory,
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /--expected-source-plan_invalid/);
     assert.equal(existsSync(sourcePlan), true);
   });
 });

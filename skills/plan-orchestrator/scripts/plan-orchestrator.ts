@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 import { spawnSync } from "node:child_process";
-import { existsSync, unlinkSync } from "node:fs";
-import { join, relative } from "node:path";
+import { existsSync, realpathSync, unlinkSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 import {
   extractSection,
   extractYaml,
@@ -523,29 +523,43 @@ function validateOpenSpecChange(changeId: string | undefined): void {
 
 function cleanupSourcePlan(args: string[]): void {
   const sourcePlan = requiredArg(args, "--source-plan");
+  const expectedSourcePlan = requiredArg(args, "--expected-source-plan");
   const changeId = requiredArg(args, "--change-id");
+  const expectedChangeId = requiredArg(args, "--expected-change-id");
+  const targetBase = optionalArg(args, "--target-base") ?? "HEAD";
   const skipRepoValidation = args.includes("--skip-repo-openspec-validation");
   const repoRoot = git(["rev-parse", "--show-toplevel"]) || process.cwd();
   const runRepoValidation =
     !skipRepoValidation && repoOpenSpecValidationAvailable(repoRoot);
-  const sourcePath = join(repoRoot, sourcePlan);
-  const relativeSource = relative(repoRoot, sourcePath);
+  const source = normalizeAgentsPlanPath(repoRoot, sourcePlan, "--source-plan");
+  const expected = normalizeAgentsPlanPath(
+    repoRoot,
+    expectedSourcePlan,
+    "--expected-source-plan",
+  );
 
-  if (
-    relativeSource.startsWith("..") ||
-    relativeSource === "" ||
-    !isAgentsPlanPath(relativeSource)
-  ) {
-    fail("source_plan_invalid: --source-plan must be under .agents/plans");
+  if (expectedChangeId !== changeId) {
+    fail(
+      "source_plan_context_mismatch: expected source plan context must match --change-id",
+    );
   }
 
-  if (existsInHead(relativeSource)) {
+  if (source.relativePath !== expected.relativePath) {
+    fail(
+      "source_plan_context_mismatch: --source-plan must match --expected-source-plan",
+    );
+  }
+
+  if (
+    existsInRef("HEAD", source.relativePath) ||
+    existsInRef(targetBase, source.relativePath)
+  ) {
     fail(
       "source_plan_committed: source plan is already committed; repair the planning branch instead of publishing a deletion-only OpenSpec diff",
     );
   }
 
-  if (!existsSync(sourcePath)) {
+  if (!existsSync(source.absolutePath)) {
     fail("source_plan_missing: source plan must exist before cleanup");
   }
 
@@ -562,13 +576,14 @@ function cleanupSourcePlan(args: string[]): void {
     process.stdout.write(result.stdout);
   }
 
-  removeFromIndexIfStaged(relativeSource);
-  unlinkSync(sourcePath);
+  removeFromIndexIfStaged(source.relativePath);
+  unlinkSync(source.absolutePath);
   console.log(
     JSON.stringify(
       {
         status: "source_plan_cleanup_complete",
-        source_plan: relativeSource,
+        source_plan: source.relativePath,
+        expected_source_plan: expected.relativePath,
         change_id: changeId,
         repo_openspec_validation: runRepoValidation ? "passed" : "skipped",
       },
@@ -597,8 +612,8 @@ function git(args: string[]): string | null {
   return result.status === 0 ? result.stdout.trim() : null;
 }
 
-function existsInHead(path: string): boolean {
-  const result = spawnSync("git", ["cat-file", "-e", `HEAD:${path}`], {
+function existsInRef(ref: string, path: string): boolean {
+  const result = spawnSync("git", ["cat-file", "-e", `${ref}:${path}`], {
     encoding: "utf8",
   });
   return result.status === 0;
@@ -641,10 +656,50 @@ function isAgentsPlanPath(path: string): boolean {
   return path === ".agents/plans" || path.startsWith(".agents/plans/");
 }
 
+function normalizeAgentsPlanPath(
+  repoRoot: string,
+  input: string,
+  label: string,
+): { absolutePath: string; relativePath: string } {
+  const absolutePath = resolve(repoRoot, input);
+  const relativePath = relative(repoRoot, absolutePath);
+  if (
+    relativePath.startsWith("..") ||
+    relativePath === "" ||
+    !isAgentsPlanPath(relativePath)
+  ) {
+    fail(`${label}_invalid: ${label} must be under .agents/plans`);
+  }
+
+  if (existsSync(absolutePath)) {
+    const realRelativePath = relative(repoRoot, realpathSync(absolutePath));
+    if (
+      realRelativePath.startsWith("..") ||
+      realRelativePath === "" ||
+      !isAgentsPlanPath(realRelativePath)
+    ) {
+      fail(`${label}_invalid: ${label} must not escape .agents/plans`);
+    }
+  }
+
+  return { absolutePath, relativePath };
+}
+
 function requiredArg(args: string[], name: string): string {
   const index = args.indexOf(name);
   if (index === -1 || !args[index + 1]) {
     fail(`${name} is required`);
+  }
+  return args[index + 1];
+}
+
+function optionalArg(args: string[], name: string): string | undefined {
+  const index = args.indexOf(name);
+  if (index === -1) {
+    return undefined;
+  }
+  if (!args[index + 1]) {
+    fail(`${name} requires a value`);
   }
   return args[index + 1];
 }
