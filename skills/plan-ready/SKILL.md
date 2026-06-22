@@ -44,6 +44,14 @@ When `plan-ready` or the user asks to write a plan artifact, write it under
 9. Stop. Do not invoke `plan-orchestrator`, `plan-unit-sequencer`, `plan-unit-delivery`, create branches, push,
    open PRs/MRs, request hosted review, or write OpenSpec files directly.
 
+Readiness is not terminal completion. It is not terminal success for
+`plan-orchestrator`. When `plan-ready` is invoked as part of
+`plan-orchestrator`, a successful `plan_delivery_handoff` or
+`openspec_blueprint` only authorizes planning review and later sequencing. The
+orchestrator terminal states remain `stack_ready` for a fully reviewed
+implementation stack and `delivery_blocked` when required evidence or routing
+is missing.
+
 ## Reviewer Selection
 
 Baseline reviewers always run:
@@ -195,6 +203,7 @@ Linear comments by default.
 | Maintaining a followthrough ledger | Use OpenSpec `tasks.md` for multi-step state |
 | Accepting old handoff shapes | Return `needs_plan_ready` |
 | Starting implementation after readiness | Stop and wait for `plan-orchestrator` |
+| Treating readiness as orchestrator completion | Continue through planning review and stacked delivery until `stack_ready` or `delivery_blocked` |
 | Skipping baseline reviewers | Run all baseline reviewers before ready |
 | Returning YAML without a readable thread summary | Add `## Readable Summary` before the YAML |
 

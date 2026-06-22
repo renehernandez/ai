@@ -46,6 +46,11 @@ scripts/plan-unit-delivery.ts validate-task-delta --base <base-tasks.md> --head 
 The delta is valid only when exactly one expected deliverable task changes from
 unchecked to checked relative to the base branch.
 
+Record the task-delta command and output in the final `delivery_gate_ledger`.
+The same ledger must also record the selected task ID, selected task base SHA,
+predecessor artifact, implementation artifact URL/ref, implementation head SHA,
+CI evidence, Nitro evidence, and whether restacking was required.
+
 Reviewer execution is a required delivery gate. A valid handoff authorizes
 launching implementation reviewers as internal subagents in the current
 harness; do not ask for separate confirmation. If internal subagents are
@@ -112,7 +117,11 @@ scripts/plan-unit-delivery.ts validate-ledger --file <ledger>
 
 The final ledger must include a passed `nitro_feedback_gate`. `validate-ledger`
 rejects missing, pending, stale, unavailable, findings, or unresolved Nitro
-feedback gates.
+feedback gates. It also rejects ledgers that omit one-unit delivery evidence:
+selected task identity, selected task base SHA, predecessor artifact,
+implementation artifact, implementation head SHA, `validate-task-delta` command,
+validator output containing `unit_task_delta_valid`, pipeline evidence, Nitro
+evidence, and restack state.
 
 ## Mistakes
 
@@ -125,6 +134,7 @@ feedback gates.
 | Reusing the planning-review PR/MR for implementation | Create a separate implementation artifact and record separation evidence |
 | Implementing multiple OpenSpec tasks at once | Return to OpenSpec or `plan-unit-sequencer` |
 | Finishing without proving the task delta | Run `validate-task-delta` against base and unit `tasks.md` |
+| Recording task-delta proof only in chat prose | Put the command and `unit_task_delta_valid` output in `delivery_gate_ledger.unit_task_delta` |
 | Treating delivery gate evidence as durable state | Keep sequence state in OpenSpec |
 | Treating an open PR/MR as done before pipelines settle | Keep monitoring latest-head pipelines |
 | Assuming Nitro feedback is absent immediately after push | Request Nitro for the latest head, wait up to 10 minutes for review start, then wait for completion |

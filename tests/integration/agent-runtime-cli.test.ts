@@ -79,6 +79,10 @@ function withFixture(
       sourcePath: join(repoRoot, "scripts/nitro-feedback-gate.ts"),
       targetPath: "scripts/nitro-feedback-gate.ts",
     },
+    {
+      sourcePath: join(repoRoot, "scripts/stack-state.ts"),
+      targetPath: "scripts/stack-state.ts",
+    },
   ];
   runtime.lockFile = join(runtimeDir, "lock.json");
   runtime.instructionSymlinkTargets = {

@@ -4,8 +4,9 @@
     "canonicalSkillsDir": "~/.agents/skills",
     "skillSymlinkTargets": ["~/.claude/skills"],
     "reusableScripts": [
+      "scripts/nitro-feedback-gate.ts",
       "scripts/planning-contracts.ts",
-      "scripts/nitro-feedback-gate.ts"
+      "scripts/stack-state.ts"
     ],
     "instructionSymlinkTargets": {
       "agents": "~/.agents",

@@ -1,0 +1,29 @@
+stack_ready:
+  status: ready
+  planning_artifact: openspec/changes/example-change
+  target_branch: main
+  stack_tip: https://github.com/example/project/pull/2
+  task_state:
+    fingerprint: feedface
+    tasks_markdown: |
+      ## 1. Example Change
+
+      - [x] 1.1 First deliverable
+  task_artifacts:
+    - task_id: "1.1"
+      artifact: https://github.com/example/project/pull/2
+  stack:
+    - artifact: https://git.fullscript.io/group/project/-/merge_requests/1
+      role: planning
+      base_sha: abc123
+      head_sha: def456
+      nitro_gate_outcome: passed
+    - artifact: https://github.com/example/project/pull/2
+      role: implementation
+      base_sha: def456
+      head_sha: abc789
+      nitro_gate_outcome: passed
+  restack_required: false
+  integrity_evidence:
+    - implementation PR base matches planning MR head
+  blockers: []
