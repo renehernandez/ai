@@ -61,7 +61,8 @@ For `openspec_blueprint` outputs:
 ## Resume Flow
 
 Before continuing existing work, inspect and validate resume state with
-`scripts/plan-orchestrator.ts resume-template` and `validate-resume`.
+`scripts/plan-orchestrator.ts resume-template` and `validate-resume`. Continue
+only from `resume_ready`; otherwise report `delivery_blocked`.
 
 The resume state must account for:
 
@@ -72,6 +73,10 @@ The resume state must account for:
 - current stack tip;
 - latest head SHA and Nitro gate state for every MR;
 - stack-tip `tasks.md` fingerprint;
+- concrete stack-tip `tasks.md` content and task-to-artifact evidence for
+  checked deliverables;
+- predecessor artifact, task-delta validation, and cumulative task-state
+  evidence for every implementation artifact;
 - restack requirements and evidence.
 
 If an earlier MR changed after descendants exist, restack affected descendants

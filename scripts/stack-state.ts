@@ -166,6 +166,7 @@ export function validateUnitTaskDelta(
 export function validateStackTipTaskState(
   tasksMarkdown: string,
   taskArtifacts: TaskArtifactEvidence[],
+  options: { requireAllDeliverablesChecked?: boolean } = {},
 ): string[] {
   const errors: string[] = [];
 
@@ -204,7 +205,10 @@ export function validateStackTipTaskState(
   const uncheckedDeliverables = tasks.filter(
     (task) => task.kind === "deliverable" && !task.checked,
   );
-  if (uncheckedDeliverables.length > 0) {
+  if (
+    options.requireAllDeliverablesChecked !== false &&
+    uncheckedDeliverables.length > 0
+  ) {
     errors.push(
       `stack_ready partial stack: unchecked deliverable tasks ${uncheckedDeliverables.map((task) => task.id).join(", ")}`,
     );

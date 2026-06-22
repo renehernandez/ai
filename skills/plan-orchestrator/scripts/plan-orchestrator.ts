@@ -166,11 +166,24 @@ orchestrator_resume:
   planning_artifact_ref: <Fullscript GitLab planning MR URL>
   current_stack_tip: <Fullscript GitLab stack-tip MR URL>
   task_state_fingerprint: <sha256 of stack-tip task state>
+  task_state:
+    fingerprint: <sha256 of stack-tip task state>
+    tasks_markdown: |
+      ## 1. Implementation
+
+      - [x] 1.1 Delivered task
+      - [ ] 1.2 Undelivered future task
+  task_artifacts:
+    - task_id: "1.1"
+      artifact: <implementation MR URL for task 1.1>
   implementation_stack:
     - artifact: <Fullscript GitLab planning or implementation MR URL>
       role: planning | implementation
       head_sha: <latest head sha>
       nitro_gate_outcome: passed | blocked | pending
+      predecessor_artifact: <previous stack MR URL or empty for planning>
+      task_delta_validated: true | false
+      cumulative_task_state_valid: true | false
   restack_required: false
   restack_evidence:
     - <evidence no earlier MR changed after descendants>
@@ -227,6 +240,7 @@ stack_ready:
 function validateResume(input: string): void {
   const body = extractYaml(input);
   const section = extractSection(body, "orchestrator_resume");
+  const taskState = extractSection(section, "task_state");
   const errors: string[] = [];
   const status = scalar(section, "status");
   const intake = scalar(section, "intake");
@@ -234,8 +248,17 @@ function validateResume(input: string): void {
   const planningArtifactRef = scalar(section, "planning_artifact_ref");
   const currentStackTip = scalar(section, "current_stack_tip");
   const restackRequired = scalar(section, "restack_required");
+  const tasksMarkdown = blockScalar(taskState, "tasks_markdown");
+  const taskArtifacts = taskArtifactEvidence(section);
   const stackArtifacts = allScalars(section, "artifact");
+  const roles = allScalars(section, "role");
   const nitroStates = allScalars(section, "nitro_gate_outcome");
+  const predecessorArtifacts = allScalars(section, "predecessor_artifact");
+  const taskDeltaStates = allScalars(section, "task_delta_validated");
+  const cumulativeTaskStates = allScalars(
+    section,
+    "cumulative_task_state_valid",
+  );
   const restackEvidence = list(section, "restack_evidence");
   const blockers = list(section, "blockers");
 
@@ -256,6 +279,11 @@ function validateResume(input: string): void {
     "orchestrator_resume.current_stack_tip",
     errors,
   );
+  requireValue(
+    scalar(taskState, "fingerprint"),
+    "orchestrator_resume.task_state.fingerprint",
+    errors,
+  );
   requireValue(restackRequired, "orchestrator_resume.restack_required", errors);
   const unsupportedArtifacts = [
     planningArtifactRef,
@@ -268,8 +296,10 @@ function validateResume(input: string): void {
     );
   }
 
-  if (status && status !== "inspected") {
-    errors.push("orchestrator_resume.status must be inspected");
+  if (status && !["resume_ready", "delivery_blocked"].includes(status)) {
+    errors.push(
+      "orchestrator_resume.status must be resume_ready or delivery_blocked",
+    );
   }
   if (
     intake &&
@@ -295,6 +325,17 @@ function validateResume(input: string): void {
   if (stackArtifacts.length === 0) {
     errors.push("orchestrator_resume.implementation_stack is required");
   }
+  errors.push(
+    ...fullscriptGitLabMergeRequestErrors(
+      stackArtifacts,
+      "delivery_blocked: unsupported stack/review host; orchestrator_resume implementation_stack artifacts must be Fullscript GitLab merge requests",
+    ),
+  );
+  if (!roles.includes("planning") || !roles.includes("implementation")) {
+    errors.push(
+      "orchestrator_resume.implementation_stack must include planning and implementation roles",
+    );
+  }
   if (
     nitroStates.some(
       (state) => !["passed", "blocked", "pending"].includes(state),
@@ -310,9 +351,57 @@ function validateResume(input: string): void {
   if (restackEvidence.length === 0) {
     errors.push("orchestrator_resume.restack_evidence is required");
   }
-  if (blockers.length > 0 && planningReviewState === "reviewed") {
+
+  if (status === "resume_ready") {
+    if (planningReviewState !== "reviewed") {
+      errors.push(
+        "orchestrator_resume.planning_review_state must be reviewed when status is resume_ready",
+      );
+    }
+    if (nitroStates.some((state) => state !== "passed")) {
+      errors.push(
+        "orchestrator_resume.implementation_stack nitro_gate_outcome must be passed before resume_ready",
+      );
+    }
+    if (restackRequired !== "false") {
+      errors.push(
+        "orchestrator_resume.restack_required must be false before resume_ready",
+      );
+    }
+    if (blockers.length > 0) {
+      errors.push(
+        "orchestrator_resume.blockers must be empty before resume_ready",
+      );
+    }
+    if (predecessorArtifacts.length === 0) {
+      errors.push(
+        "orchestrator_resume.implementation_stack predecessor_artifact evidence is required before resume_ready",
+      );
+    }
+    if (
+      taskDeltaStates.length === 0 ||
+      taskDeltaStates.some((state) => state !== "true")
+    ) {
+      errors.push(
+        "orchestrator_resume.implementation_stack task_delta_validated must be true for every implementation artifact before resume_ready",
+      );
+    }
+    if (
+      cumulativeTaskStates.length === 0 ||
+      cumulativeTaskStates.some((state) => state !== "true")
+    ) {
+      errors.push(
+        "orchestrator_resume.implementation_stack cumulative_task_state_valid must be true before resume_ready",
+      );
+    }
     errors.push(
-      "orchestrator_resume.blockers must be empty when planning is reviewed",
+      ...validateStackTipTaskState(tasksMarkdown ?? "", taskArtifacts, {
+        requireAllDeliverablesChecked: false,
+      }),
+    );
+  } else if (status === "delivery_blocked" && blockers.length === 0) {
+    errors.push(
+      "orchestrator_resume.blockers must explain why resume is delivery_blocked",
     );
   }
 

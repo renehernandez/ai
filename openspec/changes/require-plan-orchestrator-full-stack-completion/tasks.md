@@ -21,7 +21,7 @@
       invocation can still use `next_task`, but `caller: plan_orchestrator`
       always uses full-stack behavior and cannot emit terminal completion while
       unchecked deliverable tasks remain. Depends on 1.2.
-- [ ] 1.5 Add resume predecessor verification
+- [x] 1.5 Add resume predecessor verification
       Extend resume templates, validators, and instructions so continuation
       emits `resume_ready` only after predecessor artifacts, gates, task deltas,
       cumulative task state, and restack evidence pass; otherwise emit

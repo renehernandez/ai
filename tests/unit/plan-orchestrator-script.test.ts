@@ -102,22 +102,38 @@ const planningReview = `planning_review:
 `;
 
 const resumeReport = `orchestrator_resume:
-  status: inspected
+  status: resume_ready
   intake: existing_openspec
   planning_artifact: openspec/changes/example-change
   planning_review_state: reviewed
   planning_artifact_ref: https://git.fullscript.io/group/project/-/merge_requests/1
   current_stack_tip: https://git.fullscript.io/group/project/-/merge_requests/2
   task_state_fingerprint: feedface
+  task_state:
+    fingerprint: feedface
+    tasks_markdown: |
+      ## 1. Example Change
+
+      - [x] 1.1 First deliverable
+      - [ ] 1.2 Future deliverable
+  task_artifacts:
+    - task_id: "1.1"
+      artifact: https://git.fullscript.io/group/project/-/merge_requests/2
   implementation_stack:
     - artifact: https://git.fullscript.io/group/project/-/merge_requests/1
       role: planning
       head_sha: def456
       nitro_gate_outcome: passed
+      predecessor_artifact:
+      task_delta_validated: true
+      cumulative_task_state_valid: true
     - artifact: https://git.fullscript.io/group/project/-/merge_requests/2
       role: implementation
       head_sha: abc789
       nitro_gate_outcome: passed
+      predecessor_artifact: https://git.fullscript.io/group/project/-/merge_requests/1
+      task_delta_validated: true
+      cumulative_task_state_valid: true
   restack_required: false
   restack_evidence:
     - no earlier MR changed after descendants
@@ -268,6 +284,54 @@ test("validate-resume blocks unsupported stack hosts", () => {
   assert.match(
     result.stderr,
     /delivery_blocked: unsupported stack\/review host/,
+  );
+});
+
+test("validate-resume blocks resume-ready with stale predecessor gates", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport.replace(
+      "nitro_gate_outcome: passed",
+      "nitro_gate_outcome: pending",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /nitro_gate_outcome must be passed before resume_ready/,
+  );
+});
+
+test("validate-resume blocks resume-ready with invalid cumulative task state", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport.replace(
+      "cumulative_task_state_valid: true",
+      "cumulative_task_state_valid: false",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /cumulative_task_state_valid must be true before resume_ready/,
+  );
+});
+
+test("validate-resume blocks checked predecessor tasks without artifact evidence", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport.replace(
+      '    - task_id: "1.1"\n      artifact: https://git.fullscript.io/group/project/-/merge_requests/2\n',
+      "",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /missing implementation artifact evidence for checked deliverable tasks 1\.1/,
   );
 });
 
