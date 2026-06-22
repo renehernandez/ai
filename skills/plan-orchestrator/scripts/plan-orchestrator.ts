@@ -367,10 +367,7 @@ function validateResume(input: string): void {
     const missingPredecessorArtifacts = implementationEntries.filter(
       (entry) => !entry.predecessorArtifact,
     );
-    if (
-      implementationEntries.length === 0 ||
-      missingPredecessorArtifacts.length > 0
-    ) {
+    if (missingPredecessorArtifacts.length > 0) {
       errors.push(
         "orchestrator_resume.implementation_stack predecessor_artifact evidence is required before resume_ready",
       );
@@ -378,10 +375,7 @@ function validateResume(input: string): void {
     const invalidTaskDeltaEntries = implementationEntries.filter(
       (entry) => entry.taskDeltaValidated !== "true",
     );
-    if (
-      implementationEntries.length === 0 ||
-      invalidTaskDeltaEntries.length > 0
-    ) {
+    if (invalidTaskDeltaEntries.length > 0) {
       errors.push(
         "orchestrator_resume.implementation_stack task_delta_validated must be true for every implementation artifact before resume_ready",
       );
@@ -389,10 +383,7 @@ function validateResume(input: string): void {
     const invalidCumulativeTaskEntries = implementationEntries.filter(
       (entry) => entry.cumulativeTaskStateValid !== "true",
     );
-    if (
-      implementationEntries.length === 0 ||
-      invalidCumulativeTaskEntries.length > 0
-    ) {
+    if (invalidCumulativeTaskEntries.length > 0) {
       errors.push(
         "orchestrator_resume.implementation_stack cumulative_task_state_valid must be true before resume_ready",
       );
