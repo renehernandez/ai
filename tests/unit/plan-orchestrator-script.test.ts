@@ -309,8 +309,8 @@ test("validate-resume blocks resume-ready with invalid cumulative task state", (
   const result = runPlanOrchestrator(
     "validate-resume",
     resumeReport.replace(
-      "cumulative_task_state_valid: true",
-      "cumulative_task_state_valid: false",
+      "      predecessor_artifact: https://git.fullscript.io/group/project/-/merge_requests/1\n      task_delta_validated: true\n      cumulative_task_state_valid: true",
+      "      predecessor_artifact: https://git.fullscript.io/group/project/-/merge_requests/1\n      task_delta_validated: true\n      cumulative_task_state_valid: false",
     ),
   );
 
@@ -318,6 +318,73 @@ test("validate-resume blocks resume-ready with invalid cumulative task state", (
   assert.match(
     result.stderr,
     /cumulative_task_state_valid must be true before resume_ready/,
+  );
+});
+
+test("validate-resume blocks implementation entries without predecessor artifacts", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport.replace(
+      "      predecessor_artifact: https://git.fullscript.io/group/project/-/merge_requests/1",
+      "      predecessor_artifact:",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /predecessor_artifact evidence is required before resume_ready/,
+  );
+});
+
+test("validate-resume blocks implementation entries without task-delta evidence", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport.replace(
+      "      predecessor_artifact: https://git.fullscript.io/group/project/-/merge_requests/1\n      task_delta_validated: true",
+      "      predecessor_artifact: https://git.fullscript.io/group/project/-/merge_requests/1",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /task_delta_validated must be true for every implementation artifact before resume_ready/,
+  );
+});
+
+test("validate-resume blocks later implementation entries without predecessor artifacts", () => {
+  const twoImplementationResume = resumeReport.replace(
+    `    - artifact: https://git.fullscript.io/group/project/-/merge_requests/2
+      role: implementation
+      head_sha: abc789
+      nitro_gate_outcome: passed
+      predecessor_artifact: https://git.fullscript.io/group/project/-/merge_requests/1
+      task_delta_validated: true
+      cumulative_task_state_valid: true`,
+    `    - artifact: https://git.fullscript.io/group/project/-/merge_requests/2
+      role: implementation
+      head_sha: abc789
+      nitro_gate_outcome: passed
+      predecessor_artifact: https://git.fullscript.io/group/project/-/merge_requests/1
+      task_delta_validated: true
+      cumulative_task_state_valid: true
+    - artifact: https://git.fullscript.io/group/project/-/merge_requests/3
+      role: implementation
+      head_sha: beef123
+      nitro_gate_outcome: passed
+      task_delta_validated: true
+      cumulative_task_state_valid: true`,
+  );
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    twoImplementationResume,
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /predecessor_artifact evidence is required before resume_ready/,
   );
 });
 

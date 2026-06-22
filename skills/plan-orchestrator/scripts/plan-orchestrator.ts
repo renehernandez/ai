@@ -253,11 +253,8 @@ function validateResume(input: string): void {
   const stackArtifacts = allScalars(section, "artifact");
   const roles = allScalars(section, "role");
   const nitroStates = allScalars(section, "nitro_gate_outcome");
-  const predecessorArtifacts = allScalars(section, "predecessor_artifact");
-  const taskDeltaStates = allScalars(section, "task_delta_validated");
-  const cumulativeTaskStates = allScalars(
-    section,
-    "cumulative_task_state_valid",
+  const implementationEntries = implementationStackEntries(section).filter(
+    (entry) => entry.role === "implementation",
   );
   const restackEvidence = list(section, "restack_evidence");
   const blockers = list(section, "blockers");
@@ -373,22 +370,34 @@ function validateResume(input: string): void {
         "orchestrator_resume.blockers must be empty before resume_ready",
       );
     }
-    if (predecessorArtifacts.length === 0) {
+    const missingPredecessorArtifacts = implementationEntries.filter(
+      (entry) => !entry.predecessorArtifact,
+    );
+    if (
+      implementationEntries.length === 0 ||
+      missingPredecessorArtifacts.length > 0
+    ) {
       errors.push(
         "orchestrator_resume.implementation_stack predecessor_artifact evidence is required before resume_ready",
       );
     }
+    const invalidTaskDeltaEntries = implementationEntries.filter(
+      (entry) => entry.taskDeltaValidated !== "true",
+    );
     if (
-      taskDeltaStates.length === 0 ||
-      taskDeltaStates.some((state) => state !== "true")
+      implementationEntries.length === 0 ||
+      invalidTaskDeltaEntries.length > 0
     ) {
       errors.push(
         "orchestrator_resume.implementation_stack task_delta_validated must be true for every implementation artifact before resume_ready",
       );
     }
+    const invalidCumulativeTaskEntries = implementationEntries.filter(
+      (entry) => entry.cumulativeTaskStateValid !== "true",
+    );
     if (
-      cumulativeTaskStates.length === 0 ||
-      cumulativeTaskStates.some((state) => state !== "true")
+      implementationEntries.length === 0 ||
+      invalidCumulativeTaskEntries.length > 0
     ) {
       errors.push(
         "orchestrator_resume.implementation_stack cumulative_task_state_valid must be true before resume_ready",
@@ -591,6 +600,84 @@ function taskArtifactEvidence(input: string): TaskArtifactEvidence[] {
     const artifact = line.match(/^\s*artifact:\s*(.+?)\s*$/);
     if (artifact && current) {
       current.artifact = cleanInlineScalar(artifact[1]);
+    }
+  }
+
+  if (current) {
+    entries.push(current);
+  }
+
+  return entries;
+}
+
+function implementationStackEntries(input: string): Array<{
+  artifact: string;
+  role?: string;
+  predecessorArtifact?: string;
+  taskDeltaValidated?: string;
+  cumulativeTaskStateValid?: string;
+}> {
+  const stack = extractSection(input, "implementation_stack");
+  const entries: Array<{
+    artifact: string;
+    role?: string;
+    predecessorArtifact?: string;
+    taskDeltaValidated?: string;
+    cumulativeTaskStateValid?: string;
+  }> = [];
+  let current:
+    | {
+        artifact: string;
+        role?: string;
+        predecessorArtifact?: string;
+        taskDeltaValidated?: string;
+        cumulativeTaskStateValid?: string;
+      }
+    | undefined;
+
+  for (const line of stack.split(/\r?\n/)) {
+    const artifact = line.match(/^\s*-\s+artifact:\s*(.+?)\s*$/);
+    if (artifact) {
+      if (current) {
+        entries.push(current);
+      }
+      current = { artifact: cleanInlineScalar(artifact[1]) };
+      continue;
+    }
+
+    if (!current) {
+      continue;
+    }
+
+    const role = line.match(/^\s*role:\s*(.+?)\s*$/);
+    if (role) {
+      current.role = cleanInlineScalar(role[1]);
+      continue;
+    }
+
+    const predecessorArtifact = line.match(
+      /^\s*predecessor_artifact:\s*(.*?)\s*$/,
+    );
+    if (predecessorArtifact) {
+      current.predecessorArtifact = cleanInlineScalar(predecessorArtifact[1]);
+      continue;
+    }
+
+    const taskDeltaValidated = line.match(
+      /^\s*task_delta_validated:\s*(.+?)\s*$/,
+    );
+    if (taskDeltaValidated) {
+      current.taskDeltaValidated = cleanInlineScalar(taskDeltaValidated[1]);
+      continue;
+    }
+
+    const cumulativeTaskStateValid = line.match(
+      /^\s*cumulative_task_state_valid:\s*(.+?)\s*$/,
+    );
+    if (cumulativeTaskStateValid) {
+      current.cumulativeTaskStateValid = cleanInlineScalar(
+        cumulativeTaskStateValid[1],
+      );
     }
   }
 
