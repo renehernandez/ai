@@ -26,7 +26,7 @@
       emits `resume_ready` only after predecessor artifacts, gates, task deltas,
       cumulative task state, and restack evidence pass; otherwise emit
       `delivery_blocked`. Depends on 1.2 and 1.3.
-- [ ] 1.6 Preserve one-unit delivery evidence
+- [x] 1.6 Preserve one-unit delivery evidence
       Update `plan-unit-delivery` handoff and ledger guidance so each unit
       records selected task ID, selected task base SHA, predecessor artifact,
       implementation artifact URL/ref, implementation head SHA, task-delta

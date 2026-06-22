@@ -216,6 +216,11 @@ delivery_gate_ledger:
   unit_artifact_boundary:
     status: passed
     evidence: selected task delivered in one separate PR
+  unit_task_delta:
+    status: passed
+    evidence: exactly task 1.1 changed from unchecked to checked
+    command: pnpm exec tsx skills/plan-unit-delivery/scripts/plan-unit-delivery.ts validate-task-delta --base base.md --head head.md --task 1.1
+    output: '{"status":"unit_task_delta_valid","added_task":"1.1"}'
   local_verification:
     status: passed
     evidence: pnpm run test:unit
@@ -261,6 +266,9 @@ delivery_gate_ledger:
   stack_identity:
     status: passed
     evidence: implementation artifact and latest head recorded
+    selected_task_id: "1.1"
+    selected_task_base_sha: def456
+    predecessor_artifact: https://example.test/review/1
     implementation_artifact: https://example.test/review/2
     implementation_head_sha: abc789
     restack_required: false
@@ -549,4 +557,59 @@ test("validate-ledger requires one PR or MR per task evidence", () => {
 
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /unit_artifact_boundary.evidence must prove/);
+});
+
+test("validate-ledger requires selected task identity evidence", () => {
+  const result = runPlanUnitDelivery(
+    "validate-ledger",
+    deliveryLedger.replace('    selected_task_id: "1.1"\n', ""),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /stack_identity\.selected_task_id/);
+});
+
+test("validate-ledger requires predecessor artifact evidence", () => {
+  const result = runPlanUnitDelivery(
+    "validate-ledger",
+    deliveryLedger.replace(
+      "    predecessor_artifact: https://example.test/review/1\n",
+      "",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /stack_identity\.predecessor_artifact/);
+});
+
+test("validate-ledger requires validate-task-delta command evidence", () => {
+  const result = runPlanUnitDelivery(
+    "validate-ledger",
+    deliveryLedger.replace(
+      "    command: pnpm exec tsx skills/plan-unit-delivery/scripts/plan-unit-delivery.ts validate-task-delta --base base.md --head head.md --task 1.1\n",
+      "    command: pnpm test\n",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /unit_task_delta\.command must run validate-task-delta/,
+  );
+});
+
+test("validate-ledger requires task-delta validator output evidence", () => {
+  const result = runPlanUnitDelivery(
+    "validate-ledger",
+    deliveryLedger.replace(
+      '    output: \'{"status":"unit_task_delta_valid","added_task":"1.1"}\'\n',
+      "    output: task checked manually\n",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /unit_task_delta\.output must include unit_task_delta_valid/,
+  );
 });

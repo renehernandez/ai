@@ -72,6 +72,7 @@ const LEDGER_GATES = [
   "slice_status",
   "implementation",
   "unit_artifact_boundary",
+  "unit_task_delta",
   "local_verification",
   "refactoring_execution",
   "reviewer_passes",
@@ -220,10 +221,19 @@ function printGateTemplate(): void {
     status: passed
     evidence: <evidence>`;
     if (gate !== "stack_identity") {
+      if (gate === "unit_task_delta") {
+        return `${base}
+    command: <validate-task-delta command>
+    output: <validate-task-delta output containing unit_task_delta_valid>`;
+      }
+
       return base;
     }
 
     return `${base}
+    selected_task_id: <OpenSpec task id>
+    selected_task_base_sha: <selected task base sha>
+    predecessor_artifact: <predecessor PR or MR URL, or none for first implementation unit>
     implementation_artifact: <implementation PR or MR URL>
     implementation_head_sha: <implementation artifact latest head sha>
     restack_required: false`;
@@ -578,10 +588,30 @@ function validateDeliveryGateSemantics(
   const implementationHeadSha = stackIdentityGate
     ? scalar(stackIdentityGate, "implementation_head_sha")
     : undefined;
+  const selectedTaskId = stackIdentityGate
+    ? scalar(stackIdentityGate, "selected_task_id")
+    : undefined;
+  const selectedTaskBaseSha = stackIdentityGate
+    ? scalar(stackIdentityGate, "selected_task_base_sha")
+    : undefined;
+  const predecessorArtifact = stackIdentityGate
+    ? scalar(stackIdentityGate, "predecessor_artifact")
+    : undefined;
   const restackRequired = stackIdentityGate
     ? scalar(stackIdentityGate, "restack_required")
     : undefined;
 
+  requireValue(selectedTaskId, "stack_identity.selected_task_id", errors);
+  requireValue(
+    selectedTaskBaseSha,
+    "stack_identity.selected_task_base_sha",
+    errors,
+  );
+  requireValue(
+    predecessorArtifact,
+    "stack_identity.predecessor_artifact",
+    errors,
+  );
   requireValue(
     implementationArtifact,
     "stack_identity.implementation_artifact",
@@ -595,6 +625,28 @@ function validateDeliveryGateSemantics(
   requireValue(restackRequired, "stack_identity.restack_required", errors);
   if (restackRequired && !["true", "false"].includes(restackRequired)) {
     errors.push("stack_identity.restack_required must be true or false");
+  }
+
+  const unitTaskDeltaGate = findSection(section, "unit_task_delta");
+  const unitTaskDeltaCommand = unitTaskDeltaGate
+    ? scalar(unitTaskDeltaGate, "command")
+    : undefined;
+  const unitTaskDeltaOutput = unitTaskDeltaGate
+    ? scalar(unitTaskDeltaGate, "output")
+    : undefined;
+  requireValue(unitTaskDeltaCommand, "unit_task_delta.command", errors);
+  requireValue(unitTaskDeltaOutput, "unit_task_delta.output", errors);
+  if (
+    unitTaskDeltaCommand &&
+    !unitTaskDeltaCommand.includes("validate-task-delta")
+  ) {
+    errors.push("unit_task_delta.command must run validate-task-delta");
+  }
+  if (
+    unitTaskDeltaOutput &&
+    !unitTaskDeltaOutput.includes("unit_task_delta_valid")
+  ) {
+    errors.push("unit_task_delta.output must include unit_task_delta_valid");
   }
 
   const artifactBoundaryGate = findSection(section, "unit_artifact_boundary");
