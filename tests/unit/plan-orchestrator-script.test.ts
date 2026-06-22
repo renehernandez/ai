@@ -308,3 +308,20 @@ test("validate-stack-ready blocks unsupported stack tip hosts", () => {
     /delivery_blocked: unsupported stack\/review host/,
   );
 });
+
+test("validate-stack-ready reports missing stack tip without unsupported host noise", () => {
+  const result = runPlanOrchestrator(
+    "validate-stack-ready",
+    stackReady.replace(
+      "  stack_tip: https://git.fullscript.io/group/project/-/merge_requests/2\n",
+      "",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /stack_ready.stack_tip/);
+  assert.doesNotMatch(
+    result.stderr,
+    /delivery_blocked: unsupported stack\/review host/,
+  );
+});

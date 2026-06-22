@@ -38,10 +38,12 @@ export function isFullscriptGitLabMergeRequest(value: string): boolean {
 }
 
 export function fullscriptGitLabMergeRequestErrors(
-  artifacts: string[],
+  artifacts: Array<string | undefined>,
   message: string,
 ): string[] {
-  return artifacts.some((artifact) => !isFullscriptGitLabMergeRequest(artifact))
+  return artifacts
+    .filter((artifact): artifact is string => Boolean(artifact))
+    .some((artifact) => !isFullscriptGitLabMergeRequest(artifact))
     ? [message]
     : [];
 }
