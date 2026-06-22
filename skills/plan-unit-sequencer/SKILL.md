@@ -45,6 +45,11 @@ Normalize the delivery goal before selecting work:
 | `complete_change` | User asks to finish, ship, complete, or push the whole OpenSpec change | All deliverable tasks checked on target branch |
 | `bounded_sequence` | User asks for the next N tasks or to continue until blocked | Requested bound or first blocking condition |
 
+Direct sequencer invocation may use `next_task`. When the caller is
+`plan_orchestrator`, the effective goal is always `complete_change`; the
+orchestrator cannot use a one-task selection as terminal success for an
+OpenSpec change.
+
 1. Validate the OpenSpec change:
 
    ```bash
@@ -56,7 +61,9 @@ Normalize the delivery goal before selecting work:
 4. Record the stack-tip commit used for task selection.
 5. Read `openspec/changes/<change-id>/tasks.md` from stack-tip state.
 6. Run `openspec-tasks` if task deliverability is uncertain.
-7. Select the first unchecked deliverable task in document order.
+7. Select the first unchecked deliverable task in document order with
+   `select-next-task --caller plan_orchestrator --goal complete_change` for
+   orchestrator-driven runs.
 8. Pass that task to `plan-unit-delivery`.
 9. Require `plan-unit-delivery` to mark exactly one additional selected task
    checkbox complete in one separate implementation PR/MR for that task.
@@ -143,7 +150,7 @@ its base branch, and each selected task must remain its own PR/MR in the stack.
 - `scripts/plan-unit-sequencer.ts validate-planning-review --file <path>`
 - `scripts/plan-unit-sequencer.ts handoff-template`
 - `scripts/plan-unit-sequencer.ts validate-handoff --file <path>`
-- `scripts/plan-unit-sequencer.ts select-next-task <tasks.md>`
+- `scripts/plan-unit-sequencer.ts select-next-task <tasks.md> [--caller direct|plan_orchestrator] [--goal next_task|complete_change|bounded_sequence]`
 
 Legacy `plan_ready_handoff`, `plan_followthrough_slice_handoff`,
 `plan_coordinate_handoff`, `reviewed_slices`, `slice_plan_review`, and
@@ -156,6 +163,7 @@ followthrough-ledger inputs are unsupported. Return `needs_plan_ready`.
 | Sequencing from an unreviewed plan or OpenSpec change | Stop with `needs_reviewed_planning` |
 | Creating a followthrough ledger | Read OpenSpec `tasks.md` from target branch |
 | Treating a full-change request as one task | Set `delivery_goal: complete_change` and loop until no unchecked deliverable tasks remain |
+| Letting plan-orchestrator use `next_task` as terminal success | Invoke selection with `--caller plan_orchestrator`, which normalizes to `complete_change` |
 | Saying done without rereading `tasks.md` | Base completion only on stack-tip state before `stack_ready` |
 | Batching tasks inside `plan-unit-delivery` | Keep `plan-unit-delivery` to one unit; sequence units here |
 | Combining multiple OpenSpec tasks in one PR/MR | Split delivery so each task has its own PR/MR |

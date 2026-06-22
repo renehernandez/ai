@@ -16,7 +16,7 @@
       evidence, requires task-to-artifact evidence, rejects self-attested
       completion booleans, rejects checked future tasks without artifacts, and
       rejects partial stacks. Depends on 1.2.
-- [ ] 1.4 Split direct sequencer goals from orchestrator goals
+- [x] 1.4 Split direct sequencer goals from orchestrator goals
       Add caller and goal contracts to `plan-unit-sequencer` so direct
       invocation can still use `next_task`, but `caller: plan_orchestrator`
       always uses full-stack behavior and cannot emit terminal completion while

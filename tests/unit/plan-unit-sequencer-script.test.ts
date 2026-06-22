@@ -73,7 +73,10 @@ function runPlanUnitSequencerCommand(command: string): {
   };
 }
 
-function runSelectNextTask(content: string): {
+function runSelectNextTask(
+  content: string,
+  args: string[] = [],
+): {
   status: number | null;
   stderr: string;
   stdout: string;
@@ -88,6 +91,7 @@ function runSelectNextTask(content: string): {
         "skills/plan-unit-sequencer/scripts/plan-unit-sequencer.ts",
         "select-next-task",
         path,
+        ...args,
       ],
       {
         cwd: process.cwd(),
@@ -266,6 +270,9 @@ test("select-next-task returns the first unchecked deliverable", () => {
   const parsed = JSON.parse(result.stdout);
 
   assert.equal(parsed.status, "ready");
+  assert.equal(parsed.caller, "direct");
+  assert.equal(parsed.delivery_goal, "next_task");
+  assert.equal(parsed.completion_target, "one_task");
   assert.equal(parsed.next_task.id, "1.2");
 });
 
@@ -282,5 +289,51 @@ test("select-next-task reports complete when only manual tasks remain", () => {
   const parsed = JSON.parse(result.stdout);
 
   assert.equal(parsed.status, "complete");
+  assert.equal(parsed.caller, "direct");
+  assert.equal(parsed.delivery_goal, "next_task");
+  assert.equal(parsed.next_task, null);
+});
+
+test("select-next-task coerces plan-orchestrator calls to full-change delivery", () => {
+  const result = runSelectNextTask(
+    `# Tasks
+
+## 1. Delivery
+
+- [x] 1.1 Complete the first task
+- [ ] 1.2 Implement the second task
+`,
+    ["--caller", "plan_orchestrator", "--goal", "next_task"],
+  );
+
+  assert.equal(result.status, 0);
+  const parsed = JSON.parse(result.stdout);
+
+  assert.equal(parsed.status, "ready");
+  assert.equal(parsed.caller, "plan_orchestrator");
+  assert.equal(parsed.delivery_goal, "complete_change");
+  assert.equal(parsed.completion_target, "all_deliverable_tasks");
+  assert.equal(parsed.next_task.id, "1.2");
+});
+
+test("select-next-task reports OpenSpec completion for plan-orchestrator only after no unchecked deliverables remain", () => {
+  const result = runSelectNextTask(
+    `# Tasks
+
+## 1. Delivery
+
+- [x] 1.1 Complete the first task
+- [ ] 1.2 Manual production verification
+`,
+    ["--caller", "plan_orchestrator"],
+  );
+
+  assert.equal(result.status, 0);
+  const parsed = JSON.parse(result.stdout);
+
+  assert.equal(parsed.status, "openspec_complete");
+  assert.equal(parsed.caller, "plan_orchestrator");
+  assert.equal(parsed.delivery_goal, "complete_change");
+  assert.equal(parsed.completion_target, "all_deliverable_tasks");
   assert.equal(parsed.next_task, null);
 });
