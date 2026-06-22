@@ -40,8 +40,28 @@ export type PlanningReview = {
   task_state_fingerprint?: string;
   validation_evidence: string[];
   review_evidence: string[];
+  planning_feedback_status?: string;
+  planning_feedback_evidence: string[];
+  planning_feedback_items: PlanningFeedbackDispositionItem[];
   blockers: string[];
 };
+
+type PlanningFeedbackDispositionItem = {
+  note_id?: string;
+  discussion_id?: string;
+  resolvable?: string;
+  resolved?: string;
+  disposition?: string;
+  implementation_task?: string;
+  evidence?: string;
+};
+
+const PLANNING_FEEDBACK_DISPOSITIONS = [
+  "fixed_in_planning",
+  "deferred_to_task",
+  "non_actionable",
+  "blocked",
+] as const;
 
 export function readInput(args: string[]): string {
   const fileIndex = args.indexOf("--file");
@@ -157,6 +177,8 @@ export function parsePlanningReview(input: string): PlanningReview {
   const stackIdentity = findSection(section, "stack_identity") ?? "";
   const validation = findSection(section, "validation") ?? "";
   const review = findSection(section, "review") ?? "";
+  const planningFeedback =
+    findSection(section, "planning_feedback_disposition") ?? "";
 
   return {
     status: scalar(section, "status"),
@@ -187,6 +209,9 @@ export function parsePlanningReview(input: string): PlanningReview {
     task_state_fingerprint: scalar(section, "task_state_fingerprint"),
     validation_evidence: list(validation || section, "evidence"),
     review_evidence: list(review || section, "evidence"),
+    planning_feedback_status: scalar(planningFeedback, "status"),
+    planning_feedback_evidence: list(planningFeedback, "evidence"),
+    planning_feedback_items: parseObjectList(planningFeedback, "items"),
     blockers: list(section, "blockers"),
   };
 }
@@ -310,11 +335,130 @@ export function validatePlanningReviewContract(
     errors.push("planning_review.review.evidence is required");
   }
 
+  validatePlanningFeedbackDisposition(review, errors);
+
   if (review.blockers.length > 0) {
     errors.push("planning_review.blockers must be empty before sequencing");
   }
 
   return review;
+}
+
+function validatePlanningFeedbackDisposition(
+  review: PlanningReview,
+  errors: string[],
+): void {
+  requireValue(
+    review.planning_feedback_status,
+    "planning_review.planning_feedback_disposition.status",
+    errors,
+  );
+  if (
+    review.planning_feedback_status &&
+    review.planning_feedback_status !== "complete"
+  ) {
+    errors.push(
+      "planning_review.planning_feedback_disposition.status must be complete",
+    );
+  }
+  if (review.planning_feedback_evidence.length === 0) {
+    errors.push(
+      "planning_review.planning_feedback_disposition.evidence is required",
+    );
+  }
+  if (review.planning_feedback_items.length === 0) {
+    errors.push(
+      "planning_review.planning_feedback_disposition.items must enumerate Nitro planning feedback or record an explicit none item",
+    );
+  }
+
+  for (const [index, item] of review.planning_feedback_items.entries()) {
+    const label = `planning_review.planning_feedback_disposition.items[${index}]`;
+    requireValue(item.note_id, `${label}.note_id`, errors);
+    requireValue(item.disposition, `${label}.disposition`, errors);
+    requireValue(item.evidence, `${label}.evidence`, errors);
+
+    if (
+      item.disposition &&
+      !includes(PLANNING_FEEDBACK_DISPOSITIONS, item.disposition)
+    ) {
+      errors.push(
+        `${label}.disposition must be one of: ${PLANNING_FEEDBACK_DISPOSITIONS.join(", ")}`,
+      );
+    }
+    if (item.disposition === "blocked") {
+      errors.push(`${label}.disposition blocked prevents implementation`);
+    }
+    if (item.disposition === "deferred_to_task") {
+      requireValue(
+        item.implementation_task,
+        `${label}.implementation_task`,
+        errors,
+      );
+    }
+
+    if (item.resolvable && !["true", "false"].includes(item.resolvable)) {
+      errors.push(`${label}.resolvable must be true or false`);
+    }
+    if (item.resolved && !["true", "false"].includes(item.resolved)) {
+      errors.push(`${label}.resolved must be true or false`);
+    }
+    if (item.resolvable === "true") {
+      requireValue(item.discussion_id, `${label}.discussion_id`, errors);
+      requireValue(item.resolved, `${label}.resolved`, errors);
+      if (
+        item.resolved === "false" &&
+        item.disposition !== "deferred_to_task" &&
+        item.disposition !== "non_actionable"
+      ) {
+        errors.push(
+          `${label} unresolved resolvable discussion must be resolved in GitLab or dispositioned as deferred_to_task/non_actionable`,
+        );
+      }
+    }
+  }
+}
+
+function parseObjectList(input: string, key: string): Record<string, string>[] {
+  const lines = input.split(/\r?\n/);
+  const keyIndex = lines.findIndex((line) =>
+    line.match(new RegExp(`^\\s*${escapeRegExp(key)}:\\s*$`)),
+  );
+  if (keyIndex === -1) {
+    return [];
+  }
+
+  const keyIndent = lines[keyIndex].match(/^(\s*)/)?.[1].length ?? 0;
+  const items: Record<string, string>[] = [];
+  let current: Record<string, string> | undefined;
+
+  for (const line of lines.slice(keyIndex + 1)) {
+    if (line.trim() === "") {
+      continue;
+    }
+
+    const indent = line.match(/^(\s*)/)?.[1].length ?? 0;
+    if (indent <= keyIndent) {
+      break;
+    }
+
+    const newItem = line.trim().match(/^- (?:(\w+):\s*(.*))?$/);
+    if (newItem) {
+      current = {};
+      items.push(current);
+      if (newItem[1]) {
+        current[newItem[1]] = cleanScalar(newItem[2] ?? "");
+      }
+      continue;
+    }
+
+    const pair = line.trim().match(/^(\w+):\s*(.*)$/);
+    if (pair && current) {
+      current[pair[1]] = cleanScalar(pair[2]);
+    }
+  }
+
+  return items;
 }
 
 export function requireValue(

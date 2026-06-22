@@ -32,27 +32,27 @@
       implementation artifact URL/ref, implementation head SHA, task-delta
       validation command/output, CI evidence, Nitro evidence, and restack state.
       Depends on 1.2.
-- [ ] 1.7 Add planning feedback disposition gate
+- [x] 1.7 Add planning feedback disposition gate
       Update planning-review gate helpers, templates, validators, and prompts so
       ledgers enumerate prior Nitro planning feedback by note/discussion ID and
       disposition each item as fixed in planning, deferred to a specific
       implementation task, non-actionable, or blocked. Latest-head Nitro clean
       feedback alone is not sufficient when prior planning feedback exists.
       Depends on 1.2.
-- [ ] 1.8 Align plan-ready, plan-review, docs, and rules
+- [x] 1.8 Align plan-ready, plan-review, docs, and rules
       Audit/update `skills/plan-ready`, `skills/plan-review`, `AGENTS.md`,
       `instructions/AGENTS.md`, `rules/feature-delivery.md`, adapter prompts,
       and normative planning references so they align on `stack_ready` or
       `delivery_blocked` as orchestrator terminal states and use the planning
       feedback disposition gate from 1.7. Depends on 1.1, 1.4, and 1.7.
-- [ ] 1.9 Update regression coverage and examples
+- [x] 1.9 Update regression coverage and examples
       Add fixtures and tests for partial-stack rejection, resume predecessor
       verification, stale predecessor gates, invalid cumulative task state,
       unsupported host blocking, session handoff as non-success, planning-review
       rejection when prior Nitro planning feedback lacks explicit disposition,
       and direct sequencer `next_task` behavior outside orchestrator. Depends
       on 1.3, 1.4, 1.5, 1.6, and 1.7.
-- [ ] 1.10 Validate agent behavior and refresh runtime
+- [x] 1.10 Validate agent behavior and refresh runtime
       Run `writing-skills`, address findings, refresh installed skill surfaces,
       ensure reusable runtime scripts include all imported shared helpers such
       as `scripts/nitro-feedback-gate.ts`, and execute touched installed

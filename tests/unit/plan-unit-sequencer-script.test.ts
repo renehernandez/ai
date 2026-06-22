@@ -1,9 +1,16 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+
+function fixture(name: string): string {
+  return readFileSync(
+    join(process.cwd(), "tests/fixtures/plan-orchestrator", name),
+    "utf8",
+  );
+}
 
 function withTempFile(content: string, callback: (path: string) => void): void {
   const directory = mkdtempSync(join(tmpdir(), "plan-unit-sequencer-script-"));
@@ -172,6 +179,17 @@ const planningReview = `planning_review:
   review:
     evidence:
       - feedback addressed and latest-head Nitro gate passed
+  planning_feedback_disposition:
+    status: complete
+    evidence:
+      - Nitro planning feedback was enumerated by note ID and disposition.
+    items:
+      - note_id: "3330306"
+        discussion_id: abc123
+        resolvable: true
+        resolved: true
+        disposition: fixed_in_planning
+        evidence: planning MR commit addressed the comment
   blockers: []
 `;
 
@@ -265,6 +283,19 @@ test("select-next-task returns the first unchecked deliverable", () => {
 - [ ] 1.2 Implement the second task
 - [ ] 1.3 Manual production verification
 `);
+
+  assert.equal(result.status, 0);
+  const parsed = JSON.parse(result.stdout);
+
+  assert.equal(parsed.status, "ready");
+  assert.equal(parsed.caller, "direct");
+  assert.equal(parsed.delivery_goal, "next_task");
+  assert.equal(parsed.completion_target, "one_task");
+  assert.equal(parsed.next_task.id, "1.2");
+});
+
+test("fixture preserves direct sequencer next-task behavior outside orchestrator", () => {
+  const result = runSelectNextTask(fixture("direct-sequencer-next-task.md"));
 
   assert.equal(result.status, 0);
   const parsed = JSON.parse(result.stdout);
