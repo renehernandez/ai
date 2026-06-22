@@ -64,6 +64,11 @@ Validation checks repo config quality, known schema and artifact rules, bounded
 context size, reusable runtime script sources, generated asset targets, and
 managed symlink normalization.
 
+For shared skills, `agent-runtime skills validate` and the top-level
+`agent-runtime validate` also check local managed skill imports of reusable
+runtime scripts. If a local managed skill imports `../../../scripts/<file>.ts`,
+that script must be declared under `runtime.reusableScripts`.
+
 ## Refreshing Shared Runtime Surfaces
 
 After changing shared runtime sources in this repo, refresh the installed

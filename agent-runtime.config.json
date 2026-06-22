@@ -3,7 +3,10 @@
   "runtime": {
     "canonicalSkillsDir": "~/.agents/skills",
     "skillSymlinkTargets": ["~/.claude/skills"],
-    "reusableScripts": ["scripts/planning-contracts.ts"],
+    "reusableScripts": [
+      "scripts/planning-contracts.ts",
+      "scripts/nitro-feedback-gate.ts"
+    ],
     "instructionSymlinkTargets": {
       "agents": "~/.agents",
       "claude": "~/.claude",

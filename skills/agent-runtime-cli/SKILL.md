@@ -121,6 +121,12 @@ Refresh every affected installed surface before treating source edits as live:
 - generated OpenSpec skills or commands: use `pnpm agent-runtime openspec
   update`, then `pnpm agent-runtime openspec validate`.
 
+Skills and top-level runtime validation also check local managed skill imports
+of reusable runtime scripts. When a managed skill imports
+`../../../scripts/<file>.ts`, declare that file in `runtime.reusableScripts`;
+otherwise `pnpm agent-runtime skills validate ...` and
+`pnpm agent-runtime validate ...` fail before install or update.
+
 If an update changes installed files, rerun the matching `status` or `validate`
 command before finishing.
 
