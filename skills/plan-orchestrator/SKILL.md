@@ -62,11 +62,12 @@ For `openspec_blueprint` outputs:
    OpenSpec propose entrypoint.
 3. Run `openspec validate <change-id> --strict --no-interactive`.
 4. Run the repo-local OpenSpec scaffolding validation when available.
-5. If OpenSpec creation and all applicable validation steps pass, delete the
-   source `.agents/plans/**` intake file before publishing review. Applicable
-   validation steps include strict OpenSpec validation and repo-local
-   scaffolding validation when available. If creation or any applicable
-   validation step fails, preserve the source plan for repair.
+5. If OpenSpec creation and all applicable validation steps pass, run
+   `scripts/plan-orchestrator.ts cleanup-source-plan --source-plan <path>
+   --change-id <change-id>` before publishing review. Applicable validation
+   steps include strict OpenSpec validation and repo-local scaffolding
+   validation when available. If creation or any applicable validation step
+   fails, preserve the source plan for repair.
 6. Run `plan-review` against the OpenSpec change. For `artifact_type:
    openspec`, the planning branch diff must contain the OpenSpec change and no
    `.agents/plans/**` files.
@@ -128,6 +129,7 @@ validate-stack-ready`.
 - `scripts/plan-orchestrator.ts plan-review-request-template`
 - `scripts/plan-orchestrator.ts validate-planning-review --file <path>`
 - `scripts/plan-orchestrator.ts validate-openspec-change <change-id>`
+- `scripts/plan-orchestrator.ts cleanup-source-plan --source-plan <path> --change-id <change-id>`
 - `scripts/plan-orchestrator.ts resume-template`
 - `scripts/plan-orchestrator.ts validate-resume --file <path>`
 - `scripts/plan-orchestrator.ts stack-ready-template`

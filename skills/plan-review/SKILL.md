@@ -75,6 +75,10 @@ and next action.
    publishing. The diff must be planning-only: plans, OpenSpec files, docs that
    explain the plan, skill/rule workflow docs, or review metadata. If
    implementation files are present, stop and ask whether to split them out.
+   Validate the path boundary before commit with `scripts/plan-review.ts
+   validate-planning-diff --artifact-type <type> --base <target>`, which
+   includes dirty working-tree changes. For committed ranges, pass `--head
+   <ref>`.
    For `artifact_type: openspec`, `.agents/plans/**` files are scratch intake
    only and must not appear in the planning diff as added, modified, deleted,
    renamed, copied, or type-changed paths. For `artifact_type: plan`, atomic
