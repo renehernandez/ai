@@ -52,7 +52,7 @@
       rejection when prior Nitro planning feedback lacks explicit disposition,
       and direct sequencer `next_task` behavior outside orchestrator. Depends
       on 1.3, 1.4, 1.5, 1.6, and 1.7.
-- [ ] 1.10 Validate agent behavior and refresh runtime
+- [x] 1.10 Validate agent behavior and refresh runtime
       Run `writing-skills`, address findings, refresh installed skill surfaces,
       ensure reusable runtime scripts include all imported shared helpers such
       as `scripts/nitro-feedback-gate.ts`, and execute touched installed
