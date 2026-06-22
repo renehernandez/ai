@@ -125,6 +125,12 @@ and next action.
     cleanly, every prior Nitro planning item has explicit disposition, and the
     reviewed head is recorded as the implementation stack base.
 
+Planning review is not terminal success for `plan-orchestrator`. In a
+`plan-orchestrator` run, the emitted `planning_review` is the reviewed stack
+base for `plan-unit-sequencer`; the orchestrator must keep sequencing
+implementation units until it can report `stack_ready`, or report
+`delivery_blocked` with evidence when it cannot continue.
+
 ## Gate Rules
 
 | Gate | Passes when |
@@ -229,6 +235,7 @@ planning_review:
 | Applying code changes from review feedback | Convert implementation requests into plan changes or follow-ups |
 | Treating latest-head Nitro clean as enough when prior planning comments exist | Enumerate prior Nitro planning comments and record explicit disposition before emitting `planning_review` |
 | Returning gate YAML instead of `planning_review` | Emit and validate `planning_review` before handing off |
+| Treating `planning_review` as terminal success | Hand off to sequencing; only `stack_ready` or `delivery_blocked` can finish orchestrator delivery |
 | Returning YAML without a readable thread summary | Add `## Readable Summary` before the YAML |
 
 ## Test Evidence
