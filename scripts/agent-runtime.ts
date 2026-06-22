@@ -31,6 +31,7 @@ import {
 } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Command } from "commander";
+import ts from "typescript";
 
 type Scope = "skills" | "instructions" | "openspec" | "hooks";
 type RuntimeCommand = "install" | "update" | "validate" | "status";
@@ -3058,6 +3059,7 @@ function runSkills(
     statusSkills(config, profileNames);
     return;
   }
+  validateSkillConfig(config, profileNames);
 
   const lockFile = lockFileFor(config);
   const lock = readLock(lockFile);
@@ -3436,6 +3438,7 @@ function validateSkillConfig(config: Config, profileNames: string[]): void {
     );
   }
   validateReusableScriptConfig(config.runtime.reusableScripts ?? []);
+  validateLocalSkillReusableScriptImports(config, profileNames);
 
   let skillCount = 0;
   const blockNames = new Set<string>();
@@ -3524,6 +3527,108 @@ function validateReusableScriptConfig(
       throw new Error(`Missing reusable runtime script: ${sourcePath}`);
     }
   }
+}
+
+function validateLocalSkillReusableScriptImports(
+  config: Config,
+  profileNames: string[],
+): void {
+  const reusableScriptTargets = new Set(
+    (config.runtime.reusableScripts ?? []).map((runtimeFile) =>
+      normalizeRuntimeTargetPath(runtimeFileTargetPath(runtimeFile)),
+    ),
+  );
+  const missingImports = new Map<string, Set<string>>();
+
+  for (const profileName of profileNames) {
+    const sources = expandSkillSources(config, profileName);
+    ensureUniqueSkillNames(sources);
+    for (const source of sources) {
+      if (!isLocalSource(source)) {
+        continue;
+      }
+      for (const skillName of source.names) {
+        const skillDir = join(source.localPath, skillName);
+        for (const importedScript of localSkillReusableScriptImports(
+          skillDir,
+        )) {
+          if (reusableScriptTargets.has(importedScript)) {
+            continue;
+          }
+          const skillImports =
+            missingImports.get(skillName) ?? new Set<string>();
+          skillImports.add(importedScript);
+          missingImports.set(skillName, skillImports);
+        }
+      }
+    }
+  }
+
+  const errors = [...missingImports.entries()].flatMap(([skillName, imports]) =>
+    [...imports]
+      .sort()
+      .map(
+        (importedScript) =>
+          `Skill ${skillName} imports reusable runtime script ${importedScript}, but it is not listed in runtime.reusableScripts`,
+      ),
+  );
+  if (errors.length > 0) {
+    throw new Error(errors.join("\n"));
+  }
+}
+
+function localSkillReusableScriptImports(skillDir: string): string[] {
+  const scriptsDir = join(skillDir, "scripts");
+  if (!lstatIfExists(scriptsDir)?.isDirectory()) {
+    return [];
+  }
+
+  const imports = new Set<string>();
+  for (const relativeFile of collectFiles(scriptsDir)) {
+    if (extname(relativeFile) !== ".ts") {
+      continue;
+    }
+    const filePath = join(scriptsDir, relativeFile);
+    const content = readFileSync(filePath, "utf-8");
+    for (const importedScript of staticReusableScriptImports(content)) {
+      imports.add(importedScript);
+    }
+  }
+  return [...imports].sort();
+}
+
+function staticReusableScriptImports(content: string): string[] {
+  const sourceFile = ts.createSourceFile(
+    "skill-script.ts",
+    content,
+    ts.ScriptTarget.Latest,
+    false,
+    ts.ScriptKind.TS,
+  );
+  const imports = new Set<string>();
+  for (const statement of sourceFile.statements) {
+    if (
+      !ts.isImportDeclaration(statement) &&
+      !ts.isExportDeclaration(statement)
+    ) {
+      continue;
+    }
+    const moduleSpecifier = statement.moduleSpecifier;
+    if (!moduleSpecifier || !ts.isStringLiteral(moduleSpecifier)) {
+      continue;
+    }
+    const match = moduleSpecifier.text.match(
+      /^\.\.\/\.\.\/\.\.\/scripts\/(.+\.ts)$/,
+    );
+    if (match) {
+      imports.add(normalizeRuntimeTargetPath(`scripts/${match[1]}`));
+    }
+  }
+  return [...imports].sort();
+}
+
+function normalizeRuntimeTargetPath(targetPath: string): string {
+  return relative(".", targetPath).split(sep).join("/");
 }
 
 function installReusableScripts(config: Config, skillDirs: string[]): void {
