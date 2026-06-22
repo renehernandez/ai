@@ -405,6 +405,7 @@ function validateResume(input: string): void {
     }
     errors.push(
       ...validateStackTipTaskState(tasksMarkdown ?? "", taskArtifacts, {
+        context: "orchestrator_resume",
         requireAllDeliverablesChecked: false,
       }),
     );

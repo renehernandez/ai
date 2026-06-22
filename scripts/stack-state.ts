@@ -166,12 +166,13 @@ export function validateUnitTaskDelta(
 export function validateStackTipTaskState(
   tasksMarkdown: string,
   taskArtifacts: TaskArtifactEvidence[],
-  options: { requireAllDeliverablesChecked?: boolean } = {},
+  options: { context?: string; requireAllDeliverablesChecked?: boolean } = {},
 ): string[] {
   const errors: string[] = [];
+  const context = options.context ?? "stack_ready";
 
   if (tasksMarkdown.trim().length === 0) {
-    return ["stack_ready.task_state.tasks_markdown is required"];
+    return [`${context}.task_state.tasks_markdown is required`];
   }
 
   const tasks = parseTasks(tasksMarkdown);
@@ -182,20 +183,20 @@ export function validateStackTipTaskState(
   for (const evidence of taskArtifacts) {
     if (!evidence.taskId || !evidence.artifact) {
       errors.push(
-        "stack_ready.task_artifacts entries must include task_id and artifact",
+        `${context}.task_artifacts entries must include task_id and artifact`,
       );
       continue;
     }
 
     if (!tasksById.has(evidence.taskId)) {
       errors.push(
-        `stack_ready.task_artifacts references unknown task ${evidence.taskId}`,
+        `${context}.task_artifacts references unknown task ${evidence.taskId}`,
       );
     }
 
     if (artifactByTask.has(evidence.taskId)) {
       errors.push(
-        `stack_ready.task_artifacts has duplicate evidence for task ${evidence.taskId}`,
+        `${context}.task_artifacts has duplicate evidence for task ${evidence.taskId}`,
       );
     }
 
@@ -210,7 +211,7 @@ export function validateStackTipTaskState(
     uncheckedDeliverables.length > 0
   ) {
     errors.push(
-      `stack_ready partial stack: unchecked deliverable tasks ${uncheckedDeliverables.map((task) => task.id).join(", ")}`,
+      `${context} partial stack: unchecked deliverable tasks ${uncheckedDeliverables.map((task) => task.id).join(", ")}`,
     );
   }
 
@@ -222,7 +223,7 @@ export function validateStackTipTaskState(
   );
   if (checkedDeliverablesMissingArtifacts.length > 0) {
     errors.push(
-      `stack_ready.task_artifacts missing implementation artifact evidence for checked deliverable tasks ${checkedDeliverablesMissingArtifacts.map((task) => task.id).join(", ")}`,
+      `${context}.task_artifacts missing implementation artifact evidence for checked deliverable tasks ${checkedDeliverablesMissingArtifacts.map((task) => task.id).join(", ")}`,
     );
   }
 

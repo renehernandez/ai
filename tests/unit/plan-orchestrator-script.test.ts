@@ -400,7 +400,7 @@ test("validate-resume blocks checked predecessor tasks without artifact evidence
   assert.notEqual(result.status, 0);
   assert.match(
     result.stderr,
-    /missing implementation artifact evidence for checked deliverable tasks 1\.1/,
+    /orchestrator_resume\.task_artifacts missing implementation artifact evidence for checked deliverable tasks 1\.1/,
   );
 });
 
