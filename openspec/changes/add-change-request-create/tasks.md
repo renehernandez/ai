@@ -15,7 +15,7 @@
 - [x] 1.4 Add pressure scenarios and validation coverage.
   - Add documented RED/GREEN pressure scenarios or fixtures for GitLab leak rejection, GitHub template preservation, existing artifact update, ambiguous routing, multi-template selection, and hosted failure inclusion.
   - Run `pnpm run skills:validate`, `pnpm test:unit`, and `pnpm test`.
-- [ ] 1.5 Run shared skill review and runtime gates.
+- [x] 1.5 Run shared skill review and runtime gates.
   - Run `writing-skills` review against the changed shared skill behavior.
   - Run `pnpm ax skills validate --profile personal` and `pnpm ax skills validate --profile work`.
   - If live runtime refresh is intended, run `pnpm ax skills update --profile personal`, `pnpm ax skills update --profile work`, `pnpm ax skills status --profile personal`, and `pnpm ax skills status --profile work`.
