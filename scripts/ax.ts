@@ -686,6 +686,7 @@ function addCommitCommand(program: Command): void {
       const result = spawnSync("git", ["commit", ...parsed.gitArgs], {
         cwd: process.cwd(),
         encoding: "utf-8",
+        env: withoutGitRepositoryEnv(),
         stdio: "inherit",
       });
       process.exitCode = result.status ?? 1;
@@ -734,6 +735,9 @@ function parseAxCommitArgs(args: string[]): {
       const message = args[index + 1];
       if (!message) {
         errors.push(`${arg} requires a commit message`);
+        if (index + 1 < args.length) {
+          index += 1;
+        }
       } else {
         gitArgs.push(arg, message);
         index += 1;
@@ -756,6 +760,18 @@ function parseAxCommitArgs(args: string[]): {
   }
 
   return { gitArgs, errors };
+}
+
+function withoutGitRepositoryEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  delete env.GIT_ALTERNATE_OBJECT_DIRECTORIES;
+  delete env.GIT_DIR;
+  delete env.GIT_INDEX_FILE;
+  delete env.GIT_OBJECT_DIRECTORY;
+  delete env.GIT_PREFIX;
+  delete env.GIT_QUARANTINE_PATH;
+  delete env.GIT_WORK_TREE;
+  return env;
 }
 
 type CommandOptions = {

@@ -708,6 +708,28 @@ test("ax commit delegates normal staged commits after review-gate validation", (
   }
 });
 
+test("ax commit ignores parent Git repository env when delegating", () => {
+  const cwd = createGitFixture("ax-commit-sanitizes-env-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+
+    const result = runAgentRuntime(["commit", "-m", "add fixture file"], {
+      cwd,
+      env: { GIT_INDEX_FILE: join(cwd, "alternate-index") },
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(
+      runGit(["log", "-1", "--pretty=%s"], { cwd }),
+      "add fixture file",
+    );
+    assert.equal(runGit(["status", "--short"], { cwd }), "");
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
 test("ax commit refuses commits when active review-gate validation fails", () => {
   const cwd = createGitFixture("ax-commit-blocked-");
   try {
@@ -738,6 +760,23 @@ test("ax commit refuses commits when active review-gate validation fails", () =>
       }).status,
       0,
     );
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("ax commit rejects empty explicit commit messages without pathspec noise", () => {
+  const cwd = createGitFixture("ax-commit-empty-message-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+
+    const result = runAgentRuntime(["commit", "-m", ""], { cwd });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /-m requires a commit message/);
+    assert.doesNotMatch(result.stderr, /Pathspec commits are not supported/);
+    assert.equal(runGit(["status", "--short"], { cwd }), "A  file.txt");
   } finally {
     rmSync(cwd, { force: true, recursive: true });
   }
