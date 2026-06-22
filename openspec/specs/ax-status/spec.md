@@ -10,11 +10,13 @@ readiness.
 
 #### Scenario: Status reports runtime roots
 - **WHEN** `ax status` runs
-- **THEN** it reports source root, config path, target root, and executable path
+- **THEN** it reports source root, config path, lock path, cache path, target root, and executable path
 
-#### Scenario: Status reports link health
-- **WHEN** `ax status` runs from a globally linked command
-- **THEN** it reports whether the executable resolves back to the durable AI repo checkout
+#### Scenario: Status reports shim health
+- **WHEN** `ax status` runs from the managed shim or package script
+- **THEN** it reports whether `~/.local/bin/ax` exists
+- **AND** reports whether the shim is AX-managed, executable, and points at the current source root
+- **AND** reports whether PATH resolves `ax` to the managed shim or another executable
 
 #### Scenario: Status aggregates managed runtime surfaces
 - **WHEN** `ax status` runs
@@ -27,3 +29,10 @@ readiness.
 - **THEN** it reports target OpenSpec as missing
 - **AND** does not mark the global runtime installation invalid solely because OpenSpec is missing
 
+#### Scenario: Status fails for invalid managed assets
+- **WHEN** status detects broken config parsing, missing source root, invalid managed assets, broken reusable scripts, missing hook source, mismatched managed shim, stale managed shim, or detached-worktree shim target
+- **THEN** `ax status` exits non-zero
+
+#### Scenario: Status warns for target readiness gaps
+- **WHEN** status detects missing `~/.local/bin` on PATH or a shadowing executable that does not prevent explicit `pnpm ax status` from running
+- **THEN** it reports a warning without failing solely for that condition
