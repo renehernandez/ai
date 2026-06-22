@@ -565,7 +565,7 @@ function validateLedger(input: string): void {
     }
   }
 
-  validateDeliveryGateSemantics(section, errors);
+  validateDeliveryGateSemantics(body, section, errors);
 
   if (errors.length > 0) {
     console.error(
@@ -578,9 +578,12 @@ function validateLedger(input: string): void {
 }
 
 function validateDeliveryGateSemantics(
+  body: string,
   section: string,
   errors: string[],
 ): void {
+  const nitroArtifact = scalar(body, "artifact");
+  const nitroHeadSha = scalar(body, "head_sha");
   const stackIdentityGate = findSection(section, "stack_identity");
   const implementationArtifact = stackIdentityGate
     ? scalar(stackIdentityGate, "implementation_artifact")
@@ -626,13 +629,31 @@ function validateDeliveryGateSemantics(
   if (restackRequired && !["true", "false"].includes(restackRequired)) {
     errors.push("stack_identity.restack_required must be true or false");
   }
+  if (
+    nitroArtifact &&
+    implementationArtifact &&
+    nitroArtifact !== implementationArtifact
+  ) {
+    errors.push(
+      "nitro_feedback_gate.artifact must match stack_identity.implementation_artifact",
+    );
+  }
+  if (
+    nitroHeadSha &&
+    implementationHeadSha &&
+    nitroHeadSha !== implementationHeadSha
+  ) {
+    errors.push(
+      "nitro_feedback_gate.head_sha must match stack_identity.implementation_head_sha",
+    );
+  }
 
   const unitTaskDeltaGate = findSection(section, "unit_task_delta");
   const unitTaskDeltaCommand = unitTaskDeltaGate
     ? scalar(unitTaskDeltaGate, "command")
     : undefined;
   const unitTaskDeltaOutput = unitTaskDeltaGate
-    ? scalar(unitTaskDeltaGate, "output")
+    ? scalarOrBlock(unitTaskDeltaGate, "output")
     : undefined;
   requireValue(unitTaskDeltaCommand, "unit_task_delta.command", errors);
   requireValue(unitTaskDeltaOutput, "unit_task_delta.output", errors);
@@ -647,6 +668,58 @@ function validateDeliveryGateSemantics(
     !unitTaskDeltaOutput.includes("unit_task_delta_valid")
   ) {
     errors.push("unit_task_delta.output must include unit_task_delta_valid");
+  }
+  if (unitTaskDeltaCommand && selectedTaskId) {
+    const commandTaskId = parseTaskDeltaCommandTask(unitTaskDeltaCommand);
+    if (!commandTaskId) {
+      errors.push(
+        "unit_task_delta.command must include --task <selected_task_id>",
+      );
+    } else if (commandTaskId !== selectedTaskId) {
+      errors.push(
+        "unit_task_delta.command --task must match stack_identity.selected_task_id",
+      );
+    }
+  }
+  if (unitTaskDeltaOutput && selectedTaskId) {
+    const parsedOutput = parseTaskDeltaOutput(unitTaskDeltaOutput);
+    if (!parsedOutput) {
+      errors.push("unit_task_delta.output must be parseable validator JSON");
+    } else {
+      if (parsedOutput.status !== "unit_task_delta_valid") {
+        errors.push(
+          "unit_task_delta.output status must be unit_task_delta_valid",
+        );
+      }
+      if (parsedOutput.addedTaskId !== selectedTaskId) {
+        errors.push(
+          "unit_task_delta.output added_task.id must match stack_identity.selected_task_id",
+        );
+      }
+    }
+  }
+
+  const docsAlignmentGate = findSection(section, "docs_alignment");
+  const docsAlignmentEvidence = docsAlignmentGate
+    ? scalar(docsAlignmentGate, "evidence")
+    : undefined;
+  if (
+    docsAlignmentEvidence &&
+    !docsAlignmentEvidence.match(/\bdocs-alignment-review\b/i)
+  ) {
+    errors.push(
+      "docs_alignment.evidence must reference a docs-alignment-review verdict",
+    );
+  }
+  if (
+    docsAlignmentEvidence &&
+    !docsAlignmentEvidence.match(
+      /\b(clean|resolved|not[ _-]?applicable|not needed)\b/i,
+    )
+  ) {
+    errors.push(
+      "docs_alignment.evidence must record a clean, resolved, or not-applicable docs-alignment verdict",
+    );
   }
 
   const artifactBoundaryGate = findSection(section, "unit_artifact_boundary");
@@ -697,6 +770,70 @@ function validateDeliveryGateSemantics(
       "automatic_review_feedback_wait.evidence must show resolved Nitro feedback, no posted feedback after timeout, or unavailable review system evidence",
     );
   }
+}
+
+function scalarOrBlock(input: string, key: string): string | undefined {
+  const lines = input.split(/\r?\n/);
+  const keyIndex = lines.findIndex((line) =>
+    line.match(new RegExp(`^\\s*${escapeRegExp(key)}:\\s*[|>]\\s*$`)),
+  );
+  if (keyIndex === -1) {
+    return scalar(input, key);
+  }
+
+  const keyIndent = lines[keyIndex].match(/^(\s*)/)?.[1].length ?? 0;
+  const blockLines: string[] = [];
+  for (const line of lines.slice(keyIndex + 1)) {
+    if (line.trim() === "") {
+      blockLines.push("");
+      continue;
+    }
+
+    const indent = line.match(/^(\s*)/)?.[1].length ?? 0;
+    if (indent <= keyIndent) {
+      break;
+    }
+
+    blockLines.push(line.slice(Math.min(indent, keyIndent + 2)));
+  }
+
+  const value = blockLines.join("\n").trim();
+  return value || undefined;
+}
+
+function parseTaskDeltaCommandTask(command: string): string | undefined {
+  const match = command.match(
+    /(?:^|\s)--task(?:=|\s+)(?:"([^"]+)"|'([^']+)'|(\S+))/,
+  );
+  return match ? (match[1] ?? match[2] ?? match[3]) : undefined;
+}
+
+function parseTaskDeltaOutput(
+  output: string,
+): { status?: string; addedTaskId?: string } | undefined {
+  try {
+    const parsed = JSON.parse(output) as {
+      status?: unknown;
+      added_task?: unknown;
+    };
+    const addedTask = parsed.added_task;
+    const addedTaskId =
+      typeof addedTask === "string"
+        ? addedTask
+        : addedTask && typeof addedTask === "object" && "id" in addedTask
+          ? String((addedTask as { id?: unknown }).id ?? "")
+          : undefined;
+    return {
+      status: typeof parsed.status === "string" ? parsed.status : undefined,
+      addedTaskId: addedTaskId || undefined,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function validateLaunchReport(input: string): void {
