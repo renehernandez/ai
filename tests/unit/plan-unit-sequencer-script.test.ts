@@ -1,9 +1,16 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+
+function fixture(name: string): string {
+  return readFileSync(
+    join(process.cwd(), "tests/fixtures/plan-orchestrator", name),
+    "utf8",
+  );
+}
 
 function withTempFile(content: string, callback: (path: string) => void): void {
   const directory = mkdtempSync(join(tmpdir(), "plan-unit-sequencer-script-"));
@@ -73,7 +80,10 @@ function runPlanUnitSequencerCommand(command: string): {
   };
 }
 
-function runSelectNextTask(content: string): {
+function runSelectNextTask(
+  content: string,
+  args: string[] = [],
+): {
   status: number | null;
   stderr: string;
   stdout: string;
@@ -88,6 +98,7 @@ function runSelectNextTask(content: string): {
         "skills/plan-unit-sequencer/scripts/plan-unit-sequencer.ts",
         "select-next-task",
         path,
+        ...args,
       ],
       {
         cwd: process.cwd(),
@@ -168,6 +179,17 @@ const planningReview = `planning_review:
   review:
     evidence:
       - feedback addressed and latest-head Nitro gate passed
+  planning_feedback_disposition:
+    status: complete
+    evidence:
+      - Nitro planning feedback was enumerated by note ID and disposition.
+    items:
+      - note_id: "3330306"
+        discussion_id: abc123
+        resolvable: true
+        resolved: true
+        disposition: fixed_in_planning
+        evidence: planning MR commit addressed the comment
   blockers: []
 `;
 
@@ -266,6 +288,22 @@ test("select-next-task returns the first unchecked deliverable", () => {
   const parsed = JSON.parse(result.stdout);
 
   assert.equal(parsed.status, "ready");
+  assert.equal(parsed.caller, "direct");
+  assert.equal(parsed.delivery_goal, "next_task");
+  assert.equal(parsed.completion_target, "one_task");
+  assert.equal(parsed.next_task.id, "1.2");
+});
+
+test("fixture preserves direct sequencer next-task behavior outside orchestrator", () => {
+  const result = runSelectNextTask(fixture("direct-sequencer-next-task.md"));
+
+  assert.equal(result.status, 0);
+  const parsed = JSON.parse(result.stdout);
+
+  assert.equal(parsed.status, "ready");
+  assert.equal(parsed.caller, "direct");
+  assert.equal(parsed.delivery_goal, "next_task");
+  assert.equal(parsed.completion_target, "one_task");
   assert.equal(parsed.next_task.id, "1.2");
 });
 
@@ -282,5 +320,51 @@ test("select-next-task reports complete when only manual tasks remain", () => {
   const parsed = JSON.parse(result.stdout);
 
   assert.equal(parsed.status, "complete");
+  assert.equal(parsed.caller, "direct");
+  assert.equal(parsed.delivery_goal, "next_task");
+  assert.equal(parsed.next_task, null);
+});
+
+test("select-next-task coerces plan-orchestrator calls to full-change delivery", () => {
+  const result = runSelectNextTask(
+    `# Tasks
+
+## 1. Delivery
+
+- [x] 1.1 Complete the first task
+- [ ] 1.2 Implement the second task
+`,
+    ["--caller", "plan_orchestrator", "--goal", "next_task"],
+  );
+
+  assert.equal(result.status, 0);
+  const parsed = JSON.parse(result.stdout);
+
+  assert.equal(parsed.status, "ready");
+  assert.equal(parsed.caller, "plan_orchestrator");
+  assert.equal(parsed.delivery_goal, "complete_change");
+  assert.equal(parsed.completion_target, "all_deliverable_tasks");
+  assert.equal(parsed.next_task.id, "1.2");
+});
+
+test("select-next-task reports OpenSpec completion for plan-orchestrator only after no unchecked deliverables remain", () => {
+  const result = runSelectNextTask(
+    `# Tasks
+
+## 1. Delivery
+
+- [x] 1.1 Complete the first task
+- [ ] 1.2 Manual production verification
+`,
+    ["--caller", "plan_orchestrator"],
+  );
+
+  assert.equal(result.status, 0);
+  const parsed = JSON.parse(result.stdout);
+
+  assert.equal(parsed.status, "openspec_complete");
+  assert.equal(parsed.caller, "plan_orchestrator");
+  assert.equal(parsed.delivery_goal, "complete_change");
+  assert.equal(parsed.completion_target, "all_deliverable_tasks");
   assert.equal(parsed.next_task, null);
 });
