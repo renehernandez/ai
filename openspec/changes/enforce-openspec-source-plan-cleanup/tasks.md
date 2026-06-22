@@ -10,7 +10,7 @@
       `.agents/plans/**` paths. Atomic plan behavior for `artifact_type: plan`
       must remain unchanged.
 
-- [ ] 1.2 Add executable cleanup and diff validation
+- [x] 1.2 Add executable cleanup and diff validation
       Extend planning helper scripts so `plan-orchestrator` can enforce source
       plan cleanup preconditions and `plan-review` can reject OpenSpec planning
       diffs containing `.agents/plans/**` paths, including added, modified,

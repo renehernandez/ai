@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, unlinkSync } from "node:fs";
+import { join, relative } from "node:path";
 import {
   extractSection,
   extractYaml,
@@ -26,6 +26,7 @@ type Command =
   | "plan-review-request-template"
   | "validate-planning-review"
   | "validate-openspec-change"
+  | "cleanup-source-plan"
   | "resume-template"
   | "validate-resume"
   | "stack-ready-template"
@@ -38,7 +39,7 @@ function main(): void {
 
   if (!isCommand(command)) {
     fail(
-      "Usage: plan-orchestrator.ts <detect|plan-review-request-template|validate-planning-review|validate-openspec-change|resume-template|validate-resume|stack-ready-template|validate-stack-ready> [--file path|change-id]",
+      "Usage: plan-orchestrator.ts <detect|plan-review-request-template|validate-planning-review|validate-openspec-change|cleanup-source-plan|resume-template|validate-resume|stack-ready-template|validate-stack-ready> [--file path|change-id]",
     );
   }
 
@@ -74,6 +75,11 @@ function main(): void {
 
   if (command === "validate-stack-ready") {
     validateStackReady(readInput(args));
+    return;
+  }
+
+  if (command === "cleanup-source-plan") {
+    cleanupSourcePlan(args);
     return;
   }
 
@@ -515,12 +521,70 @@ function validateOpenSpecChange(changeId: string | undefined): void {
   process.stdout.write(result.stdout);
 }
 
+function cleanupSourcePlan(args: string[]): void {
+  const sourcePlan = requiredArg(args, "--source-plan");
+  const changeId = requiredArg(args, "--change-id");
+  const skipRepoValidation = args.includes("--skip-repo-openspec-validation");
+  const repoRoot = git(["rev-parse", "--show-toplevel"]) || process.cwd();
+  const runRepoValidation =
+    !skipRepoValidation && repoOpenSpecValidationAvailable(repoRoot);
+  const sourcePath = join(repoRoot, sourcePlan);
+  const relativeSource = relative(repoRoot, sourcePath);
+
+  if (
+    relativeSource.startsWith("..") ||
+    relativeSource === "" ||
+    !isAgentsPlanPath(relativeSource)
+  ) {
+    fail("source_plan_invalid: --source-plan must be under .agents/plans");
+  }
+
+  if (existsInHead(relativeSource)) {
+    fail(
+      "source_plan_committed: source plan is already committed; repair the planning branch instead of publishing a deletion-only OpenSpec diff",
+    );
+  }
+
+  if (!existsSync(sourcePath)) {
+    fail("source_plan_missing: source plan must exist before cleanup");
+  }
+
+  validateOpenSpecChange(changeId);
+
+  if (runRepoValidation) {
+    const result = spawnSync("pnpm", ["ax", "openspec", "validate"], {
+      encoding: "utf8",
+    });
+    if (result.status !== 0) {
+      process.stderr.write(result.stderr || result.stdout);
+      process.exit(result.status ?? 1);
+    }
+    process.stdout.write(result.stdout);
+  }
+
+  removeFromIndexIfStaged(relativeSource);
+  unlinkSync(sourcePath);
+  console.log(
+    JSON.stringify(
+      {
+        status: "source_plan_cleanup_complete",
+        source_plan: relativeSource,
+        change_id: changeId,
+        repo_openspec_validation: runRepoValidation ? "passed" : "skipped",
+      },
+      null,
+      2,
+    ),
+  );
+}
+
 function isCommand(command: string | undefined): command is Command {
   return [
     "detect",
     "plan-review-request-template",
     "validate-planning-review",
     "validate-openspec-change",
+    "cleanup-source-plan",
     "resume-template",
     "validate-resume",
     "stack-ready-template",
@@ -531,6 +595,58 @@ function isCommand(command: string | undefined): command is Command {
 function git(args: string[]): string | null {
   const result = spawnSync("git", args, { encoding: "utf8" });
   return result.status === 0 ? result.stdout.trim() : null;
+}
+
+function existsInHead(path: string): boolean {
+  const result = spawnSync("git", ["cat-file", "-e", `HEAD:${path}`], {
+    encoding: "utf8",
+  });
+  return result.status === 0;
+}
+
+function removeFromIndexIfStaged(path: string): void {
+  const staged = spawnSync(
+    "git",
+    ["diff", "--cached", "--name-only", "--", path],
+    {
+      encoding: "utf8",
+    },
+  );
+  if (staged.status !== 0 || staged.stdout.trim() === "") {
+    return;
+  }
+
+  const result = spawnSync("git", ["rm", "--cached", "--quiet", "--", path], {
+    encoding: "utf8",
+  });
+  if (result.status !== 0) {
+    process.stderr.write(result.stderr || result.stdout);
+    process.exit(result.status ?? 1);
+  }
+}
+
+function repoOpenSpecValidationAvailable(repoRoot: string): boolean {
+  if (!existsSync(join(repoRoot, "package.json"))) {
+    return false;
+  }
+
+  const result = spawnSync("pnpm", ["--version"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  return result.status === 0;
+}
+
+function isAgentsPlanPath(path: string): boolean {
+  return path === ".agents/plans" || path.startsWith(".agents/plans/");
+}
+
+function requiredArg(args: string[], name: string): string {
+  const index = args.indexOf(name);
+  if (index === -1 || !args[index + 1]) {
+    fail(`${name} is required`);
+  }
+  return args[index + 1];
 }
 
 function allScalars(input: string, key: string): string[] {

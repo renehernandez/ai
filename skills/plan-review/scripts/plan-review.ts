@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { nitroFeedbackGateErrors } from "../../../scripts/nitro-feedback-gate.ts";
 import {
@@ -30,6 +30,7 @@ const LEDGER_GATES = [
   "request_validation",
   "session_start",
   "planning_only_diff",
+  "openspec_source_plan_boundary",
   "artifact_validation",
   "review_feedback_routing",
   "artifact_creation_update",
@@ -40,6 +41,7 @@ const LEDGER_GATES = [
   "no_implementation",
 ] as const;
 const LEDGER_NOT_APPLICABLE_GATES = [
+  "openspec_source_plan_boundary",
   "automated_feedback",
   "developer_review",
 ] as const;
@@ -49,6 +51,7 @@ type Command =
   | "detect"
   | "request-template"
   | "validate-request"
+  | "validate-planning-diff"
   | "planning-review-template"
   | "validate-planning-review"
   | "gate-template"
@@ -76,7 +79,7 @@ function main(): void {
 
   if (!isCommand(command)) {
     fail(
-      "Usage: plan-review.ts <detect|request-template|validate-request|gate-template|validate-ledger> [--file path]",
+      "Usage: plan-review.ts <detect|request-template|validate-request|validate-planning-diff|gate-template|validate-ledger> [--file path]",
     );
   }
 
@@ -103,6 +106,11 @@ function main(): void {
   const input = readInput(args);
   if (command === "validate-request") {
     validateRequest(input);
+    return;
+  }
+
+  if (command === "validate-planning-diff") {
+    validatePlanningDiff(args, input);
     return;
   }
 
@@ -325,6 +333,51 @@ function validateRequest(input: string): void {
   console.log(`${request.source} valid`);
 }
 
+function validatePlanningDiff(args: string[], stdinInput: string): void {
+  const artifactType = requiredArg(args, "--artifact-type");
+  const diffFile = optionalArg(args, "--diff-file");
+  const diffText = diffFile
+    ? readDiffFile(diffFile)
+    : stdinInput.trim()
+      ? stdinInput
+      : gitDiffNameStatus(args);
+
+  if (!includes(ARTIFACT_TYPES, artifactType)) {
+    fail(`artifact_type must be one of: ${ARTIFACT_TYPES.join(", ")}`);
+  }
+
+  const entries = parseNameStatus(diffText);
+  const planPathEntries = entries.filter((entry) =>
+    entry.paths.some(isAgentsPlanPath),
+  );
+
+  if (artifactType === "openspec" && planPathEntries.length > 0) {
+    console.error(
+      [
+        "Invalid planning diff:",
+        "- artifact_type openspec planning diffs must not include .agents/plans paths",
+        ...planPathEntries.map(
+          (entry) =>
+            `- ${entry.status}: ${entry.paths.filter(isAgentsPlanPath).join(" -> ")}`,
+        ),
+      ].join("\n"),
+    );
+    process.exit(1);
+  }
+
+  console.log(
+    JSON.stringify(
+      {
+        status: "planning_diff_valid",
+        artifact_type: artifactType,
+        checked_entries: entries.length,
+      },
+      null,
+      2,
+    ),
+  );
+}
+
 function validateLedger(input: string): void {
   const body = extractYaml(input);
   const section = extractSection(body, "plan_review_gate_ledger");
@@ -445,6 +498,7 @@ function isCommand(command: string | undefined): command is Command {
     "detect",
     "request-template",
     "validate-request",
+    "validate-planning-diff",
     "planning-review-template",
     "validate-planning-review",
     "gate-template",
@@ -458,4 +512,66 @@ function git(args: string[]): string | null {
     return null;
   }
   return result.stdout.trim();
+}
+
+type NameStatusEntry = {
+  status: string;
+  paths: string[];
+};
+
+function parseNameStatus(input: string): NameStatusEntry[] {
+  return input
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [status, ...paths] = line.split(/\t+/);
+      return { status, paths };
+    });
+}
+
+function gitDiffNameStatus(args: string[]): string {
+  const base = optionalArg(args, "--base");
+  const head = optionalArg(args, "--head");
+  if (!base) {
+    fail(
+      "validate-planning-diff requires --base <ref> [--head <ref>], --diff-file <path>, or name-status diff on stdin",
+    );
+  }
+
+  const refs = head ? [base, head] : [base];
+  const result = spawnSync(
+    "git",
+    ["diff", "--name-status", "--find-renames", "--find-copies", ...refs],
+    { encoding: "utf8" },
+  );
+  if (result.status !== 0) {
+    process.stderr.write(result.stderr || result.stdout);
+    process.exit(result.status ?? 1);
+  }
+  return result.stdout;
+}
+
+function readDiffFile(path: string): string {
+  if (!existsSync(path)) {
+    fail(`diff_file_missing: ${path}`);
+  }
+  return readFileSync(path, "utf8");
+}
+
+function isAgentsPlanPath(path: string): boolean {
+  return path === ".agents/plans" || path.startsWith(".agents/plans/");
+}
+
+function optionalArg(args: string[], name: string): string | undefined {
+  const index = args.indexOf(name);
+  return index === -1 ? undefined : args[index + 1];
+}
+
+function requiredArg(args: string[], name: string): string {
+  const value = optionalArg(args, name);
+  if (!value) {
+    fail(`${name} is required`);
+  }
+  return value;
 }
