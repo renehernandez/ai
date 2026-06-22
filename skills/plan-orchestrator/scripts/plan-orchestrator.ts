@@ -159,7 +159,7 @@ function printResumeTemplate(): void {
 
 \`\`\`yaml
 orchestrator_resume:
-  status: inspected
+  status: resume_ready | delivery_blocked
   intake: ready_plan | openspec_blueprint | existing_openspec | continue_resume
   planning_artifact: <plan file or OpenSpec change>
   planning_review_state: reviewed | missing | blocked

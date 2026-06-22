@@ -200,6 +200,8 @@ test("resume-template emits a readable summary before YAML", () => {
     result.stdout.indexOf("## Readable Summary") <
       result.stdout.indexOf("orchestrator_resume:"),
   );
+  assert.match(result.stdout, /status: resume_ready \| delivery_blocked/);
+  assert.doesNotMatch(result.stdout, /status: inspected/);
 });
 
 test("stack-ready-template emits a readable summary before YAML", () => {
