@@ -35,10 +35,11 @@ Portable user-level instructions that are installed into runtime profiles live i
 - Use `/scrutinize` for adversarial validation of plans, implementation diffs, PRs, hosted review feedback, proposed approaches, sanity checks, and second opinions.
 - Always use the `hallmark` skill for frontend design work, including greenfield UI, redesigns, design audits, visual polish, and design extraction from URLs or screenshots.
 - Prefer CLI tools that carry authentication and org conventions: `gh` for GitHub, `glab` for GitLab, and `wrangler` for Cloudflare.
-- For this repo, commit directly on `main` after completing any file change, then push `main` to `origin/main` unless the user explicitly asks not to commit or push. Do not create a feature branch, hosted review branch, PR, or MR unless the user explicitly asks for one.
-- Review-first plan workflows are the explicit exception to direct-main publishing. When `plan-orchestrator`, `plan-review`, or the approved plan workflow requires Nitro-reviewed stacked delivery, create the planning MR first, wait for the required Nitro-clean planning-review gate, and only then continue to stacked implementation sequencing. A `plan-orchestrator` run may finish only with `stack_ready` for the full reviewed stack or `delivery_blocked` with evidence; one delivered OpenSpec task, `plan-ready` output, or `planning_review` handoff is not terminal success.
+- For this repo, completed work routes through GitLab `origin` merge requests against `main` with Nitro review by default. Do not commit directly to `main` or push `main` unless the user explicitly asks for direct publication.
+- For this repo, a delivery artifact is complete only after the GitLab MR exists, CI or no-pipeline state is inspected, Nitro review is requested with `/request_review @nitro`, and latest-head Nitro feedback is clean or fully resolved.
+- Review-first plan workflows use the same GitLab MR/Nitro route with stacked delivery. When `plan-orchestrator`, `plan-review`, or the approved plan workflow requires Nitro-reviewed stacked delivery, create the planning MR first, wait for the required Nitro-clean planning-review gate, and only then continue to stacked implementation sequencing. A `plan-orchestrator` run may finish only with `stack_ready` for the full reviewed stack or `delivery_blocked` with evidence; one delivered OpenSpec task, `plan-ready` output, or `planning_review` handoff is not terminal success.
 - When asked to merge stacked MRs, follow [rules/git-and-review.md](rules/git-and-review.md): land the stack bottom-to-top, expect each next MR to retarget to `main`, and resolve any newly surfaced conflicts before merging the next MR.
-- Treat the GitHub `origin` remote as the primary publishing remote for `main`. If publishing behavior changes in the future, document the primary remote, target branch, mirror remotes, push URLs, and any manual fallback commands here before changing push behavior.
+- Treat GitLab `origin` as the primary hosted-review and publishing remote for this repo. The `github` remote remains a mirror path; do not use it as the default delivery route unless the user explicitly asks or GitLab is unavailable.
 - Do not use "smoke test" or "smoke tests" wording. Describe the exact verification performed instead, such as browser route checks, console checks, or manual browser verification.
 - Avoid slop-like contrast phrasing and generic AI filler. Do not lean on formulas like "X, not just Y", "more than just", "isn't just", or "the future of"; state the concrete claim directly.
 - Describe the exact verification performed instead of using vague shortcut
@@ -61,7 +62,7 @@ Portable user-level instructions that are installed into runtime profiles live i
 
 - Use `pnpm ax openspec install|update|validate|status` to manage
   repo-local OpenSpec scaffolding.
-- When invoked as a globally linked `ax` command from another repo,
+- When invoked through the managed `~/.local/bin/ax` shim from another repo,
   the runtime source/config root remains this AI repo by default, while
   repo-local scopes such as `openspec` target the invocation current working
   directory. Use top-level `ax status` to verify source root, config

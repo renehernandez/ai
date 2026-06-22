@@ -16,7 +16,7 @@ const result = spawnSync(
     cwd: process.cwd(),
     env: {
       ...process.env,
-      AGENT_RUNTIME_EXECUTABLE_PATH: process.argv[1] ?? "",
+      AX_EXECUTABLE_PATH: process.argv[1] ?? "",
     },
     stdio: "inherit",
   },

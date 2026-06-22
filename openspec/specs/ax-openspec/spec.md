@@ -57,7 +57,7 @@ inputs isolated from ambient user-level OpenSpec global configuration.
 #### Scenario: Generation ignores ambient global config
 - **WHEN** user global OpenSpec config contains different profile, delivery, or workflow values
 - **AND** `ax openspec install` or `update` generates assets
-- **THEN** generated workflows match the values resolved from `agent-runtime.config.json` and confirmed setup inputs
+- **THEN** generated workflows match the values resolved from `ax.config.json` and confirmed setup inputs
 
 #### Scenario: Upstream invocation is observable in tests
 - **WHEN** integration tests run with a fake OpenSpec CLI
@@ -107,10 +107,9 @@ and command targets.
 - **THEN** `ax openspec validate` fails with the specific config problem
 
 #### Scenario: Asset validation follows resolved targets
-- **WHEN** `agent-runtime.config.json` selects a subset of tools or custom target maps
+- **WHEN** `ax.config.json` selects a subset of tools or custom target maps
 - **THEN** `ax openspec validate` checks only the resolved expected generated assets and symlinks
 
 #### Scenario: Normalization drift fails validation
 - **WHEN** generated OpenSpec skill or command outputs remain as duplicated real files where symlinks are expected
 - **THEN** `ax openspec validate` fails and reports the drifted paths
-

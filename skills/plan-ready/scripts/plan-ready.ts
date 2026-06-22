@@ -2,7 +2,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { join, normalize, relative, resolve } from "node:path";
 import {
   cleanScalar,
   escapeRegExp,
@@ -92,6 +92,8 @@ type BlueprintTask = {
 
 type ParsedBlueprint = {
   status?: string;
+  source_plan_ref?: string;
+  source_plan_change_id?: string;
   suggested_id?: string;
   title?: string;
   objective?: string;
@@ -249,6 +251,9 @@ function printBlueprintTemplate(): void {
 \`\`\`yaml
 openspec_blueprint:
   status: ready_for_openspec
+  source_plan:
+    ref: .agents/plans/example.md
+    change_id: <verb-noun-change-id>
   change:
     suggested_id: <verb-noun-change-id>
     title: <OpenSpec change title>
@@ -411,6 +416,12 @@ function validateBlueprint(input: string): void {
     .filter((id): id is string => Boolean(id));
 
   requireValue(blueprint.status, "status", errors);
+  requireValue(blueprint.source_plan_ref, "source_plan.ref", errors);
+  requireValue(
+    blueprint.source_plan_change_id,
+    "source_plan.change_id",
+    errors,
+  );
   requireValue(blueprint.suggested_id, "change.suggested_id", errors);
   requireValue(blueprint.title, "change.title", errors);
   requireValue(blueprint.objective, "change.objective", errors);
@@ -426,10 +437,25 @@ function validateBlueprint(input: string): void {
   }
 
   if (
+    blueprint.source_plan_ref &&
+    !isSafeAgentsPlanRef(blueprint.source_plan_ref)
+  ) {
+    errors.push("source_plan.ref must be under .agents/plans");
+  }
+
+  if (
     blueprint.suggested_id &&
     !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(blueprint.suggested_id)
   ) {
     errors.push("change.suggested_id must be a lowercase kebab-case id");
+  }
+
+  if (
+    blueprint.source_plan_change_id &&
+    blueprint.suggested_id &&
+    blueprint.source_plan_change_id !== blueprint.suggested_id
+  ) {
+    errors.push("source_plan.change_id must match change.suggested_id");
   }
 
   if (blueprint.scope_in.length === 0) {
@@ -648,6 +674,7 @@ function parseHandoff(input: string): ParsedHandoff {
 function parseBlueprint(input: string): ParsedBlueprint {
   const body = extractYaml(input);
   const section = extractSection(body, "openspec_blueprint");
+  const sourcePlan = extractSection(section, "source_plan");
   const change = extractSection(section, "change");
   const scope = extractSection(section, "scope");
   const specs = extractSection(section, "specs");
@@ -655,6 +682,8 @@ function parseBlueprint(input: string): ParsedBlueprint {
 
   return {
     status: scalar(section, "status"),
+    source_plan_ref: scalar(sourcePlan, "ref"),
+    source_plan_change_id: scalar(sourcePlan, "change_id"),
     suggested_id: scalar(change, "suggested_id"),
     title: scalar(change, "title"),
     objective: scalar(change, "objective"),
@@ -785,6 +814,22 @@ function legacyErrors(input: string): string[] {
 
 function fingerprint(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+function isAgentsPlanPath(path: string): boolean {
+  return path === ".agents/plans" || path.startsWith(".agents/plans/");
+}
+
+function isSafeAgentsPlanRef(path: string): boolean {
+  if (path.startsWith("/")) {
+    return false;
+  }
+  const normalized = normalize(path);
+  return (
+    !normalized.startsWith("..") &&
+    normalized !== "." &&
+    isAgentsPlanPath(normalized)
+  );
 }
 
 function isCommand(command: string | undefined): command is Command {

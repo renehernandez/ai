@@ -75,6 +75,14 @@ and next action.
    publishing. The diff must be planning-only: plans, OpenSpec files, docs that
    explain the plan, skill/rule workflow docs, or review metadata. If
    implementation files are present, stop and ask whether to split them out.
+   Validate the path boundary before commit with `scripts/plan-review.ts
+   validate-planning-diff --artifact-type <type> --base <target>`, which
+   includes dirty working-tree changes. For committed ranges, pass `--head
+   <ref>`.
+   For `artifact_type: openspec`, `.agents/plans/**` files are scratch intake
+   only and must not appear in the planning diff as added, modified, deleted,
+   renamed, copied, or type-changed paths. For `artifact_type: plan`, atomic
+   plan review may still publish `.agents/plans/**` as the reviewed artifact.
 5. Run artifact-specific validation:
    - OpenSpec: `openspec validate <change-id> --strict --no-interactive`.
    - Markdown plan: check links or render only when the repo has an established
@@ -138,6 +146,7 @@ implementation units until it can report `stack_ready`, or report
 | Request validation | Exactly one valid `plan_review_request` or `plan_delivery_handoff` is available |
 | Session start | Live repo, branch, remotes, existing artifacts, and planning artifact are inspected |
 | Planning-only diff | Diff contains no implementation changes, or implementation changes are explicitly split out |
+| OpenSpec source-plan boundary | OpenSpec review diffs contain no `.agents/plans/**`; atomic plan artifacts may keep them |
 | Artifact validation | OpenSpec/doc/ticket validation passes or a precise gap is reported |
 | Review feedback routing | Artifact and feedback adapters are selected, or ambiguity is blocked |
 | Artifact creation/update | Draft PR/MR exists for the latest planning-only branch |

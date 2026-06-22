@@ -2,6 +2,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
   cpSync,
   existsSync,
   lstatSync,
@@ -21,6 +22,7 @@ import {
 import { homedir, tmpdir } from "node:os";
 import {
   basename,
+  delimiter,
   dirname,
   extname,
   isAbsolute,
@@ -41,6 +43,7 @@ import {
 type Scope = "skills" | "instructions" | "openspec" | "hooks";
 type RuntimeCommand = "install" | "update" | "validate" | "status";
 type SkillCommand = Extract<RuntimeCommand, "install" | "update" | "validate">;
+type ShimCommand = "install" | "status" | "uninstall";
 
 type RemoteSkillSource = {
   url: string;
@@ -256,6 +259,7 @@ type ResolvedHookStartupRemoteConfig = {
 type ParsedArgs = {
   scope?: Scope;
   command: RuntimeCommand;
+  shimCommand?: ShimCommand;
   profileNames?: string[];
   allProfiles?: boolean;
   configPath: string;
@@ -268,6 +272,11 @@ export type RuntimeInvocationContext = {
   targetRoot: string;
   executablePath: string;
   configPath: string;
+};
+
+type RuntimeHealth = {
+  failures: string[];
+  warnings: string[];
 };
 
 type LockedSkill = {
@@ -307,9 +316,12 @@ type LockFile = {
   >;
 };
 
-const CONFIG_FILE = "agent-runtime.config.json";
-const LOCK_FILE = "agent-runtime.lock.json";
-const CACHE_DIR = ".agent-runtime/cache";
+const CONFIG_FILE = "ax.config.json";
+const LOCK_FILE = "ax.lock.json";
+const CACHE_DIR = ".ax/cache";
+const SHIM_PATH = "~/.local/bin/ax";
+const SHIM_MARKER = "# AX_MANAGED_SHIM";
+const SHIM_SOURCE_ROOT_PREFIX = "# AX_SOURCE_ROOT=";
 const OPENSPEC_INSTALL_COMMAND = "npm install -g @fission-ai/openspec@latest";
 const DEFAULT_OPENSPEC_SCHEMA = "spec-driven";
 const DEFAULT_OPENSPEC_PROFILE = "custom";
@@ -349,7 +361,7 @@ const PROJECT_SIGNAL_DOC_FILES = [
   "CLAUDE.md",
 ] as const;
 const PROJECT_SIGNAL_IGNORED_NAMES = new Set([
-  ".agent-runtime",
+  ".ax",
   ".cache",
   ".codex",
   ".git",
@@ -364,7 +376,7 @@ const PROJECT_SIGNAL_IGNORED_NAMES = new Set([
   "node_modules",
   "openspec",
   "tmp",
-  "agent-runtime.lock.json",
+  "ax.lock.json",
   "package-lock.json",
   "pnpm-lock.yaml",
   "yarn.lock",
@@ -396,14 +408,18 @@ export function executeParsedCommand(input: ParsedArgs): void {
   const { scope, command, profileNames, allProfiles, configPath } = input;
   const runtimeContext =
     input.runtimeContext ?? createRuntimeInvocationContext(configPath);
+  if (input.shimCommand) {
+    runShim(input.shimCommand, runtimeContext);
+    return;
+  }
   const config = readJson<Config>(runtimeContext.configPath);
   if (scope !== "openspec") {
     process.chdir(runtimeContext.sourceRoot);
   }
 
   if (!scope) {
-    if (command === "status" && !profileNames?.length && !allProfiles) {
-      runRuntimeStatus(config, runtimeContext);
+    if (command === "status") {
+      runRuntimeStatus(config, runtimeContext, { profileNames, allProfiles });
       return;
     }
     const profileSelection = resolveProfileSelection(config, {
@@ -457,8 +473,28 @@ export function createProgram(
   addHooksCommands(program, execute);
   addReviewGateCommands(program);
   addCommitCommand(program);
+  addShimCommands(program, execute);
 
   return program;
+}
+
+function addShimCommands(program: Command, execute: CommandExecutor): void {
+  const shim = program
+    .command("shim")
+    .description("Manage the AX-owned global command shim");
+  for (const shimCommand of shimCommands()) {
+    shim
+      .command(shimCommand)
+      .description(`${labelForCommand(shimCommand)} the managed AX shim`)
+      .action((first: CommandOptions | Command, second?: Command) => {
+        const { options, commandObject } = actionContext(first, second);
+        execute({
+          command: "status",
+          shimCommand,
+          configPath: configPathFor(commandObject, options),
+        });
+      });
+  }
 }
 
 function addWrapperCommand(
@@ -811,8 +847,8 @@ export function createRuntimeInvocationContext(
     sourceRoot: runtimeSourceRoot(),
     targetRoot: process.cwd(),
     executablePath:
-      process.env.AGENT_RUNTIME_EXECUTABLE_PATH || process.argv[1]
-        ? resolve(process.env.AGENT_RUNTIME_EXECUTABLE_PATH || process.argv[1])
+      process.env.AX_EXECUTABLE_PATH || process.argv[1]
+        ? resolve(process.env.AX_EXECUTABLE_PATH || process.argv[1])
         : "",
     configPath: resolve(configPath),
   };
@@ -845,7 +881,11 @@ function runtimeCommands(): RuntimeCommand[] {
   return ["install", "update", "validate", "status"];
 }
 
-function labelForCommand(command: RuntimeCommand): string {
+function shimCommands(): ShimCommand[] {
+  return ["install", "status", "uninstall"];
+}
+
+function labelForCommand(command: RuntimeCommand | ShimCommand): string {
   return command[0].toUpperCase() + command.slice(1);
 }
 
@@ -1464,36 +1504,82 @@ function formatOpenSpecPartialStateError(
 function runRuntimeStatus(
   config: Config,
   context: RuntimeInvocationContext,
+  input: { profileNames?: string[]; allProfiles?: boolean } = {},
 ): void {
-  const profileSelection = {
-    profileNames: configuredProfileNames(config),
-    interactive: false,
-  };
+  const profileSelection =
+    input.profileNames?.length || input.allProfiles
+      ? resolveProfileSelection(config, input)
+      : {
+          profileNames: configuredProfileNames(config),
+          interactive: false,
+        };
+  const health = createRuntimeHealth();
 
   console.log("AX");
   console.log(`Source root: ${context.sourceRoot}`);
   console.log(`Config path: ${context.configPath}`);
+  console.log(`Lock path: ${runtimeRootedPath(context, lockFileFor(config))}`);
+  console.log(`Cache path: ${runtimeRootedPath(context, CACHE_DIR)}`);
   console.log(`Target root: ${context.targetRoot}`);
   console.log(`Executable path: ${context.executablePath || "(unknown)"}`);
+  if (!existsSync(context.sourceRoot)) {
+    recordRuntimeFailure(health, `Missing source root: ${context.sourceRoot}`);
+  }
   printExecutableLinkStatus(context);
   console.log("");
 
+  console.log("Shim");
+  statusShim(context, health);
+  console.log("");
+
   console.log("Skills");
-  runSkills("status", config, profileSelection);
+  const skillsOutput = captureConsoleOutput(() =>
+    runSkills("status", config, profileSelection),
+  );
+  printCapturedOutput(skillsOutput);
+  collectRuntimeSurfaceFindings(health, skillsOutput);
   console.log("");
 
   console.log("Instructions");
-  runInstructions("status", config, profileSelection);
+  const instructionsOutput = captureConsoleOutput(() =>
+    runInstructions("status", config, profileSelection),
+  );
+  printCapturedOutput(instructionsOutput);
+  collectRuntimeSurfaceFindings(health, instructionsOutput);
   console.log("");
 
   console.log("Hooks");
-  runHooks("status", config);
+  const hooksOutput = captureConsoleOutput(() => runHooks("status", config));
+  printCapturedOutput(hooksOutput);
+  collectRuntimeSurfaceFindings(health, hooksOutput);
   console.log("");
 
   console.log("OpenSpec");
-  withWorkingDirectory(context.targetRoot, () => {
-    runOpenSpec("status", config);
+  let openSpecError: unknown;
+  const openSpecOutput = captureConsoleOutput(() => {
+    try {
+      withWorkingDirectory(context.targetRoot, () => {
+        runOpenSpec("status", config);
+      });
+    } catch (error) {
+      openSpecError = error;
+    }
   });
+  printCapturedOutput(openSpecOutput);
+  collectRuntimeSurfaceFindings(health, openSpecOutput);
+  if (openSpecError) {
+    const message =
+      openSpecError instanceof Error
+        ? openSpecError.message
+        : String(openSpecError);
+    recordRuntimeFailure(health, `OpenSpec status failed: ${message}`);
+  }
+  printRuntimeHealth(health);
+  if (health.failures.length > 0) {
+    throw new Error(
+      `AX status detected runtime failures:\n${health.failures.map((failure) => `- ${failure}`).join("\n")}`,
+    );
+  }
 }
 
 function printExecutableLinkStatus(context: RuntimeInvocationContext): void {
@@ -1509,6 +1595,262 @@ function printExecutableLinkStatus(context: RuntimeInvocationContext): void {
     return;
   }
   console.log(`[external] Executable link: ${executableRealPath}`);
+}
+
+function runShim(
+  command: ShimCommand,
+  context: RuntimeInvocationContext,
+): void {
+  if (command === "install") {
+    installShim(context);
+    return;
+  }
+  if (command === "uninstall") {
+    uninstallShim(context);
+    return;
+  }
+  statusShim(context);
+}
+
+function installShim(context: RuntimeInvocationContext): void {
+  const shimPath = managedShimPath();
+  const existing = lstatIfExists(shimPath);
+  if (existing && !isManagedShim(shimPath)) {
+    throw new Error(
+      `Refusing to overwrite unmanaged ax shim at ${shimPath}. Remove it or move it before running ax shim install.`,
+    );
+  }
+  mkdirSync(dirname(shimPath), { recursive: true });
+  writeFileSync(shimPath, renderManagedShim(context), "utf-8");
+  chmodSync(shimPath, 0o755);
+  console.log(`Installed managed AX shim: ${shimPath}`);
+  statusShim(context);
+}
+
+function uninstallShim(context: RuntimeInvocationContext): void {
+  const shimPath = managedShimPath();
+  if (!existsSync(shimPath)) {
+    console.log(`Managed AX shim is not installed: ${shimPath}`);
+    return;
+  }
+  if (!isManagedShim(shimPath)) {
+    throw new Error(`Refusing to remove unmanaged ax shim at ${shimPath}.`);
+  }
+  rmSync(shimPath);
+  console.log(`Removed managed AX shim: ${shimPath}`);
+  statusShim(context);
+}
+
+function statusShim(
+  context: RuntimeInvocationContext,
+  health?: RuntimeHealth,
+): void {
+  const shimPath = managedShimPath();
+  const shimDirectory = dirname(shimPath);
+  const stats = lstatIfExists(shimPath);
+  const managed = stats ? isManagedShim(shimPath) : false;
+  const executable = Boolean(stats && stats.mode & 0o111);
+  const pathEntries = process.env.PATH?.split(delimiter).filter(Boolean) ?? [];
+  const matchingAxEntries = pathEntries
+    .map((entry) => join(entry, "ax"))
+    .filter((entry) => {
+      const entryStats = lstatIfExists(entry);
+      return Boolean(entryStats && entryStats.mode & 0o111);
+    });
+  const firstAx = matchingAxEntries[0];
+
+  console.log("AX Shim");
+  console.log(`Shim path: ${shimPath}`);
+  console.log(
+    `${stats ? (managed ? "[ok]" : "[unmanaged]") : "[missing]"} Managed shim`,
+  );
+  if (!stats) {
+    recordRuntimeWarning(health, `Managed shim is not installed: ${shimPath}`);
+  } else if (!managed) {
+    recordRuntimeFailure(health, `Unmanaged ax file exists at ${shimPath}`);
+  }
+  if (stats) {
+    console.log(`${executable ? "[ok]" : "[not-executable]"} Executable bit`);
+    if (!executable) {
+      recordRuntimeFailure(
+        health,
+        `Managed shim is not executable: ${shimPath}`,
+      );
+    }
+  }
+  if (managed) {
+    const sourceRoot = managedShimSourceRoot(shimPath);
+    console.log(
+      `${sourceRoot === context.sourceRoot ? "[ok]" : "[stale]"} Source root: ${sourceRoot}`,
+    );
+    console.log(`Expected source root: ${context.sourceRoot}`);
+    if (sourceRoot !== context.sourceRoot) {
+      recordRuntimeFailure(
+        health,
+        `Managed shim source root does not match this runtime: ${sourceRoot}`,
+      );
+    }
+    if (sourceRoot !== "(unknown)" && !existsSync(sourceRoot)) {
+      console.log(`[stale] Source root path missing: ${sourceRoot}`);
+      recordRuntimeFailure(
+        health,
+        `Managed shim source root path is missing: ${sourceRoot}`,
+      );
+    }
+    if (isDisposableWorktreePath(sourceRoot)) {
+      console.log(
+        `[detached] Source root appears to be a disposable worktree: ${sourceRoot}`,
+      );
+      recordRuntimeFailure(
+        health,
+        `Managed shim source root is a disposable worktree: ${sourceRoot}`,
+      );
+    }
+  }
+  console.log(
+    `${pathEntries.includes(shimDirectory) ? "[ok]" : "[missing]"} PATH includes ${shimDirectory}`,
+  );
+  if (!pathEntries.includes(shimDirectory)) {
+    recordRuntimeWarning(health, `${shimDirectory} is not on PATH`);
+    console.log(
+      `Add to your shell profile: export PATH="${shimDirectory}:$PATH"`,
+    );
+  }
+  if (matchingAxEntries.length === 0) {
+    console.log("[missing] PATH ax entries: none");
+    return;
+  }
+  for (const [index, entry] of matchingAxEntries.entries()) {
+    const prefix =
+      entry === shimPath
+        ? index === 0
+          ? "[ok]"
+          : "[shadowed]"
+        : index === 0
+          ? "[shadowing]"
+          : "[external]";
+    console.log(`${prefix} PATH ax entry: ${entry}`);
+  }
+  if (firstAx && firstAx !== shimPath) {
+    console.log(`[warning] ${firstAx} shadows the managed AX shim.`);
+    recordRuntimeWarning(health, `${firstAx} shadows ${shimPath}`);
+  }
+}
+
+function managedShimPath(): string {
+  return expandHome(SHIM_PATH);
+}
+
+function renderManagedShim(context: RuntimeInvocationContext): string {
+  const executable = join(context.sourceRoot, "bin", "ax.mjs");
+  return [
+    "#!/bin/sh",
+    SHIM_MARKER,
+    `${SHIM_SOURCE_ROOT_PREFIX}${context.sourceRoot}`,
+    `exec ${shellSingleQuote(executable)} "$@"`,
+    "",
+  ].join("\n");
+}
+
+function isManagedShim(path: string): boolean {
+  return existsSync(path) && readFileSync(path, "utf-8").includes(SHIM_MARKER);
+}
+
+function managedShimSourceRoot(path: string): string {
+  const line = readFileSync(path, "utf-8")
+    .split(/\r?\n/)
+    .find((value) => value.startsWith(SHIM_SOURCE_ROOT_PREFIX));
+  return line ? line.slice(SHIM_SOURCE_ROOT_PREFIX.length) : "(unknown)";
+}
+
+function shellSingleQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\"'\"'")}'`;
+}
+
+function isDisposableWorktreePath(path: string): boolean {
+  return (
+    path.split(sep).includes(".codex") && path.split(sep).includes("worktrees")
+  );
+}
+
+function createRuntimeHealth(): RuntimeHealth {
+  return { failures: [], warnings: [] };
+}
+
+function recordRuntimeFailure(
+  health: RuntimeHealth | undefined,
+  finding: string,
+): void {
+  health?.failures.push(finding);
+}
+
+function recordRuntimeWarning(
+  health: RuntimeHealth | undefined,
+  finding: string,
+): void {
+  health?.warnings.push(finding);
+}
+
+function runtimeRootedPath(
+  context: RuntimeInvocationContext,
+  path: string,
+): string {
+  return isAbsolute(path) ? path : resolve(context.sourceRoot, path);
+}
+
+function captureConsoleOutput(callback: () => void): string[] {
+  const originalLog = console.log;
+  const output: string[] = [];
+  console.log = (...args: unknown[]) => {
+    output.push(args.map(String).join(" "));
+  };
+  try {
+    callback();
+  } finally {
+    console.log = originalLog;
+  }
+  return output;
+}
+
+function printCapturedOutput(output: string[]): void {
+  for (const line of output) {
+    console.log(line);
+  }
+}
+
+function collectRuntimeSurfaceFindings(
+  health: RuntimeHealth,
+  output: string[],
+): void {
+  for (const line of output) {
+    if (line.includes("[missing] Hook source")) {
+      recordRuntimeFailure(health, line);
+    }
+    if (line.includes("[missing] Reusable script")) {
+      recordRuntimeFailure(health, line);
+    }
+    if (line.includes("[not-symlink]")) {
+      recordRuntimeFailure(health, line);
+    }
+    if (line.includes("[wrong-target]")) {
+      recordRuntimeFailure(health, line);
+    }
+  }
+}
+
+function printRuntimeHealth(health: RuntimeHealth): void {
+  console.log("");
+  console.log("Health");
+  if (health.failures.length === 0 && health.warnings.length === 0) {
+    console.log("[ok] Runtime health");
+    return;
+  }
+  for (const warning of health.warnings) {
+    console.log(`[warning] ${warning}`);
+  }
+  for (const failure of health.failures) {
+    console.log(`[failure] ${failure}`);
+  }
 }
 
 function withWorkingDirectory<T>(directory: string, callback: () => T): T {
@@ -3267,7 +3609,7 @@ function runSkills(
   backupRuntimeTarget(lockFile, {
     assetKind: "config",
     backupsRoot,
-    targetName: "agent-runtime-lock",
+    targetName: "ax-lock",
   });
   writeJson(lockFile, lock);
 }

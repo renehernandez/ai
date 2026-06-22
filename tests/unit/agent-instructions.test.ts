@@ -64,6 +64,25 @@ test("git rules require stacked MRs to land bottom-to-top", () => {
   assert.match(text, /resolve the conflict on that MR's source branch/);
 });
 
+test("ai repo delivery uses GitLab MRs with Nitro review by default", () => {
+  const agentsText = readFileSync("AGENTS.md", "utf-8");
+  const portableAgentsText = readFileSync("instructions/AGENTS.md", "utf-8");
+  const gitRulesText = readFileSync("rules/git-and-review.md", "utf-8");
+
+  for (const text of [agentsText, portableAgentsText, gitRulesText]) {
+    assert.match(text, /GitLab `origin`/);
+    assert.match(
+      text,
+      /merge request.*targeting `main`|merge requests against `main`/,
+    );
+    assert.match(text, /\/request_review @nitro/);
+    assert.match(text, /latest-head Nitro feedback/);
+    assert.doesNotMatch(text, /commit directly on `main` after completing/);
+    assert.doesNotMatch(text, /GitHub is the primary `main` publishing remote/);
+    assert.doesNotMatch(text, /ordinary direct-publish guidance/);
+  }
+});
+
 for (const file of [
   "skills/plan-ready/SKILL.md",
   "skills/plan-ready/agents/openai.yaml",

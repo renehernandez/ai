@@ -38,13 +38,16 @@ These rules cover Git, GitHub, GitLab, Linear, review routing, and external comm
 - Do not force push for ordinary follow-up work, review feedback, or CI fixes. Use subsequent commits because the user's hosted diffs are squash-merged. Force push only when it is necessary to resolve a Git history change, rebase, conflict, stale remote update, or when the user explicitly asks for a history rewrite.
 - If a commit fails due to pre-commit hooks, fix branch-caused failures and retry; ask the user how to proceed only when the failure is unrelated, external, or requires a product decision.
 - Always ask before committing or pushing to default branches such as `main` or `master`.
-- In this `ai` repo, user requests to commit and push completed work are approval to commit on `main` and push `main` to the `github` remote. Do not create feature branches, hosted review branches, PRs, or MRs for this repo unless the user explicitly asks.
-- For this repo, GitHub is the primary `main` publishing remote. Push `main` with the `github` remote; it has multiple push URLs and updates GitHub first, then GitLab. Do not push `main` directly to the GitLab `origin` remote unless the user explicitly asks or the multi-push remote is broken.
-- For reviewed plan work, let `plan-unit-delivery` own implementation gates before commit and artifact-host follow-through after push.
+- In this `ai` repo, completed work should be delivered through a GitLab `origin` merge request targeting `main` with Nitro review by default. Do not commit directly to `main` or push `main` unless the user explicitly asks for direct publication.
+- For this repo, treat GitLab `origin` as the primary hosted-review and publishing remote. The `github` remote remains a mirror path; use it only when the user explicitly asks or GitLab is unavailable.
+- A hosted delivery for this repo is complete only after the GitLab MR exists, CI or no-pipeline state is inspected, Nitro review is requested with `/request_review @nitro`, and latest-head Nitro feedback is clean or fully resolved.
+- For feature work, run the pre-commit quality gate, commit the feature branch, push it, create or update the artifact-host PR/MR, monitor CI, and fix branch-caused failures.
 - Never include `Co-Authored-By: Claude` or similar co-author attribution lines in MR or PR descriptions.
 
 ## MR and PR Description Maintenance
 
+- For host-neutral requests to create or update a PR, MR, pull request, merge request, change request, or review artifact, use `change-request-create` first. Let it select the artifact provider and description policy, then delegate provider-specific mutation to `github-pr-create` or `glab-mr-create`.
+- Use provider-specific creation skills directly only when the user explicitly asks for GitHub or GitLab, an existing artifact URL fixes the host, or a higher-level workflow has already selected the provider adapter.
 - After any commit that changes an MR or PR's scope, behavior, approach, deployment requirements, or reviewer-facing content, update the description proactively. Do not wait for the user to ask.
 - Reviewers only see the final diff. Keep the description aligned to the current branch, not intermediate approaches or reverted work.
 - Do not narrate intermediate decisions, reverted approaches, or scoped-out work in the description unless there is a lasting consequence a reviewer needs to know, such as a follow-up issue or deliberate coverage gap.

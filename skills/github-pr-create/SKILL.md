@@ -11,10 +11,13 @@ Create GitHub pull requests with `gh` after verifying branch, remote, and duplic
 ## When to Use
 
 - Feature work or a bug fix is ready for GitHub review.
-- The user asks to create, open, draft, or prepare a GitHub PR.
+- The user explicitly asks to create, open, draft, or prepare a GitHub PR.
 - `plan-unit-delivery` or `plan-review` detects a GitHub remote and needs the PR creation step.
+- `change-request-create` selected GitHub as the provider adapter.
 
 Do not use for GitLab merge requests; use the GitLab MR creation skill instead.
+For host-neutral PR/MR/change request wording, use `change-request-create`
+first so routing and full description policy stay in one place.
 
 ## Workflow
 
@@ -57,12 +60,12 @@ Do not use for GitLab merge requests; use the GitLab MR creation skill instead.
    - `.github/PULL_REQUEST_TEMPLATE.md`
    - `.github/PULL_REQUEST_TEMPLATE/*.md`
 
-   Keep the body reviewer-facing:
-   - Include exact verification or RED/GREEN evidence when it helps reviewers understand risk.
-   - Do not reference local-only plans, temporary files, verification ledgers, internal reviewer gates, subagent gates, or automation-routing details unless those artifacts are committed in the PR and useful to the reviewer.
-   - If the user excluded a plan, pressure test file, helper script, or other artifact from the PR, do not tell reviewers to inspect it. Make the necessary evidence self-contained in the PR body.
-   - Link directly to upstream repositories, tools, specs, issues, or related PRs that reviewers need. Use actual URLs, not bare names.
-   - Report hosted status only when it is useful to reviewers. Prefer concrete facts like "no workflow run was created for this branch" over local workflow bookkeeping.
+   Keep the body reviewer-facing. For neutral or mixed-host requests, apply
+   `change-request-create` before this adapter. For direct GitHub use:
+   - Preserve the selected template shape and fill placeholders concisely.
+   - Include targeted evidence or hosted status only when it helps reviewers understand risk.
+   - Omit unnecessary author-workflow references and routine validation already represented by CI or repository hooks.
+   - Link directly to reviewer-needed issues, related PRs, or upstream resources.
 
    Fallback body:
    ```markdown
@@ -113,12 +116,14 @@ Do not use for GitLab merge requests; use the GitLab MR creation skill instead.
 | Opening a ready PR by default | Use `--draft` unless the user asks for ready review |
 | Guessing base branch | Read remote HEAD, branch config, or project docs |
 | Hiding verification gaps | Put exact checks in the PR body or report what was not run |
+| Handling a neutral PR/MR request here | Use `change-request-create` before provider mutation |
 
 ## Validation Scenarios
 
 - GitHub branch with an existing open PR: pass only if the agent checks `gh pr list --head` before creating a duplicate.
 - GitHub side-project branch with no upstream: pass only if the agent pushes or verifies the intended fork/head before `gh pr create`.
 - User asks for a ready PR: pass only if the agent does not force `--draft` and reports the readiness choice.
+- User asks for a host-neutral change request: pass only if the agent routes through `change-request-create` instead of this provider adapter directly.
 - Process-heavy change with local plans, pressure tests, or internal review gates: pass only if the PR body includes self-contained reviewer evidence, omits references to excluded/local artifacts, and links directly to reviewer-needed upstream resources.
 
 ## Test Evidence
