@@ -78,6 +78,27 @@ Validation rejects:
 - missing stack relationship evidence;
 - `restack_required: true`.
 
+### Planning feedback disposition
+
+The planning-review gate has its own historical-feedback requirement. A
+latest-head Nitro clean note proves the current planning head has no new
+critical issues, but it does not prove every prior Nitro planning discussion was
+handled. The planning-review ledger must enumerate all Nitro-authored planning
+comments and discussions on the planning MR, including earlier review rounds,
+and record a disposition for each item:
+
+- fixed in the planning artifact;
+- deferred to a specific implementation task;
+- non-actionable with rationale;
+- blocked.
+
+Each item should carry the Nitro note ID, discussion ID when present, current
+resolvable/resolved state from the artifact host, and evidence for the
+disposition. If a resolvable discussion remains unresolved in GitLab, the gate
+can pass only when the ledger explicitly explains why it is non-actionable or
+deferred. Unresolved actionable planning feedback blocks implementation
+sequencing even when the latest-head Nitro summary is clean.
+
 ### Resume predecessor verification
 
 Resume validation splits inspection from continuation:

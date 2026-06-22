@@ -36,14 +36,19 @@
       Audit/update `skills/plan-ready`, `skills/plan-review`, `AGENTS.md`,
       `instructions/AGENTS.md`, `rules/feature-delivery.md`, adapter prompts,
       and normative planning references so they align on `stack_ready` or
-      `delivery_blocked` as orchestrator terminal states. Depends on 1.1 and
-      1.4.
+      `delivery_blocked` as orchestrator terminal states. Planning-review
+      ledgers must enumerate prior Nitro planning feedback by note/discussion
+      ID and disposition each item as fixed in planning, deferred to a specific
+      implementation task, non-actionable, or blocked; latest-head Nitro clean
+      feedback alone is not sufficient when prior planning feedback exists.
+      Depends on 1.1 and 1.4.
 - [ ] 1.8 Update regression coverage and examples
       Add fixtures and tests for partial-stack rejection, resume predecessor
       verification, stale predecessor gates, invalid cumulative task state,
-      unsupported host blocking, session handoff as non-success, and direct
-      sequencer `next_task` behavior outside orchestrator. Depends on 1.3, 1.4,
-      1.5, and 1.6.
+      unsupported host blocking, session handoff as non-success, planning-review
+      rejection when prior Nitro planning feedback lacks explicit disposition,
+      and direct sequencer `next_task` behavior outside orchestrator. Depends
+      on 1.3, 1.4, 1.5, and 1.6.
 - [ ] 1.9 Validate agent behavior and refresh runtime
       Run `writing-skills`, address findings, refresh installed skill surfaces,
       ensure reusable runtime scripts include all imported shared helpers such

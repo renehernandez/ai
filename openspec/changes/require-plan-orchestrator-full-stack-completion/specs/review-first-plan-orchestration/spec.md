@@ -81,6 +81,44 @@ the full stack of deliverable tasks.
 - **THEN** `plan-orchestrator` reports `delivery_blocked` with routing evidence
 - **AND** it does not fall back to direct publish
 
+### Requirement: Planning Review Feedback Disposition
+The system SHALL prove prior Nitro planning feedback is explicitly dispositioned
+before implementation sequencing starts.
+
+#### Scenario: Latest clean Nitro note is not enough
+- **WHEN** a planning MR has a latest-head Nitro note with no new critical
+  issues
+- **AND** earlier Nitro planning comments or discussions exist
+- **THEN** the planning-review gate requires a feedback disposition ledger
+- **AND** the workflow does not start implementation sequencing from the latest
+  clean note alone
+
+#### Scenario: Prior planning feedback is dispositioned
+- **WHEN** a planning MR has Nitro planning feedback from one or more review
+  rounds
+- **THEN** the planning-review ledger enumerates every Nitro-authored planning
+  comment or discussion by note ID
+- **AND** includes the discussion ID when the feedback belongs to a discussion
+- **AND** records whether each discussion is resolvable and currently resolved
+  in the artifact host
+- **AND** records disposition as fixed in planning, deferred to a specific
+  implementation task, non-actionable, or blocked
+- **AND** records evidence for that disposition
+
+#### Scenario: Unresolved planning discussion blocks without rationale
+- **WHEN** a Nitro-authored planning discussion is resolvable and unresolved in
+  GitLab
+- **AND** the planning-review ledger does not provide fixed, deferred, or
+  non-actionable rationale
+- **THEN** the planning-review gate emits `delivery_blocked`
+- **AND** implementation sequencing does not start
+
+#### Scenario: Latest clean head plus dispositioned history is ready
+- **WHEN** the latest planning head has clean Nitro feedback
+- **AND** every prior Nitro planning comment or discussion has an explicit
+  disposition with evidence
+- **THEN** the planning-review gate may emit `ready_for_stack`
+
 ### Requirement: Resume Predecessor Verification
 The system SHALL verify predecessor task artifacts before resuming a partially
 delivered OpenSpec stack.

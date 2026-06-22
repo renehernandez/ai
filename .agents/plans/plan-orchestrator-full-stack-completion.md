@@ -34,6 +34,10 @@ That makes a partial stack look like a complete orchestration run.
 - Orchestrator success is `stack_ready`, not "complete" or "shipped".
 - `stack_ready` is valid only when every deliverable OpenSpec task is checked
   at the current stack tip and every stack artifact has passed required gates.
+- Planning review success requires both latest-head Nitro clean feedback and an
+  explicit disposition ledger for every prior Nitro planning comment or
+  discussion. A final clean note alone is not enough to prove earlier planning
+  feedback was handled.
 - If deliverable tasks remain, the only valid orchestrator states are
   continuing or blocked with evidence.
 - Resume always verifies predecessor tasks and artifacts before selecting the
@@ -55,6 +59,10 @@ In scope:
   full-stack delivery rather than implying bare sequencer continuation.
 - Update shared planning contract helpers and validators for stack readiness,
   resume validation, and incomplete-stack rejection.
+- Update planning-review gate helpers, templates, and validation so prior Nitro
+  planning comments are enumerated by note/discussion ID and dispositioned as
+  fixed in the planning artifact, deferred to a specific implementation task,
+  non-actionable, or blocked before implementation sequencing starts.
 - Extract or add shared stack-state helpers for stack artifacts, task inventory,
   gate evidence, and task-delta validation so orchestrator, sequencer, and
   delivery scripts consume the same evidence semantics.
@@ -95,7 +103,8 @@ Out of scope:
 1. Run readiness and planning review as it does today.
 2. Materialize OpenSpec changes when `plan-ready` emits an
    `openspec_blueprint`.
-3. Validate planning review before implementation sequencing.
+3. Validate planning review before implementation sequencing, including a
+   complete prior-feedback disposition ledger for the planning MR.
 4. Invoke `plan-unit-sequencer` with an orchestrator-owned full-stack delivery
    context.
 5. Deliver one implementation unit at a time through `plan-unit-delivery`.
@@ -107,6 +116,30 @@ Out of scope:
 
 The orchestrator must not mark the active goal complete after one task unless
 the whole OpenSpec change has exactly one deliverable task.
+
+### Planning Review Gate Completeness
+
+The planning review gate must not treat a final latest-head Nitro clean note as
+the whole planning-review proof. Before implementation sequencing starts, the
+planning-review ledger must enumerate every Nitro-authored planning comment and
+discussion visible on the planning artifact, including previous review rounds.
+
+Each Nitro planning item must record:
+
+- note ID and discussion ID when available;
+- whether the discussion is resolvable and currently resolved in the artifact
+  host;
+- disposition: fixed in the planning artifact, deferred to a specific
+  implementation task, non-actionable, or blocked;
+- evidence for the disposition, such as a follow-up commit, reviewed spec/task
+  wording, or explicit non-actionable rationale.
+
+Resolvable GitLab discussions may remain unresolved only when the ledger gives
+an explicit non-actionable or deferred rationale. Otherwise, unresolved
+resolvable Nitro planning discussions block the planning gate. The ledger must
+also identify the latest-head Nitro clean note used for the current planning
+head, so the gate proves both current-head cleanliness and prior-feedback
+closure.
 
 ### Completion States
 
@@ -363,6 +396,11 @@ Acceptance:
 
 - `skills/plan-ready` and `skills/plan-review` either receive necessary wording
   and adapter prompt updates or have explicit no-change evidence.
+- Planning-review handoff and ledger validation require prior Nitro planning
+  comments and discussions to be enumerated by note/discussion ID with explicit
+  disposition before implementation sequencing starts.
+- Latest-head Nitro clean feedback is necessary but not sufficient for planning
+  review readiness when earlier Nitro planning feedback exists.
 - `AGENTS.md`, `instructions/AGENTS.md`, and `rules/feature-delivery.md` are
   audited for stale wording around plan orchestration, stacked sequencing,
   terminal success, and direct publish exceptions.
@@ -392,6 +430,9 @@ Acceptance:
 - Host capability failure blocks before the full-stack loop.
 - Budget or session handoff cannot be reported as success while stack work
   remains.
+- A planning-review fixture with a latest-head clean Nitro note but unresolved
+  prior Nitro planning discussions is rejected unless every prior item has an
+  explicit fixed, deferred, non-actionable, or blocked disposition.
 
 Verification:
 
