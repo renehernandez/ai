@@ -67,8 +67,9 @@ In scope:
 - Update installed agent prompts or runtime skill assets affected by the
   contract change.
 - Ensure reusable runtime scripts include every shared script imported by
-  installed planning skills, including `scripts/nitro-feedback-gate.ts` if the
-  installed `plan-unit-delivery` script continues to import it.
+  installed planning skills. `plan-unit-delivery` currently imports
+  `scripts/nitro-feedback-gate.ts` in both the repo-local and installed runtime
+  copies, so that helper must be installed or the import must be removed.
 - Run `writing-skills` review before delivery because this changes shared agent
   behavior.
 - Refresh installed runtime skill surfaces after implementation so the live
@@ -221,6 +222,9 @@ Acceptance:
 - Adapter prompts require full stack delivery for OpenSpec-backed requests.
 - Legacy success wording is removed or constrained behind validated
   `stack_ready`.
+- `plan-orchestrator/SKILL.md` explicitly introduces `delivery_blocked` as an
+  orchestrator-level terminal state instead of leaving the term only in the
+  sequencer vocabulary.
 - The orchestrator prompt says it invokes the sequencer in full-stack
   orchestrator mode and cannot accept sequencer `next_task` completion as
   terminal success.
@@ -407,7 +411,10 @@ Acceptance:
   and `~/.agents/skills/plan-unit-delivery/scripts/plan-unit-delivery.ts
   detect` or equivalent supported commands.
 - Reusable runtime scripts include every shared script imported by installed
-  planning skills, including `scripts/nitro-feedback-gate.ts` if still needed.
+  planning skills. Because `plan-unit-delivery` currently imports
+  `scripts/nitro-feedback-gate.ts`, runtime refresh must either install that
+  helper beside installed skill roots or refactor the installed script so the
+  import is no longer required.
 
 Verification:
 

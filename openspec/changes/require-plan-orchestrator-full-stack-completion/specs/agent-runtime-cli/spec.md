@@ -17,6 +17,14 @@ The system SHALL validate installed runtime surfaces after managed updates.
 - **AND** post-refresh verification executes representative installed planning
   scripts rather than relying only on status or validation metadata
 
+#### Scenario: Nitro feedback helper import is covered
+- **WHEN** `plan-unit-delivery` imports `scripts/nitro-feedback-gate.ts` from
+  either the repo-local or installed runtime skill copy
+- **THEN** runtime refresh installs `scripts/nitro-feedback-gate.ts` beside the
+  installed skill roots or removes the installed script import
+- **AND** an installed `plan-unit-delivery` script execution check proves the
+  import resolves
+
 #### Scenario: Missing shared script import blocks delivery
 - **WHEN** an installed planning skill script fails because a shared helper
   script is missing from the installed runtime scripts directory

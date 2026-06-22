@@ -50,6 +50,14 @@ ready for merge.
 The system SHALL make `plan-orchestrator` drive OpenSpec implementation through
 the full stack of deliverable tasks.
 
+#### Scenario: Orchestrator exposes delivery blocked terminal state
+- **WHEN** `plan-orchestrator` cannot continue because required review,
+  routing, stack, task, runtime, or resume evidence is missing or failed
+- **THEN** `plan-orchestrator/SKILL.md` describes `delivery_blocked` as an
+  orchestrator-level terminal state
+- **AND** the workflow does not rely only on lower-level sequencer vocabulary
+  for that status
+
 #### Scenario: Orchestrator invokes sequencer in full-stack mode
 - **WHEN** `plan-orchestrator` invokes `plan-unit-sequencer`
 - **THEN** the sequencer receives caller context identifying

@@ -4,7 +4,9 @@
       Update `skills/plan-orchestrator` docs, adapter prompts, templates, and
       host-capability preflight so partial OpenSpec delivery cannot be terminal
       success. Unsupported stack/review hosts must produce `delivery_blocked`
-      with routing evidence.
+      with routing evidence. `plan-orchestrator/SKILL.md` must explicitly add
+      `delivery_blocked` as an orchestrator-level terminal state, not leave it
+      only in the sequencer vocabulary.
 - [ ] 1.2 Define shared stack-state evidence helpers
       Add or extract shared helpers for OpenSpec task inventory, stack artifact
       parsing, gate evidence, and task-delta validation. Reuse these helpers
@@ -45,5 +47,8 @@
 - [ ] 1.9 Validate agent behavior and refresh runtime
       Run `writing-skills`, address findings, refresh installed skill surfaces,
       ensure reusable runtime scripts include all imported shared helpers such
-      as `scripts/nitro-feedback-gate.ts` when needed, and execute touched
-      installed planning scripts after refresh. Depends on 1.7 and 1.8.
+      as `scripts/nitro-feedback-gate.ts`, and execute touched installed
+      planning scripts after refresh. `plan-unit-delivery` currently imports
+      that helper in both repo-local and installed runtime copies, so the
+      implementation must either install the helper or remove the import before
+      runtime refresh can pass. Depends on 1.7 and 1.8.
