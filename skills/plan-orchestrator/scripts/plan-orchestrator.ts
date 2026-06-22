@@ -221,6 +221,8 @@ function validateResume(input: string): void {
   const status = scalar(section, "status");
   const intake = scalar(section, "intake");
   const planningReviewState = scalar(section, "planning_review_state");
+  const planningArtifactRef = scalar(section, "planning_artifact_ref");
+  const currentStackTip = scalar(section, "current_stack_tip");
   const restackRequired = scalar(section, "restack_required");
   const stackArtifacts = allScalars(section, "artifact");
   const nitroStates = allScalars(section, "nitro_gate_outcome");
@@ -240,11 +242,21 @@ function validateResume(input: string): void {
     errors,
   );
   requireValue(
-    scalar(section, "current_stack_tip"),
+    currentStackTip,
     "orchestrator_resume.current_stack_tip",
     errors,
   );
   requireValue(restackRequired, "orchestrator_resume.restack_required", errors);
+  const unsupportedArtifacts = [
+    planningArtifactRef,
+    currentStackTip,
+    ...stackArtifacts,
+  ].filter((artifact) => artifact && !isFullscriptGitLabMergeRequest(artifact));
+  if (unsupportedArtifacts.length > 0) {
+    errors.push(
+      "delivery_blocked: unsupported stack/review host; orchestrator_resume artifacts must be Fullscript GitLab merge requests",
+    );
+  }
 
   if (status && status !== "inspected") {
     errors.push("orchestrator_resume.status must be inspected");
@@ -312,6 +324,7 @@ function validateStackReady(input: string): void {
   const status = scalar(section, "status");
   const restackRequired = scalar(section, "restack_required");
   const allTasksChecked = scalar(taskState, "all_deliverable_tasks_checked");
+  const stackTip = scalar(section, "stack_tip");
   const stackArtifacts = allScalars(section, "artifact");
   const roles = allScalars(section, "role");
   const nitroStates = allScalars(section, "nitro_gate_outcome");
@@ -329,7 +342,7 @@ function validateStackReady(input: string): void {
     "stack_ready.target_branch",
     errors,
   );
-  requireValue(scalar(section, "stack_tip"), "stack_ready.stack_tip", errors);
+  requireValue(stackTip, "stack_ready.stack_tip", errors);
   requireValue(
     allTasksChecked,
     "stack_ready.task_state.all_deliverable_tasks_checked",
@@ -355,8 +368,8 @@ function validateStackReady(input: string): void {
       "stack_ready.stack must include planning and implementation artifacts",
     );
   }
-  const unsupportedArtifacts = stackArtifacts.filter(
-    (artifact) => !isFullscriptGitLabMergeRequest(artifact),
+  const unsupportedArtifacts = [stackTip, ...stackArtifacts].filter(
+    (artifact) => artifact && !isFullscriptGitLabMergeRequest(artifact),
   );
   if (unsupportedArtifacts.length > 0) {
     errors.push(

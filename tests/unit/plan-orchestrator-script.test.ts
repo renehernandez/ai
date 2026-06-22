@@ -241,6 +241,22 @@ test("validate-resume accepts inspected stack state", () => {
   assert.match(result.stdout, /orchestrator_resume valid/);
 });
 
+test("validate-resume blocks unsupported stack hosts", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport.replace(
+      "current_stack_tip: https://git.fullscript.io/group/project/-/merge_requests/2",
+      "current_stack_tip: https://github.com/example/project/pull/2",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /delivery_blocked: unsupported stack\/review host/,
+  );
+});
+
 test("validate-stack-ready accepts a clean reviewed stack", () => {
   const result = runPlanOrchestrator("validate-stack-ready", stackReady);
 
@@ -267,6 +283,22 @@ test("validate-stack-ready blocks unsupported stack hosts", () => {
     stackReady.replace(
       "    - artifact: https://git.fullscript.io/group/project/-/merge_requests/2",
       "    - artifact: https://github.com/example/project/pull/2",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /delivery_blocked: unsupported stack\/review host/,
+  );
+});
+
+test("validate-stack-ready blocks unsupported stack tip hosts", () => {
+  const result = runPlanOrchestrator(
+    "validate-stack-ready",
+    stackReady.replace(
+      "stack_tip: https://git.fullscript.io/group/project/-/merge_requests/2",
+      "stack_tip: https://github.com/example/project/pull/2",
     ),
   );
 
