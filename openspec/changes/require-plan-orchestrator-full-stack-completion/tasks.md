@@ -48,7 +48,7 @@
       Run `writing-skills`, address findings, refresh installed skill surfaces,
       ensure reusable runtime scripts include all imported shared helpers such
       as `scripts/nitro-feedback-gate.ts`, and execute touched installed
-      planning scripts after refresh. `plan-unit-delivery` currently imports
-      that helper in both repo-local and installed runtime copies, so the
-      implementation must either install the helper or remove the import before
-      runtime refresh can pass. Depends on 1.7 and 1.8.
+      planning scripts after refresh. `plan-review` and `plan-unit-delivery`
+      currently import that helper in both repo-local and installed runtime
+      copies, so the implementation must either install the helper or remove
+      the imports before runtime refresh can pass. Depends on 1.7 and 1.8.

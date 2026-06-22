@@ -67,9 +67,10 @@ In scope:
 - Update installed agent prompts or runtime skill assets affected by the
   contract change.
 - Ensure reusable runtime scripts include every shared script imported by
-  installed planning skills. `plan-unit-delivery` currently imports
-  `scripts/nitro-feedback-gate.ts` in both the repo-local and installed runtime
-  copies, so that helper must be installed or the import must be removed.
+  installed planning skills. `plan-review` and `plan-unit-delivery` currently
+  import `scripts/nitro-feedback-gate.ts` in both the repo-local and installed
+  runtime copies, so that helper must be installed or the imports must be
+  removed.
 - Run `writing-skills` review before delivery because this changes shared agent
   behavior.
 - Refresh installed runtime skill surfaces after implementation so the live
@@ -411,10 +412,10 @@ Acceptance:
   and `~/.agents/skills/plan-unit-delivery/scripts/plan-unit-delivery.ts
   detect` or equivalent supported commands.
 - Reusable runtime scripts include every shared script imported by installed
-  planning skills. Because `plan-unit-delivery` currently imports
-  `scripts/nitro-feedback-gate.ts`, runtime refresh must either install that
-  helper beside installed skill roots or refactor the installed script so the
-  import is no longer required.
+  planning skills. Because `plan-review` and `plan-unit-delivery` currently
+  import `scripts/nitro-feedback-gate.ts`, runtime refresh must either install
+  that helper beside installed skill roots or refactor the installed scripts so
+  the import is no longer required.
 
 Verification:
 
