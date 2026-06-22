@@ -387,7 +387,33 @@ Verification:
 - `pnpm agent-runtime skills validate --profile work`
 - Existing delivery validator tests
 
-### 1.7 Align plan-ready, plan-review, docs, and rules
+### 1.7 Add planning feedback disposition gate
+
+Update planning-review gate helpers, templates, validators, and prompts so
+prior Nitro planning comments are enumerated by note/discussion ID and
+dispositioned as fixed in the planning artifact, deferred to a specific
+implementation task, non-actionable, or blocked before implementation
+sequencing starts.
+
+Acceptance:
+
+- Planning-review ledgers enumerate prior Nitro planning comments and
+  discussions by note/discussion ID.
+- Each feedback item records whether the host discussion is resolvable and
+  currently resolved when that metadata exists.
+- Each feedback item records one disposition: fixed in planning, deferred to a
+  specific implementation task, non-actionable, or blocked.
+- Latest-head Nitro clean feedback is necessary but not sufficient for planning
+  review readiness when earlier Nitro planning feedback exists.
+- Unresolved resolvable Nitro planning discussions block unless they have an
+  explicit non-actionable or deferred rationale.
+
+Verification:
+
+- `pnpm test`
+- Targeted planning-review validator tests for prior-feedback disposition
+
+### 1.8 Align plan-ready, plan-review, docs, and rules
 
 Audit and update planning-adjacent skills and normative instructions so they
 describe the same full-stack orchestration contract.
@@ -396,11 +422,9 @@ Acceptance:
 
 - `skills/plan-ready` and `skills/plan-review` either receive necessary wording
   and adapter prompt updates or have explicit no-change evidence.
-- Planning-review handoff and ledger validation require prior Nitro planning
-  comments and discussions to be enumerated by note/discussion ID with explicit
-  disposition before implementation sequencing starts.
-- Latest-head Nitro clean feedback is necessary but not sufficient for planning
-  review readiness when earlier Nitro planning feedback exists.
+- Planning-adjacent skills and docs use the prior-feedback disposition gate
+  introduced by task 1.7 rather than treating latest-head Nitro clean feedback
+  as the only planning-review proof.
 - `AGENTS.md`, `instructions/AGENTS.md`, and `rules/feature-delivery.md` are
   audited for stale wording around plan orchestration, stacked sequencing,
   terminal success, and direct publish exceptions.
@@ -414,7 +438,7 @@ Verification:
 - `pnpm agent-runtime skills validate --profile personal`
 - `pnpm agent-runtime skills validate --profile work`
 
-### 1.8 Update regression coverage and examples
+### 1.9 Update regression coverage and examples
 
 Add fixtures and tests covering the original failure mode and the new resume
 gate.
@@ -440,7 +464,7 @@ Verification:
 - `pnpm biome:check:all` or scoped formatting checks if broad repo formatting
   has unrelated drift
 
-### 1.9 Validate agent behavior and refresh runtime
+### 1.10 Validate agent behavior and refresh runtime
 
 Run the shared agent-behavior review and refresh installed skill surfaces after
 the implementation is complete.
