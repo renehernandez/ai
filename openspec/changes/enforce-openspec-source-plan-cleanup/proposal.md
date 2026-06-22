@@ -19,8 +19,9 @@ state after materialization.
 - Require the cleanup helper contract to carry the expected source-plan path
   separately from the deletion target, so `--source-plan` cannot authorize
   itself.
-- Add a machine-readable `openspec_blueprint.source_plan.ref` carrier and
-  validator/prompt updates so `plan-orchestrator` can pass the expected path to
+- Add machine-readable `openspec_blueprint.source_plan.ref` and
+  `openspec_blueprint.source_plan.change_id` carriers plus validator/prompt
+  updates so `plan-orchestrator` can pass the expected path and change id to
   cleanup from reviewed readiness output.
 - Preserve the source plan when OpenSpec creation or validation fails.
 - Block plan-to-OpenSpec publication when the primary source plan has already

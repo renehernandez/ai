@@ -1,22 +1,26 @@
 ## ADDED Requirements
 
 ### Requirement: OpenSpec Blueprint Source Plan Reference
-The system SHALL carry the source plan path in machine-readable readiness output
-when `plan-ready` emits an `openspec_blueprint` from a `.agents/plans/**`
-artifact.
+The system SHALL carry source plan path and expected change id in
+machine-readable readiness output when `plan-ready` emits an
+`openspec_blueprint` from a `.agents/plans/**` artifact.
 
 #### Scenario: Blueprint includes source plan ref
 - **WHEN** `plan-ready` emits an `openspec_blueprint` from a
   `.agents/plans/**` artifact
 - **THEN** the blueprint includes `source_plan.ref` with the source plan path
+- **AND** the blueprint includes `source_plan.change_id` matching
+  `change.suggested_id`
 - **AND** `validate-blueprint` rejects plan-file-backed OpenSpec blueprints
-  that omit `source_plan.ref`
+  that omit `source_plan.ref`, omit `source_plan.change_id`, or use a
+  `source_plan.change_id` that does not match `change.suggested_id`
 
 #### Scenario: Orchestrator passes expected source plan to cleanup
 - **WHEN** `plan-orchestrator` materializes an `openspec_blueprint` that
-  includes `source_plan.ref`
+  includes `source_plan.ref` and `source_plan.change_id`
 - **THEN** it passes that value to `cleanup-source-plan` as
   `--expected-source-plan`
+- **AND** it passes `source_plan.change_id` as `--expected-change-id`
 - **AND** it does not derive the expected source-plan value from the cleanup
   target itself
 
@@ -28,8 +32,9 @@ when an `openspec_blueprint` is materialized into an OpenSpec change.
 - **WHEN** `plan-orchestrator` materializes an `openspec_blueprint` from a
   primary `.agents/plans/**` source plan
 - **AND** `cleanup-source-plan` receives `--source-plan <delete-target>` and a
-  separate `--expected-source-plan <recorded-source-plan>` for the current
-  conversion context
+  separate `--expected-source-plan <recorded-source-plan>` and
+  `--expected-change-id <recorded-change-id>` for the current conversion
+  context
 - **AND** the normalized cleanup target matches the normalized expected
   source-plan path
 - **AND** the OpenSpec change is created
@@ -43,8 +48,8 @@ when an `openspec_blueprint` is materialized into an OpenSpec change.
 - **WHEN** `plan-orchestrator` materializes an `openspec_blueprint` from a
   primary `.agents/plans/**` source plan
 - **AND** `cleanup-source-plan` receives separate matching `--source-plan` and
-  `--expected-source-plan` paths for the current conversion context and
-  `change-id`
+  `--expected-source-plan` paths plus matching `--change-id` and
+  `--expected-change-id` values for the current conversion context
 - **AND** `openspec validate <change-id> --strict --no-interactive` passes
 - **AND** no repo-local OpenSpec scaffolding validation command is available
 - **THEN** the workflow records that the repo-local validation surface was
@@ -80,6 +85,13 @@ when an `openspec_blueprint` is materialized into an OpenSpec change.
 - **THEN** the workflow reports an invalid precondition
 - **AND** preserves the supplied `.agents/plans/**` file
 - **AND** does not default expected source-plan authority from `--source-plan`
+
+#### Scenario: Expected change id is missing
+- **WHEN** `plan-orchestrator` is asked to clean up a `.agents/plans/**` path
+- **AND** no separate `--expected-change-id` value is supplied
+- **THEN** the workflow reports an invalid precondition
+- **AND** preserves the supplied `.agents/plans/**` file
+- **AND** does not default expected change authority from `--change-id`
 
 #### Scenario: Cleanup context is for a different change id
 - **WHEN** `plan-orchestrator` is asked to clean up a `.agents/plans/**` path

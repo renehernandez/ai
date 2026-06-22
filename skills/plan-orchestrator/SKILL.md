@@ -64,10 +64,14 @@ For `openspec_blueprint` outputs:
 4. Run the repo-local OpenSpec scaffolding validation when available.
 5. If OpenSpec creation and all applicable validation steps pass, run
    `scripts/plan-orchestrator.ts cleanup-source-plan --source-plan <path>
-   --change-id <change-id>` before publishing review. Applicable validation
-   steps include strict OpenSpec validation and repo-local scaffolding
-   validation when available. If creation or any applicable validation step
-   fails, preserve the source plan for repair.
+   --expected-source-plan <source_plan.ref> --expected-change-id
+   <source_plan.change_id> --change-id <change-id>` before publishing review.
+   The expected source plan and change id come from the current
+   `openspec_blueprint.source_plan`; do not infer them by scanning
+   `.agents/plans/**` or default them from `--source-plan` or `--change-id`.
+   Applicable validation steps include strict OpenSpec validation and
+   repo-local scaffolding validation when available. If creation or any
+   applicable validation step fails, preserve the source plan for repair.
 6. Run `plan-review` against the OpenSpec change. For `artifact_type:
    openspec`, the planning branch diff must contain the OpenSpec change and no
    `.agents/plans/**` files.
@@ -129,7 +133,7 @@ validate-stack-ready`.
 - `scripts/plan-orchestrator.ts plan-review-request-template`
 - `scripts/plan-orchestrator.ts validate-planning-review --file <path>`
 - `scripts/plan-orchestrator.ts validate-openspec-change <change-id>`
-- `scripts/plan-orchestrator.ts cleanup-source-plan --source-plan <path> --change-id <change-id>`
+- `scripts/plan-orchestrator.ts cleanup-source-plan --source-plan <path> --expected-source-plan <path> --expected-change-id <change-id> --change-id <change-id>`
 - `scripts/plan-orchestrator.ts resume-template`
 - `scripts/plan-orchestrator.ts validate-resume --file <path>`
 - `scripts/plan-orchestrator.ts stack-ready-template`
