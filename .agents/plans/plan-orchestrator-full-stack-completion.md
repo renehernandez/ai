@@ -69,9 +69,9 @@ In scope:
 - Ensure reusable runtime scripts include every shared script imported by
   installed planning skills. `plan-review` and `plan-unit-delivery` currently
   import `scripts/nitro-feedback-gate.ts` in both the repo-local and installed
-  runtime copies. The installed helper resolves on this machine from an
-  unmanaged plain file under `~/.agents/scripts`, while
-  `agent-runtime.config.json` does not list it in `reusableScripts`, so runtime
+  runtime copies. If an installed helper resolves only because an unmanaged file
+  happens to exist under a runtime scripts directory, while
+  `agent-runtime.config.json` does not declare it in `reusableScripts`, runtime
   refresh must make that helper managed or remove the imports.
 - Run `writing-skills` review before delivery because this changes shared agent
   behavior.
@@ -195,7 +195,10 @@ Resume validation must split inspected state from continuation state:
 Budget exhaustion, token exhaustion, or session handoff is not success. If the
 workflow cannot keep running in the current session, it must stop as
 `delivery_blocked` with durable resume evidence and must not mark the active
-goal complete.
+goal complete. Resume evidence must classify whether the halt is immediately
+retryable session exhaustion or an external blocker requiring user or system
+action, so retry can resume from the latest verified stack state without
+mislabeling normal exhaustion as a failed predecessor gate.
 
 ### Direct Sequencer Invocation
 
@@ -417,9 +420,9 @@ Acceptance:
   planning skills. Because `plan-review` and `plan-unit-delivery` currently
   import `scripts/nitro-feedback-gate.ts`, runtime refresh must either install
   that helper beside installed skill roots or refactor the installed scripts so
-  the import is no longer required. The existing installed helper resolves on
-  this machine from an unmanaged plain file under `~/.agents/scripts`, so this
-  task converts accidental availability into managed refresh behavior.
+  the import is no longer required. If the helper resolves only from an
+  unmanaged file under a runtime scripts directory, this task converts
+  accidental availability into managed refresh behavior.
 
 Verification:
 

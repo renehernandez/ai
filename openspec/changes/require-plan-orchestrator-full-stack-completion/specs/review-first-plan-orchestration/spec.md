@@ -107,6 +107,10 @@ delivered OpenSpec stack.
 - **THEN** the workflow records durable resume evidence
 - **AND** reports `delivery_blocked`
 - **AND** does not mark the active goal complete
+- **AND** the resume evidence classifies the halt as immediately retryable
+  session exhaustion rather than an external blocker
+- **AND** a retry can resume from the latest verified stack state without
+  reclassifying unchanged predecessor gates as failed
 
 ### Requirement: One-Unit Delivery Evidence
 The system SHALL expose enough evidence from each unit delivery for downstream
