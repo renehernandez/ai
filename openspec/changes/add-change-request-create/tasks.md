@@ -4,7 +4,7 @@
   - Add the `change-request-creation` spec delta.
   - Add the narrow `review-first-plan-orchestration` delta for shared rule and runtime alignment.
   - Validate with `pnpm ax openspec validate`.
-- [ ] 1.2 Add contract-only host-neutral skill.
+- [x] 1.2 Add contract-only host-neutral skill.
   - Add `skills/change-request-create/SKILL.md`.
   - Keep the skill guidance-only: no new shared scripts, hosted-status fetchers, provider-neutral CLI helpers, or generic provider framework.
   - Validate with `pnpm run skills:validate`, `pnpm ax skills validate --profile personal`, and `pnpm ax skills validate --profile work`.
