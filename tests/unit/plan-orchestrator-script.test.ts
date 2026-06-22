@@ -404,6 +404,48 @@ test("validate-resume blocks checked predecessor tasks without artifact evidence
   );
 });
 
+test("validate-resume blocks resume-ready without reviewed planning", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport.replace(
+      "planning_review_state: reviewed",
+      "planning_review_state: blocked",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /planning_review_state must be reviewed when status is resume_ready/,
+  );
+});
+
+test("validate-resume blocks resume-ready when restack is required", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport.replace("restack_required: false", "restack_required: true"),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /restack_required must be false before resume_ready/,
+  );
+});
+
+test("validate-resume blocks resume-ready reports with blockers", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport.replace(
+      "  blockers: []",
+      "  blockers:\n    - waiting on predecessor MR",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /blockers must be empty before resume_ready/);
+});
+
 test("validate-resume blocks delivery-blocked reports without blockers", () => {
   const result = runPlanOrchestrator(
     "validate-resume",
@@ -415,6 +457,21 @@ test("validate-resume blocks delivery-blocked reports without blockers", () => {
     result.stderr,
     /blockers must explain why resume is delivery_blocked/,
   );
+});
+
+test("validate-resume accepts delivery-blocked reports with blockers", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport
+      .replace("status: resume_ready", "status: delivery_blocked")
+      .replace(
+        "  blockers: []",
+        "  blockers:\n    - waiting on predecessor MR",
+      ),
+  );
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /orchestrator_resume valid/);
 });
 
 test("validate-stack-ready accepts a clean reviewed stack", () => {
