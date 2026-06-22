@@ -42,6 +42,17 @@ for (const file of [
   });
 }
 
+test("git rules require stacked MRs to land bottom-to-top", () => {
+  const text = readFileSync("rules/git-and-review.md", "utf-8");
+
+  assert.match(text, /merge MRs in a stack/);
+  assert.match(text, /bottom of the\s+stack to the top/);
+  assert.match(text, /first\/base MR to `main` first/);
+  assert.match(text, /last\/top MR is merged last/);
+  assert.match(text, /retarget the next stacked MR to `main`/);
+  assert.match(text, /resolve the conflict on that MR's source branch/);
+});
+
 for (const file of [
   "skills/plan-ready/SKILL.md",
   "skills/plan-ready/agents/openai.yaml",

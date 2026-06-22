@@ -96,3 +96,18 @@ These rules cover Git, GitHub, GitLab, Linear, review routing, and external comm
 - `glab stack sync` always leaves the working tree on the last branch in the stack.
 - Never assume you are on the correct branch after a stack sync.
 - Never amend a diff without explicitly navigating to the correct branch first.
+
+## Merging Stacked MRs
+
+- When the user asks to merge MRs in a stack, merge from the bottom of the
+  stack to the top: merge the first/base MR to `main` first, then the next MR,
+  and continue until the last/top MR is merged last.
+- Do not collapse the stack by merging the top MR first unless the user
+  explicitly asks for that alternate landing shape.
+- After each lower MR lands, refresh the next MR from live GitLab state before
+  merging. GitLab may automatically retarget the next stacked MR to `main`.
+- Expect conflicts to appear after retargeting. If the next MR is not
+  mergeable, resolve the conflict on that MR's source branch, rerun the relevant
+  verification, push the conflict fix, and re-check the MR before merging.
+- Use the live MR head SHA as the merge guard for each MR and verify each merge
+  with provider state before proceeding to the next MR.
