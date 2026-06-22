@@ -50,5 +50,8 @@
       as `scripts/nitro-feedback-gate.ts`, and execute touched installed
       planning scripts after refresh. `plan-review` and `plan-unit-delivery`
       currently import that helper in both repo-local and installed runtime
-      copies, so the implementation must either install the helper or remove
-      the imports before runtime refresh can pass. Depends on 1.7 and 1.8.
+      copies. The existing installed helper resolves on this machine, but
+      `agent-runtime.config.json` omits it from `reusableScripts`, so the
+      implementation must either make refresh install the helper or remove the
+      imports before runtime refresh can be treated as durable. Depends on 1.7
+      and 1.8.

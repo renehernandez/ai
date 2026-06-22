@@ -69,8 +69,9 @@ In scope:
 - Ensure reusable runtime scripts include every shared script imported by
   installed planning skills. `plan-review` and `plan-unit-delivery` currently
   import `scripts/nitro-feedback-gate.ts` in both the repo-local and installed
-  runtime copies, so that helper must be installed or the imports must be
-  removed.
+  runtime copies. The installed helper resolves on this machine, but
+  `agent-runtime.config.json` does not list it in `reusableScripts`, so runtime
+  refresh must keep installing the helper or remove the imports.
 - Run `writing-skills` review before delivery because this changes shared agent
   behavior.
 - Refresh installed runtime skill surfaces after implementation so the live
@@ -415,7 +416,9 @@ Acceptance:
   planning skills. Because `plan-review` and `plan-unit-delivery` currently
   import `scripts/nitro-feedback-gate.ts`, runtime refresh must either install
   that helper beside installed skill roots or refactor the installed scripts so
-  the import is no longer required.
+  the import is no longer required. The existing installed helper resolves on
+  this machine, so this task preserves refresh durability rather than assuming
+  the installed runtime is currently broken.
 
 Verification:
 
