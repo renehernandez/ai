@@ -19,7 +19,7 @@
       committed source plans, and allow atomic plan review to keep using
       `.agents/plans/**` artifacts. Depends on 1.1.
 
-- [ ] 1.3 Add regression coverage for source-plan states
+- [x] 1.3 Add regression coverage for source-plan states
       Add tests or fixture-backed script checks for untracked source plan
       cleanup, staged source plan cleanup, validation-failure preservation,
       already committed source-plan blocking, OpenSpec planning-diff rejection,

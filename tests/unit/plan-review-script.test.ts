@@ -68,6 +68,27 @@ function runPlanReviewCommand(command: string): {
   };
 }
 
+function runPlanReviewArgs(
+  args: string[],
+  input = "",
+): { status: number | null; stderr: string; stdout: string } {
+  const result = spawnSync(
+    "pnpm",
+    ["exec", "tsx", "skills/plan-review/scripts/plan-review.ts", ...args],
+    {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      input,
+    },
+  );
+
+  return {
+    status: result.status,
+    stderr: result.stderr,
+    stdout: result.stdout,
+  };
+}
+
 const planReviewRequest = `plan_review_request:
   status: ready_for_review
   artifact_type: openspec
@@ -208,6 +229,58 @@ test("planning-review-template emits a readable summary before YAML", () => {
       result.stdout.indexOf("planning_review:"),
   );
   assert.match(result.stdout, /planning_review:/);
+});
+
+test("validate-planning-diff rejects OpenSpec diffs with source-plan paths", () => {
+  const result = runPlanReviewArgs(
+    ["validate-planning-diff", "--artifact-type", "openspec"],
+    [
+      "A\t.agents/plans/added.md",
+      "M\t.agents/plans/modified.md",
+      "D\t.agents/plans/deleted.md",
+      "R100\t.agents/plans/old.md\topenspec/changes/example/proposal.md",
+      "C100\topenspec/changes/example/tasks.md\t.agents/plans/copied.md",
+      "T\t.agents/plans/type-changed.md",
+    ].join("\n"),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /artifact_type openspec/);
+  assert.match(result.stderr, /A: \.agents\/plans\/added\.md/);
+  assert.match(result.stderr, /D: \.agents\/plans\/deleted\.md/);
+  assert.match(result.stderr, /R100: \.agents\/plans\/old\.md/);
+  assert.match(result.stderr, /C100: \.agents\/plans\/copied\.md/);
+  assert.match(result.stderr, /T: \.agents\/plans\/type-changed\.md/);
+});
+
+test("validate-planning-diff rejects deletion-only OpenSpec source-plan diffs", () => {
+  const result = runPlanReviewArgs(
+    ["validate-planning-diff", "--artifact-type", "openspec"],
+    "D\t.agents/plans/source.md\n",
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /D: \.agents\/plans\/source\.md/);
+});
+
+test("validate-planning-diff accepts atomic plan source-plan artifacts", () => {
+  const result = runPlanReviewArgs(
+    ["validate-planning-diff", "--artifact-type", "plan"],
+    "A\t.agents/plans/source.md\n",
+  );
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /planning_diff_valid/);
+});
+
+test("validate-planning-diff accepts OpenSpec diffs without source-plan paths", () => {
+  const result = runPlanReviewArgs(
+    ["validate-planning-diff", "--artifact-type", "openspec"],
+    "A\topenspec/changes/example/proposal.md\n",
+  );
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /planning_diff_valid/);
 });
 
 test("validate-planning-review accepts reviewed planning handoffs", () => {

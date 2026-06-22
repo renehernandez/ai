@@ -1,9 +1,35 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+
+const repoRoot = process.cwd();
+const require = createRequire(import.meta.url);
+const tsxLoader = require.resolve("tsx");
+const planOrchestratorScript = join(
+  repoRoot,
+  "skills/plan-orchestrator/scripts/plan-orchestrator.ts",
+);
+
+function cleanGitEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  delete env.GIT_DIR;
+  delete env.GIT_WORK_TREE;
+  delete env.GIT_INDEX_FILE;
+  delete env.GIT_PREFIX;
+  return env;
+}
 
 function fixture(name: string): string {
   return readFileSync(
@@ -78,6 +104,62 @@ function runPlanOrchestratorCommand(command: string): {
     stderr: result.stderr,
     stdout: result.stdout,
   };
+}
+
+function runPlanOrchestratorArgs(
+  args: string[],
+  cwd = repoRoot,
+): { status: number | null; stderr: string; stdout: string } {
+  const result = spawnSync(
+    process.execPath,
+    ["--import", tsxLoader, planOrchestratorScript, ...args],
+    {
+      cwd,
+      encoding: "utf8",
+      env: cleanGitEnv(),
+    },
+  );
+
+  return {
+    status: result.status,
+    stderr: result.stderr,
+    stdout: result.stdout,
+  };
+}
+
+function withTempOpenSpecRepo(callback: (directory: string) => void): void {
+  const directory = mkdtempSync(join(tmpdir(), "plan-orchestrator-repo-"));
+  try {
+    mkdirSync(join(directory, "openspec", "changes"), { recursive: true });
+    cpSync(
+      join(repoRoot, "openspec/config.yaml"),
+      join(directory, "openspec/config.yaml"),
+    );
+    cpSync(
+      join(repoRoot, "openspec/changes/enforce-openspec-source-plan-cleanup"),
+      join(directory, "openspec/changes/enforce-openspec-source-plan-cleanup"),
+      { recursive: true },
+    );
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.test"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    runGit(directory, ["add", "openspec"]);
+    runGit(directory, ["commit", "-m", "add openspec fixture"]);
+    mkdirSync(join(directory, ".agents/plans"), { recursive: true });
+    callback(directory);
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+}
+
+function runGit(directory: string, args: string[]): string {
+  const result = spawnSync("git", args, {
+    cwd: directory,
+    encoding: "utf8",
+    env: cleanGitEnv(),
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  return result.stdout.trim();
 }
 
 const planningReview = `planning_review:
@@ -231,6 +313,98 @@ test("stack-ready-template emits a readable summary before YAML", () => {
     result.stdout.indexOf("## Readable Summary") <
       result.stdout.indexOf("stack_ready:"),
   );
+});
+
+test("cleanup-source-plan deletes untracked source plans after validation", () => {
+  withTempOpenSpecRepo((directory) => {
+    const sourcePlan = join(directory, ".agents/plans/source.md");
+    writeFileSync(sourcePlan, "Plan intake", "utf8");
+
+    const result = runPlanOrchestratorArgs(
+      [
+        "cleanup-source-plan",
+        "--source-plan",
+        ".agents/plans/source.md",
+        "--change-id",
+        "enforce-openspec-source-plan-cleanup",
+      ],
+      directory,
+    );
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /source_plan_cleanup_complete/);
+    assert.equal(existsSync(sourcePlan), false);
+    assert.equal(runGit(directory, ["status", "--short"]), "");
+  });
+});
+
+test("cleanup-source-plan removes staged source plans from index and disk", () => {
+  withTempOpenSpecRepo((directory) => {
+    const sourcePlan = join(directory, ".agents/plans/source.md");
+    writeFileSync(sourcePlan, "Plan intake", "utf8");
+    runGit(directory, ["add", ".agents/plans/source.md"]);
+
+    const result = runPlanOrchestratorArgs(
+      [
+        "cleanup-source-plan",
+        "--source-plan",
+        ".agents/plans/source.md",
+        "--change-id",
+        "enforce-openspec-source-plan-cleanup",
+      ],
+      directory,
+    );
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /source_plan_cleanup_complete/);
+    assert.equal(existsSync(sourcePlan), false);
+    assert.equal(runGit(directory, ["status", "--short"]), "");
+  });
+});
+
+test("cleanup-source-plan preserves source plans when OpenSpec validation fails", () => {
+  withTempOpenSpecRepo((directory) => {
+    const sourcePlan = join(directory, ".agents/plans/source.md");
+    writeFileSync(sourcePlan, "Plan intake", "utf8");
+
+    const result = runPlanOrchestratorArgs(
+      [
+        "cleanup-source-plan",
+        "--source-plan",
+        ".agents/plans/source.md",
+        "--change-id",
+        "missing-change",
+      ],
+      directory,
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.equal(existsSync(sourcePlan), true);
+  });
+});
+
+test("cleanup-source-plan blocks already committed source plans", () => {
+  withTempOpenSpecRepo((directory) => {
+    const sourcePlan = join(directory, ".agents/plans/source.md");
+    writeFileSync(sourcePlan, "Plan intake", "utf8");
+    runGit(directory, ["add", ".agents/plans/source.md"]);
+    runGit(directory, ["commit", "-m", "commit source plan"]);
+
+    const result = runPlanOrchestratorArgs(
+      [
+        "cleanup-source-plan",
+        "--source-plan",
+        ".agents/plans/source.md",
+        "--change-id",
+        "enforce-openspec-source-plan-cleanup",
+      ],
+      directory,
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /source_plan_committed/);
+    assert.equal(existsSync(sourcePlan), true);
+  });
 });
 
 test("validate-planning-review accepts reviewed planning", () => {
