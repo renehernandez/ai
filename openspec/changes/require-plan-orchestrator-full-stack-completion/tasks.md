@@ -39,7 +39,7 @@
       implementation task, non-actionable, or blocked. Latest-head Nitro clean
       feedback alone is not sufficient when prior planning feedback exists.
       Depends on 1.2.
-- [ ] 1.8 Align plan-ready, plan-review, docs, and rules
+- [x] 1.8 Align plan-ready, plan-review, docs, and rules
       Audit/update `skills/plan-ready`, `skills/plan-review`, `AGENTS.md`,
       `instructions/AGENTS.md`, `rules/feature-delivery.md`, adapter prompts,
       and normative planning references so they align on `stack_ready` or
