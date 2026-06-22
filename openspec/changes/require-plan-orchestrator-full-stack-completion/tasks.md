@@ -45,7 +45,7 @@
       and normative planning references so they align on `stack_ready` or
       `delivery_blocked` as orchestrator terminal states and use the planning
       feedback disposition gate from 1.7. Depends on 1.1, 1.4, and 1.7.
-- [ ] 1.9 Update regression coverage and examples
+- [x] 1.9 Update regression coverage and examples
       Add fixtures and tests for partial-stack rejection, resume predecessor
       verification, stale predecessor gates, invalid cumulative task state,
       unsupported host blocking, session handoff as non-success, planning-review

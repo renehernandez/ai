@@ -1,9 +1,16 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+
+function fixture(name: string): string {
+  return readFileSync(
+    join(process.cwd(), "tests/fixtures/plan-orchestrator", name),
+    "utf8",
+  );
+}
 
 function withTempFile(content: string, callback: (path: string) => void): void {
   const directory = mkdtempSync(join(tmpdir(), "plan-orchestrator-script-"));
@@ -582,6 +589,71 @@ test("validate-stack-ready blocks unsupported stack tip hosts", () => {
   );
 });
 
+test("fixture rejects partial stack-ready state", () => {
+  const result = runPlanOrchestrator(
+    "validate-stack-ready",
+    fixture("partial-stack-ready.yaml"),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /partial stack: unchecked deliverable tasks 1\.2/,
+  );
+});
+
+test("fixture rejects resume without predecessor artifacts", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    fixture("resume-missing-predecessor.yaml"),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /predecessor_artifact evidence is required before resume_ready/,
+  );
+});
+
+test("fixture rejects resume with stale predecessor gates", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    fixture("resume-stale-gate.yaml"),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /nitro_gate_outcome must be passed before resume_ready/,
+  );
+});
+
+test("fixture rejects resume with invalid cumulative task state", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    fixture("resume-invalid-cumulative-state.yaml"),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /cumulative_task_state_valid must be true before resume_ready/,
+  );
+});
+
+test("fixture blocks unsupported host stack-ready state", () => {
+  const result = runPlanOrchestrator(
+    "validate-stack-ready",
+    fixture("unsupported-host-stack-ready.yaml"),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /delivery_blocked: unsupported stack\/review host/,
+  );
+});
+
 test("validate-stack-ready reports missing stack tip without unsupported host noise", () => {
   const result = runPlanOrchestrator(
     "validate-stack-ready",
@@ -597,4 +669,14 @@ test("validate-stack-ready reports missing stack tip without unsupported host no
     result.stderr,
     /delivery_blocked: unsupported stack\/review host/,
   );
+});
+
+test("fixture treats session handoff before stack-ready as delivery-blocked", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    fixture("session-handoff-blocked.yaml"),
+  );
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /orchestrator_resume valid/);
 });
