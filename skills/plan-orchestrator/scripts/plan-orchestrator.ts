@@ -127,7 +127,16 @@ plan_review_request:
 
 function validatePlanningReview(input: string): void {
   const errors = legacyPlanContractErrors(input);
-  validatePlanningReviewContract(input, errors);
+  const review = validatePlanningReviewContract(input, errors);
+
+  if (
+    review.review_artifact &&
+    !isFullscriptGitLabMergeRequest(review.review_artifact)
+  ) {
+    errors.push(
+      "delivery_blocked: unsupported stack/review host; Nitro-reviewed stacked delivery requires a Fullscript GitLab merge request review_artifact",
+    );
+  }
 
   if (errors.length > 0) {
     console.error(
@@ -346,6 +355,14 @@ function validateStackReady(input: string): void {
       "stack_ready.stack must include planning and implementation artifacts",
     );
   }
+  const unsupportedArtifacts = stackArtifacts.filter(
+    (artifact) => !isFullscriptGitLabMergeRequest(artifact),
+  );
+  if (unsupportedArtifacts.length > 0) {
+    errors.push(
+      "delivery_blocked: unsupported stack/review host; stack_ready.stack artifacts must be Fullscript GitLab merge requests",
+    );
+  }
   if (!roles.includes("planning") || !roles.includes("implementation")) {
     errors.push(
       "stack_ready.stack must include planning and implementation roles",
@@ -411,6 +428,18 @@ function isCommand(command: string | undefined): command is Command {
 function git(args: string[]): string | null {
   const result = spawnSync("git", args, { encoding: "utf8" });
   return result.status === 0 ? result.stdout.trim() : null;
+}
+
+function isFullscriptGitLabMergeRequest(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      url.hostname === "git.fullscript.io" &&
+      /\/-\/merge_requests\/\d+(?:\/)?$/.test(url.pathname)
+    );
+  } catch {
+    return false;
+  }
 }
 
 function allScalars(input: string, key: string): string[] {

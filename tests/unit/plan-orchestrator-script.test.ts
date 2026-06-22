@@ -77,7 +77,7 @@ const planningReview = `planning_review:
   status: reviewed
   artifact_type: plan
   artifact_ref: .agents/plans/example.md
-  review_artifact: https://example.test/review/1
+  review_artifact: https://git.fullscript.io/group/project/-/merge_requests/1
   mode: stacked_delivery
   gate_outcome: ready_for_stack
   target_branch: main
@@ -218,6 +218,22 @@ test("validate-planning-review rejects retired planning modes", () => {
   );
 });
 
+test("validate-planning-review blocks unsupported review hosts", () => {
+  const result = runPlanOrchestrator(
+    "validate-planning-review",
+    planningReview.replace(
+      "https://git.fullscript.io/group/project/-/merge_requests/1",
+      "https://github.com/example/project/pull/1",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /delivery_blocked: unsupported stack\/review host/,
+  );
+});
+
 test("validate-resume accepts inspected stack state", () => {
   const result = runPlanOrchestrator("validate-resume", resumeReport);
 
@@ -243,4 +259,20 @@ test("validate-stack-ready rejects pending Nitro gates", () => {
 
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /nitro_gate_outcome must be passed/);
+});
+
+test("validate-stack-ready blocks unsupported stack hosts", () => {
+  const result = runPlanOrchestrator(
+    "validate-stack-ready",
+    stackReady.replace(
+      "    - artifact: https://git.fullscript.io/group/project/-/merge_requests/2",
+      "    - artifact: https://github.com/example/project/pull/2",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /delivery_blocked: unsupported stack\/review host/,
+  );
 });

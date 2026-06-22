@@ -42,6 +42,10 @@ Implementation may start only when `plan-review` emits a validated
 Do not accept `ship_then_continue` or `stack_when_ready`. Treat them as legacy
 inputs and return `needs_plan_ready`.
 
+Before sequencing, verify that the planning review and implementation stack can
+use Nitro-reviewed Fullscript GitLab merge requests. Unsupported review or stack
+hosts are not a fallback path; report `delivery_blocked` with routing evidence.
+
 ## OpenSpec Proposal Flow
 
 For `openspec_blueprint` outputs:
@@ -75,6 +79,13 @@ and rerun Nitro gates for every changed head before continuing.
 
 ## Completion
 
+The only orchestrator-level terminal states after reviewed planning are:
+
+- `stack_ready`: the full planning plus implementation stack is reviewed and
+  ready for merge follow-through.
+- `delivery_blocked`: the workflow cannot continue without a fix, external
+  action, supported artifact host, or later retry from durable resume evidence.
+
 Finish with `stack_ready` only after:
 
 - the planning MR and every implementation MR have latest-head Nitro gate
@@ -105,6 +116,7 @@ validate-stack-ready`.
 | No `planning_review` before sequencing | Return `needs_reviewed_planning`. |
 | OpenSpec validation failure | Return `openspec_proposal_blocked`. |
 | Pending planning review | Return `planning_review_blocked`. |
+| Unsupported review or stack host | Return `delivery_blocked` with routing evidence. |
 
 ## Output Rule
 

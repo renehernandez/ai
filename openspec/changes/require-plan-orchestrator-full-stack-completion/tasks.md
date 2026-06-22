@@ -1,6 +1,6 @@
 ## 1. Full-Stack Orchestration Contract
 
-- [ ] 1.1 Tighten orchestrator contract and host preflight
+- [x] 1.1 Tighten orchestrator contract and host preflight
       Update `skills/plan-orchestrator` docs, adapter prompts, templates, and
       host-capability preflight so partial OpenSpec delivery cannot be terminal
       success. Unsupported stack/review hosts must produce `delivery_blocked`
