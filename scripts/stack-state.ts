@@ -113,7 +113,7 @@ export function validateUnitTaskDelta(
     );
   } else if (expectedHeadTask && !expectedHeadTask.checked) {
     errors.push(
-      `unit_task_delta_missing: expected task ${expectedTaskId} is not checked in head tasks.md`,
+      `unit_task_delta_missing: expected task ${expectedTaskId} was not checked`,
     );
   }
 
@@ -127,12 +127,24 @@ export function validateUnitTaskDelta(
     );
   }
 
-  const unexpectedNewlyChecked = newlyCheckedDeliverables.filter(
+  if (
+    newlyCheckedDeliverables.length === 1 &&
+    newlyCheckedDeliverables[0].id !== expectedTaskId
+  ) {
+    errors.push(
+      `unit_task_delta_unexpected: checked ${newlyCheckedDeliverables[0].id} instead of ${expectedTaskId}`,
+    );
+  }
+
+  const unexpectedNewlyCheckedTasks = newlyChecked.filter(
     (task) => task.id !== expectedTaskId,
   );
-  if (unexpectedNewlyChecked.length > 0) {
+  if (
+    unexpectedNewlyCheckedTasks.length > 0 &&
+    newlyCheckedDeliverables.length <= 1
+  ) {
     errors.push(
-      `unit_task_delta_unexpected: checked extra tasks ${unexpectedNewlyChecked.map((task) => task.id).join(", ")}`,
+      `unit_task_delta_unexpected: checked extra tasks ${unexpectedNewlyCheckedTasks.map((task) => task.id).join(", ")}`,
     );
   }
 
