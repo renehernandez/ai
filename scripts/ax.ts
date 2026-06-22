@@ -706,13 +706,23 @@ function addCommitCommand(program: Command): void {
         process.exitCode = 1;
         return;
       }
-      if (!hasStagedDiff(process.cwd())) {
-        console.error("No staged diff to commit.");
+      let validation: ReturnType<typeof validateReviewGateForCommit>;
+      try {
+        if (!hasStagedDiff(process.cwd())) {
+          console.error("No staged diff to commit.");
+          process.exitCode = 1;
+          return;
+        }
+        validation = validateReviewGateForCommit(process.cwd());
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(
+          `Unable to validate review gate: ${message.split(/\r?\n/, 1)[0]}`,
+        );
         process.exitCode = 1;
         return;
       }
 
-      const validation = validateReviewGateForCommit(process.cwd());
       if (!validation.ok) {
         process.stderr.write(formatReviewGateStatus(validation));
         process.exitCode = 1;
@@ -781,7 +791,12 @@ function parseAxCommitArgs(args: string[]): {
       continue;
     }
     if (arg.startsWith("--message=")) {
-      gitArgs.push("--message", arg.slice("--message=".length));
+      const message = arg.slice("--message=".length);
+      if (!message) {
+        errors.push("--message requires a commit message");
+      } else {
+        gitArgs.push("--message", message);
+      }
       continue;
     }
     if (arg.startsWith("-")) {

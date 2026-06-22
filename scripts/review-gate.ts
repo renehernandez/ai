@@ -55,7 +55,7 @@ export function ensureReviewGateStateDirectory(cwd = process.cwd()): string {
 }
 
 export function stagedDiffHash(cwd = process.cwd()): string {
-  const diff = gitOutputRaw(["diff", "--cached", "--binary"], cwd);
+  const diff = gitOutputBuffer(["diff", "--cached", "--binary"], cwd);
   return `sha256:${createHash("sha256").update(diff).digest("hex")}`;
 }
 
@@ -323,6 +323,23 @@ function gitOutputRaw(args: string[], cwd: string): string {
   });
   if (result.status !== 0) {
     throw new Error((result.stderr || result.stdout || "git failed").trim());
+  }
+  return result.stdout;
+}
+
+function gitOutputBuffer(args: string[], cwd: string): Buffer {
+  const result = spawnSync("git", args, {
+    cwd,
+    env: withoutGitRepositoryEnv(),
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      (
+        result.stderr.toString("utf-8") ||
+        result.stdout.toString("utf-8") ||
+        "git failed"
+      ).trim(),
+    );
   }
   return result.stdout;
 }

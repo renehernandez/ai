@@ -975,6 +975,36 @@ test("ax commit rejects empty explicit commit messages without pathspec noise", 
   }
 });
 
+test("ax commit rejects empty equals-form commit messages", () => {
+  const cwd = createGitFixture("ax-commit-empty-equals-message-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+
+    const result = runAgentRuntime(["commit", "--message="], { cwd });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /--message requires a commit message/);
+    assert.equal(runGit(["status", "--short"], { cwd }), "A  file.txt");
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("ax commit reports review-gate git errors without stack traces", () => {
+  const cwd = mkdtempSync(join(tmpdir(), "ax-commit-not-git-"));
+  try {
+    const result = runAgentRuntime(["commit", "-m", "outside git"], { cwd });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Unable to validate review gate:/);
+    assert.doesNotMatch(result.stderr, /Error:/);
+    assert.doesNotMatch(result.stderr, /\n\s+at /);
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
 test("ax commit rejects commit-shape-mutating flags", () => {
   const cwd = createGitFixture("ax-commit-rejects-");
   try {
