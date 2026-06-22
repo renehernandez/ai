@@ -21,8 +21,8 @@ All work goes through planning review before implementation:
 4. If `plan-ready` emits `plan_delivery_handoff`, create a
    `plan_review_request` and run `plan-review`.
 5. If `plan-ready` emits `openspec_blueprint`, create the OpenSpec proposal with
-   the configured OpenSpec propose entrypoint, run strict OpenSpec validation,
-   create a `plan_review_request`, and run `plan-review`.
+   the configured OpenSpec propose entrypoint, apply the source-plan cleanup
+   rule below, create a `plan_review_request`, and run `plan-review`.
 6. Consume only a validated `planning_review` handoff before implementation.
 7. Run `plan-unit-sequencer` for unit selection.
 8. Let `plan-unit-delivery` implement exactly one selected unit at a time.
@@ -55,13 +55,28 @@ hosts are not a fallback path; report `delivery_blocked` with routing evidence.
 
 For `openspec_blueprint` outputs:
 
-1. Create the OpenSpec change from the blueprint using the repo's configured
+1. Confirm the source `.agents/plans/**` intake file is not already committed.
+   If it is already committed, block conversion and repair the branch; do not
+   publish a deletion-only source-plan diff for an OpenSpec planning review.
+2. Create the OpenSpec change from the blueprint using the repo's configured
    OpenSpec propose entrypoint.
-2. Run `openspec validate <change-id> --strict --no-interactive`.
-3. Run the repo-local OpenSpec scaffolding validation when available.
-4. Run `plan-review` against the OpenSpec change.
-5. Do not start implementation until `plan-review` emits valid
+3. Run `openspec validate <change-id> --strict --no-interactive`.
+4. Run the repo-local OpenSpec scaffolding validation when available.
+5. If OpenSpec creation and all applicable validation steps pass, delete the
+   source `.agents/plans/**` intake file before publishing review. Applicable
+   validation steps include strict OpenSpec validation and repo-local
+   scaffolding validation when available. If creation or any applicable
+   validation step fails, preserve the source plan for repair.
+6. Run `plan-review` against the OpenSpec change. For `artifact_type:
+   openspec`, the planning branch diff must contain the OpenSpec change and no
+   `.agents/plans/**` files.
+7. Do not start implementation until `plan-review` emits valid
    `planning_review`.
+
+Atomic plan review is unchanged: when `plan-ready` emits
+`plan_delivery_handoff` for `artifact_type: plan`, `.agents/plans/**` remains
+the durable reviewed planning artifact and must not be deleted by this
+OpenSpec cleanup rule.
 
 ## Resume Flow
 

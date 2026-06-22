@@ -26,6 +26,15 @@ These rules govern when to diagnose, when to edit, and how to route implementati
 - Do not refer to retired agent names or require a subagent that is not available in the current harness.
 - For implementation work that needs planning, review-first delivery, stacked PRs/MRs, or multi-step coordination, use `plan-orchestrator` and its related plan workflow skills.
 - Do not commit or push non-feature implementation work unless the user explicitly asks or the approved plan requires it.
+- In plan-to-OpenSpec conversion, `.agents/plans/**` files are scratch intake.
+  Delete the source plan only after the OpenSpec change is created, strict
+  validation passes, and repo-local OpenSpec scaffolding validation passes when
+  available. Preserve it when creation or validation fails. If the source plan
+  is already committed, block and repair the branch instead of publishing a
+  deletion-only source-plan diff. For `artifact_type: openspec`, the
+  planning-review diff must contain no `.agents/plans/**` paths. For
+  `artifact_type: plan`, `.agents/plans/**` remains a valid reviewed planning
+  artifact.
 
 ## Local Code Review
 
