@@ -13,7 +13,7 @@ This is separate from `ai-readiness-upkeep`: docs alignment decides whether the 
 
 ## When To Use
 
-Use during plan-unit-delivery workflows, feature-delivery quality gates, PR reviews, background review rubrics, and before opening or updating a PR. Skip for pure formatting changes or mechanical generated-file churn unless the generated change affects documented behavior.
+Use during plan-unit-delivery workflows, PR reviews, background review rubrics, and before opening or updating a PR. Skip for pure formatting changes or mechanical generated-file churn unless the generated change affects documented behavior.
 
 ## Workflow
 

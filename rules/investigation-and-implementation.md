@@ -24,7 +24,7 @@ These rules govern when to diagnose, when to edit, and how to route implementati
 - When the user asks to implement, fix, build, or apply changes, work in the current agent session by default.
 - Skills and workflows may delegate to available local, cloud, or custom subagents when they define a bounded implementation, exploration, or verification lane.
 - Do not refer to retired agent names or require a subagent that is not available in the current harness.
-- For feature implementation work, follow [feature-delivery.md](feature-delivery.md) through PR creation and CI follow-through unless the user explicitly asks to stop earlier.
+- For implementation work that needs planning, review-first delivery, stacked PRs/MRs, or multi-step coordination, use `plan-orchestrator` and its related plan workflow skills.
 - Do not commit or push non-feature implementation work unless the user explicitly asks or the approved plan requires it.
 
 ## Local Code Review

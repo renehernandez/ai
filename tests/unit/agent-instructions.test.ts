@@ -30,7 +30,7 @@ for (const file of ["AGENTS.md", "instructions/AGENTS.md"] as const) {
 for (const file of [
   "AGENTS.md",
   "instructions/AGENTS.md",
-  "rules/feature-delivery.md",
+  "skills/plan-orchestrator/SKILL.md",
 ] as const) {
   test(`${file} pins plan-orchestrator terminal states`, () => {
     const text = readFileSync(file, "utf-8");

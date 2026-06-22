@@ -39,7 +39,7 @@ These rules cover Git, GitHub, GitLab, Linear, review routing, and external comm
 - Always ask before committing or pushing to default branches such as `main` or `master`.
 - In this `ai` repo, user requests to commit and push completed work are approval to commit on `main` and push `main` to the `github` remote. Do not create feature branches, hosted review branches, PRs, or MRs for this repo unless the user explicitly asks.
 - For this repo, GitHub is the primary `main` publishing remote. Push `main` with the `github` remote; it has multiple push URLs and updates GitHub first, then GitLab. Do not push `main` directly to the GitLab `origin` remote unless the user explicitly asks or the multi-push remote is broken.
-- For feature work, follow [feature-delivery.md](feature-delivery.md): run the pre-commit quality gate, commit the feature branch, push it, create or update the artifact-host PR/MR, monitor CI, and fix branch-caused failures.
+- For reviewed plan work, let `plan-unit-delivery` own implementation gates before commit and artifact-host follow-through after push.
 - Never include `Co-Authored-By: Claude` or similar co-author attribution lines in MR or PR descriptions.
 
 ## MR and PR Description Maintenance

@@ -11,8 +11,8 @@ Portable user-level instructions that are installed into runtime profiles live i
 - Then apply this file and the linked files under [rules/](rules/).
 - If a rule names a tool that is unavailable in the current harness, use the closest safe equivalent and say what changed.
 - Do not commit, push, install dependencies, or run destructive commands unless the user explicitly asks.
-- A feature implementation request counts as approval to complete the feature-delivery workflow in [rules/feature-delivery.md](rules/feature-delivery.md) unless the user says to stop before commit, push, or PR.
-- If the user says "feature delivery workflow", "follow feature delivery", or similar, immediately read and apply [rules/feature-delivery.md](rules/feature-delivery.md); do not search only the project repo and conclude it is missing.
+- For implementation work that needs planning, review-first delivery, stacked PRs/MRs, or multi-step coordination, route through `plan-orchestrator` and the related plan workflow skills.
+- For small direct implementation work, use the current session and the project's local verification/review rules unless the user explicitly asks for a plan workflow.
 
 ## Quick Operating Rules
 

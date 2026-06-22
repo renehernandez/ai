@@ -27,6 +27,11 @@ All work goes through planning review before implementation:
 7. Run `plan-unit-sequencer` for unit selection.
 8. Let `plan-unit-delivery` implement exactly one selected unit at a time.
 
+Intermediate outputs such as `plan_delivery_handoff`, `openspec_blueprint`,
+`planning_review`, or one delivered unit are not terminal success for
+`plan-orchestrator`; continue until `stack_ready` or report `delivery_blocked`
+with evidence.
+
 ## Stacked Delivery Mode
 
 The only implementation mode is `stacked_delivery`.

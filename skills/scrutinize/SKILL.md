@@ -16,7 +16,7 @@ This is not a generic review. Use the normal review skills for their scopes; use
 - plan, design doc, architecture, or proposed approach scrutiny
 - implementation diff, branch, PR, hosted review feedback, or merge-readiness scrutiny
 - sanity checks, second opinions, and adversarial validation requests
-- mandatory `feature-delivery` and `plan-unit-delivery` gates
+- mandatory `plan-ready`, `plan-review`, and `plan-unit-delivery` gates
 
 Do not use for pure formatting review, prose polish, status briefs, or implementation without a review gate.
 
@@ -100,6 +100,6 @@ Verdicts:
 
 ## Test Evidence
 
-- RED: current feature-delivery and plan-unit-delivery docs allowed completion without any mandatory adversarial scrutiny gate.
+- RED: earlier direct-delivery and plan-unit-delivery docs allowed completion without any mandatory adversarial scrutiny gate.
 - GREEN: with this skill loaded, the duplicate-helper and retry-claim scenarios produced evidence-backed `MAJOR` findings and `fix-then-ship` verdicts.
 - REFACTOR: with this skill loaded, plausible but unproven concurrency and CI concerns stayed under residual risk instead of becoming findings.
