@@ -15,11 +15,14 @@ For general GitLab CLI commands, use `glab-cli`.
 ## When to Use
 
 - Feature work or a bug fix is ready for GitLab review.
-- The user asks to create, open, draft, or prepare a GitLab MR.
+- The user explicitly asks to create, open, draft, or prepare a GitLab MR.
 - `plan-unit-delivery` or `plan-review` detects a GitLab remote and needs the MR creation step.
+- `change-request-create` selected GitLab as the provider adapter.
 - The repo is hosted in the Fullscript Lab GitLab instance.
 
 Do not use for GitHub pull requests; use the GitHub PR creation skill instead.
+For host-neutral PR/MR/change request wording, use `change-request-create`
+first so routing and full description policy stay in one place.
 
 ## Workflow
 
@@ -59,13 +62,13 @@ Do not use for GitHub pull requests; use the GitHub PR creation skill instead.
 
 6. Build the MR body. Prefer project templates when available.
 
-   Keep the body reviewer-facing:
+   Keep the body reviewer-facing. For neutral or mixed-host requests, apply
+   `change-request-create` before this adapter. For direct GitLab use:
    - Explain why the change exists and where reviewers should focus.
-   - Include exact verification or RED/GREEN evidence when it helps reviewers understand risk.
-   - Do not reference local-only plans, temporary files, verification ledgers, internal reviewer gates, subagent gates, or automation-routing details unless those artifacts are committed in the MR and useful to the reviewer.
-   - If the user excluded a plan, pressure test file, helper script, or other artifact from the MR, do not tell reviewers to inspect it. Make the necessary evidence self-contained in the MR body.
-   - Link directly to upstream repositories, tools, specs, issues, or related MRs that reviewers need. Use actual URLs, not bare names.
-   - Report hosted status only when it is useful to reviewers. Prefer concrete facts like "no pipeline was created for this branch" over local workflow bookkeeping.
+   - Preserve project template sections and required checklist semantics.
+   - Include targeted evidence or hosted status only when it helps reviewers understand risk.
+   - Omit unnecessary author-workflow references and routine validation already represented by CI or repository hooks.
+   - Link directly to reviewer-needed issues, related MRs, or upstream resources.
 
    Fallback body:
    ```markdown
@@ -125,12 +128,14 @@ Do not use for GitHub pull requests; use the GitHub PR creation skill instead.
 | Guessing target branch | Read remote HEAD, branch config, or project docs |
 | Leaking local process into the MR body | Keep reviewer evidence self-contained and omit local-only artifacts |
 | Naming upstream resources without links | Include actual URLs for reviewer-needed references |
+| Handling a neutral PR/MR request here | Use `change-request-create` before provider mutation |
 
 ## Validation Scenarios
 
 - GitLab branch with an existing open MR: pass only if the agent checks `glab mr list --source-branch` before creating a duplicate.
 - GitLab repo with multiple remotes or hosts: pass only if the agent verifies the intended artifact remote before pushing or creating the MR.
 - User asks for a ready MR: pass only if the agent does not force `--draft` and reports the readiness choice.
+- User asks for a host-neutral change request: pass only if the agent routes through `change-request-create` instead of this provider adapter directly.
 - Process-heavy change with local plans, pressure tests, or internal review gates: pass only if the MR body includes self-contained reviewer evidence, omits references to excluded/local artifacts, and links directly to reviewer-needed upstream resources.
 
 ## Test Evidence
