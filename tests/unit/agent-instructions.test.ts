@@ -27,6 +27,17 @@ for (const file of ["AGENTS.md", "instructions/AGENTS.md"] as const) {
   });
 }
 
+for (const file of ["AGENTS.md", "instructions/AGENTS.md"] as const) {
+  test(`${file} routes agent commits through ax commit`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /ax commit/);
+    assert.match(text, /local review gate/);
+    assert.match(text, /instead of raw `git commit`/);
+    assert.match(text, /user's manual terminal/);
+  });
+}
+
 for (const file of [
   "AGENTS.md",
   "instructions/AGENTS.md",

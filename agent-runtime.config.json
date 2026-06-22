@@ -6,6 +6,7 @@
     "reusableScripts": [
       "scripts/nitro-feedback-gate.ts",
       "scripts/planning-contracts.ts",
+      "scripts/review-gate.ts",
       "scripts/stack-state.ts"
     ],
     "instructionSymlinkTargets": {

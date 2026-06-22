@@ -80,6 +80,10 @@ function withFixture(
       targetPath: "scripts/nitro-feedback-gate.ts",
     },
     {
+      sourcePath: join(repoRoot, "scripts/review-gate.ts"),
+      targetPath: "scripts/review-gate.ts",
+    },
+    {
       sourcePath: join(repoRoot, "scripts/stack-state.ts"),
       targetPath: "scripts/stack-state.ts",
     },
@@ -184,6 +188,39 @@ function runGit(args: string[], options: RunOptions = {}): string {
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
   return result.stdout.trim();
+}
+
+function createGitFixture(prefix = "ax-git-"): string {
+  const cwd = mkdtempSync(join(tmpdir(), prefix));
+  runGit(["init"], { cwd });
+  runGit(["config", "user.email", "agent@example.com"], { cwd });
+  runGit(["config", "user.name", "Agent Runtime"], { cwd });
+  return cwd;
+}
+
+function stagedHash(cwd: string): string {
+  const result = spawnSync("git", ["diff", "--cached", "--binary"], {
+    cwd,
+    encoding: "utf-8",
+    env: withoutGitRepositoryEnv(),
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const diff = result.stdout;
+  return `sha256:${createHash("sha256").update(diff).digest("hex")}`;
+}
+
+function writeReviewGateState(
+  cwd: string,
+  state: Record<string, unknown>,
+): void {
+  const gitDir = runGit(["rev-parse", "--git-dir"], { cwd });
+  const gitPath = gitDir.startsWith(sep) ? gitDir : join(cwd, gitDir);
+  mkdirSync(join(gitPath, "ax"), { recursive: true });
+  writeFileSync(
+    join(gitPath, "ax", "review-gate.json"),
+    `${JSON.stringify(state, null, 2)}\n`,
+    "utf-8",
+  );
 }
 
 function matchCount(input: string, pattern: RegExp): number {
@@ -443,6 +480,8 @@ test("CLI shows global help", () => {
   assert.match(result.stdout, /hooks/);
   assert.match(result.stdout, /instructions/);
   assert.match(result.stdout, /openspec/);
+  assert.match(result.stdout, /review-gate/);
+  assert.match(result.stdout, /commit/);
   assert.match(result.stdout, /skills/);
 });
 
@@ -466,6 +505,259 @@ test("CLI shows hooks scope help", () => {
   assert.match(result.stdout, /status/);
   assert.match(result.stdout, /update/);
   assert.match(result.stdout, /validate/);
+});
+
+test("review-gate validate-commit allows missing inactive gate state", () => {
+  const cwd = createGitFixture("ax-review-gate-missing-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+
+    const result = runAgentRuntime(["review-gate", "validate-commit"], { cwd });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /No review gate state found; allowing commit/);
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("review-gate status reports active gate diagnostics without failing", () => {
+  const cwd = createGitFixture("ax-review-gate-status-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+    writeReviewGateState(cwd, {
+      version: 1,
+      active: true,
+      stagedDiffHash: stagedHash(cwd),
+      requiredReviewPasses: ["implementation-review", "docs-alignment-review"],
+      results: {
+        "implementation-review": {
+          status: "passed",
+          diffHash: stagedHash(cwd),
+        },
+      },
+      blockingFindings: [{ message: "docs missing" }],
+    });
+
+    const result = runAgentRuntime(["review-gate", "status"], { cwd });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /state_path:/);
+    assert.match(result.stdout, /active: true/);
+    assert.match(result.stdout, /required_review_passes:/);
+    assert.match(result.stdout, /missing_review_passes: docs-alignment-review/);
+    assert.match(result.stdout, /blocking_findings: 1/);
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("review-gate validate-commit rejects missing review passes and blocking findings", () => {
+  const cwd = createGitFixture("ax-review-gate-blocking-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+    writeReviewGateState(cwd, {
+      version: 1,
+      active: true,
+      stagedDiffHash: stagedHash(cwd),
+      requiredReviewPasses: ["implementation-review"],
+      results: {},
+      blockingFindings: [{ message: "fix me" }],
+    });
+
+    const result = runAgentRuntime(["review-gate", "validate-commit"], { cwd });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Missing required review pass/);
+    assert.match(result.stderr, /unresolved blocking findings/);
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("review-gate validate-commit rejects stale active review results", () => {
+  const cwd = createGitFixture("ax-review-gate-stale-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+    writeReviewGateState(cwd, {
+      version: 1,
+      active: true,
+      stagedDiffHash: "sha256:old",
+      requiredReviewPasses: ["implementation-review"],
+      results: {
+        "implementation-review": {
+          status: "passed",
+          diffHash: "sha256:old",
+        },
+      },
+      blockingFindings: [],
+    });
+
+    const result = runAgentRuntime(["review-gate", "validate-commit"], { cwd });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Stale review pass/);
+    assert.match(result.stderr, /Review gate staged diff hash is stale/);
+    assert.match(result.stderr, /rerun required local reviews/);
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("review-gate validate-commit rejects malformed gate JSON", () => {
+  const cwd = createGitFixture("ax-review-gate-malformed-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+    const gitDir = runGit(["rev-parse", "--git-dir"], { cwd });
+    const gitPath = gitDir.startsWith(sep) ? gitDir : join(cwd, gitDir);
+    mkdirSync(join(gitPath, "ax"), { recursive: true });
+    writeFileSync(join(gitPath, "ax", "review-gate.json"), "{ nope\n", "utf-8");
+
+    const result = runAgentRuntime(["review-gate", "validate-commit"], { cwd });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /not valid JSON/);
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("review-gate validate-commit rejects incomplete active gate state", () => {
+  const cwd = createGitFixture("ax-review-gate-incomplete-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+    writeReviewGateState(cwd, {
+      version: 1,
+      active: true,
+    });
+
+    const result = runAgentRuntime(["review-gate", "validate-commit"], { cwd });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /requires stagedDiffHash/);
+    assert.match(result.stderr, /requires requiredReviewPasses/);
+    assert.match(result.stderr, /requires results/);
+    assert.match(result.stderr, /requires blockingFindings/);
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("review-gate validate-commit accepts passed active review results", () => {
+  const cwd = createGitFixture("ax-review-gate-passed-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+    const hash = stagedHash(cwd);
+    writeReviewGateState(cwd, {
+      version: 1,
+      active: true,
+      stagedDiffHash: hash,
+      requiredReviewPasses: ["implementation-review", "docs-alignment-review"],
+      results: {
+        "implementation-review": {
+          status: "passed",
+          diffHash: hash,
+        },
+        "docs-alignment-review": {
+          status: "passed",
+          diffHash: hash,
+        },
+      },
+      blockingFindings: [],
+    });
+
+    const result = runAgentRuntime(["review-gate", "validate-commit"], { cwd });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /active: true/);
+    assert.match(
+      result.stdout,
+      /completed_review_passes: implementation-review, docs-alignment-review/,
+    );
+    assert.match(result.stdout, /next: ax commit/);
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("ax commit delegates normal staged commits after review-gate validation", () => {
+  const cwd = createGitFixture("ax-commit-delegates-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+
+    const result = runAgentRuntime(["commit", "-m", "add fixture file"], {
+      cwd,
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(
+      runGit(["log", "-1", "--pretty=%s"], { cwd }),
+      "add fixture file",
+    );
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("ax commit refuses commits when active review-gate validation fails", () => {
+  const cwd = createGitFixture("ax-commit-blocked-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+    writeReviewGateState(cwd, {
+      version: 1,
+      active: true,
+      stagedDiffHash: "sha256:old",
+      requiredReviewPasses: ["implementation-review"],
+      results: {},
+      blockingFindings: [],
+    });
+
+    const result = runAgentRuntime(["commit", "-m", "should not commit"], {
+      cwd,
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Missing required review pass/);
+    assert.match(result.stderr, /Review gate staged diff hash is stale/);
+    assert.equal(runGit(["status", "--short"], { cwd }), "A  file.txt");
+    assert.notEqual(
+      spawnSync("git", ["rev-parse", "--verify", "HEAD"], {
+        cwd,
+        encoding: "utf-8",
+        env: withoutGitRepositoryEnv(),
+      }).status,
+      0,
+    );
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("ax commit rejects commit-shape-mutating flags", () => {
+  const cwd = createGitFixture("ax-commit-rejects-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+
+    const result = runAgentRuntime(["commit", "--amend", "-m", "rewrite"], {
+      cwd,
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Unsupported ax commit mode: --amend/);
+    assert.equal(runGit(["status", "--short"], { cwd }), "A  file.txt");
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
 });
 
 test("CLI installs missing OpenSpec scaffolding and updates configured projects", () => {

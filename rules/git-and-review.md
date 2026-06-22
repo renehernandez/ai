@@ -32,7 +32,8 @@ These rules cover Git, GitHub, GitLab, Linear, review routing, and external comm
 
 ## Git Commits
 
-- Always use the `/glab-commit` skill when committing and pushing changes.
+- Agents must use `ax commit` for commits instead of invoking `git commit` manually. `ax commit` validates local review-gate state before delegating to Git and preserves the user's manual terminal escape hatch.
+- Legacy slash commit helpers may still shape commit messages or host-specific publish flow when explicitly available, but they must not bypass `ax commit` for agent-authored commits.
 - Never use `--no-verify` when committing.
 - Do not force push for ordinary follow-up work, review feedback, or CI fixes. Use subsequent commits because the user's hosted diffs are squash-merged. Force push only when it is necessary to resolve a Git history change, rebase, conflict, stale remote update, or when the user explicitly asks for a history rewrite.
 - If a commit fails due to pre-commit hooks, fix branch-caused failures and retry; ask the user how to proceed only when the failure is unrelated, external, or requires a product decision.
@@ -53,7 +54,7 @@ These rules cover Git, GitHub, GitLab, Linear, review routing, and external comm
 ## Creating Hosted Reviews from a Dirty Working Tree
 
 - When a hosted-review creation skill such as `/glab-mr-create` is invoked on a non-default branch with uncommitted changes, commit and push the relevant changes before creating the MR or PR. Do not ask first unless the diff includes unrelated user changes, secrets, generated noise, or a failed verification decision.
-- Use `/glab-commit` or the equivalent commit workflow to author the commit. Standard rules still apply: no `--no-verify`, no default-branch push without confirmation, and no co-author attribution in commits.
+- Use `ax commit` or the equivalent review-gated commit workflow to author the commit. Standard rules still apply: no `--no-verify`, no default-branch push without confirmation, and no co-author attribution in commits.
 - After committing and pushing, continue the hosted review creation workflow.
 
 ## Local Code Review

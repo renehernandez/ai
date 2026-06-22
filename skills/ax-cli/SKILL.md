@@ -43,6 +43,8 @@ copies, or raw upstream OpenSpec setup.
 | AGENTS.md/rules instructions | `instructions` |
 | Hooks | `hooks` |
 | Repo-local OpenSpec scaffolding | `openspec` |
+| Commit through the local review gate | `commit` |
+| Inspect or validate local review-gate state | `review-gate` |
 | Drift check without file mutation | `status` or `validate` before `install`/`update` |
 
 Use `install` for first-time runtime setup. Use `update` for already managed
@@ -69,6 +71,25 @@ default config path resolve to the durable AI repo. Repo-local scopes such as
 `openspec` target the current working directory. Do not silently run AI repo
 package scripts against a target repo to simulate global usage; use the linked
 binary or explicitly explain the source/config/target roots before proceeding.
+
+## Commit And Review Gate
+
+Agents should commit through `ax commit`, not raw `git commit`:
+
+```bash
+ax review-gate status
+ax review-gate validate-commit
+ax commit -m "Commit message"
+```
+
+`ax commit` validates the local review gate for the current staged diff before
+delegating to Git. When no active review gate exists, validation allows the
+commit with a note. When a gate is active, required review-pass evidence must
+match the staged diff.
+
+V1 supports normal staged commits with `-m` or `--message`. It rejects
+commit-shape-mutating or bypass modes such as `--amend`, `-a`, `--all`,
+`--include`, `--only`, pathspec commits, and `--no-verify`.
 
 ## OpenSpec Setup
 
@@ -163,3 +184,8 @@ command before finishing.
   `--profile personal` and used repo-local `openspec update` plus validation.
 - GREEN: with this skill loaded, shared-skill refresh pressure updated and
   validated both runtime profiles before treating the source change as live.
+- RED: baseline commit pressure treated `git commit -m` as the obvious agent
+  path and did not inspect local review-gate state before committing.
+- GREEN: with this skill loaded, commit pressure used `ax review-gate status`
+  or `ax review-gate validate-commit` for diagnostics and `ax commit -m` for
+  the actual commit path, while rejecting bypass or shape-changing flags.
