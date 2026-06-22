@@ -26,8 +26,8 @@ The system SHALL validate installed runtime surfaces after managed updates.
 - **AND** installed `plan-review` and `plan-unit-delivery` script execution
   checks prove the import resolves wherever it remains
 - **AND** the check distinguishes a currently broken installed helper from a
-  refresh-durability gap where the installed helper resolves but is not declared
-  in reusable runtime script configuration
+  refresh-durability gap where the installed helper resolves only from an
+  unmanaged file that is not declared in reusable runtime script configuration
 
 #### Scenario: Missing shared script import blocks delivery
 - **WHEN** an installed planning skill script fails because a shared helper
