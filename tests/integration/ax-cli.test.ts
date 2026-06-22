@@ -80,6 +80,10 @@ function withFixture(
       targetPath: "scripts/nitro-feedback-gate.ts",
     },
     {
+      sourcePath: join(repoRoot, "scripts/review-gate.ts"),
+      targetPath: "scripts/review-gate.ts",
+    },
+    {
       sourcePath: join(repoRoot, "scripts/stack-state.ts"),
       targetPath: "scripts/stack-state.ts",
     },
@@ -196,6 +200,39 @@ function runGit(args: string[], options: RunOptions = {}): string {
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
   return result.stdout.trim();
+}
+
+function createGitFixture(prefix = "ax-git-"): string {
+  const cwd = mkdtempSync(join(tmpdir(), prefix));
+  runGit(["init"], { cwd });
+  runGit(["config", "user.email", "agent@example.com"], { cwd });
+  runGit(["config", "user.name", "Agent Runtime"], { cwd });
+  return cwd;
+}
+
+function stagedHash(cwd: string): string {
+  const result = spawnSync("git", ["diff", "--cached", "--binary"], {
+    cwd,
+    encoding: "utf-8",
+    env: withoutGitRepositoryEnv(),
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const diff = result.stdout;
+  return `sha256:${createHash("sha256").update(diff).digest("hex")}`;
+}
+
+function writeReviewGateState(
+  cwd: string,
+  state: Record<string, unknown>,
+): void {
+  const gitDir = runGit(["rev-parse", "--git-dir"], { cwd });
+  const gitPath = gitDir.startsWith(sep) ? gitDir : join(cwd, gitDir);
+  mkdirSync(join(gitPath, "ax"), { recursive: true });
+  writeFileSync(
+    join(gitPath, "ax", "review-gate.json"),
+    `${JSON.stringify(state, null, 2)}\n`,
+    "utf-8",
+  );
 }
 
 function matchCount(input: string, pattern: RegExp): number {
@@ -407,51 +444,72 @@ test("global bin uses central config and target cwd for repo-local scope", () =>
 test("global status reports runtime roots and target OpenSpec readiness", () => {
   const targetDir = mkdtempSync(join(tmpdir(), "ax-status-"));
   try {
-    writeFileSync(
-      join(targetDir, "agent-runtime.config.json"),
-      "not valid json\n",
-      "utf-8",
-    );
-    const result = runAgentRuntimeBin(["status"], {
-      cwd: targetDir,
-      env: addOpenSpecStub(targetDir),
-    });
+    withTempHome((homeDir) => {
+      writeFileSync(
+        join(targetDir, "agent-runtime.config.json"),
+        "not valid json\n",
+        "utf-8",
+      );
+      const scriptsDir = join(homeDir, ".agents", "scripts");
+      mkdirSync(scriptsDir, { recursive: true });
+      for (const scriptName of [
+        "nitro-feedback-gate.ts",
+        "planning-contracts.ts",
+        "review-gate.ts",
+        "stack-state.ts",
+      ]) {
+        symlinkSync(
+          join(repoRoot, "scripts", scriptName),
+          join(scriptsDir, scriptName),
+        );
+      }
+      const result = runAgentRuntimeBin(["status"], {
+        cwd: targetDir,
+        env: { ...addOpenSpecStub(targetDir), HOME: homeDir },
+      });
 
-    assert.equal(result.status, 0, result.stderr || result.stdout);
-    assert.match(result.stdout, /AX/);
-    assert.match(
-      result.stdout,
-      new RegExp(`Source root: ${escapeRegExp(repoRoot)}`),
-    );
-    assert.match(
-      result.stdout,
-      new RegExp(
-        `Config path: ${escapeRegExp(join(repoRoot, "ax.config.json"))}`,
-      ),
-    );
-    assert.match(
-      result.stdout,
-      new RegExp(`Lock path: ${escapeRegExp(join(repoRoot, "ax.lock.json"))}`),
-    );
-    assert.match(
-      result.stdout,
-      new RegExp(`Cache path: ${escapeRegExp(join(repoRoot, ".ax", "cache"))}`),
-    );
-    assert.match(
-      result.stdout,
-      new RegExp(`Target root: ${escapeRegExp(realPathIfPossible(targetDir))}`),
-    );
-    assert.match(result.stdout, /\[ok\] Executable link:/);
-    assert.match(result.stdout, /Shim/);
-    assert.match(result.stdout, /\[missing\] Managed shim/);
-    assert.match(result.stdout, /Reusable script/);
-    assert.match(result.stdout, /OpenSpec/);
-    assert.match(result.stdout, /Health/);
-    assert.match(result.stdout, /\[warning\] Managed shim is not installed/);
-    assert.match(
-      result.stdout,
-      /\[missing\] OpenSpec config: openspec\/config.yaml/,
-    );
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.match(result.stdout, /AX/);
+      assert.match(
+        result.stdout,
+        new RegExp(`Source root: ${escapeRegExp(repoRoot)}`),
+      );
+      assert.match(
+        result.stdout,
+        new RegExp(
+          `Config path: ${escapeRegExp(join(repoRoot, "ax.config.json"))}`,
+        ),
+      );
+      assert.match(
+        result.stdout,
+        new RegExp(
+          `Lock path: ${escapeRegExp(join(repoRoot, "ax.lock.json"))}`,
+        ),
+      );
+      assert.match(
+        result.stdout,
+        new RegExp(
+          `Cache path: ${escapeRegExp(join(repoRoot, ".ax", "cache"))}`,
+        ),
+      );
+      assert.match(
+        result.stdout,
+        new RegExp(
+          `Target root: ${escapeRegExp(realPathIfPossible(targetDir))}`,
+        ),
+      );
+      assert.match(result.stdout, /\[ok\] Executable link:/);
+      assert.match(result.stdout, /Shim/);
+      assert.match(result.stdout, /\[missing\] Managed shim/);
+      assert.match(result.stdout, /Reusable script/);
+      assert.match(result.stdout, /OpenSpec/);
+      assert.match(result.stdout, /Health/);
+      assert.match(result.stdout, /\[warning\] Managed shim is not installed/);
+      assert.match(
+        result.stdout,
+        /\[missing\] OpenSpec config: openspec\/config.yaml/,
+      );
+    });
   } finally {
     rmSync(targetDir, { force: true, recursive: true });
   }
@@ -471,34 +529,39 @@ test("global status keeps default lock and cache roots under source root with ex
         ]);
         assert.equal(install.status, 0, install.stderr || install.stdout);
 
-        const result = runAgentRuntimeBin(["status", "--config", configPath], {
-          cwd: targetDir,
-          env: addOpenSpecStub(targetDir),
-        });
+        withTempHome((homeDir) => {
+          const result = runAgentRuntimeBin(
+            ["status", "--config", configPath],
+            {
+              cwd: targetDir,
+              env: { ...addOpenSpecStub(targetDir), HOME: homeDir },
+            },
+          );
 
-        assert.equal(result.status, 0, result.stderr || result.stdout);
-        assert.match(
-          result.stdout,
-          new RegExp(`Config path: ${escapeRegExp(configPath)}`),
-        );
-        assert.match(
-          result.stdout,
-          new RegExp(
-            `Lock path: ${escapeRegExp(join(repoRoot, "ax.lock.json"))}`,
-          ),
-        );
-        assert.match(
-          result.stdout,
-          new RegExp(
-            `Cache path: ${escapeRegExp(join(repoRoot, ".ax", "cache"))}`,
-          ),
-        );
-        assert.match(
-          result.stdout,
-          new RegExp(
-            `Target root: ${escapeRegExp(realPathIfPossible(targetDir))}`,
-          ),
-        );
+          assert.equal(result.status, 0, result.stderr || result.stdout);
+          assert.match(
+            result.stdout,
+            new RegExp(`Config path: ${escapeRegExp(configPath)}`),
+          );
+          assert.match(
+            result.stdout,
+            new RegExp(
+              `Lock path: ${escapeRegExp(join(repoRoot, "ax.lock.json"))}`,
+            ),
+          );
+          assert.match(
+            result.stdout,
+            new RegExp(
+              `Cache path: ${escapeRegExp(join(repoRoot, ".ax", "cache"))}`,
+            ),
+          );
+          assert.match(
+            result.stdout,
+            new RegExp(
+              `Target root: ${escapeRegExp(realPathIfPossible(targetDir))}`,
+            ),
+          );
+        });
       },
       (config) => {
         const runtime = config.runtime as Record<string, unknown>;
@@ -522,24 +585,23 @@ test("global status honors explicit profile selection", () => {
     ]);
     assert.equal(install.status, 0, install.stderr || install.stdout);
 
-    const result = runAgentRuntime([
-      "status",
-      "--profile",
-      "work",
-      "--config",
-      configPath,
-    ]);
+    withTempHome((homeDir) => {
+      const result = runAgentRuntime(
+        ["status", "--profile", "work", "--config", configPath],
+        { env: { HOME: homeDir } },
+      );
 
-    assert.equal(result.status, 0, result.stderr || result.stdout);
-    assert.match(result.stdout, /AX/);
-    assert.match(result.stdout, /Validated 1 profile/);
-    assert.match(result.stdout, /Profile work/);
-    assert.doesNotMatch(result.stdout, /Profile personal/);
-    assert.match(result.stdout, /Skills/);
-    assert.match(result.stdout, /Instructions/);
-    assert.match(result.stdout, /Hooks/);
-    assert.match(result.stdout, /OpenSpec/);
-    assert.match(result.stdout, /Health/);
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.match(result.stdout, /AX/);
+      assert.match(result.stdout, /Validated 1 profile/);
+      assert.match(result.stdout, /Profile work/);
+      assert.doesNotMatch(result.stdout, /Profile personal/);
+      assert.match(result.stdout, /Skills/);
+      assert.match(result.stdout, /Instructions/);
+      assert.match(result.stdout, /Hooks/);
+      assert.match(result.stdout, /OpenSpec/);
+      assert.match(result.stdout, /Health/);
+    });
   });
 });
 
@@ -610,6 +672,8 @@ test("CLI shows global help", () => {
   assert.match(result.stdout, /hooks/);
   assert.match(result.stdout, /instructions/);
   assert.match(result.stdout, /openspec/);
+  assert.match(result.stdout, /review-gate/);
+  assert.match(result.stdout, /commit/);
   assert.match(result.stdout, /shim/);
   assert.match(result.stdout, /skills/);
 });
@@ -634,6 +698,351 @@ test("CLI shows hooks scope help", () => {
   assert.match(result.stdout, /status/);
   assert.match(result.stdout, /update/);
   assert.match(result.stdout, /validate/);
+});
+
+test("review-gate validate-commit allows missing inactive gate state", () => {
+  const cwd = createGitFixture("ax-review-gate-missing-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+
+    const result = runAgentRuntime(["review-gate", "validate-commit"], { cwd });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /No review gate state found; allowing commit/);
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("review-gate status reports active gate diagnostics without failing", () => {
+  const cwd = createGitFixture("ax-review-gate-status-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+    writeReviewGateState(cwd, {
+      version: 1,
+      active: true,
+      stagedDiffHash: stagedHash(cwd),
+      requiredReviewPasses: ["implementation-review", "docs-alignment-review"],
+      results: {
+        "implementation-review": {
+          status: "passed",
+          diffHash: stagedHash(cwd),
+        },
+      },
+      blockingFindings: [{ message: "docs missing" }],
+    });
+
+    const result = runAgentRuntime(["review-gate", "status"], { cwd });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /state_path:/);
+    assert.match(result.stdout, /active: true/);
+    assert.match(result.stdout, /required_review_passes:/);
+    assert.match(result.stdout, /missing_review_passes: docs-alignment-review/);
+    assert.match(result.stdout, /blocking_findings: 1/);
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("review-gate validate-commit rejects missing review passes and blocking findings", () => {
+  const cwd = createGitFixture("ax-review-gate-blocking-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+    writeReviewGateState(cwd, {
+      version: 1,
+      active: true,
+      stagedDiffHash: stagedHash(cwd),
+      requiredReviewPasses: ["implementation-review"],
+      results: {},
+      blockingFindings: [{ message: "fix me" }],
+    });
+
+    const result = runAgentRuntime(["review-gate", "validate-commit"], { cwd });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Missing required review pass/);
+    assert.match(result.stderr, /unresolved blocking findings/);
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("review-gate validate-commit rejects stale active review results", () => {
+  const cwd = createGitFixture("ax-review-gate-stale-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+    writeReviewGateState(cwd, {
+      version: 1,
+      active: true,
+      stagedDiffHash: "sha256:old",
+      requiredReviewPasses: ["implementation-review"],
+      results: {
+        "implementation-review": {
+          status: "passed",
+          diffHash: "sha256:old",
+        },
+      },
+      blockingFindings: [],
+    });
+
+    const result = runAgentRuntime(["review-gate", "validate-commit"], { cwd });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Stale review pass/);
+    assert.match(result.stderr, /completed_review_passes: \(none\)/);
+    assert.match(result.stderr, /Review gate staged diff hash is stale/);
+    assert.match(result.stderr, /rerun required local reviews/);
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("review-gate validate-commit rejects malformed gate JSON", () => {
+  const cwd = createGitFixture("ax-review-gate-malformed-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+    const gitDir = runGit(["rev-parse", "--git-dir"], { cwd });
+    const gitPath = gitDir.startsWith(sep) ? gitDir : join(cwd, gitDir);
+    mkdirSync(join(gitPath, "ax"), { recursive: true });
+    writeFileSync(join(gitPath, "ax", "review-gate.json"), "{ nope\n", "utf-8");
+
+    const result = runAgentRuntime(["review-gate", "validate-commit"], { cwd });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /not valid JSON/);
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("review-gate validate-commit rejects incomplete active gate state", () => {
+  const cwd = createGitFixture("ax-review-gate-incomplete-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+    writeReviewGateState(cwd, {
+      version: 1,
+      active: true,
+    });
+
+    const result = runAgentRuntime(["review-gate", "validate-commit"], { cwd });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /requires stagedDiffHash/);
+    assert.match(result.stderr, /requires requiredReviewPasses/);
+    assert.match(result.stderr, /requires results/);
+    assert.match(result.stderr, /requires blockingFindings/);
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("review-gate validate-commit accepts passed active review results", () => {
+  const cwd = createGitFixture("ax-review-gate-passed-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+    const hash = stagedHash(cwd);
+    writeReviewGateState(cwd, {
+      version: 1,
+      active: true,
+      stagedDiffHash: hash,
+      requiredReviewPasses: ["implementation-review", "docs-alignment-review"],
+      results: {
+        "implementation-review": {
+          status: "passed",
+          diffHash: hash,
+        },
+        "docs-alignment-review": {
+          status: "passed",
+          diffHash: hash,
+        },
+      },
+      blockingFindings: [],
+    });
+
+    const result = runAgentRuntime(["review-gate", "validate-commit"], { cwd });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /active: true/);
+    assert.match(
+      result.stdout,
+      /completed_review_passes: implementation-review, docs-alignment-review/,
+    );
+    assert.match(result.stdout, /next: ax commit/);
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("ax commit delegates normal staged commits after review-gate validation", () => {
+  const cwd = createGitFixture("ax-commit-delegates-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+
+    const result = runAgentRuntime(["commit", "-m", "add fixture file"], {
+      cwd,
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(
+      runGit(["log", "-1", "--pretty=%s"], { cwd }),
+      "add fixture file",
+    );
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("ax commit ignores parent Git repository env when delegating", () => {
+  const cwd = createGitFixture("ax-commit-sanitizes-env-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+
+    const result = runAgentRuntime(["commit", "-m", "add fixture file"], {
+      cwd,
+      env: { GIT_INDEX_FILE: join(cwd, "alternate-index") },
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(
+      runGit(["log", "-1", "--pretty=%s"], { cwd }),
+      "add fixture file",
+    );
+    assert.equal(runGit(["status", "--short"], { cwd }), "");
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("ax commit refuses commits when active review-gate validation fails", () => {
+  const cwd = createGitFixture("ax-commit-blocked-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+    writeReviewGateState(cwd, {
+      version: 1,
+      active: true,
+      stagedDiffHash: "sha256:old",
+      requiredReviewPasses: ["implementation-review"],
+      results: {},
+      blockingFindings: [],
+    });
+
+    const result = runAgentRuntime(["commit", "-m", "should not commit"], {
+      cwd,
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Missing required review pass/);
+    assert.match(result.stderr, /Review gate staged diff hash is stale/);
+    assert.equal(runGit(["status", "--short"], { cwd }), "A  file.txt");
+    assert.notEqual(
+      spawnSync("git", ["rev-parse", "--verify", "HEAD"], {
+        cwd,
+        encoding: "utf-8",
+        env: withoutGitRepositoryEnv(),
+      }).status,
+      0,
+    );
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("ax commit rejects empty explicit commit messages without pathspec noise", () => {
+  const cwd = createGitFixture("ax-commit-empty-message-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+
+    const result = runAgentRuntime(["commit", "-m", ""], { cwd });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /-m requires a commit message/);
+    assert.doesNotMatch(result.stderr, /Pathspec commits are not supported/);
+    assert.equal(runGit(["status", "--short"], { cwd }), "A  file.txt");
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("ax commit rejects empty equals-form commit messages", () => {
+  const cwd = createGitFixture("ax-commit-empty-equals-message-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+
+    const result = runAgentRuntime(["commit", "--message="], { cwd });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /--message requires a commit message/);
+    assert.equal(runGit(["status", "--short"], { cwd }), "A  file.txt");
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("ax commit reports review-gate git errors without stack traces", () => {
+  const cwd = mkdtempSync(join(tmpdir(), "ax-commit-not-git-"));
+  try {
+    const result = runAgentRuntime(["commit", "-m", "outside git"], { cwd });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Unable to validate review gate:/);
+    assert.doesNotMatch(result.stderr, /Error:/);
+    assert.doesNotMatch(result.stderr, /\n\s+at /);
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("ax commit rejects commit-shape-mutating flags", () => {
+  const cwd = createGitFixture("ax-commit-rejects-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+
+    const result = runAgentRuntime(["commit", "--amend", "-m", "rewrite"], {
+      cwd,
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Unsupported ax commit mode: --amend/);
+    assert.equal(runGit(["status", "--short"], { cwd }), "A  file.txt");
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("ax commit rejects autosquash and message-reuse commit modes", () => {
+  const cwd = createGitFixture("ax-commit-rejects-autosquash-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+
+    for (const args of [
+      ["commit", "--fixup=HEAD", "-m", "fixup"],
+      ["commit", "--squash", "HEAD", "-m", "squash"],
+      ["commit", "-C", "HEAD"],
+      ["commit", "-c", "HEAD"],
+    ]) {
+      const result = runAgentRuntime(args, { cwd });
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /Unsupported ax commit mode/);
+    }
+    assert.equal(runGit(["status", "--short"], { cwd }), "A  file.txt");
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
 });
 
 test("CLI installs, reports, and uninstalls managed AX shim", () => {

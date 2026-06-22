@@ -34,6 +34,11 @@ import {
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Command } from "commander";
 import ts from "typescript";
+import {
+  formatReviewGateStatus,
+  hasStagedDiff,
+  validateReviewGateForCommit,
+} from "./review-gate.ts";
 
 type Scope = "skills" | "instructions" | "openspec" | "hooks";
 type RuntimeCommand = "install" | "update" | "validate" | "status";
@@ -466,6 +471,8 @@ export function createProgram(
   addInstructionsCommands(program, execute);
   addOpenSpecCommands(program, execute);
   addHooksCommands(program, execute);
+  addReviewGateCommands(program);
+  addCommitCommand(program);
   addShimCommands(program, execute);
 
   return program;
@@ -654,6 +661,168 @@ function addHooksCommands(program: Command, execute: CommandExecutor): void {
         });
       });
   }
+}
+
+function addReviewGateCommands(program: Command): void {
+  const reviewGate = program
+    .command("review-gate")
+    .description("Inspect and validate local review gate state");
+
+  reviewGate
+    .command("status")
+    .description("Show local review gate status for the current staged diff")
+    .action(() => {
+      const validation = validateReviewGateForCommit(process.cwd());
+      process.stdout.write(formatReviewGateStatus(validation));
+    });
+
+  reviewGate
+    .command("validate-commit")
+    .description("Validate local review gate state for the current staged diff")
+    .action(() => {
+      const validation = validateReviewGateForCommit(process.cwd());
+      if (!validation.ok) {
+        process.stderr.write(formatReviewGateStatus(validation));
+        process.exitCode = 1;
+        return;
+      }
+      process.stdout.write(formatReviewGateStatus(validation));
+    });
+}
+
+function addCommitCommand(program: Command): void {
+  program
+    .command("commit")
+    .description("Validate the local review gate, then run git commit")
+    .allowUnknownOption(true)
+    .allowExcessArguments(true)
+    .argument("[args...]", "Supported git commit arguments")
+    .action((args: string[]) => {
+      const parsed = parseAxCommitArgs(args);
+      if (parsed.errors.length > 0) {
+        for (const error of parsed.errors) {
+          console.error(error);
+        }
+        process.exitCode = 1;
+        return;
+      }
+      let validation: ReturnType<typeof validateReviewGateForCommit>;
+      try {
+        if (!hasStagedDiff(process.cwd())) {
+          console.error("No staged diff to commit.");
+          process.exitCode = 1;
+          return;
+        }
+        validation = validateReviewGateForCommit(process.cwd());
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(
+          `Unable to validate review gate: ${message.split(/\r?\n/, 1)[0]}`,
+        );
+        process.exitCode = 1;
+        return;
+      }
+
+      if (!validation.ok) {
+        process.stderr.write(formatReviewGateStatus(validation));
+        process.exitCode = 1;
+        return;
+      }
+
+      const result = spawnSync("git", ["commit", ...parsed.gitArgs], {
+        cwd: process.cwd(),
+        encoding: "utf-8",
+        env: withoutGitRepositoryEnv(),
+        stdio: "inherit",
+      });
+      process.exitCode = result.status ?? 1;
+    });
+}
+
+function parseAxCommitArgs(args: string[]): {
+  gitArgs: string[];
+  errors: string[];
+} {
+  const errors: string[] = [];
+  const gitArgs: string[] = [];
+  const unsupported = new Set([
+    "--amend",
+    "-a",
+    "--all",
+    "--include",
+    "-i",
+    "--only",
+    "-o",
+    "--no-verify",
+    "--fixup",
+    "--squash",
+    "-C",
+    "-c",
+    "--reuse-message",
+    "--reedit-message",
+  ]);
+  const unsupportedPrefixes = [
+    "--fixup=",
+    "--squash=",
+    "--reuse-message=",
+    "--reedit-message=",
+  ];
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (
+      unsupported.has(arg) ||
+      unsupportedPrefixes.some((prefix) => arg.startsWith(prefix))
+    ) {
+      errors.push(`Unsupported ax commit mode: ${arg}`);
+      continue;
+    }
+    if (arg === "-m" || arg === "--message") {
+      const message = args[index + 1];
+      if (!message) {
+        errors.push(`${arg} requires a commit message`);
+        if (index + 1 < args.length) {
+          index += 1;
+        }
+      } else {
+        gitArgs.push(arg, message);
+        index += 1;
+      }
+      continue;
+    }
+    if (arg.startsWith("--message=")) {
+      const message = arg.slice("--message=".length);
+      if (!message) {
+        errors.push("--message requires a commit message");
+      } else {
+        gitArgs.push("--message", message);
+      }
+      continue;
+    }
+    if (arg.startsWith("-")) {
+      errors.push(`Unsupported ax commit option: ${arg}`);
+      continue;
+    }
+    errors.push(`Pathspec commits are not supported by ax commit: ${arg}`);
+  }
+
+  if (!gitArgs.includes("-m") && !gitArgs.includes("--message")) {
+    errors.push("ax commit currently requires -m or --message.");
+  }
+
+  return { gitArgs, errors };
+}
+
+function withoutGitRepositoryEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  delete env.GIT_ALTERNATE_OBJECT_DIRECTORIES;
+  delete env.GIT_DIR;
+  delete env.GIT_INDEX_FILE;
+  delete env.GIT_OBJECT_DIRECTORY;
+  delete env.GIT_PREFIX;
+  delete env.GIT_QUARANTINE_PATH;
+  delete env.GIT_WORK_TREE;
+  return env;
 }
 
 type CommandOptions = {
