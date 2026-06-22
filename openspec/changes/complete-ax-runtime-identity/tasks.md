@@ -61,7 +61,7 @@
     - `pnpm ax validate --all-profiles`
     - `pnpm ax openspec validate`
     - `rg --hidden -n "agent-runtime|AGENT_RUNTIME|\\.agent-runtime|pnpm link|globally linked" . -g '!node_modules' -g '!.git'`
-- [ ] 1.5 Align repo delivery guidance with GitLab MR review
+- [x] 1.5 Align repo delivery guidance with GitLab MR review
   - Deliverable: Update repo-local and shared git/review instructions so
     completed work in this repo routes through GitLab `origin` MRs against
     `main` with Nitro review by default.
