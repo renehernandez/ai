@@ -60,7 +60,13 @@ OpenSpec change.
 3. Inspect the reviewed planning stack base and current stack tip.
 4. Record the stack-tip commit used for task selection.
 5. Read `openspec/changes/<change-id>/tasks.md` from stack-tip state.
-6. Run `openspec-tasks` if task deliverability is uncertain.
+6. Run `openspec-tasks` if task deliverability is uncertain. A lifecycle-only
+   documentation, testing, linting, review, validation, or verification group
+   anywhere in `tasks.md` is not a deliverable implementation unit, unless that
+   area is the feature being changed. Deliverable-scoped proof subchecks are
+   valid only as sub-bullets inside the related deliverable task, not as
+   OpenSpec task checkboxes or independent delivery units. Block with
+   `needs_spec_redesign` instead of selecting a lifecycle phase.
 7. Select the first unchecked deliverable task in document order with
    `select-next-task --caller plan_orchestrator --goal complete_change` for
    orchestrator-driven runs.
@@ -129,6 +135,7 @@ its base branch, and each selected task must remain its own PR/MR in the stack.
 | `needs_openspec` | Work is multi-deliverable but not in OpenSpec | Create or update OpenSpec |
 | `openspec_invalid` | OpenSpec validation fails | Repair OpenSpec |
 | `needs_openspec_tasks` | `tasks.md` is not deliverable | Run `openspec-tasks` |
+| `needs_spec_redesign` | OpenSpec tasks are lifecycle phases instead of deliverables | Ask the user whether to redo, brainstorm, narrow, or choose another route |
 | `ambiguous_delivery_goal` | User intent conflicts with available task state | Ask for the completion target |
 | `scope_mismatch` | User asks for full delivery but tasks are too broad or not deliverable | Run `openspec-tasks` |
 | `selected_task_stale` | Target task state changed | Rerun `plan-unit-sequencer` |
@@ -167,6 +174,7 @@ followthrough-ledger inputs are unsupported. Return `needs_plan_ready`.
 | Saying done without rereading `tasks.md` | Base completion only on stack-tip state before `stack_ready` |
 | Batching tasks inside `plan-unit-delivery` | Keep `plan-unit-delivery` to one unit; sequence units here |
 | Combining multiple OpenSpec tasks in one PR/MR | Split delivery so each task has its own PR/MR |
+| Selecting a testing, documentation, or validation phase as a unit | Block with `needs_spec_redesign` unless that area is the feature being changed |
 | Selecting from a detached or stale checkout | Refresh target branch and record the target commit |
 | Advancing after a requested but incomplete Nitro review | Wait for latest-head Nitro completion |
 | Treating stacked work as landed | Report stack-ready state until the stack lands on target |
