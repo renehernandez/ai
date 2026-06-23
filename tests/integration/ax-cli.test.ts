@@ -72,6 +72,10 @@ function withFixture(
   runtime.backupsDir = join(runtimeDir, "backups");
   runtime.reusableScripts = [
     {
+      sourcePath: join(repoRoot, "scripts/plan-artifacts.ts"),
+      targetPath: "scripts/plan-artifacts.ts",
+    },
+    {
       sourcePath: join(repoRoot, "scripts/planning-contracts.ts"),
       targetPath: "scripts/planning-contracts.ts",
     },
@@ -454,6 +458,7 @@ test("global status reports runtime roots and target OpenSpec readiness", () => 
       mkdirSync(scriptsDir, { recursive: true });
       for (const scriptName of [
         "nitro-feedback-gate.ts",
+        "plan-artifacts.ts",
         "planning-contracts.ts",
         "review-gate.ts",
         "stack-state.ts",

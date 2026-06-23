@@ -2,6 +2,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, realpathSync, unlinkSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
+import { isAgentsPlanPath } from "../../../scripts/plan-artifacts.ts";
 import {
   extractSection,
   extractYaml,
@@ -650,10 +651,6 @@ function repoOpenSpecValidationAvailable(repoRoot: string): boolean {
     stdio: ["ignore", "pipe", "pipe"],
   });
   return result.status === 0;
-}
-
-function isAgentsPlanPath(path: string): boolean {
-  return path === ".agents/plans" || path.startsWith(".agents/plans/");
 }
 
 function normalizeAgentsPlanPath(

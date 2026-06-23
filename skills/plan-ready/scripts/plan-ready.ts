@@ -2,7 +2,8 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { join, normalize, relative, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
+import { isSafeAgentsPlanRef } from "../../../scripts/plan-artifacts.ts";
 import {
   cleanScalar,
   escapeRegExp,
@@ -814,22 +815,6 @@ function legacyErrors(input: string): string[] {
 
 function fingerprint(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
-}
-
-function isAgentsPlanPath(path: string): boolean {
-  return path === ".agents/plans" || path.startsWith(".agents/plans/");
-}
-
-function isSafeAgentsPlanRef(path: string): boolean {
-  if (path.startsWith("/")) {
-    return false;
-  }
-  const normalized = normalize(path);
-  return (
-    !normalized.startsWith("..") &&
-    normalized !== "." &&
-    isAgentsPlanPath(normalized)
-  );
 }
 
 function isCommand(command: string | undefined): command is Command {
