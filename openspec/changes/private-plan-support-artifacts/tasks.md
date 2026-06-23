@@ -20,7 +20,7 @@
 - [x] 2.2 Add deterministic identity derivation from `origin` fetch URL or the
       selected artifact-host remote, normalized plan path, plan path hash, plan
       slug, and plan content fingerprint.
-- [ ] 2.3 Implement recoverable writes for immutable artifact blobs,
+- [x] 2.3 Implement recoverable writes for immutable artifact blobs,
       `manifest.json`, revision `metadata.json`, and append-only
       `index.jsonl`.
 - [ ] 2.4 Add `pnpm ax plans artifact list --plan <path>` to print manifest and

@@ -1,12 +1,16 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  appendFileSync,
   copyFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
   readFileSync,
   realpathSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
 import {
@@ -49,6 +53,7 @@ const STRUCTURED_SUPPORT_EXTENSIONS = new Set([
   ".yaml",
   ".yml",
 ]);
+const WRITE_LOCK_STALE_MS = 5 * 60 * 1000;
 
 export type PlanSupportArtifactKind =
   (typeof PLAN_SUPPORT_ARTIFACT_KINDS)[number];
@@ -89,9 +94,14 @@ export type PlanArtifactRecordResult = {
   planPathHash: string;
   planSlug: string;
   planContentFingerprint: string;
+  revisionId: string;
   artifactKind: PlanArtifactRecordKind;
   artifactContentFingerprint: string;
   privateWorkspaceRelativePath: string;
+  artifactRelativePath: string;
+  manifestRelativePath: string;
+  metadataRelativePath: string;
+  indexRelativePath: string;
 };
 
 export type PlanArtifactIdentity = {
@@ -100,6 +110,51 @@ export type PlanArtifactIdentity = {
   normalizedPlanPath: string;
   planPathHash: string;
   planSlug: string;
+  planContentFingerprint: string;
+};
+
+type PlanArtifactStoredRecord = {
+  recordedAt: string;
+  artifactKind: PlanArtifactRecordKind;
+  artifactContentFingerprint: string;
+  artifactRelativePath: string;
+};
+
+type PlanArtifactRevisionRecord = {
+  revisionId: string;
+  createdAt: string;
+  planContentFingerprint: string;
+  metadataRelativePath: string;
+  artifacts: PlanArtifactStoredRecord[];
+};
+
+type PlanArtifactManifest = {
+  version: 1;
+  repoKey: string;
+  repoHash: string;
+  normalizedPlanPath: string;
+  planPathHash: string;
+  planSlug: string;
+  revisions: PlanArtifactRevisionRecord[];
+};
+
+type PlanArtifactRevisionMetadata = PlanArtifactRevisionRecord & {
+  version: 1;
+  repoKey: string;
+  repoHash: string;
+  normalizedPlanPath: string;
+  planPathHash: string;
+  planSlug: string;
+};
+
+type PlanArtifactIndexRecord = PlanArtifactStoredRecord & {
+  version: 1;
+  repoKey: string;
+  repoHash: string;
+  normalizedPlanPath: string;
+  planPathHash: string;
+  planSlug: string;
+  revisionId: string;
   planContentFingerprint: string;
 };
 
@@ -273,22 +328,127 @@ export function recordPlanArtifact(options: {
   ensurePrivateDirectory(repoRoot);
   ensurePrivateDirectory(join(repoRoot, "plans"));
   ensurePrivateDirectory(resolve(identity.workspacePath));
-  ensurePrivateDirectory(resolve(identity.artifactsPath));
 
   const artifactContentFingerprint = sha256Hex(readFileSync(artifactRealPath));
-  const artifactsRealPath = realpathSync(identity.artifactsPath);
-  const artifactPath = join(
-    artifactsRealPath,
-    `${artifactKind}-${artifactContentFingerprint}${safeArtifactExtension(artifactRealPath)}`,
-  );
-  assertPathInside(
-    artifactPath,
-    realpathSync(identity.workspacePath),
-    "artifact destination must remain inside private plan workspace",
-  );
-  if (!existsSync(artifactPath)) {
-    copyFileSync(artifactRealPath, artifactPath);
+  const revisionId = `plan-${artifactIdentity.planContentFingerprint.slice(0, 16)}`;
+  const workspaceRealPath = realpathSync(identity.workspacePath);
+  const releaseLock = acquirePlanArtifactWriteLock(workspaceRealPath);
+  let artifactPath = "";
+  let artifactRelativePath = "";
+  let metadataPath = "";
+  let metadataRelativePath = "";
+  try {
+    const manifestPath = join(workspaceRealPath, "manifest.json");
+    const indexPath = join(workspaceRealPath, "index.jsonl");
+    const revisionsPath = join(workspaceRealPath, "revisions");
+    ensurePrivateDirectory(revisionsPath);
+    const revisionPath = join(revisionsPath, revisionId);
+    ensurePrivateDirectory(revisionPath);
+    const revisionArtifactsPath = join(revisionPath, "artifacts");
+    ensurePrivateDirectory(revisionArtifactsPath);
+    const artifactsRealPath = realpathSync(revisionArtifactsPath);
+    artifactPath = join(
+      artifactsRealPath,
+      `${artifactKind}-${artifactContentFingerprint}${safeArtifactExtension(artifactRealPath)}`,
+    );
+    assertPathInside(
+      artifactPath,
+      workspaceRealPath,
+      "artifact destination must remain inside private plan workspace",
+    );
+    copyImmutableFile(
+      artifactRealPath,
+      artifactPath,
+      artifactContentFingerprint,
+    );
+
+    metadataPath = join(revisionPath, "metadata.json");
+    artifactRelativePath = relative(workspaceRealPath, artifactPath)
+      .split(sep)
+      .join("/");
+    metadataRelativePath = relative(workspaceRealPath, metadataPath)
+      .split(sep)
+      .join("/");
+    const createdAt = new Date().toISOString();
+    const manifest = readPlanArtifactManifest(manifestPath);
+    assertManifestMatchesIdentity(manifest, artifactIdentity, identity);
+    const existingRevision = manifest?.revisions.find(
+      (revision) => revision.revisionId === revisionId,
+    );
+    const existingArtifact = existingRevision?.artifacts.find(
+      (artifact) =>
+        artifact.artifactKind === artifactKind &&
+        artifact.artifactContentFingerprint === artifactContentFingerprint,
+    );
+    const artifactRecord = existingArtifact ?? {
+      recordedAt: createdAt,
+      artifactKind,
+      artifactContentFingerprint,
+      artifactRelativePath,
+    };
+    const revisionRecord = existingRevision
+      ? {
+          ...existingRevision,
+          artifacts: existingArtifact
+            ? existingRevision.artifacts
+            : [...existingRevision.artifacts, artifactRecord],
+        }
+      : {
+          revisionId,
+          createdAt,
+          planContentFingerprint: artifactIdentity.planContentFingerprint,
+          metadataRelativePath,
+          artifacts: [artifactRecord],
+        };
+    const revisionMetadata: PlanArtifactRevisionMetadata = {
+      version: 1,
+      repoKey: artifactIdentity.repoKey,
+      repoHash: identity.repoHash,
+      normalizedPlanPath: artifactIdentity.normalizedPlanPath,
+      planPathHash: artifactIdentity.planPathHash,
+      planSlug: artifactIdentity.planSlug,
+      ...revisionRecord,
+    };
+    atomicWriteJson(metadataPath, revisionMetadata);
+
+    const nextManifest: PlanArtifactManifest = manifest
+      ? {
+          ...manifest,
+          revisions: existingRevision
+            ? manifest.revisions.map((revision) =>
+                revision.revisionId === revisionId ? revisionRecord : revision,
+              )
+            : [...manifest.revisions, revisionRecord],
+        }
+      : {
+          version: 1,
+          repoKey: artifactIdentity.repoKey,
+          repoHash: identity.repoHash,
+          normalizedPlanPath: artifactIdentity.normalizedPlanPath,
+          planPathHash: artifactIdentity.planPathHash,
+          planSlug: artifactIdentity.planSlug,
+          revisions: [revisionRecord],
+        };
+    atomicWriteJson(manifestPath, nextManifest);
+    appendIndexRecordIfMissing(
+      indexPath,
+      {
+        version: 1,
+        repoKey: artifactIdentity.repoKey,
+        repoHash: identity.repoHash,
+        normalizedPlanPath: artifactIdentity.normalizedPlanPath,
+        planPathHash: artifactIdentity.planPathHash,
+        planSlug: artifactIdentity.planSlug,
+        revisionId,
+        planContentFingerprint: artifactIdentity.planContentFingerprint,
+        ...artifactRecord,
+      },
+      workspaceRealPath,
+    );
+  } finally {
+    releaseLock();
   }
+  const axPlansRealPath = realpathSync(axPlansRoot);
 
   return {
     status: "recorded",
@@ -297,11 +457,25 @@ export function recordPlanArtifact(options: {
     planPathHash: artifactIdentity.planPathHash,
     planSlug: artifactIdentity.planSlug,
     planContentFingerprint: artifactIdentity.planContentFingerprint,
+    revisionId,
     artifactKind,
     artifactContentFingerprint,
-    privateWorkspaceRelativePath: relative(
-      realpathSync(axPlansRoot),
-      artifactPath,
+    privateWorkspaceRelativePath: relative(axPlansRealPath, artifactPath)
+      .split(sep)
+      .join("/"),
+    artifactRelativePath,
+    manifestRelativePath: relative(
+      axPlansRealPath,
+      realpathSync(join(workspaceRealPath, "manifest.json")),
+    )
+      .split(sep)
+      .join("/"),
+    metadataRelativePath: relative(axPlansRealPath, metadataPath)
+      .split(sep)
+      .join("/"),
+    indexRelativePath: relative(
+      axPlansRealPath,
+      realpathSync(join(workspaceRealPath, "index.jsonl")),
     )
       .split(sep)
       .join("/"),
@@ -426,6 +600,189 @@ function ensurePrivateDirectory(path: string): void {
     return;
   }
   mkdirSync(path, { mode: 0o700, recursive: true });
+}
+
+function copyImmutableFile(
+  sourcePath: string,
+  destinationPath: string,
+  expectedFingerprint: string,
+): void {
+  if (existsSync(destinationPath)) {
+    const stats = lstatSync(destinationPath);
+    if (stats.isSymbolicLink() || !stats.isFile()) {
+      throw new Error(
+        `Private plan artifact blob must be a regular file: ${destinationPath}`,
+      );
+    }
+    const existingFingerprint = sha256Hex(readFileSync(destinationPath));
+    if (existingFingerprint !== expectedFingerprint) {
+      throw new Error(
+        `Private plan artifact blob is incomplete or corrupt and must be repaired before recording: ${destinationPath}`,
+      );
+    }
+    return;
+  }
+
+  const temporaryPath = `${destinationPath}.tmp-${process.pid}-${Date.now()}`;
+  copyFileSync(sourcePath, temporaryPath);
+  renameSync(temporaryPath, destinationPath);
+}
+
+function acquirePlanArtifactWriteLock(workspacePath: string): () => void {
+  const lockPath = join(workspacePath, ".write.lock");
+  const deadline = Date.now() + 30_000;
+
+  while (Date.now() < deadline) {
+    try {
+      mkdirSync(lockPath, { mode: 0o700 });
+      return () => {
+        rmSync(lockPath, { force: true, recursive: true });
+      };
+    } catch (error) {
+      if (
+        !(error instanceof Error) ||
+        !("code" in error) ||
+        error.code !== "EEXIST"
+      ) {
+        throw error;
+      }
+      const stats = lstatSync(lockPath);
+      if (stats.isSymbolicLink() || !stats.isDirectory()) {
+        throw new Error(
+          `Private plan artifact lock path is not a directory: ${lockPath}`,
+        );
+      }
+      if (Date.now() - stats.mtimeMs > WRITE_LOCK_STALE_MS) {
+        rmSync(lockPath, { force: true, recursive: true });
+        continue;
+      }
+      sleepSync(50);
+    }
+  }
+
+  throw new Error(
+    `Timed out waiting for private plan artifact writer lock: ${lockPath}`,
+  );
+}
+
+function sleepSync(milliseconds: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
+
+function appendIndexRecordIfMissing(
+  path: string,
+  record: PlanArtifactIndexRecord,
+  workspaceRoot: string,
+): void {
+  assertPathInside(
+    resolve(path),
+    workspaceRoot,
+    "index destination must remain inside private plan workspace",
+  );
+
+  let stats: ReturnType<typeof lstatSync> | null = null;
+  try {
+    stats = lstatSync(path);
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      !("code" in error) ||
+      error.code !== "ENOENT"
+    ) {
+      throw error;
+    }
+  }
+
+  if (stats) {
+    if (stats.isSymbolicLink() || !stats.isFile()) {
+      throw new Error(
+        `Private plan artifact index must be a regular file: ${path}`,
+      );
+    }
+    assertPathInside(
+      realpathSync(path),
+      workspaceRoot,
+      "index destination must remain inside private plan workspace",
+    );
+    const rows = readFileSync(path, "utf-8")
+      .split("\n")
+      .filter((line) => line.trim() !== "");
+    for (const row of rows) {
+      let parsed: {
+        revisionId?: unknown;
+        artifactKind?: unknown;
+        artifactContentFingerprint?: unknown;
+      };
+      try {
+        parsed = JSON.parse(row);
+      } catch (error) {
+        throw new Error(
+          `Private plan artifact index is corrupt and must be repaired before recording: ${path}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      if (
+        parsed.revisionId === record.revisionId &&
+        parsed.artifactKind === record.artifactKind &&
+        parsed.artifactContentFingerprint === record.artifactContentFingerprint
+      ) {
+        return;
+      }
+    }
+  }
+
+  appendFileSync(path, `${JSON.stringify(record)}\n`, "utf-8");
+}
+
+function atomicWriteJson(path: string, value: unknown): void {
+  const temporaryPath = `${path}.tmp-${process.pid}-${Date.now()}`;
+  writeFileSync(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, {
+    encoding: "utf-8",
+    mode: 0o600,
+  });
+  renameSync(temporaryPath, path);
+}
+
+function readPlanArtifactManifest(path: string): PlanArtifactManifest | null {
+  if (!existsSync(path)) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf-8")) as {
+      version?: unknown;
+      revisions?: unknown;
+    };
+    if (parsed.version !== 1 || !Array.isArray(parsed.revisions)) {
+      throw new Error("invalid manifest shape");
+    }
+    return parsed as PlanArtifactManifest;
+  } catch (error) {
+    throw new Error(
+      `Private plan artifact manifest is corrupt and must be repaired before recording: ${path}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+function assertManifestMatchesIdentity(
+  manifest: PlanArtifactManifest | null,
+  artifactIdentity: PlanArtifactIdentity,
+  workspaceIdentity: PlanArtifactWorkspaceIdentity,
+): void {
+  if (!manifest) {
+    return;
+  }
+
+  if (
+    manifest.repoKey !== artifactIdentity.repoKey ||
+    manifest.repoHash !== workspaceIdentity.repoHash ||
+    manifest.normalizedPlanPath !== artifactIdentity.normalizedPlanPath ||
+    manifest.planPathHash !== artifactIdentity.planPathHash ||
+    manifest.planSlug !== artifactIdentity.planSlug
+  ) {
+    throw new Error(
+      "Private plan artifact manifest identity does not match the selected plan",
+    );
+  }
 }
 
 function assertPathInside(path: string, root: string, message: string): void {
