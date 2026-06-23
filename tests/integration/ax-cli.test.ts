@@ -1083,6 +1083,76 @@ test("ax commit required review-gate mode delegates and consumes an active fresh
   }
 });
 
+test("ax commit required review-gate mode preserves active gate when a hook mutates the committed diff", () => {
+  const cwd = createGitFixture("ax-commit-required-gate-mutated-diff-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+    const hash = stagedHash(cwd);
+    writeReviewGateState(cwd, {
+      version: 1,
+      active: true,
+      status: "active",
+      workflow: "plan-unit-delivery",
+      sourceProvenance: {
+        kind: "plan_delivery_handoff",
+        ref: "/tmp/example-handoff.yaml",
+      },
+      stagedDiffHash: hash,
+      requiredReviewPasses: ["implementation-review"],
+      results: {
+        "implementation-review": {
+          status: "passed",
+          diffHash: hash,
+        },
+      },
+      blockingFindings: [],
+    });
+    const preCommitHook = join(cwd, ".git", "hooks", "pre-commit");
+    writeFileSync(
+      preCommitHook,
+      "#!/bin/sh\nprintf 'two\\n' > file.txt\ngit add file.txt\n",
+      "utf-8",
+    );
+    chmodSync(preCommitHook, 0o755);
+
+    const result = runAgentRuntime(
+      ["commit", "--require-review-gate", "-m", "add fixture file"],
+      {
+        cwd,
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.equal(
+      runGit(["log", "-1", "--pretty=%s"], { cwd }),
+      "add fixture file",
+    );
+    assert.equal(runGit(["show", "HEAD:file.txt"], { cwd }), "two");
+    assert.match(
+      result.stderr,
+      /created commit does not match the reviewed staged diff/,
+    );
+    assert.match(result.stderr, /review gate was not consumed/);
+    assert.match(result.stderr, /created_commit: [a-f0-9]{40}/);
+    assert.match(
+      result.stderr,
+      new RegExp(`reviewed_staged_diff_hash: ${escapeRegExp(hash)}`),
+    );
+    assert.match(
+      result.stderr,
+      /created_commit_diff_hash: sha256:[a-f0-9]{64}/,
+    );
+    const state = readReviewGateState(cwd);
+    assert.equal(state.active, true);
+    assert.equal(state.status, "active");
+    assert.equal(state.stagedDiffHash, hash);
+    assert.equal(state.consumedAt, undefined);
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
 test("ax commit required review-gate mode preserves active gate when git commit fails", () => {
   const cwd = createGitFixture("ax-commit-required-gate-git-fails-");
   try {
