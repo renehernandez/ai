@@ -3,7 +3,7 @@
 - [x] 1.1 Extract or reuse shared helpers for safe `.agents/plans/**`
       normalization, primary markdown plan classification, support-sidecar
       classification, fingerprinting, and private workspace path derivation.
-- [ ] 1.2 Update `plan-review` validation so `artifact_type: plan` accepts
+- [x] 1.2 Update `plan-review` validation so `artifact_type: plan` accepts
       primary markdown plan docs and rejects support sidecars under
       `.agents/plans/**`.
 - [ ] 1.3 Preserve `artifact_type: openspec` validation so every

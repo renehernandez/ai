@@ -3,7 +3,10 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { nitroFeedbackGateErrors } from "../../../scripts/nitro-feedback-gate.ts";
-import { isAgentsPlanPath } from "../../../scripts/plan-artifacts.ts";
+import {
+  isAgentsPlanPath,
+  isPlanSupportSidecar,
+} from "../../../scripts/plan-artifacts.ts";
 import {
   extractSection,
   extractYaml,
@@ -373,6 +376,24 @@ function validatePlanningDiff(args: string[], stdinInput: string): void {
     process.exit(1);
   }
 
+  const supportSidecarEntries = planPathEntries.filter((entry) =>
+    entry.paths.some(isPlanSupportSidecar),
+  );
+  if (artifactType === "plan" && supportSidecarEntries.length > 0) {
+    console.error(
+      [
+        "Invalid planning diff:",
+        "- artifact_type plan planning diffs must not include .agents/plans support sidecars",
+        "- store support artifacts in thread evidence or the private AX plan workspace instead of .agents/plans/**",
+        ...supportSidecarEntries.map(
+          (entry) =>
+            `- ${entry.status}: ${entry.paths.filter(isPlanSupportSidecar).join(" -> ")}`,
+        ),
+      ].join("\n"),
+    );
+    process.exit(1);
+  }
+
   console.log(
     JSON.stringify(
       {
@@ -591,7 +612,40 @@ function parseNameStatus(input: string): NameStatusEntry[] {
     .filter(Boolean)
     .map((line) => {
       const [status, ...paths] = line.split(/\t+/);
-      return { status, paths };
+      return { status, paths: paths.map(unquoteGitPath) };
+    });
+}
+
+function unquoteGitPath(path: string): string {
+  if (!path.startsWith('"') || !path.endsWith('"')) {
+    return path;
+  }
+
+  return path
+    .slice(1, -1)
+    .replace(/\\([0-7]{1,3}|.)/g, (_match, escaped: string) => {
+      if (/^[0-7]+$/.test(escaped)) {
+        return String.fromCharCode(Number.parseInt(escaped, 8));
+      }
+
+      switch (escaped) {
+        case "a":
+          return "\x07";
+        case "b":
+          return "\b";
+        case "f":
+          return "\f";
+        case "n":
+          return "\n";
+        case "r":
+          return "\r";
+        case "t":
+          return "\t";
+        case "v":
+          return "\v";
+        default:
+          return escaped;
+      }
     });
 }
 
