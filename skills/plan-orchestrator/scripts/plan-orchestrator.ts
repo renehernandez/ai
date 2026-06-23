@@ -117,6 +117,8 @@ function printPlanReviewRequestTemplate(): void {
 - Status: ready to publish planning-only hosted review.
 - Artifact: openspec/changes/example-change.
 - Review goal: validate planning before implementation.
+- Readiness evidence: copied from the validated plan-ready output.
+- Blueprint provenance: recorded when an OpenSpec change was materialized.
 - Next action: run plan-review and wait for planning_review.
 
 \`\`\`yaml
@@ -125,9 +127,43 @@ plan_review_request:
   artifact_type: openspec
   artifact_ref: openspec/changes/example-change
   review_goal: "Validate the plan before implementation."
+  hosted_review_routing: <copy review-feedback-routing or plan-review host route>
   requested_reviewers:
-    - nitro
-    - developers
+    - <copy each hosted-review reviewer required by the selected route>
+  readiness_reviewer_evidence:
+    artifact_fingerprint: <copy plan-ready review.reviewer_evidence.artifact_fingerprint>
+    completed_at: <copy plan-ready review.reviewer_evidence.completed_at>
+    gate_outcome: <copy plan-ready review.reviewer_evidence.gate_outcome>
+    baseline_reviewers:
+      - <copy each plan-ready baseline reviewer>
+    selected_dynamic_reviewers:
+      - <copy each selected plan-ready dynamic reviewer, or [] when plan-ready emitted []>
+    per_reviewer_status:
+      <copy every plan-ready per-reviewer status, including selected dynamic reviewers>
+    skipped_reviewers:
+      - <copy each plan-ready skipped reviewer, or [] when plan-ready emitted []>
+    skipped_rationale:
+      - <copy each plan-ready skipped rationale, or [] when plan-ready emitted []>
+    blocking_findings:
+      - <copy each plan-ready blocking finding, or [] for ready outputs>
+  blueprint_provenance:
+    source: openspec_blueprint
+    source_plan:
+      ref: <openspec_blueprint.source_plan.ref>
+      change_id: <openspec_blueprint.source_plan.change_id>
+      artifact_fingerprint: <openspec_blueprint.review.reviewer_evidence.artifact_fingerprint>
+    generated_change:
+      change_id: example-change
+      ref: openspec/changes/example-change
+      generated_paths:
+        - openspec/changes/example-change/proposal.md
+        - openspec/changes/example-change/tasks.md
+        - openspec/changes/example-change/specs/<spec>/spec.md
+    validation_evidence:
+      - openspec validate example-change --strict --no-interactive
+      - pnpm ax openspec validate
+    cleanup_evidence:
+      - scripts/plan-orchestrator.ts cleanup-source-plan --source-plan <path> --expected-source-plan <source_plan.ref> --expected-change-id <change-id> --change-id <change-id>
   unresolved_blockers: []
 \`\`\`
 `);

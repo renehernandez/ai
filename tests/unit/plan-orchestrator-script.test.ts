@@ -322,6 +322,21 @@ test("plan-review-request-template emits a readable summary before YAML", () => 
       result.stdout.indexOf("plan_review_request:"),
   );
   assert.match(result.stdout, /plan_review_request:/);
+  assert.match(result.stdout, /hosted_review_routing:/);
+  assert.match(result.stdout, /copy each hosted-review reviewer/);
+  assert.doesNotMatch(result.stdout, /- nitro\n\s+- developers/);
+  assert.match(result.stdout, /readiness_reviewer_evidence:/);
+  assert.match(result.stdout, /artifact_fingerprint:/);
+  assert.match(result.stdout, /baseline_reviewers:/);
+  assert.match(result.stdout, /selected_dynamic_reviewers:/);
+  assert.match(result.stdout, /per_reviewer_status:/);
+  assert.match(result.stdout, /copy each selected plan-ready dynamic reviewer/);
+  assert.match(result.stdout, /copy every plan-ready per-reviewer status/);
+  assert.match(result.stdout, /copy each plan-ready blocking finding/);
+  assert.match(result.stdout, /blueprint_provenance:/);
+  assert.match(result.stdout, /source: openspec_blueprint/);
+  assert.match(result.stdout, /generated_change:/);
+  assert.match(result.stdout, /cleanup_evidence:/);
 });
 
 test("resume-template emits a readable summary before YAML", () => {
