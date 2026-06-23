@@ -800,6 +800,17 @@ test("CLI shows hooks scope help", () => {
   assert.match(result.stdout, /validate/);
 });
 
+test("review-gate help excludes private activation", () => {
+  const result = runAgentRuntime(["review-gate", "--help"]);
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /Usage: ax review-gate/);
+  assert.match(result.stdout, /status/);
+  assert.match(result.stdout, /validate-commit/);
+  assert.match(result.stdout, /force-unlock/);
+  assert.doesNotMatch(result.stdout, /activate/i);
+});
+
 test("review-gate force-unlock removes a stuck local lock", () => {
   const cwd = createGitFixture("ax-review-gate-force-unlock-");
   try {
@@ -1326,6 +1337,96 @@ test("ax commit required review-gate mode rejects linked-worktree gate reuse", (
   } finally {
     rmSync(worktree, { force: true, recursive: true });
     rmSync(repo, { force: true, recursive: true });
+  }
+});
+
+test("ax commit required review-gate mode rejects workflow, unit, and staged-diff mismatches", () => {
+  const scenarios = [
+    {
+      name: "workflow",
+      expected: /Review gate identity mismatch: workflow/,
+      mutate: (state: Record<string, unknown>) => {
+        const identity = state.identity as Record<string, unknown>;
+        identity.workflow = "other-workflow";
+      },
+    },
+    {
+      name: "unit",
+      expected: /Review gate identity mismatch: unitId/,
+      mutate: (state: Record<string, unknown>) => {
+        const identity = state.identity as Record<string, unknown>;
+        identity.unitId = "unit-2";
+      },
+    },
+    {
+      name: "staged-diff",
+      expected: /Review gate staged diff hash is stale/,
+      mutate: (state: Record<string, unknown>) => {
+        const changedHash = `sha256:${"0".repeat(64)}`;
+        const identity = state.identity as Record<string, unknown>;
+        const results = state.results as Record<
+          string,
+          Record<string, unknown>
+        >;
+        identity.stagedDiffHash = changedHash;
+        state.stagedDiffHash = changedHash;
+        results["implementation-review"].diffHash = changedHash;
+      },
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    const cwd = createGitFixture(
+      `ax-commit-required-gate-${scenario.name}-mismatch-`,
+    );
+    try {
+      writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+      runGit(["add", "file.txt"], { cwd });
+      const hash = stagedHash(cwd);
+      writeReviewGateState(cwd, {
+        version: 1,
+        active: true,
+        workflow: "plan-unit-delivery",
+        unit: {
+          id: "unit-1",
+          title: "Fixture unit",
+        },
+        sourceProvenance: {
+          kind: "plan_delivery_handoff",
+          ref: "/tmp/example-handoff.yaml",
+        },
+        stagedDiffHash: hash,
+        requiredReviewPasses: ["implementation-review"],
+        results: {
+          "implementation-review": {
+            status: "passed",
+            diffHash: hash,
+          },
+        },
+        blockingFindings: [],
+      });
+      const state = readReviewGateState(cwd);
+      scenario.mutate(state);
+      writeFileSync(
+        reviewGateStatePath(cwd),
+        `${JSON.stringify(state, null, 2)}\n`,
+        "utf-8",
+      );
+
+      const result = runAgentRuntime(
+        ["commit", "--require-review-gate", "-m", "add fixture file"],
+        {
+          cwd,
+        },
+      );
+
+      assert.equal(result.status, 1, scenario.name);
+      assert.match(result.stderr, scenario.expected);
+      assert.match(result.stderr, /complete or rerun required local reviews/);
+      assert.equal(runGit(["status", "--short"], { cwd }), "A  file.txt");
+    } finally {
+      rmSync(cwd, { force: true, recursive: true });
+    }
   }
 });
 
