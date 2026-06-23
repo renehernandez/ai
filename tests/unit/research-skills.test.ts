@@ -54,10 +54,32 @@ test("research skills expose supported frontmatter and OpenAI metadata", () => {
   );
 });
 
-test("research skill carries technical, content, and mixed-intent routing contracts", () => {
+test("research defaults to one selected area skill and a research brief", () => {
   const skill = read("skills/research/SKILL.md");
   const metadata = read("skills/research/agents/openai.yaml");
 
+  assert.match(skill, /Dispatch general research requests/);
+  assert.match(skill, /exactly one area skill/);
+  assert.match(
+    skill,
+    /Default research output is the selected area skill's `research_brief`/,
+  );
+  assert.match(skill, /load and apply the selected area skill/);
+  assert.match(skill, /Do not merely name/);
+  assert.match(skill, /standards, protocols,/);
+  assert.match(skill, /talks, presentations,/);
+  assert.match(metadata, /choose exactly one research area skill/);
+  assert.match(
+    metadata,
+    /return that selected skill's source-backed research_brief/,
+  );
+});
+
+test("research preserves explicit route-only, unnecessary, and ambiguous routing contracts", () => {
+  const skill = read("skills/research/SKILL.md");
+  const metadata = read("skills/research/agents/openai.yaml");
+
+  assert.match(skill, /Explicit Route-Only Mode/);
   assert.match(skill, /research_routing:/);
   assert.match(skill, /status: routed \| ask_user \| unnecessary/);
   assert.match(
@@ -68,11 +90,28 @@ test("research skill carries technical, content, and mixed-intent routing contra
     skill,
     /secondary_skill: research-technical \| research-content \| none/,
   );
-  assert.match(skill, /standards, protocols,/);
-  assert.match(skill, /talks, presentations,/);
+  assert.match(skill, /"route this research request"/);
+  assert.match(skill, /"which research skill should I use\?"/);
+  assert.match(skill, /research_routing.status: unnecessary/);
+  assert.match(skill, /Ask one clarifying question and stop/);
+  assert.match(
+    metadata,
+    /Return research_routing only for explicit route-only\/classify requests/,
+  );
+});
+
+test("research keeps mixed intent and downstream continuation bounded", () => {
+  const skill = read("skills/research/SKILL.md");
+  const metadata = read("skills/research/agents/openai.yaml");
+
   assert.match(skill, /mixed technical-plus-content requests/);
-  assert.match(skill, /Ask one question and stop/);
-  assert.match(metadata, /research_routing decision/);
+  assert.match(skill, /secondary_skill` or equivalent deferred-lane language/);
+  assert.match(skill, /Do not run both area skills in v1/);
+  assert.match(skill, /Do not run downstream brainstorming/);
+  assert.match(
+    metadata,
+    /Stop before brainstorming, planning, drafting, deck creation, or coding/,
+  );
 });
 
 test("technical research skill pins source-backed brief and technical fields", () => {
