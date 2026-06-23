@@ -128,10 +128,13 @@ for (const file of ["AGENTS.md", "instructions/AGENTS.md"] as const) {
 
     assert.match(text, /Do not stage or commit local workflow artifacts/);
     assert.match(text, /work-project repositories/);
+    assert.match(text, /reviewer scratch/);
     assert.match(text, /readiness reports/);
     assert.match(text, /reviewer reports/);
     assert.match(text, /delivery ledgers/);
+    assert.match(text, /validation evidence/);
     assert.match(text, /private plan-support pointers/);
+    assert.match(text, /private plan-support storage/);
     assert.match(text, /Reusable AI repo workflow machinery/);
     assert.match(text, /regression fixtures/);
     assert.match(text, /feature being changed in this AI repo/);
