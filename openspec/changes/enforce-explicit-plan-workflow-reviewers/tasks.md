@@ -24,7 +24,7 @@
 - [x] 2.4 Reuse existing active-gate consume/clear semantics for required-gate
   commits, preserve active gates when Git fails before creating a commit, and
   warn without failing retroactively when post-commit cleanup fails.
-- [ ] 2.5 Update `ax review-gate status` and `validate-commit` so missing,
+- [x] 2.5 Update `ax review-gate status` and `validate-commit` so missing,
   active, blocking, stale, and consumed gates are reported clearly.
 - [ ] 2.6 Verify the created commit still matches the reviewed staged diff
   before consuming a required gate; fail the command and preserve or mark the

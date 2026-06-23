@@ -717,6 +717,7 @@ test("review-gate validate-commit allows missing inactive gate state", () => {
     const result = runAgentRuntime(["review-gate", "validate-commit"], { cwd });
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /state_status: missing/);
     assert.match(result.stdout, /No review gate state found; allowing commit/);
   } finally {
     rmSync(cwd, { force: true, recursive: true });
@@ -731,6 +732,11 @@ test("review-gate status reports active gate diagnostics without failing", () =>
     writeReviewGateState(cwd, {
       version: 1,
       active: true,
+      workflow: "plan-unit-delivery",
+      sourceProvenance: {
+        kind: "plan_delivery_handoff",
+        ref: "/tmp/example-handoff.yaml",
+      },
       stagedDiffHash: stagedHash(cwd),
       requiredReviewPasses: ["implementation-review", "docs-alignment-review"],
       results: {
@@ -746,6 +752,7 @@ test("review-gate status reports active gate diagnostics without failing", () =>
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.match(result.stdout, /state_path:/);
+    assert.match(result.stdout, /state_status: active/);
     assert.match(result.stdout, /active: true/);
     assert.match(result.stdout, /required_review_passes:/);
     assert.match(result.stdout, /missing_review_passes: docs-alignment-review/);
@@ -779,6 +786,38 @@ test("review-gate validate-commit rejects missing review passes and blocking fin
   }
 });
 
+test("review-gate validate-commit reports consumed gate state clearly", () => {
+  const cwd = createGitFixture("ax-review-gate-consumed-status-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+    writeReviewGateState(cwd, {
+      version: 1,
+      active: false,
+      status: "consumed",
+      workflow: "plan-unit-delivery",
+      stagedDiffHash: stagedHash(cwd),
+      requiredReviewPasses: ["implementation-review"],
+      results: {
+        "implementation-review": {
+          status: "passed",
+          diffHash: stagedHash(cwd),
+        },
+      },
+      blockingFindings: [],
+      consumedAt: new Date().toISOString(),
+    });
+
+    const result = runAgentRuntime(["review-gate", "validate-commit"], { cwd });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /state_status: consumed/);
+    assert.match(result.stdout, /Review gate is consumed; allowing commit/);
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
 test("review-gate validate-commit rejects stale active review results", () => {
   const cwd = createGitFixture("ax-review-gate-stale-");
   try {
@@ -787,12 +826,19 @@ test("review-gate validate-commit rejects stale active review results", () => {
     writeReviewGateState(cwd, {
       version: 1,
       active: true,
-      stagedDiffHash: "sha256:old",
+      workflow: "plan-unit-delivery",
+      sourceProvenance: {
+        kind: "plan_delivery_handoff",
+        ref: "/tmp/example-handoff.yaml",
+      },
+      stagedDiffHash:
+        "sha256:0000000000000000000000000000000000000000000000000000000000000000",
       requiredReviewPasses: ["implementation-review"],
       results: {
         "implementation-review": {
           status: "passed",
-          diffHash: "sha256:old",
+          diffHash:
+            "sha256:0000000000000000000000000000000000000000000000000000000000000000",
         },
       },
       blockingFindings: [],
@@ -801,6 +847,7 @@ test("review-gate validate-commit rejects stale active review results", () => {
     const result = runAgentRuntime(["review-gate", "validate-commit"], { cwd });
 
     assert.equal(result.status, 1);
+    assert.match(result.stderr, /state_status: active/);
     assert.match(result.stderr, /Stale review pass/);
     assert.match(result.stderr, /completed_review_passes: \(none\)/);
     assert.match(result.stderr, /Review gate staged diff hash is stale/);
@@ -823,6 +870,7 @@ test("review-gate validate-commit rejects malformed gate JSON", () => {
     const result = runAgentRuntime(["review-gate", "validate-commit"], { cwd });
 
     assert.equal(result.status, 1);
+    assert.match(result.stderr, /state_status: invalid/);
     assert.match(result.stderr, /not valid JSON/);
   } finally {
     rmSync(cwd, { force: true, recursive: true });
@@ -842,6 +890,7 @@ test("review-gate validate-commit rejects incomplete active gate state", () => {
     const result = runAgentRuntime(["review-gate", "validate-commit"], { cwd });
 
     assert.equal(result.status, 1);
+    assert.match(result.stderr, /state_status: invalid/);
     assert.match(result.stderr, /requires stagedDiffHash/);
     assert.match(result.stderr, /requires requiredReviewPasses/);
     assert.match(result.stderr, /requires results/);

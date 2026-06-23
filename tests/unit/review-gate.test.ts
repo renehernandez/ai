@@ -291,10 +291,11 @@ test("consumed review gate state is inactive for commit validation", () => {
     assert.equal(consumed.state?.status, "consumed");
     assert.equal(typeof consumed.state?.consumedAt, "string");
     assert.equal(consumedValidation.ok, true);
+    assert.equal(consumedValidation.stateStatus, "consumed");
     assert.equal(consumedValidation.active, false);
     assert.equal(
       consumedValidation.note,
-      "Review gate is inactive; allowing commit.",
+      "Review gate is consumed; allowing commit.",
     );
   } finally {
     rmSync(cwd, { force: true, recursive: true });

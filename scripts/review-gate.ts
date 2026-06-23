@@ -51,6 +51,7 @@ export type ReviewGateState = {
 export type ReviewGateValidation = {
   ok: boolean;
   statePath: string;
+  stateStatus: ReviewGateStatus | "missing" | "invalid";
   active: boolean;
   workflow?: string;
   stagedDiffHash: string;
@@ -224,6 +225,7 @@ export function validateReviewGateForCommit(
   const currentDiffHash = stagedDiffHash(cwd);
   const base: Omit<ReviewGateValidation, "ok" | "errors"> = {
     statePath,
+    stateStatus: "missing",
     active: false,
     workflow: undefined,
     stagedDiffHash: currentDiffHash,
@@ -249,6 +251,7 @@ export function validateReviewGateForCommit(
   } catch (error) {
     return {
       ...base,
+      stateStatus: "invalid",
       ok: false,
       errors: [`Review gate state is not valid JSON: ${errorMessage(error)}`],
     };
@@ -259,6 +262,8 @@ export function validateReviewGateForCommit(
   const requiredReviewPasses = normalized.requiredReviewPasses;
   const results = normalized.results;
   const active = normalized.active;
+  const stateStatus: ReviewGateValidation["stateStatus"] =
+    schemaErrors.length > 0 ? "invalid" : normalized.status;
   const workflow = normalized.workflow;
   const stateDiffHash = normalized.stagedDiffHash;
   const completedReviewPasses = requiredReviewPasses.filter((reviewPass) => {
@@ -278,6 +283,7 @@ export function validateReviewGateForCommit(
     return {
       ...base,
       ok: schemaErrors.length === 0,
+      stateStatus,
       active: false,
       workflow,
       requiredReviewPasses,
@@ -287,9 +293,7 @@ export function validateReviewGateForCommit(
       blockingFindings,
       errors: schemaErrors,
       note:
-        schemaErrors.length === 0
-          ? "Review gate is inactive; allowing commit."
-          : undefined,
+        schemaErrors.length === 0 ? inactiveGateNote(stateStatus) : undefined,
     };
   }
 
@@ -322,6 +326,7 @@ export function validateReviewGateForCommit(
   return {
     ...base,
     ok: errors.length === 0,
+    stateStatus,
     active: true,
     workflow,
     requiredReviewPasses,
@@ -339,6 +344,7 @@ export function formatReviewGateStatus(
 ): string {
   const lines = [
     `state_path: ${validation.statePath}`,
+    `state_status: ${validation.stateStatus}`,
     `active: ${validation.active}`,
     `staged_diff_hash: ${validation.stagedDiffHash}`,
     `required_review_passes: ${formatList(validation.requiredReviewPasses)}`,
@@ -625,6 +631,7 @@ function atomicWriteJson(statePath: string, state: ReviewGateState): void {
 
 function normalizeState(state: unknown): {
   errors: string[];
+  status: ReviewGateStatus;
   active: boolean;
   workflow?: string;
   stagedDiffHash?: string;
@@ -636,6 +643,7 @@ function normalizeState(state: unknown): {
   if (!isPlainRecord(state)) {
     return {
       errors,
+      status: "cleared",
       active: false,
       workflow: undefined,
       stagedDiffHash: undefined,
@@ -646,6 +654,11 @@ function normalizeState(state: unknown): {
   }
   return {
     errors,
+    status: GATE_STATUSES.has(state.status as string)
+      ? (state.status as ReviewGateStatus)
+      : state.active === true
+        ? "active"
+        : "cleared",
     active: state.active === true,
     workflow: typeof state.workflow === "string" ? state.workflow : undefined,
     stagedDiffHash:
@@ -662,6 +675,16 @@ function normalizeState(state: unknown): {
       ? state.blockingFindings
       : [],
   };
+}
+
+function inactiveGateNote(status: ReviewGateStatus): string {
+  if (status === "consumed") {
+    return "Review gate is consumed; allowing commit.";
+  }
+  if (status === "cleared") {
+    return "Review gate is cleared; allowing commit.";
+  }
+  return "Review gate is inactive; allowing commit.";
 }
 
 function gitOutput(args: string[], cwd: string): string {
