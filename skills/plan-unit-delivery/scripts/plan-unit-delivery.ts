@@ -163,7 +163,13 @@ type ReviewOutcome = {
 type ParsedReviewerReport = {
   launchedReviewers: string[];
   skippedReviewerNames: Set<string>;
+  skippedReviewers: SkippedReviewer[];
   outcomes: ReviewOutcome[];
+};
+
+type SkippedReviewer = {
+  reviewer: string;
+  evidence: string;
 };
 
 function main(): void {
@@ -623,7 +629,10 @@ function buildPlanUnitDeliveryReviewGateInput(
       kind: "plan_delivery_handoff",
       ref: handoff.artifact_ref,
       phase: PLAN_UNIT_DELIVERY_REVIEW_PHASE,
-      evidence: options.evidenceRef ? [options.evidenceRef] : [],
+      evidence: [
+        ...(options.evidenceRef ? [options.evidenceRef] : []),
+        ...skippedReviewerEvidence(report.skippedReviewers),
+      ],
     },
     requiredReviewPasses,
     results,
@@ -669,6 +678,15 @@ function assertReviewerLaunchReportConsistent(
       `Invalid reviewer launch/report pair:\n${errors.map((error) => `- ${error}`).join("\n")}`,
     );
   }
+}
+
+function skippedReviewerEvidence(
+  skippedReviewers: SkippedReviewer[],
+): string[] {
+  return skippedReviewers.map(
+    ({ reviewer, evidence }) =>
+      `skipped reviewer ${reviewer}: not_applicable - ${evidence}`,
+  );
 }
 
 function assertRequiredReviewPassesPassed(
@@ -1063,7 +1081,13 @@ function validatedLaunchReport(input: string): ParsedReviewerLaunch {
   const launchedReviewers = list(section, "launched_reviewers");
   const skippedReviewers = list(section, "skipped_reviewers");
   const reviewPassIds = list(section, "review_pass_ids");
-  const skippedReviewerNames = parseSkippedReviewers(skippedReviewers, errors);
+  const parsedSkippedReviewers = parseSkippedReviewers(
+    skippedReviewers,
+    errors,
+  );
+  const skippedReviewerNames = new Set(
+    parsedSkippedReviewers.map(({ reviewer }) => reviewer),
+  );
   const reviewPassIdReviewers = new Set<string>();
 
   if (status !== "launched") {
@@ -1084,6 +1108,7 @@ function validatedLaunchReport(input: string): ParsedReviewerLaunch {
     skippedReviewerNames,
     errors,
   );
+  rejectLaunchedSkippedOverlap(launchedReviewers, skippedReviewerNames, errors);
 
   for (const reviewPassId of reviewPassIds) {
     const parsed = reviewPassId.match(/^([^:]+):\s*(.+)$/);
@@ -1120,7 +1145,10 @@ function validatedLaunchReport(input: string): ParsedReviewerLaunch {
     );
   }
 
-  return { launchedReviewers, skippedReviewerNames };
+  return {
+    launchedReviewers,
+    skippedReviewerNames,
+  };
 }
 
 function validateReviewReport(input: string): void {
@@ -1143,7 +1171,13 @@ function validatedReviewReport(input: string): ParsedReviewerReport {
   const skippedReviewers = list(section, "skipped_reviewers");
   const outcomes = list(section, "outcomes");
   const outcomeReviewers = new Set<string>();
-  const skippedReviewerNames = parseSkippedReviewers(skippedReviewers, errors);
+  const parsedSkippedReviewers = parseSkippedReviewers(
+    skippedReviewers,
+    errors,
+  );
+  const skippedReviewerNames = new Set(
+    parsedSkippedReviewers.map(({ reviewer }) => reviewer),
+  );
   const parsedOutcomes: ReviewOutcome[] = [];
 
   if (status !== "complete") {
@@ -1164,6 +1198,7 @@ function validatedReviewReport(input: string): ParsedReviewerReport {
     skippedReviewerNames,
     errors,
   );
+  rejectLaunchedSkippedOverlap(launchedReviewers, skippedReviewerNames, errors);
 
   if (outcomes.length === 0) {
     errors.push("outcomes must include each launched reviewer");
@@ -1242,7 +1277,12 @@ function validatedReviewReport(input: string): ParsedReviewerReport {
     );
   }
 
-  return { launchedReviewers, skippedReviewerNames, outcomes: parsedOutcomes };
+  return {
+    launchedReviewers,
+    skippedReviewerNames,
+    skippedReviewers: parsedSkippedReviewers,
+    outcomes: parsedOutcomes,
+  };
 }
 
 function requireRequiredReviewers(
@@ -1270,6 +1310,18 @@ function requireKnownReviewers(
   }
 }
 
+function rejectLaunchedSkippedOverlap(
+  launchedReviewers: string[],
+  skippedReviewerNames: Set<string>,
+  errors: string[],
+): void {
+  for (const reviewer of launchedReviewers) {
+    if (skippedReviewerNames.has(reviewer)) {
+      errors.push(`${reviewer} cannot be both launched and skipped`);
+    }
+  }
+}
+
 function requireConditionalReviewerAccounting(
   reviewer: (typeof REVIEW_PASSES)[number],
   launchedReviewers: string[],
@@ -1289,8 +1341,8 @@ function requireConditionalReviewerAccounting(
 function parseSkippedReviewers(
   skippedReviewers: string[],
   errors: string[],
-): Set<string> {
-  const skippedReviewerNames = new Set<string>();
+): SkippedReviewer[] {
+  const parsedSkippedReviewers: SkippedReviewer[] = [];
 
   for (const skippedReviewer of skippedReviewers) {
     const parsed = skippedReviewer.match(
@@ -1314,10 +1366,10 @@ function parseSkippedReviewers(
       errors.push(`${reviewer} skipped evidence is required`);
     }
 
-    skippedReviewerNames.add(reviewer);
+    parsedSkippedReviewers.push({ reviewer, evidence });
   }
 
-  return skippedReviewerNames;
+  return parsedSkippedReviewers;
 }
 
 function parseHandoff(input: string): ParsedHandoff {
