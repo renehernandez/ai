@@ -1,7 +1,14 @@
 #!/usr/bin/env tsx
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { createHash } from "node:crypto";
+import {
+  existsSync,
+  lstatSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+} from "node:fs";
+import { join, sep } from "node:path";
 import { nitroFeedbackGateErrors } from "../../../scripts/nitro-feedback-gate.ts";
 import {
   cleanScalar,
@@ -66,6 +73,7 @@ const READINESS_REVIEWER_STATUSES = [
   "blocked",
   "skipped",
 ] as const;
+const OPENSPEC_CHANGE_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 type Command =
   | "detect"
@@ -91,6 +99,7 @@ type ParsedRequest = {
   review_goal?: string;
   requested_reviewers: string[];
   readiness_reviewer_evidence?: ReadinessReviewerEvidence;
+  blueprint_provenance?: BlueprintProvenance;
   unresolved_blockers: string[];
   blockers: string[];
 };
@@ -107,6 +116,23 @@ type ReadinessReviewerEvidence = {
   skipped_reviewers: string[];
   skipped_rationale: string[];
   blocking_findings: string[];
+};
+
+type BlueprintProvenance = {
+  present: boolean;
+  source?: string;
+  source_plan: {
+    ref?: string;
+    change_id?: string;
+    artifact_fingerprint?: string;
+  };
+  generated_change: {
+    change_id?: string;
+    ref?: string;
+    generated_paths: string[];
+  };
+  validation_evidence: string[];
+  cleanup_evidence: string[];
 };
 
 main();
@@ -228,6 +254,24 @@ plan_review_request:
     skipped_rationale:
       - <copy each plan-ready skipped rationale, or [] when plan-ready emitted []>
     blocking_findings: []
+  blueprint_provenance:
+    source: openspec_blueprint
+    source_plan:
+      ref: <openspec_blueprint.source_plan.ref>
+      change_id: <openspec_blueprint.source_plan.change_id>
+      artifact_fingerprint: <openspec_blueprint.review.reviewer_evidence.artifact_fingerprint>
+    generated_change:
+      change_id: example-change
+      ref: openspec/changes/example-change
+      generated_paths:
+        - openspec/changes/example-change/proposal.md
+        - openspec/changes/example-change/tasks.md
+        - openspec/changes/example-change/specs/<spec>/spec.md
+    validation_evidence:
+      - openspec validate example-change --strict --no-interactive
+      - pnpm ax openspec validate
+    cleanup_evidence:
+      - scripts/plan-orchestrator.ts cleanup-source-plan --source-plan <path> --expected-source-plan <source_plan.ref> --expected-change-id <change-id> --change-id <change-id>
   unresolved_blockers: []
 \`\`\`
 `);
@@ -438,6 +482,7 @@ function commitPlanning(args: string[], input: string): void {
   const diffHash = stagedDiffHash(cwd);
   const evidenceRef =
     optionalArg(args, "--source-ref") ?? optionalArg(args, "--file");
+  validateOpenSpecBlueprintProvenanceBeforeGate(input, cwd, args);
   const reviewGateInput = buildPlanReviewGateInput(input, {
     diffHash,
     evidenceRef,
@@ -608,6 +653,7 @@ function parseRequest(input: string): ParsedRequest {
       requested_reviewers: list(reviewSection, "requested_reviewers"),
       readiness_reviewer_evidence:
         parseReadinessReviewerEvidence(reviewSection),
+      blueprint_provenance: parseBlueprintProvenance(reviewSection),
       unresolved_blockers: list(reviewSection, "unresolved_blockers"),
       blockers: [],
     };
@@ -624,6 +670,30 @@ function parseRequest(input: string): ParsedRequest {
     requested_reviewers: list(handoffBody, "requested_reviewers"),
     unresolved_blockers: list(handoffBody, "unresolved_blockers"),
     blockers: list(handoffBody, "blockers"),
+  };
+}
+
+function parseBlueprintProvenance(requestSection: string): BlueprintProvenance {
+  const section = findChildSection(requestSection, "blueprint_provenance");
+  const body = section ?? "";
+  const sourcePlan = findChildSection(body, "source_plan") ?? "";
+  const generatedChange = findChildSection(body, "generated_change") ?? "";
+
+  return {
+    present: Boolean(section),
+    source: scalar(body, "source"),
+    source_plan: {
+      ref: scalar(sourcePlan, "ref"),
+      change_id: scalar(sourcePlan, "change_id"),
+      artifact_fingerprint: scalar(sourcePlan, "artifact_fingerprint"),
+    },
+    generated_change: {
+      change_id: scalar(generatedChange, "change_id"),
+      ref: scalar(generatedChange, "ref"),
+      generated_paths: list(generatedChange, "generated_paths"),
+    },
+    validation_evidence: list(body, "validation_evidence"),
+    cleanup_evidence: list(body, "cleanup_evidence"),
   };
 }
 
@@ -759,6 +829,413 @@ function readinessReviewerEvidenceErrors(
   return errors;
 }
 
+function validateOpenSpecBlueprintProvenanceBeforeGate(
+  input: string,
+  cwd: string,
+  args: string[],
+): void {
+  const request = parseRequest(input);
+  if (
+    request.source !== "plan_review_request" ||
+    request.artifact_type !== "openspec"
+  ) {
+    return;
+  }
+
+  const errors = blueprintProvenanceErrors(request, cwd);
+  if (errors.length > 0) {
+    fail(
+      [
+        "openspec_blueprint_provenance_blocked: rerun readiness reviewers on the materialized OpenSpec diff before plan-review commit",
+        ...errors.map((error) => `- ${error}`),
+      ].join("\n"),
+    );
+  }
+
+  runStrictOpenSpecValidation(request.blueprint_provenance, cwd, args);
+}
+
+function blueprintProvenanceErrors(
+  request: ParsedRequest,
+  cwd: string,
+): string[] {
+  const errors: string[] = [];
+  const provenance = request.blueprint_provenance;
+  const evidence = request.readiness_reviewer_evidence;
+  const artifactRef = request.artifact_ref;
+
+  if (!provenance?.present) {
+    return ["blueprint_provenance is required for OpenSpec planning commits"];
+  }
+
+  if (provenance.source !== "openspec_blueprint") {
+    errors.push("blueprint_provenance.source must be openspec_blueprint");
+  }
+
+  requireValue(
+    provenance.source_plan.ref,
+    "blueprint_provenance.source_plan.ref",
+    errors,
+  );
+  requireValue(
+    provenance.source_plan.change_id,
+    "blueprint_provenance.source_plan.change_id",
+    errors,
+  );
+  requireValue(
+    provenance.source_plan.artifact_fingerprint,
+    "blueprint_provenance.source_plan.artifact_fingerprint",
+    errors,
+  );
+  requireValue(
+    provenance.generated_change.change_id,
+    "blueprint_provenance.generated_change.change_id",
+    errors,
+  );
+  requireValue(
+    provenance.generated_change.ref,
+    "blueprint_provenance.generated_change.ref",
+    errors,
+  );
+
+  if (
+    provenance.source_plan.ref &&
+    !isConcreteAgentsPlanFile(provenance.source_plan.ref)
+  ) {
+    errors.push(
+      "blueprint_provenance.source_plan.ref must point to a concrete .agents/plans file",
+    );
+  }
+
+  if (
+    provenance.source_plan.ref &&
+    provenance.source_plan.artifact_fingerprint
+  ) {
+    errors.push(...sourcePlanFingerprintErrors(provenance, cwd));
+  }
+
+  if (
+    evidence?.artifact_fingerprint &&
+    provenance.source_plan.artifact_fingerprint &&
+    evidence.artifact_fingerprint !==
+      provenance.source_plan.artifact_fingerprint
+  ) {
+    errors.push(
+      "blueprint_provenance.source_plan.artifact_fingerprint must match readiness_reviewer_evidence.artifact_fingerprint",
+    );
+  }
+
+  if (
+    artifactRef &&
+    provenance.generated_change.ref &&
+    artifactRef !== provenance.generated_change.ref
+  ) {
+    errors.push(
+      "blueprint_provenance.generated_change.ref must match artifact_ref",
+    );
+  }
+
+  const changeIdFromRef = artifactRef?.match(
+    /^openspec\/changes\/([^/]+)$/,
+  )?.[1];
+  if (artifactRef && !changeIdFromRef) {
+    errors.push(
+      "artifact_ref must match openspec/changes/<change-id> for OpenSpec planning commits",
+    );
+  }
+
+  for (const [label, changeId] of [
+    [
+      "blueprint_provenance.source_plan.change_id",
+      provenance.source_plan.change_id,
+    ],
+    [
+      "blueprint_provenance.generated_change.change_id",
+      provenance.generated_change.change_id,
+    ],
+    ["artifact_ref change id", changeIdFromRef],
+  ] as const) {
+    if (changeId && !OPENSPEC_CHANGE_ID_PATTERN.test(changeId)) {
+      errors.push(`${label} must be a lowercase OpenSpec change id slug`);
+    }
+  }
+
+  const expectedGeneratedRef = provenance.generated_change.change_id
+    ? `openspec/changes/${provenance.generated_change.change_id}`
+    : undefined;
+  if (
+    expectedGeneratedRef &&
+    (artifactRef !== expectedGeneratedRef ||
+      provenance.generated_change.ref !== expectedGeneratedRef)
+  ) {
+    errors.push(
+      `blueprint_provenance.generated_change.ref and artifact_ref must be ${expectedGeneratedRef}`,
+    );
+  }
+
+  const changeIds = [
+    provenance.source_plan.change_id,
+    provenance.generated_change.change_id,
+    changeIdFromRef,
+  ].filter(Boolean);
+  if (new Set(changeIds).size > 1) {
+    errors.push(
+      "blueprint_provenance source_plan.change_id, generated_change.change_id, and artifact_ref change id must match",
+    );
+  }
+
+  const generatedPaths = provenance.generated_change.generated_paths;
+  if (generatedPaths.length === 0) {
+    errors.push(
+      "blueprint_provenance.generated_change.generated_paths is required",
+    );
+  }
+
+  for (const generatedPath of generatedPaths) {
+    if (
+      generatedPath.startsWith("/") ||
+      generatedPath.split("/").includes("..")
+    ) {
+      errors.push(
+        `blueprint_provenance.generated_change.generated_paths contains invalid path: ${generatedPath}`,
+      );
+      continue;
+    }
+
+    if (
+      provenance.generated_change.ref &&
+      generatedPath !== provenance.generated_change.ref &&
+      !generatedPath.startsWith(`${provenance.generated_change.ref}/`)
+    ) {
+      errors.push(
+        `blueprint_provenance.generated_change.generated_paths must stay under ${provenance.generated_change.ref}: ${generatedPath}`,
+      );
+    }
+
+    if (!existsSync(join(cwd, generatedPath))) {
+      errors.push(
+        `blueprint_provenance.generated_change.generated_paths missing from working tree: ${generatedPath}`,
+      );
+    }
+  }
+
+  const stagedEntries = stagedNameStatus(cwd);
+  const stagedPlanPathEntries = stagedEntries.filter((entry) =>
+    entry.paths.some(isAgentsPlanPath),
+  );
+  for (const entry of stagedPlanPathEntries) {
+    errors.push(
+      `OpenSpec planning commits must not stage .agents/plans paths: ${entry.status}: ${entry.paths.filter(isAgentsPlanPath).join(" -> ")}`,
+    );
+  }
+
+  const stagedArtifactTouchedPaths = artifactRef
+    ? stagedEntries.flatMap((entry) =>
+        stagedArtifactBoundaryPaths(entry, artifactRef),
+      )
+    : [];
+  const stagedArtifactPaths = stagedArtifactTouchedPaths.filter((path) =>
+    artifactRef
+      ? path === artifactRef || path.startsWith(`${artifactRef}/`)
+      : false,
+  );
+  if (stagedArtifactPaths.length === 0) {
+    errors.push(
+      "staged OpenSpec diff must include at least one path under artifact_ref",
+    );
+  }
+
+  const undeclaredStagedPaths = stagedArtifactTouchedPaths.filter(
+    (path) => !generatedPaths.includes(path),
+  );
+  for (const stagedPath of undeclaredStagedPaths) {
+    errors.push(
+      `staged OpenSpec path is not declared in blueprint_provenance.generated_change.generated_paths: ${stagedPath}`,
+    );
+  }
+
+  if (
+    stagedArtifactPaths.length > 0 &&
+    !stagedArtifactPaths.some((path) => generatedPaths.includes(path))
+  ) {
+    errors.push(
+      "staged OpenSpec diff must include at least one generated path declared by blueprint_provenance",
+    );
+  }
+
+  const dirtyGeneratedPaths = unstagedOrUntrackedPaths(
+    cwd,
+    artifactRef ? [artifactRef] : generatedPaths,
+  );
+  for (const generatedPath of dirtyGeneratedPaths) {
+    errors.push(
+      `OpenSpec artifact has unstaged or untracked changes outside the staged diff: ${generatedPath}`,
+    );
+  }
+
+  const strictValidationCommand = provenance.generated_change.change_id
+    ? `openspec validate ${provenance.generated_change.change_id} --strict --no-interactive`
+    : undefined;
+  if (
+    strictValidationCommand &&
+    !provenance.validation_evidence.includes(strictValidationCommand)
+  ) {
+    errors.push(
+      `blueprint_provenance.validation_evidence must include ${strictValidationCommand}`,
+    );
+  }
+
+  return errors;
+}
+
+function sourcePlanFingerprintErrors(
+  provenance: BlueprintProvenance,
+  cwd: string,
+): string[] {
+  const ref = provenance.source_plan.ref;
+  const expectedFingerprint = provenance.source_plan.artifact_fingerprint;
+  const changeId = provenance.source_plan.change_id;
+  const errors: string[] = [];
+
+  if (!ref || !expectedFingerprint) {
+    return errors;
+  }
+
+  const path = join(cwd, ref);
+  if (existsSync(path)) {
+    const plansRoot = join(cwd, ".agents", "plans");
+    const realCwd = realpathSync(cwd);
+    const realPlansRoot = realpathSync(plansRoot);
+    const realPath = realpathSync(path);
+    if (
+      !realPlansRoot.startsWith(`${realCwd}${sep}`) ||
+      !realPath.startsWith(`${realPlansRoot}${sep}`)
+    ) {
+      return [
+        "blueprint_provenance.source_plan.ref must resolve inside .agents/plans",
+      ];
+    }
+
+    if (lstatSync(path).isSymbolicLink()) {
+      return [
+        "blueprint_provenance.source_plan.ref must not point to a symlink",
+      ];
+    }
+
+    const stat = statSync(path);
+    if (!stat.isFile()) {
+      return [
+        "blueprint_provenance.source_plan.ref must point to a regular source plan file",
+      ];
+    }
+
+    const actualFingerprint = fingerprint(path);
+    if (actualFingerprint !== expectedFingerprint) {
+      return [
+        "blueprint_provenance.source_plan.artifact_fingerprint must match source_plan.ref content",
+      ];
+    }
+
+    return errors;
+  }
+
+  if (!hasCleanupEvidence(provenance, ref, changeId)) {
+    errors.push(
+      "blueprint_provenance.cleanup_evidence must prove source_plan.ref cleanup when the source plan file is absent",
+    );
+  }
+
+  return errors;
+}
+
+function hasCleanupEvidence(
+  provenance: BlueprintProvenance,
+  ref: string,
+  changeId: string | undefined,
+): boolean {
+  return provenance.cleanup_evidence.some((evidence) => {
+    const args = shellWords(evidence);
+    if (!changeId) {
+      return false;
+    }
+
+    return arraysEqual(args, [
+      "scripts/plan-orchestrator.ts",
+      "cleanup-source-plan",
+      "--source-plan",
+      ref,
+      "--expected-source-plan",
+      ref,
+      "--expected-change-id",
+      changeId,
+      "--change-id",
+      changeId,
+    ]);
+  });
+}
+
+function shellWords(input: string): string[] {
+  return input.match(/"[^"]*"|'[^']*'|\S+/g)?.map(cleanScalar) ?? [];
+}
+
+function arraysEqual(left: string[], right: string[]): boolean {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
+}
+
+function runStrictOpenSpecValidation(
+  provenance: BlueprintProvenance | undefined,
+  cwd: string,
+  args: string[],
+): void {
+  const changeId = provenance?.generated_change.change_id;
+  if (!changeId) {
+    return;
+  }
+
+  const commandOverride = optionalArg(args, "--openspec-command");
+  if (
+    commandOverride &&
+    process.env.AX_PLAN_REVIEW_ALLOW_OPENSPEC_COMMAND_OVERRIDE !== "1"
+  ) {
+    fail(
+      "openspec_command_override_forbidden: --openspec-command is only available to plan-review unit tests",
+    );
+  }
+
+  const command = commandOverride ?? "openspec";
+  const commandArgs = ["validate", changeId, "--strict", "--no-interactive"];
+  const result = spawnSync(command, commandArgs, {
+    cwd,
+    encoding: "utf8",
+  });
+  if (result.error) {
+    fail(
+      [
+        `openspec_strict_validation_failed: ${["openspec", ...commandArgs].join(" ")}`,
+        result.error.message,
+        "next action: ensure the OpenSpec CLI is installed and on PATH, then rerun `pnpm ax openspec status` or `pnpm ax openspec validate` before retrying.",
+      ].join("\n"),
+    );
+  }
+
+  if (result.status === 0) {
+    return;
+  }
+
+  fail(
+    [
+      `openspec_strict_validation_failed: ${["openspec", ...commandArgs].join(" ")}`,
+      (result.stderr ?? "").trim(),
+      (result.stdout ?? "").trim(),
+    ]
+      .filter(Boolean)
+      .join("\n"),
+  );
+}
+
 function map(input: string, key: string): Record<string, string> {
   const lines = input.split(/\r?\n/);
   const keyIndex = lines.findIndex((line) =>
@@ -787,6 +1264,39 @@ function map(input: string, key: string): Record<string, string> {
   }
 
   return values;
+}
+
+function findChildSection(input: string, sectionName: string): string | null {
+  const lines = input.split(/\r?\n/);
+  const start = lines.findIndex(
+    (line) =>
+      line.trim() === `${sectionName}:` &&
+      (line.match(/^(\s*)/)?.[1].length ?? 0) === 0,
+  );
+  if (start === -1) {
+    return null;
+  }
+
+  const sectionIndent = lines[start].match(/^(\s*)/)?.[1].length ?? 0;
+  const childIndent = sectionIndent + 2;
+  const values: string[] = [];
+  for (const line of lines.slice(start + 1)) {
+    if (line.trim() === "") {
+      values.push("");
+      continue;
+    }
+
+    const indent = line.match(/^(\s*)/)?.[1].length ?? 0;
+    if (indent <= sectionIndent) {
+      break;
+    }
+
+    values.push(
+      line.startsWith(" ".repeat(childIndent)) ? line.slice(childIndent) : line,
+    );
+  }
+
+  return values.join("\n");
 }
 
 function buildPlanReviewGateInput(
@@ -922,6 +1432,31 @@ function parseNameStatus(input: string): NameStatusEntry[] {
     });
 }
 
+function stagedArtifactBoundaryPaths(
+  entry: NameStatusEntry,
+  artifactRef: string,
+): string[] {
+  if (entry.status.startsWith("R")) {
+    return entry.paths.some((path) => isArtifactPath(path, artifactRef))
+      ? entry.paths
+      : [];
+  }
+
+  if (entry.status.startsWith("C")) {
+    const destination = entry.paths[entry.paths.length - 1];
+    return destination && isArtifactPath(destination, artifactRef)
+      ? [destination]
+      : [];
+  }
+
+  const path = entry.paths[0];
+  return path && isArtifactPath(path, artifactRef) ? [path] : [];
+}
+
+function isArtifactPath(path: string, artifactRef: string): boolean {
+  return path === artifactRef || path.startsWith(`${artifactRef}/`);
+}
+
 function gitDiffNameStatus(args: string[]): string {
   const base = optionalArg(args, "--base");
   const head = optionalArg(args, "--head");
@@ -944,6 +1479,53 @@ function gitDiffNameStatus(args: string[]): string {
   return result.stdout;
 }
 
+function stagedNameStatus(cwd: string): NameStatusEntry[] {
+  const result = spawnSync(
+    "git",
+    ["diff", "--cached", "--name-status", "--find-renames", "--find-copies"],
+    { cwd, encoding: "utf8" },
+  );
+  if (result.status !== 0) {
+    process.stderr.write(result.stderr || result.stdout);
+    process.exit(result.status ?? 1);
+  }
+  return parseNameStatus(result.stdout);
+}
+
+function unstagedOrUntrackedPaths(cwd: string, paths: string[]): string[] {
+  if (paths.length === 0) {
+    return [];
+  }
+
+  const result = spawnSync(
+    "git",
+    ["status", "--porcelain=v1", "--", ...paths],
+    { cwd, encoding: "utf8" },
+  );
+  if (result.status !== 0) {
+    process.stderr.write(result.stderr || result.stdout);
+    process.exit(result.status ?? 1);
+  }
+
+  return result.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter(Boolean)
+    .flatMap((line) => {
+      const status = line.slice(0, 2);
+      const pathText = line.slice(3);
+      const path = pathText.includes(" -> ")
+        ? pathText.split(" -> ").at(-1)
+        : pathText;
+
+      if (status === "??" || status[1] !== " ") {
+        return path ? [path] : [];
+      }
+
+      return [];
+    });
+}
+
 function readDiffFile(path: string): string {
   if (!existsSync(path)) {
     fail(`diff_file_missing: ${path}`);
@@ -953,6 +1535,19 @@ function readDiffFile(path: string): string {
 
 function isAgentsPlanPath(path: string): boolean {
   return path === ".agents/plans" || path.startsWith(".agents/plans/");
+}
+
+function isConcreteAgentsPlanFile(path: string): boolean {
+  return (
+    path.startsWith(".agents/plans/") &&
+    !path.endsWith("/") &&
+    !path.split("/").includes("..") &&
+    path !== ".agents/plans"
+  );
+}
+
+function fingerprint(path: string): string {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
 function optionalArg(args: string[], name: string): string | undefined {

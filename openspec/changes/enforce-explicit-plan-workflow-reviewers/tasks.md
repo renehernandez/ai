@@ -55,7 +55,7 @@
   owns readiness-to-planning-commit gate binding; legacy `plan-ready` activation
   callers are rejected with a route-to-`plan-review` diagnostic instead of
   silently writing state or no-oping.
-- [ ] 3.6 Before arming the gate for materialized OpenSpec planning files,
+- [x] 3.6 Before arming the gate for materialized OpenSpec planning files,
   validate blueprint-to-OpenSpec provenance by checking source plan, change id,
   artifact fingerprint, generated paths, and strict OpenSpec validation; rerun
   readiness reviewers on the materialized OpenSpec diff when provenance cannot

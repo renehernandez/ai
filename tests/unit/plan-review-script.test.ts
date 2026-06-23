@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   chmodSync,
+  existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -29,6 +33,7 @@ function withoutGitRepositoryEnv(): NodeJS.ProcessEnv {
       delete env[key];
     }
   }
+  env.AX_PLAN_REVIEW_ALLOW_OPENSPEC_COMMAND_OVERRIDE = "1";
   return env;
 }
 
@@ -36,6 +41,7 @@ function runPlanReview(
   command: string,
   content: string,
   extraArgs: string[] = [],
+  env: NodeJS.ProcessEnv = withoutGitRepositoryEnv(),
 ): { status: number | null; stderr: string; stdout: string } {
   let result: ReturnType<typeof spawnSync> | undefined;
   withTempFile(content, (path) => {
@@ -53,7 +59,7 @@ function runPlanReview(
       {
         cwd: process.cwd(),
         encoding: "utf8",
-        env: withoutGitRepositoryEnv(),
+        env,
       },
     );
   });
@@ -150,6 +156,23 @@ const planReviewRequest = `plan_review_request:
     skipped_reviewers: []
     skipped_rationale: []
     blocking_findings: []
+  blueprint_provenance:
+    source: openspec_blueprint
+    source_plan:
+      ref: .agents/plans/example-change.md
+      change_id: example-change
+      artifact_fingerprint: source-plan-fingerprint
+    generated_change:
+      change_id: example-change
+      ref: openspec/changes/example-change
+      generated_paths:
+        - openspec/changes/example-change/proposal.md
+        - openspec/changes/example-change/tasks.md
+    validation_evidence:
+      - openspec validate example-change --strict --no-interactive
+      - pnpm ax openspec validate
+    cleanup_evidence:
+      - scripts/plan-orchestrator.ts cleanup-source-plan --source-plan .agents/plans/example-change.md --expected-source-plan .agents/plans/example-change.md --expected-change-id example-change --change-id example-change
   unresolved_blockers: []
 `;
 
@@ -344,8 +367,20 @@ test("commit-planning activates review gate and invokes required-gate ax commit"
     writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
     runGit(directory, ["add", "README.md"]);
     runGit(directory, ["commit", "-m", "initial"]);
-    writeFileSync(join(directory, "plan.md"), "planning\n", "utf8");
-    runGit(directory, ["add", "plan.md"]);
+    mkdirSync(join(directory, "openspec", "changes", "example-change"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "proposal.md"),
+      "planning\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "tasks.md"),
+      "- [ ] 1. Implement\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "openspec"]);
 
     const argsPath = join(directory, "ax-args.txt");
     const fakeAxPath = join(directory, "fake-ax");
@@ -356,6 +391,15 @@ test("commit-planning activates review gate and invokes required-gate ax commit"
     );
     chmodSync(fakeAxPath, 0o755);
 
+    const openspecArgsPath = join(directory, "openspec-args.txt");
+    const fakeOpenSpecPath = join(directory, "fake-openspec");
+    writeFileSync(
+      fakeOpenSpecPath,
+      `#!/bin/sh\nprintf '%s\\n' "$@" > "${openspecArgsPath}"\n`,
+      "utf8",
+    );
+    chmodSync(fakeOpenSpecPath, 0o755);
+
     const result = runPlanReview("commit-planning", planReviewRequest, [
       "--cwd",
       directory,
@@ -363,10 +407,16 @@ test("commit-planning activates review gate and invokes required-gate ax commit"
       "Commit planning",
       "--ax-command",
       fakeAxPath,
+      "--openspec-command",
+      fakeOpenSpecPath,
     ]);
 
     assert.equal(result.status, 0);
     assert.match(result.stdout, /planning_commit_committed/);
+    assert.deepEqual(
+      readFileSync(openspecArgsPath, "utf8").trim().split("\n"),
+      ["validate", "example-change", "--strict", "--no-interactive"],
+    );
     assert.deepEqual(readFileSync(argsPath, "utf8").trim().split("\n"), [
       "commit",
       "--require-review-gate",
@@ -391,6 +441,1384 @@ test("commit-planning activates review gate and invokes required-gate ax commit"
   }
 });
 
+test("commit-planning blocks OpenSpec gate activation when strict validation fails", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
+  try {
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.com"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
+    runGit(directory, ["add", "README.md"]);
+    runGit(directory, ["commit", "-m", "initial"]);
+    mkdirSync(join(directory, "openspec", "changes", "example-change"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "proposal.md"),
+      "planning\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "tasks.md"),
+      "- [ ] 1. Implement\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "openspec"]);
+
+    const fakeOpenSpecPath = join(directory, "fake-openspec");
+    writeFileSync(
+      fakeOpenSpecPath,
+      "#!/bin/sh\nprintf '%s\\n' 'invalid openspec' >&2\nexit 1\n",
+      "utf8",
+    );
+    chmodSync(fakeOpenSpecPath, 0o755);
+
+    const result = runPlanReview("commit-planning", planReviewRequest, [
+      "--cwd",
+      directory,
+      "--message",
+      "Commit planning",
+      "--ax-command",
+      join(directory, "missing-fake-ax"),
+      "--openspec-command",
+      fakeOpenSpecPath,
+    ]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /openspec_strict_validation_failed/);
+    assert.match(
+      result.stderr,
+      /openspec validate example-change --strict --no-interactive/,
+    );
+    assert.match(result.stderr, /invalid openspec/);
+    assert.equal(
+      result.stderr.includes("ENOENT") || result.stderr.includes("not found"),
+      false,
+    );
+    assert.equal(
+      existsSync(join(directory, ".git", "ax", "review-gate.json")),
+      false,
+    );
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+test("commit-planning reports missing OpenSpec executable before gate activation", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
+  try {
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.com"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
+    runGit(directory, ["add", "README.md"]);
+    runGit(directory, ["commit", "-m", "initial"]);
+    mkdirSync(join(directory, "openspec", "changes", "example-change"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "proposal.md"),
+      "planning\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "tasks.md"),
+      "- [ ] 1. Implement\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "openspec"]);
+
+    const result = runPlanReview("commit-planning", planReviewRequest, [
+      "--cwd",
+      directory,
+      "--message",
+      "Commit planning",
+      "--ax-command",
+      join(directory, "missing-fake-ax"),
+      "--openspec-command",
+      join(directory, "missing-openspec"),
+    ]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /openspec_strict_validation_failed/);
+    assert.match(result.stderr, /spawn/);
+    assert.match(result.stderr, /pnpm ax openspec status/);
+    assert.match(result.stderr, /pnpm ax openspec validate/);
+    assert.equal(
+      result.stderr.includes("TypeError") ||
+        result.stderr.includes("Cannot read properties"),
+      false,
+    );
+    assert.equal(
+      existsSync(join(directory, ".git", "ax", "review-gate.json")),
+      false,
+    );
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+test("commit-planning forbids OpenSpec command overrides outside tests", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
+  try {
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.com"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
+    runGit(directory, ["add", "README.md"]);
+    runGit(directory, ["commit", "-m", "initial"]);
+    mkdirSync(join(directory, "openspec", "changes", "example-change"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "proposal.md"),
+      "planning\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "tasks.md"),
+      "- [ ] 1. Implement\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "openspec"]);
+
+    const env = withoutGitRepositoryEnv();
+    delete env.AX_PLAN_REVIEW_ALLOW_OPENSPEC_COMMAND_OVERRIDE;
+    const result = runPlanReview(
+      "commit-planning",
+      planReviewRequest,
+      [
+        "--cwd",
+        directory,
+        "--message",
+        "Commit planning",
+        "--ax-command",
+        join(directory, "missing-fake-ax"),
+        "--openspec-command",
+        "/usr/bin/true",
+      ],
+      env,
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /openspec_command_override_forbidden/);
+    assert.equal(
+      existsSync(join(directory, ".git", "ax", "review-gate.json")),
+      false,
+    );
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+test("commit-planning blocks OpenSpec gate activation when blueprint provenance is missing", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
+  try {
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.com"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
+    runGit(directory, ["add", "README.md"]);
+    runGit(directory, ["commit", "-m", "initial"]);
+    mkdirSync(join(directory, "openspec", "changes", "example-change"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "proposal.md"),
+      "planning\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "openspec"]);
+
+    const result = runPlanReview(
+      "commit-planning",
+      planReviewRequest.replace(
+        / {2}blueprint_provenance:[\s\S]*? {2}unresolved_blockers: \[\]/,
+        "  unresolved_blockers: []",
+      ),
+      [
+        "--cwd",
+        directory,
+        "--message",
+        "Commit planning",
+        "--ax-command",
+        join(directory, "missing-fake-ax"),
+      ],
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /openspec_blueprint_provenance_blocked/);
+    assert.match(
+      result.stderr,
+      /rerun readiness reviewers on the materialized OpenSpec diff/,
+    );
+    assert.equal(
+      result.stderr.includes("ENOENT") || result.stderr.includes("not found"),
+      false,
+    );
+    assert.equal(
+      existsSync(join(directory, ".git", "ax", "review-gate.json")),
+      false,
+    );
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+test("commit-planning requires blueprint provenance as a direct request child", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
+  try {
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.com"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
+    runGit(directory, ["add", "README.md"]);
+    runGit(directory, ["commit", "-m", "initial"]);
+    mkdirSync(join(directory, "openspec", "changes", "example-change"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "proposal.md"),
+      "planning\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "tasks.md"),
+      "- [ ] 1. Implement\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "openspec"]);
+
+    const nestedRequest = planReviewRequest.replace(
+      / {2}blueprint_provenance:[\s\S]*? {2}unresolved_blockers: \[\]/,
+      (match) =>
+        `${match
+          .replace("  unresolved_blockers: []", "")
+          .split("\n")
+          .map((line) => (line ? `  ${line}` : line))
+          .join("\n")}\n  unresolved_blockers: []`,
+    );
+    const result = runPlanReview("commit-planning", nestedRequest, [
+      "--cwd",
+      directory,
+      "--message",
+      "Commit planning",
+      "--ax-command",
+      join(directory, "missing-fake-ax"),
+    ]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /blueprint_provenance is required for OpenSpec planning commits/,
+    );
+    assert.equal(
+      existsSync(join(directory, ".git", "ax", "review-gate.json")),
+      false,
+    );
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+test("commit-planning blocks generated paths with unstaged working-tree changes", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
+  try {
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.com"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
+    mkdirSync(join(directory, "openspec", "changes", "example-change"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "proposal.md"),
+      "initial planning\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "tasks.md"),
+      "- [ ] 1. Initial\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "."]);
+    runGit(directory, ["commit", "-m", "initial"]);
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "proposal.md"),
+      "staged planning\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "tasks.md"),
+      "- [ ] 1. Unstaged change\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "openspec/changes/example-change/proposal.md"]);
+
+    const result = runPlanReview("commit-planning", planReviewRequest, [
+      "--cwd",
+      directory,
+      "--message",
+      "Commit planning",
+      "--ax-command",
+      join(directory, "missing-fake-ax"),
+    ]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /OpenSpec artifact has unstaged or untracked changes outside the staged diff/,
+    );
+    assert.match(result.stderr, /openspec\/changes\/example-change\/tasks.md/);
+    assert.equal(
+      existsSync(join(directory, ".git", "ax", "review-gate.json")),
+      false,
+    );
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+test("commit-planning blocks staged source plan paths for OpenSpec commits", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
+  try {
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.com"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
+    runGit(directory, ["add", "README.md"]);
+    runGit(directory, ["commit", "-m", "initial"]);
+    mkdirSync(join(directory, ".agents", "plans"), { recursive: true });
+    mkdirSync(join(directory, "openspec", "changes", "example-change"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(directory, ".agents", "plans", "example-change.md"),
+      "source plan\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "proposal.md"),
+      "planning\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "tasks.md"),
+      "- [ ] 1. Implement\n",
+      "utf8",
+    );
+    runGit(directory, ["add", ".agents", "openspec"]);
+
+    const sourceFingerprint = createHash("sha256")
+      .update("source plan\n")
+      .digest("hex");
+    const result = runPlanReview(
+      "commit-planning",
+      planReviewRequest.replaceAll(
+        "source-plan-fingerprint",
+        sourceFingerprint,
+      ),
+      [
+        "--cwd",
+        directory,
+        "--message",
+        "Commit planning",
+        "--ax-command",
+        join(directory, "missing-fake-ax"),
+      ],
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /must not stage \.agents\/plans paths/);
+    assert.equal(
+      existsSync(join(directory, ".git", "ax", "review-gate.json")),
+      false,
+    );
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+test("commit-planning blocks undeclared dirty files under the OpenSpec artifact", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
+  try {
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.com"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
+    mkdirSync(join(directory, "openspec", "changes", "example-change"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "proposal.md"),
+      "initial planning\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "tasks.md"),
+      "- [ ] 1. Implement\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "."]);
+    runGit(directory, ["commit", "-m", "initial"]);
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "proposal.md"),
+      "staged planning\n",
+      "utf8",
+    );
+    mkdirSync(
+      join(directory, "openspec", "changes", "example-change", "specs", "new"),
+      { recursive: true },
+    );
+    writeFileSync(
+      join(
+        directory,
+        "openspec",
+        "changes",
+        "example-change",
+        "specs",
+        "new",
+        "spec.md",
+      ),
+      "unstaged spec\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "openspec/changes/example-change/proposal.md"]);
+
+    const result = runPlanReview("commit-planning", planReviewRequest, [
+      "--cwd",
+      directory,
+      "--message",
+      "Commit planning",
+      "--ax-command",
+      join(directory, "missing-fake-ax"),
+    ]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /OpenSpec artifact has unstaged or untracked changes outside the staged diff/,
+    );
+    assert.match(result.stderr, /openspec\/changes\/example-change\/specs\//);
+    assert.equal(
+      existsSync(join(directory, ".git", "ax", "review-gate.json")),
+      false,
+    );
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+test("commit-planning blocks invalid OpenSpec source plan refs before ax commit", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
+  try {
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.com"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
+    runGit(directory, ["add", "README.md"]);
+    runGit(directory, ["commit", "-m", "initial"]);
+    mkdirSync(join(directory, "openspec", "changes", "example-change"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "proposal.md"),
+      "planning\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "tasks.md"),
+      "- [ ] 1. Implement\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "openspec"]);
+
+    const result = runPlanReview(
+      "commit-planning",
+      planReviewRequest.replace(
+        "      ref: .agents/plans/example-change.md",
+        "      ref: .agents/plans/../example-change.md",
+      ),
+      [
+        "--cwd",
+        directory,
+        "--message",
+        "Commit planning",
+        "--ax-command",
+        join(directory, "missing-fake-ax"),
+      ],
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /source_plan\.ref must point to a concrete \.agents\/plans file/,
+    );
+    assert.equal(
+      result.stderr.includes("ENOENT") || result.stderr.includes("not found"),
+      false,
+    );
+    assert.equal(
+      existsSync(join(directory, ".git", "ax", "review-gate.json")),
+      false,
+    );
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+test("commit-planning rejects source plan symlink provenance", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
+  try {
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.com"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
+    runGit(directory, ["add", "README.md"]);
+    runGit(directory, ["commit", "-m", "initial"]);
+    mkdirSync(join(directory, ".agents", "plans"), { recursive: true });
+    mkdirSync(join(directory, "outside"), { recursive: true });
+    mkdirSync(join(directory, "openspec", "changes", "example-change"), {
+      recursive: true,
+    });
+    writeFileSync(join(directory, "outside", "source.md"), "source\n", "utf8");
+    symlinkSync(
+      join(directory, "outside", "source.md"),
+      join(directory, ".agents", "plans", "example-change.md"),
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "proposal.md"),
+      "planning\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "tasks.md"),
+      "- [ ] 1. Implement\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "openspec"]);
+
+    const sourceFingerprint = createHash("sha256")
+      .update("source\n")
+      .digest("hex");
+    const result = runPlanReview(
+      "commit-planning",
+      planReviewRequest.replaceAll(
+        "source-plan-fingerprint",
+        sourceFingerprint,
+      ),
+      [
+        "--cwd",
+        directory,
+        "--message",
+        "Commit planning",
+        "--ax-command",
+        join(directory, "missing-fake-ax"),
+      ],
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /source_plan\.ref must resolve inside \.agents\/plans/,
+    );
+    assert.equal(
+      existsSync(join(directory, ".git", "ax", "review-gate.json")),
+      false,
+    );
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+test("commit-planning rejects source plans through symlinked plan roots", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
+  const outsideRoot = mkdtempSync(join(tmpdir(), "plan-review-outside-"));
+  try {
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.com"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
+    runGit(directory, ["add", "README.md"]);
+    runGit(directory, ["commit", "-m", "initial"]);
+    mkdirSync(join(directory, ".agents"), { recursive: true });
+    mkdirSync(join(outsideRoot, "plans"), { recursive: true });
+    mkdirSync(join(directory, "openspec", "changes", "example-change"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(outsideRoot, "plans", "example-change.md"),
+      "source\n",
+      "utf8",
+    );
+    symlinkSync(
+      join(outsideRoot, "plans"),
+      join(directory, ".agents", "plans"),
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "proposal.md"),
+      "planning\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "tasks.md"),
+      "- [ ] 1. Implement\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "openspec"]);
+
+    const sourceFingerprint = createHash("sha256")
+      .update("source\n")
+      .digest("hex");
+    const result = runPlanReview(
+      "commit-planning",
+      planReviewRequest.replaceAll(
+        "source-plan-fingerprint",
+        sourceFingerprint,
+      ),
+      [
+        "--cwd",
+        directory,
+        "--message",
+        "Commit planning",
+        "--ax-command",
+        join(directory, "missing-fake-ax"),
+      ],
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /source_plan\.ref must resolve inside \.agents\/plans/,
+    );
+    assert.equal(
+      existsSync(join(directory, ".git", "ax", "review-gate.json")),
+      false,
+    );
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+    rmSync(outsideRoot, { force: true, recursive: true });
+  }
+});
+
+test("commit-planning requires source plan change id from source_plan provenance", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
+  try {
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.com"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
+    runGit(directory, ["add", "README.md"]);
+    runGit(directory, ["commit", "-m", "initial"]);
+    mkdirSync(join(directory, "openspec", "changes", "example-change"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "proposal.md"),
+      "planning\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "tasks.md"),
+      "- [ ] 1. Implement\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "openspec"]);
+
+    const result = runPlanReview(
+      "commit-planning",
+      planReviewRequest.replace("      change_id: example-change\n", ""),
+      [
+        "--cwd",
+        directory,
+        "--message",
+        "Commit planning",
+        "--ax-command",
+        join(directory, "missing-fake-ax"),
+      ],
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /blueprint_provenance\.source_plan\.change_id is required/,
+    );
+    assert.equal(
+      existsSync(join(directory, ".git", "ax", "review-gate.json")),
+      false,
+    );
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+test("commit-planning rejects cleanup evidence prefix spoofing", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
+  try {
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.com"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
+    runGit(directory, ["add", "README.md"]);
+    runGit(directory, ["commit", "-m", "initial"]);
+    mkdirSync(join(directory, "openspec", "changes", "example-change"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "proposal.md"),
+      "planning\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "tasks.md"),
+      "- [ ] 1. Implement\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "openspec"]);
+
+    const result = runPlanReview(
+      "commit-planning",
+      planReviewRequest
+        .replace(
+          "--expected-source-plan .agents/plans/example-change.md",
+          "--expected-source-plan .agents/plans/example-change.md.bak",
+        )
+        .replace(
+          "--expected-change-id example-change",
+          "--expected-change-id example-change-old",
+        )
+        .replace(
+          "--change-id example-change",
+          "--change-id example-change-old",
+        ),
+      [
+        "--cwd",
+        directory,
+        "--message",
+        "Commit planning",
+        "--ax-command",
+        join(directory, "missing-fake-ax"),
+      ],
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /cleanup_evidence must prove source_plan\.ref cleanup/,
+    );
+    assert.equal(
+      existsSync(join(directory, ".git", "ax", "review-gate.json")),
+      false,
+    );
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+test("commit-planning rejects spoofed cleanup command names", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
+  try {
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.com"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
+    runGit(directory, ["add", "README.md"]);
+    runGit(directory, ["commit", "-m", "initial"]);
+    mkdirSync(join(directory, "openspec", "changes", "example-change"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "proposal.md"),
+      "planning\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "tasks.md"),
+      "- [ ] 1. Implement\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "openspec"]);
+
+    const result = runPlanReview(
+      "commit-planning",
+      planReviewRequest.replace(
+        "scripts/plan-orchestrator.ts cleanup-source-plan",
+        "fake-cleanup-source-plan",
+      ),
+      [
+        "--cwd",
+        directory,
+        "--message",
+        "Commit planning",
+        "--ax-command",
+        join(directory, "missing-fake-ax"),
+      ],
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /cleanup_evidence must prove source_plan\.ref cleanup/,
+    );
+    assert.equal(
+      existsSync(join(directory, ".git", "ax", "review-gate.json")),
+      false,
+    );
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+test("commit-planning rejects cleanup evidence with extra arguments", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
+  try {
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.com"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
+    runGit(directory, ["add", "README.md"]);
+    runGit(directory, ["commit", "-m", "initial"]);
+    mkdirSync(join(directory, "openspec", "changes", "example-change"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "proposal.md"),
+      "planning\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "tasks.md"),
+      "- [ ] 1. Implement\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "openspec"]);
+
+    const result = runPlanReview(
+      "commit-planning",
+      planReviewRequest.replace(
+        " --change-id example-change",
+        " --change-id example-change --skip-repo-openspec-validation",
+      ),
+      [
+        "--cwd",
+        directory,
+        "--message",
+        "Commit planning",
+        "--ax-command",
+        join(directory, "missing-fake-ax"),
+      ],
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /cleanup_evidence must prove source_plan\.ref cleanup/,
+    );
+    assert.equal(
+      existsSync(join(directory, ".git", "ax", "review-gate.json")),
+      false,
+    );
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+test("commit-planning requires cleanup evidence to include actual change id", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
+  try {
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.com"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
+    runGit(directory, ["add", "README.md"]);
+    runGit(directory, ["commit", "-m", "initial"]);
+    mkdirSync(join(directory, "openspec", "changes", "example-change"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "proposal.md"),
+      "planning\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "tasks.md"),
+      "- [ ] 1. Implement\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "openspec"]);
+
+    const result = runPlanReview(
+      "commit-planning",
+      planReviewRequest.replace(" --change-id example-change", ""),
+      [
+        "--cwd",
+        directory,
+        "--message",
+        "Commit planning",
+        "--ax-command",
+        join(directory, "missing-fake-ax"),
+      ],
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /cleanup_evidence must prove source_plan\.ref cleanup/,
+    );
+    assert.equal(
+      existsSync(join(directory, ".git", "ax", "review-gate.json")),
+      false,
+    );
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+test("commit-planning blocks source plans changed after readiness review", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
+  try {
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.com"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
+    runGit(directory, ["add", "README.md"]);
+    runGit(directory, ["commit", "-m", "initial"]);
+    mkdirSync(join(directory, ".agents", "plans"), { recursive: true });
+    mkdirSync(join(directory, "openspec", "changes", "example-change"), {
+      recursive: true,
+    });
+    const originalSourcePlan = "original source plan\n";
+    const originalFingerprint = createHash("sha256")
+      .update(originalSourcePlan)
+      .digest("hex");
+    writeFileSync(
+      join(directory, ".agents", "plans", "example-change.md"),
+      "changed source plan\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "proposal.md"),
+      "planning\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "tasks.md"),
+      "- [ ] 1. Implement\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "openspec"]);
+
+    const result = runPlanReview(
+      "commit-planning",
+      planReviewRequest.replaceAll(
+        "source-plan-fingerprint",
+        originalFingerprint,
+      ),
+      [
+        "--cwd",
+        directory,
+        "--message",
+        "Commit planning",
+        "--ax-command",
+        join(directory, "missing-fake-ax"),
+      ],
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /source_plan\.artifact_fingerprint must match source_plan\.ref content/,
+    );
+    assert.equal(
+      existsSync(join(directory, ".git", "ax", "review-gate.json")),
+      false,
+    );
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+test("commit-planning ignores copied-from OpenSpec paths when proving staged artifact changes", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
+  try {
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.com"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
+    mkdirSync(join(directory, "openspec", "changes", "example-change"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "proposal.md"),
+      "planning\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "tasks.md"),
+      "- [ ] 1. Implement\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "."]);
+    runGit(directory, ["commit", "-m", "initial"]);
+    writeFileSync(
+      join(directory, "copied-proposal.md"),
+      readFileSync(
+        join(directory, "openspec", "changes", "example-change", "proposal.md"),
+        "utf8",
+      ),
+      "utf8",
+    );
+    runGit(directory, ["add", "copied-proposal.md"]);
+
+    const result = runPlanReview("commit-planning", planReviewRequest, [
+      "--cwd",
+      directory,
+      "--message",
+      "Commit planning",
+      "--ax-command",
+      join(directory, "missing-fake-ax"),
+    ]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /staged OpenSpec diff must include at least one path under artifact_ref/,
+    );
+    assert.equal(
+      existsSync(join(directory, ".git", "ax", "review-gate.json")),
+      false,
+    );
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+test("commit-planning blocks spoofed OpenSpec artifact roots", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
+  try {
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.com"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
+    runGit(directory, ["add", "README.md"]);
+    runGit(directory, ["commit", "-m", "initial"]);
+    mkdirSync(join(directory, "docs", "example-change"), { recursive: true });
+    writeFileSync(
+      join(directory, "docs", "example-change", "proposal.md"),
+      "not openspec\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "docs"]);
+
+    const spoofedRequest = planReviewRequest
+      .replace(
+        "  artifact_ref: openspec/changes/example-change",
+        "  artifact_ref: docs/example-change",
+      )
+      .replace(
+        "      ref: openspec/changes/example-change",
+        "      ref: docs/example-change",
+      )
+      .replaceAll(
+        "openspec/changes/example-change/proposal.md",
+        "docs/example-change/proposal.md",
+      )
+      .replaceAll(
+        "openspec/changes/example-change/tasks.md",
+        "docs/example-change/tasks.md",
+      );
+
+    const result = runPlanReview("commit-planning", spoofedRequest, [
+      "--cwd",
+      directory,
+      "--message",
+      "Commit planning",
+      "--ax-command",
+      join(directory, "missing-fake-ax"),
+    ]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /generated_change\.ref and artifact_ref must be openspec\/changes\/example-change/,
+    );
+    assert.equal(
+      existsSync(join(directory, ".git", "ax", "review-gate.json")),
+      false,
+    );
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+test("commit-planning rejects option-shaped OpenSpec change ids", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
+  try {
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.com"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
+    runGit(directory, ["add", "README.md"]);
+    runGit(directory, ["commit", "-m", "initial"]);
+    mkdirSync(join(directory, "openspec", "changes", "--help"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(directory, "openspec", "changes", "--help", "proposal.md"),
+      "planning\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "--help", "tasks.md"),
+      "- [ ] 1. Implement\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "openspec"]);
+
+    const optionRequest = planReviewRequest
+      .replaceAll("example-change", "--help")
+      .replaceAll(".agents/plans/--help.md", ".agents/plans/example.md");
+    const result = runPlanReview("commit-planning", optionRequest, [
+      "--cwd",
+      directory,
+      "--message",
+      "Commit planning",
+      "--ax-command",
+      join(directory, "missing-fake-ax"),
+    ]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /change_id must be a lowercase OpenSpec change id slug/,
+    );
+    assert.equal(
+      existsSync(join(directory, ".git", "ax", "review-gate.json")),
+      false,
+    );
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+test("commit-planning rejects malformed OpenSpec kebab-case change ids", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
+  try {
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.com"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
+    runGit(directory, ["add", "README.md"]);
+    runGit(directory, ["commit", "-m", "initial"]);
+    mkdirSync(join(directory, "openspec", "changes", "example--change"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(directory, "openspec", "changes", "example--change", "proposal.md"),
+      "planning\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example--change", "tasks.md"),
+      "- [ ] 1. Implement\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "openspec"]);
+
+    const malformedRequest = planReviewRequest.replaceAll(
+      "example-change",
+      "example--change",
+    );
+    const result = runPlanReview("commit-planning", malformedRequest, [
+      "--cwd",
+      directory,
+      "--message",
+      "Commit planning",
+      "--ax-command",
+      join(directory, "missing-fake-ax"),
+    ]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /change_id must be a lowercase OpenSpec change id slug/,
+    );
+    assert.equal(
+      existsSync(join(directory, ".git", "ax", "review-gate.json")),
+      false,
+    );
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+test("commit-planning blocks renames out of declared OpenSpec artifact paths", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
+  try {
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.com"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
+    mkdirSync(join(directory, "openspec", "changes", "example-change"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "proposal.md"),
+      "planning\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "tasks.md"),
+      "- [ ] 1. Implement\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "."]);
+    runGit(directory, ["commit", "-m", "initial"]);
+    runGit(directory, [
+      "mv",
+      "openspec/changes/example-change/proposal.md",
+      "proposal.md",
+    ]);
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "tasks.md"),
+      "- [ ] 1. Updated\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "openspec/changes/example-change/tasks.md"]);
+
+    const result = runPlanReview("commit-planning", planReviewRequest, [
+      "--cwd",
+      directory,
+      "--message",
+      "Commit planning",
+      "--ax-command",
+      join(directory, "missing-fake-ax"),
+    ]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /staged OpenSpec path is not declared in blueprint_provenance\.generated_change\.generated_paths: proposal\.md/,
+    );
+    assert.equal(
+      existsSync(join(directory, ".git", "ax", "review-gate.json")),
+      false,
+    );
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+test("commit-planning blocks stale OpenSpec blueprint provenance before ax commit", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
+  try {
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.com"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
+    runGit(directory, ["add", "README.md"]);
+    runGit(directory, ["commit", "-m", "initial"]);
+    mkdirSync(join(directory, "openspec", "changes", "example-change"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "proposal.md"),
+      "planning\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "tasks.md"),
+      "- [ ] 1. Implement\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "openspec"]);
+
+    const result = runPlanReview(
+      "commit-planning",
+      planReviewRequest.replace(
+        "      artifact_fingerprint: source-plan-fingerprint",
+        "      artifact_fingerprint: stale-source-plan-fingerprint",
+      ),
+      [
+        "--cwd",
+        directory,
+        "--message",
+        "Commit planning",
+        "--ax-command",
+        join(directory, "missing-fake-ax"),
+      ],
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /source_plan\.artifact_fingerprint must match readiness_reviewer_evidence\.artifact_fingerprint/,
+    );
+    assert.equal(
+      result.stderr.includes("ENOENT") || result.stderr.includes("not found"),
+      false,
+    );
+    assert.equal(
+      existsSync(join(directory, ".git", "ax", "review-gate.json")),
+      false,
+    );
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+test("commit-planning blocks OpenSpec provenance when staged diff misses artifact paths", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
+  try {
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.com"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
+    mkdirSync(join(directory, "openspec", "changes", "example-change"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "proposal.md"),
+      "planning\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "tasks.md"),
+      "- [ ] 1. Implement\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "."]);
+    runGit(directory, ["commit", "-m", "initial"]);
+    writeFileSync(join(directory, "unrelated.md"), "not planning\n", "utf8");
+    runGit(directory, ["add", "unrelated.md"]);
+
+    const result = runPlanReview("commit-planning", planReviewRequest, [
+      "--cwd",
+      directory,
+      "--message",
+      "Commit planning",
+      "--ax-command",
+      join(directory, "missing-fake-ax"),
+    ]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /staged OpenSpec diff must include at least one path under artifact_ref/,
+    );
+    assert.equal(
+      result.stderr.includes("ENOENT") || result.stderr.includes("not found"),
+      false,
+    );
+    assert.equal(
+      existsSync(join(directory, ".git", "ax", "review-gate.json")),
+      false,
+    );
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
 test("commit-planning requires a message", () => {
   const result = runPlanReview("commit-planning", planReviewRequest);
 
@@ -409,6 +1837,11 @@ test("request-template emits a readable summary before YAML", () => {
   );
   assert.match(result.stdout, /plan_review_request:/);
   assert.match(result.stdout, /readiness_reviewer_evidence:/);
+  assert.match(result.stdout, /blueprint_provenance:/);
+  assert.match(
+    result.stdout,
+    /openspec validate example-change --strict --no-interactive/,
+  );
   assert.match(result.stdout, /copy every plan-ready per-reviewer status/);
 });
 
