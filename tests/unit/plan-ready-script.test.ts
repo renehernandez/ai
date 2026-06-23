@@ -121,7 +121,7 @@ function validBlueprint(): string {
   tasks:
     - id: "1.1"
       title: Add blueprint validation
-      deliverable: Validate the complex-plan blueprint schema.
+      deliverable: Implement complex-plan blueprint schema checks.
       acceptance:
         - Valid blueprints pass validation.
       verification:
@@ -274,6 +274,8 @@ test("blueprint-template emits the OpenSpec blueprint contract", () => {
   );
   assert.match(result.stdout, /openspec_blueprint:/);
   assert.match(result.stdout, /status: ready_for_openspec/);
+  assert.match(result.stdout, /deliverable: <PR\/MR-sized outcome>/);
+  assert.match(result.stdout, /deliverable-scoped docs or proof work/);
   assert.match(result.stdout, /next_action: create_openspec_change/);
   assert.doesNotMatch(result.stdout, /needs_openspec/);
 });
@@ -283,6 +285,125 @@ test("validate-blueprint accepts a reviewed OpenSpec blueprint", () => {
 
   assert.equal(result.status, 0);
   assert.match(result.stdout, /openspec_blueprint valid/);
+});
+
+test("validate-blueprint rejects lifecycle-only documentation tasks", () => {
+  const result = runPlanReady(
+    "validate-blueprint",
+    validBlueprint().replace(
+      `      title: Add blueprint validation
+      deliverable: Implement complex-plan blueprint schema checks.`,
+      `      title: Documentation Updates
+      deliverable: Capture documentation proof after implementation.`,
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /needs_spec_redesign/);
+  assert.match(result.stderr, /tasks\.1\.1 is lifecycle_phase_group/);
+});
+
+test("validate-blueprint rejects imperative lifecycle update tasks", () => {
+  const documentationResult = runPlanReady(
+    "validate-blueprint",
+    validBlueprint().replace(
+      `      title: Add blueprint validation
+      deliverable: Implement complex-plan blueprint schema checks.`,
+      `      title: Update documentation
+      deliverable: Update user docs after implementation.`,
+    ),
+  );
+  const validationResult = runPlanReady(
+    "validate-blueprint",
+    validBlueprint().replace(
+      `      title: Add blueprint validation
+      deliverable: Implement complex-plan blueprint schema checks.`,
+      `      title: Update validation evidence
+      deliverable: Update validation notes after implementation.`,
+    ),
+  );
+
+  assert.notEqual(documentationResult.status, 0);
+  assert.match(
+    documentationResult.stderr,
+    /tasks\.1\.1 is lifecycle_phase_group/,
+  );
+  assert.notEqual(validationResult.status, 0);
+  assert.match(validationResult.stderr, /tasks\.1\.1 is lifecycle_phase_group/);
+});
+
+test("validate-blueprint rejects proof-only blueprint tasks", () => {
+  const result = runPlanReady(
+    "validate-blueprint",
+    validBlueprint().replace(
+      `      title: Add blueprint validation
+      deliverable: Implement complex-plan blueprint schema checks.`,
+      `      title: Run tests and lint
+      deliverable: Run tests and lint after implementation.`,
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /needs_spec_redesign/);
+  assert.match(result.stderr, /tasks\.1\.1 is proof_only_task/);
+});
+
+test("validate-blueprint rejects manual-looking proof collection tasks", () => {
+  const result = runPlanReady(
+    "validate-blueprint",
+    validBlueprint().replace(
+      `      title: Add blueprint validation
+      deliverable: Implement complex-plan blueprint schema checks.`,
+      `      title: Validation Evidence
+      deliverable: Manual validation evidence collection.`,
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /needs_spec_redesign/);
+  assert.match(result.stderr, /tasks\.1\.1 is lifecycle_phase_group/);
+});
+
+test("validate-blueprint rejects proof-only deliverables with feature-looking titles", () => {
+  const result = runPlanReady(
+    "validate-blueprint",
+    validBlueprint().replace(
+      `      title: Add blueprint validation
+      deliverable: Implement complex-plan blueprint schema checks.`,
+      `      title: Validation Tooling
+      deliverable: Capture CI proof after implementation.`,
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /needs_spec_redesign/);
+  assert.match(result.stderr, /tasks\.1\.1 is proof_only_task/);
+});
+
+test("validate-blueprint accepts docs and validation tooling as feature work", () => {
+  const docsFeature = runPlanReady(
+    "validate-blueprint",
+    validBlueprint().replace(
+      `      title: Add blueprint validation
+      deliverable: Implement complex-plan blueprint schema checks.`,
+      `      title: Build documentation generator
+      deliverable: Implement a documentation generator feature for release notes.`,
+    ),
+  );
+  const validationFeature = runPlanReady(
+    "validate-blueprint",
+    validBlueprint().replace(
+      `      title: Add blueprint validation
+      deliverable: Implement complex-plan blueprint schema checks.`,
+      `      title: Add runtime validation tooling
+      deliverable: Implement runtime validation tooling for OpenSpec task-shape checks.`,
+    ),
+  );
+
+  assert.equal(docsFeature.status, 0);
+  assert.match(docsFeature.stdout, /openspec_blueprint valid/);
+  assert.equal(validationFeature.status, 0);
+  assert.match(validationFeature.stdout, /openspec_blueprint valid/);
 });
 
 test("validate-blueprint requires source plan ref", () => {

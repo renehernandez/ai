@@ -187,6 +187,14 @@ narrow the scope, or choose another planning route. Set
 `blocked_readiness.reason` to `needs_spec_redesign` so downstream workflows do
 not treat the result as a generic missing-decision block.
 
+`validate-blueprint` enforces the same boundary as OpenSpec task auditing. It
+must reject blueprint tasks that are lifecycle-only, validation-only,
+proof-only, or manual-looking proof collection entries. Treat that failure as a
+readiness block: report `needs_spec_redesign` and ask the user how to proceed.
+Do not silently rewrite the blueprint, do not create the OpenSpec change, and
+do not move the rejected lifecycle work into standalone OpenSpec task
+checkboxes.
+
 Legacy `slice_plan_review`, `reviewed_slices`,
 `plan_ready_handoff`, `plan_followthrough_slice_handoff`, and
 followthrough-ledger inputs are unsupported. Return `needs_plan_ready` and ask
@@ -227,6 +235,7 @@ Linear comments by default.
 | Starting implementation after readiness | Stop and wait for `plan-orchestrator` |
 | Treating readiness as orchestrator completion | Continue through planning review and stacked delivery until `stack_ready` or `delivery_blocked` |
 | Adding a documentation or validation OpenSpec phase anywhere | Fold proof work into deliverable tasks or block with `blocked_readiness.reason: needs_spec_redesign` |
+| Letting validation-only blueprint tasks pass schema validation | Treat `validate-blueprint` `needs_spec_redesign` output as a readiness block |
 | Skipping baseline reviewers | Run all baseline reviewers before ready |
 | Returning YAML without a readable thread summary | Add `## Readable Summary` before the YAML |
 

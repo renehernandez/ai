@@ -20,6 +20,7 @@ import {
   requireValue,
   scalar,
 } from "../../../scripts/planning-contracts.ts";
+import { classifyTaskShape } from "../../openspec-tasks/scripts/openspec-tasks.ts";
 
 const BASELINE_REVIEWERS = [
   "implementation-readiness",
@@ -274,7 +275,7 @@ openspec_blueprint:
       title: <minor deliverable title>
       deliverable: <PR/MR-sized outcome>
       acceptance:
-        - <observable result>
+        - <observable result, including deliverable-scoped docs or proof work when needed>
       verification:
         - <required command, check, or manual proof>
       dependencies: []
@@ -487,6 +488,18 @@ function validateBlueprint(input: string): void {
     requireValue(task.id, `${label}.id`, errors);
     requireValue(task.title, `${label}.title`, errors);
     requireValue(task.deliverable, `${label}.deliverable`, errors);
+    const taskShape = classifyTaskShape(
+      task.title ?? "",
+      task.deliverable ?? task.title ?? "",
+    );
+    const deliverableShape = classifyTaskShape("", task.deliverable ?? "");
+    const rejectedShape =
+      taskShape.kind === "needs_spec_redesign" ? taskShape : deliverableShape;
+    if (rejectedShape.kind === "needs_spec_redesign") {
+      errors.push(
+        `needs_spec_redesign: ${label} is ${rejectedShape.reason ?? "not a deliverable implementation unit"}`,
+      );
+    }
     if (task.acceptance.length === 0) {
       errors.push(`${label}.acceptance must include at least one item`);
     }
