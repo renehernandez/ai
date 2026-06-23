@@ -225,6 +225,11 @@ fingerprint, skipped reviewer rationale, blocking findings, completion
 timestamp, and gate outcome. Downstream skills must consume this evidence
 explicitly instead of recomputing reviewer lists.
 
+Do not activate or write local review-gate state from `plan-ready`. The legacy
+`activate-review-gate` command must route callers to `plan-review`; `plan-review`
+owns binding readiness evidence to the staged planning diff and committing
+through the local required gate.
+
 Legacy `slice_plan_review`, `reviewed_slices`,
 `plan_ready_handoff`, `plan_followthrough_slice_handoff`, and
 followthrough-ledger inputs are unsupported. Return `needs_plan_ready` and ask
@@ -266,6 +271,7 @@ Linear comments by default.
 | Treating readiness as orchestrator completion | Continue through planning review and stacked delivery until `stack_ready` or `delivery_blocked` |
 | Skipping baseline reviewers | Run all baseline reviewers before ready |
 | Returning YAML without a readable thread summary | Add `## Readable Summary` before the YAML |
+| Activating a local review gate in PlanReady | Route to `plan-review` with readiness reviewer evidence |
 
 ## Test Evidence
 
