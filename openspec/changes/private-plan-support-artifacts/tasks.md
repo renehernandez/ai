@@ -51,7 +51,7 @@
 - [x] 4.2 Run `pnpm test:unit`.
 - [x] 4.3 Refresh and validate managed skill surfaces for personal and work
       profiles.
-- [ ] 4.4 Refresh and validate managed instruction/rule surfaces for personal
+- [x] 4.4 Refresh and validate managed instruction/rule surfaces for personal
       and work profiles.
 - [ ] 4.5 Inspect `ax.lock.json` and confirm runtime metadata drift is expected.
 - [ ] 4.6 Run `pnpm test` and `git diff --check`.
