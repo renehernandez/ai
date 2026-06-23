@@ -33,7 +33,7 @@
   commit-time mutation produces a different diff.
 - [x] 2.7 Add atomic validate-and-consume behavior with repo/worktree-scoped
   locking or equivalent compare-and-consume semantics.
-- [ ] 2.8 Bind active gates to worktree identity and reject linked-worktree,
+- [x] 2.8 Bind active gates to worktree identity and reject linked-worktree,
   branch, `HEAD`, workflow, unit, or staged-diff mismatches.
 - [ ] 2.9 Add AX unit and integration tests for required-gate missing-state
   failure, no-gate ordinary commits, ordinary active-gate failure, successful

@@ -6,6 +6,7 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  realpathSync,
   renameSync,
   unlinkSync,
   writeFileSync,
@@ -32,6 +33,17 @@ export type ReviewGateSourceProvenance = {
   evidence?: string[];
 };
 
+export type ReviewGateIdentity = {
+  gitCommonDir: string;
+  gitDir: string;
+  worktreeRoot: string;
+  branchRef: string | null;
+  headSha: string | null;
+  stagedDiffHash: string;
+  workflow: string;
+  unitId: string | null;
+};
+
 export type ReviewGateState = {
   version: 1;
   active: boolean;
@@ -42,6 +54,7 @@ export type ReviewGateState = {
     title?: string;
   };
   sourceProvenance?: ReviewGateSourceProvenance;
+  identity?: ReviewGateIdentity;
   stagedDiffHash?: string;
   requiredReviewPasses?: string[];
   results?: Record<string, ReviewGateResult>;
@@ -65,6 +78,7 @@ export type ReviewGateValidation = {
   staleReviewPasses: string[];
   blockingFindings: unknown[];
   errors: string[];
+  identityMismatches: string[];
   note?: string;
 };
 
@@ -168,6 +182,69 @@ export function hasStagedDiff(cwd = process.cwd()): boolean {
   throw new Error((result.stderr || result.stdout || "git diff failed").trim());
 }
 
+export function currentReviewGateIdentity(input: {
+  cwd?: string;
+  stagedDiffHash: string;
+  workflow: string;
+  unit?: ReviewGateState["unit"];
+}): ReviewGateIdentity {
+  const cwd = input.cwd ?? process.cwd();
+  const gitDir = absoluteGitPath(
+    gitOutput(["rev-parse", "--git-dir"], cwd),
+    cwd,
+  );
+  const gitCommonDir = absoluteGitPath(
+    gitOutput(["rev-parse", "--git-common-dir"], cwd),
+    cwd,
+  );
+  const worktreeRoot = absoluteGitPath(
+    gitOutput(["rev-parse", "--show-toplevel"], cwd),
+    cwd,
+  );
+  return {
+    gitCommonDir,
+    gitDir,
+    worktreeRoot,
+    branchRef: gitOutputOptional(["symbolic-ref", "--quiet", "HEAD"], cwd),
+    headSha: gitOutputOptional(["rev-parse", "--verify", "HEAD"], cwd),
+    stagedDiffHash: input.stagedDiffHash,
+    workflow: input.workflow,
+    unitId: input.unit?.id ?? null,
+  };
+}
+
+function reviewGateIdentityMismatches(
+  state: ReviewGateState,
+  currentDiffHash: string,
+  cwd: string,
+): string[] {
+  if (!state.identity || !state.workflow) {
+    return [];
+  }
+  const currentIdentity = currentReviewGateIdentity({
+    cwd,
+    stagedDiffHash: currentDiffHash,
+    workflow: state.workflow,
+    unit: state.unit,
+  });
+  const mismatches: string[] = [];
+  for (const field of [
+    "gitCommonDir",
+    "gitDir",
+    "worktreeRoot",
+    "branchRef",
+    "headSha",
+    "stagedDiffHash",
+    "workflow",
+    "unitId",
+  ] as const) {
+    if (state.identity[field] !== currentIdentity[field]) {
+      mismatches.push(field);
+    }
+  }
+  return mismatches;
+}
+
 export function writeActiveReviewGate(
   input: ActiveReviewGateInput,
   cwd = process.cwd(),
@@ -184,6 +261,12 @@ export function writeActiveReviewGate(
       workflow: input.workflow,
       unit: input.unit,
       sourceProvenance: input.sourceProvenance,
+      identity: currentReviewGateIdentity({
+        cwd,
+        stagedDiffHash: diffHash,
+        workflow: input.workflow,
+        unit: input.unit,
+      }),
       stagedDiffHash: diffHash,
       requiredReviewPasses: input.requiredReviewPasses,
       results: normalizeResultInput(input.results, diffHash),
@@ -488,6 +571,7 @@ function activeReviewGateFingerprint(state: ReviewGateState): string {
     workflow: state.workflow ?? null,
     unit: state.unit ?? null,
     sourceProvenance: state.sourceProvenance ?? null,
+    identity: state.identity ?? null,
     stagedDiffHash: state.stagedDiffHash ?? null,
     requiredReviewPasses: state.requiredReviewPasses ?? [],
     results: state.results ?? {},
@@ -568,6 +652,7 @@ export function validateReviewGateForCommit(
     missingReviewPasses: [],
     staleReviewPasses: [],
     blockingFindings: [],
+    identityMismatches: [],
   };
 
   if (!existsSync(statePath)) {
@@ -637,6 +722,7 @@ export function validateReviewGateForCommit(
       missingReviewPasses,
       staleReviewPasses,
       blockingFindings,
+      identityMismatches: [],
       errors: schemaErrors,
       note:
         schemaErrors.length === 0 ? inactiveGateNote(stateStatus) : undefined,
@@ -668,6 +754,19 @@ export function validateReviewGateForCommit(
   if (stateDiffHash && stateDiffHash !== currentDiffHash) {
     errors.push("Review gate staged diff hash is stale.");
   }
+  const identityMismatches =
+    schemaErrors.length === 0 && isPlainRecord(state)
+      ? reviewGateIdentityMismatches(
+          state as ReviewGateState,
+          currentDiffHash,
+          cwd,
+        )
+      : [];
+  errors.push(
+    ...identityMismatches.map(
+      (field) => `Review gate identity mismatch: ${field}`,
+    ),
+  );
 
   return {
     ...base,
@@ -684,6 +783,7 @@ export function validateReviewGateForCommit(
     missingReviewPasses,
     staleReviewPasses,
     blockingFindings,
+    identityMismatches,
     errors,
   };
 }
@@ -701,6 +801,7 @@ export function formatReviewGateStatus(
     `completed_review_passes: ${formatList(validation.completedReviewPasses)}`,
     `missing_review_passes: ${formatList(validation.missingReviewPasses)}`,
     `stale_review_passes: ${formatList(validation.staleReviewPasses)}`,
+    `identity_mismatches: ${formatList(validation.identityMismatches)}`,
     `blocking_findings: ${validation.blockingFindings.length}`,
   ];
 
@@ -731,6 +832,7 @@ function validateStateShape(state: unknown): string[] {
   const workflow = state.workflow;
   const unit = state.unit;
   const sourceProvenance = state.sourceProvenance;
+  const identity = state.identity;
   const stagedDiffHashValue = state.stagedDiffHash;
   const requiredReviewPassesValue = state.requiredReviewPasses;
   const resultsValue = state.results;
@@ -785,12 +887,18 @@ function validateStateShape(state: unknown): string[] {
   if (hasOwn(state, "sourceProvenance")) {
     validateSourceProvenance(sourceProvenance, errors);
   }
+  if (hasOwn(state, "identity")) {
+    validateIdentity(identity, errors);
+  }
   if (active === true) {
     if (!workflow) {
       errors.push("Active review gate requires workflow.");
     }
     if (!sourceProvenance) {
       errors.push("Active review gate requires sourceProvenance.");
+    }
+    if (!identity) {
+      errors.push("Active review gate requires identity.");
     }
     if (!stagedDiffHashValue) {
       errors.push("Active review gate requires stagedDiffHash.");
@@ -943,6 +1051,45 @@ function validateSourceProvenance(value: unknown, errors: string[]): void {
   }
 }
 
+function validateIdentity(value: unknown, errors: string[]): void {
+  if (!isPlainRecord(value)) {
+    errors.push("identity must be an object.");
+    return;
+  }
+  for (const field of ["gitCommonDir", "gitDir", "worktreeRoot", "workflow"]) {
+    if (typeof value[field] !== "string" || value[field].length === 0) {
+      errors.push(`identity.${field} must be a non-empty string.`);
+    }
+  }
+  if (
+    typeof value.stagedDiffHash !== "string" ||
+    !isDiffHash(value.stagedDiffHash)
+  ) {
+    errors.push("identity.stagedDiffHash must be a sha256 diff hash.");
+  }
+  if (
+    hasOwn(value, "branchRef") &&
+    value.branchRef !== null &&
+    (typeof value.branchRef !== "string" || value.branchRef.length === 0)
+  ) {
+    errors.push("identity.branchRef must be a non-empty string or null.");
+  }
+  if (
+    hasOwn(value, "headSha") &&
+    value.headSha !== null &&
+    (typeof value.headSha !== "string" || value.headSha.length === 0)
+  ) {
+    errors.push("identity.headSha must be a non-empty string or null.");
+  }
+  if (
+    hasOwn(value, "unitId") &&
+    value.unitId !== null &&
+    (typeof value.unitId !== "string" || value.unitId.length === 0)
+  ) {
+    errors.push("identity.unitId must be a non-empty string or null.");
+  }
+}
+
 function readReviewGateState(statePath: string): ReviewGateReadResult {
   if (!existsSync(statePath)) {
     return { exists: false };
@@ -1084,6 +1231,23 @@ function inactiveGateNote(status: ReviewGateStatus): string {
 
 function gitOutput(args: string[], cwd: string): string {
   return gitOutputRaw(args, cwd).trimEnd();
+}
+
+function gitOutputOptional(args: string[], cwd: string): string | null {
+  const result = spawnSync("git", args, {
+    cwd,
+    encoding: "utf-8",
+    env: withoutGitRepositoryEnv(),
+  });
+  if (result.status !== 0) {
+    return null;
+  }
+  return result.stdout.trimEnd();
+}
+
+function absoluteGitPath(path: string, cwd: string): string {
+  const absolutePath = isAbsolute(path) ? path : resolve(cwd, path);
+  return existsSync(absolutePath) ? realpathSync(absolutePath) : absolutePath;
 }
 
 function gitOutputRaw(args: string[], cwd: string): string {
