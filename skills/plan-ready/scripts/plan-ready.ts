@@ -103,6 +103,8 @@ type ParsedBlueprint = {
   proposed_requirements: string[];
   tasks: BlueprintTask[];
   recommended_first_task?: string;
+  has_required_reviewers: boolean;
+  has_optional_reviewers: boolean;
   required_reviewers: string[];
   optional_reviewers: string[];
   reviewers_used: string[];
@@ -521,8 +523,36 @@ function validateBlueprint(input: string): void {
   }
 
   for (const reviewer of BASELINE_REVIEWERS) {
+    if (!blueprint.required_reviewers.includes(reviewer)) {
+      errors.push(`required_reviewers must include ${reviewer}`);
+    }
+
     if (!blueprint.reviewers_used.includes(reviewer)) {
       errors.push(`reviewers_used must include ${reviewer}`);
+    }
+  }
+
+  if (!blueprint.has_required_reviewers) {
+    errors.push("review.required_reviewers is required");
+  }
+
+  if (!blueprint.has_optional_reviewers) {
+    errors.push("review.optional_reviewers is required");
+  }
+
+  for (const reviewer of blueprint.required_reviewers) {
+    if (!includes(BASELINE_REVIEWERS, reviewer)) {
+      errors.push(
+        `required_reviewers can include only baseline reviewers: ${reviewer}`,
+      );
+    }
+  }
+
+  for (const reviewer of blueprint.optional_reviewers) {
+    if (!includes(OPTIONAL_REVIEWERS, reviewer)) {
+      errors.push(
+        `optional_reviewers can include only optional reviewers: ${reviewer}`,
+      );
     }
   }
 
@@ -698,6 +728,8 @@ function parseBlueprint(input: string): ParsedBlueprint {
     proposed_requirements: list(specs, "proposed_requirements"),
     tasks: parseBlueprintTasks(extractSection(section, "tasks")),
     recommended_first_task: scalar(section, "recommended_first_task"),
+    has_required_reviewers: hasKey(review, "required_reviewers"),
+    has_optional_reviewers: hasKey(review, "optional_reviewers"),
     required_reviewers: list(review, "required_reviewers"),
     optional_reviewers: list(review, "optional_reviewers"),
     reviewers_used: list(review, "reviewers_used"),

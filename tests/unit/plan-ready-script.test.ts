@@ -395,3 +395,87 @@ test("validate-blueprint rejects a recommended first task with dependencies", ()
     /tasks.1.1.dependencies includes unknown task 2.1/,
   );
 });
+
+test("validate-blueprint requires normalized required reviewers", () => {
+  const result = runPlanReady(
+    "validate-blueprint",
+    validBlueprint().replace(
+      / {4}required_reviewers:\n {6}- implementation-readiness\n {6}- edge-cases-and-risks\n {6}- simplification-and-scope-control\n {6}- refactoring-opportunities\n/,
+      "",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /review.required_reviewers is required/);
+});
+
+test("validate-blueprint requires normalized optional reviewers", () => {
+  const result = runPlanReady(
+    "validate-blueprint",
+    validBlueprint().replace("    optional_reviewers: []\n", ""),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /review.optional_reviewers is required/);
+});
+
+test("validate-blueprint requires baseline reviewers in required reviewers", () => {
+  const result = runPlanReady(
+    "validate-blueprint",
+    validBlueprint().replace("      - edge-cases-and-risks\n", ""),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /required_reviewers must include edge-cases-and-risks/,
+  );
+});
+
+test("validate-blueprint rejects unknown required reviewers", () => {
+  const result = runPlanReady(
+    "validate-blueprint",
+    validBlueprint().replace(
+      "      - refactoring-opportunities\n    optional_reviewers: []",
+      "      - refactoring-opportunities\n      - invented-reviewer\n    optional_reviewers: []",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /required_reviewers can include only baseline reviewers: invented-reviewer/,
+  );
+});
+
+test("validate-blueprint rejects optional reviewers in required reviewers", () => {
+  const result = runPlanReady(
+    "validate-blueprint",
+    validBlueprint().replace(
+      "      - refactoring-opportunities\n    optional_reviewers: []",
+      "      - refactoring-opportunities\n      - docs-and-agent-alignment\n    optional_reviewers: []",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /required_reviewers can include only baseline reviewers: docs-and-agent-alignment/,
+  );
+});
+
+test("validate-blueprint rejects non-catalog optional reviewers", () => {
+  const result = runPlanReady(
+    "validate-blueprint",
+    validBlueprint().replace(
+      "    optional_reviewers: []",
+      "    optional_reviewers:\n      - implementation-readiness",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /optional_reviewers can include only optional reviewers: implementation-readiness/,
+  );
+});
