@@ -6,6 +6,7 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   renameSync,
@@ -374,11 +375,6 @@ export function recordPlanArtifact(options: {
       workspaceRealPath,
       "artifact destination must remain inside private plan workspace",
     );
-    copyImmutableFile(
-      artifactRealPath,
-      artifactPath,
-      artifactContentFingerprint,
-    );
 
     metadataPath = join(revisionPath, "metadata.json");
     artifactRelativePath = relative(workspaceRealPath, artifactPath)
@@ -390,6 +386,12 @@ export function recordPlanArtifact(options: {
     const createdAt = new Date().toISOString();
     const manifest = readPlanArtifactManifest(manifestPath);
     assertManifestMatchesIdentity(manifest, artifactIdentity, identity);
+    assertNoOrphanArtifactBlobs(workspaceRealPath, manifest);
+    copyImmutableFile(
+      artifactRealPath,
+      artifactPath,
+      artifactContentFingerprint,
+    );
     const existingRevision = manifest?.revisions.find(
       (revision) => revision.revisionId === revisionId,
     );
@@ -519,6 +521,7 @@ export function listPlanArtifacts(options: {
   });
   const manifest = readPlanArtifactManifest(workspaceIdentity.manifestPath);
   assertManifestMatchesIdentity(manifest, artifactIdentity, workspaceIdentity);
+  assertNoOrphanArtifactBlobs(workspaceIdentity.workspacePath, manifest);
 
   const revisions = manifest?.revisions ?? [];
   const artifacts = revisions.flatMap((revision) =>
@@ -787,6 +790,7 @@ function appendIndexRecordIfMissing(
     const rows = readFileSync(path, "utf-8")
       .split("\n")
       .filter((line) => line.trim() !== "");
+    let hasMatchingRecord = false;
     for (const row of rows) {
       let parsed: {
         revisionId?: unknown;
@@ -805,8 +809,11 @@ function appendIndexRecordIfMissing(
         parsed.artifactKind === record.artifactKind &&
         parsed.artifactContentFingerprint === record.artifactContentFingerprint
       ) {
-        return;
+        hasMatchingRecord = true;
       }
+    }
+    if (hasMatchingRecord) {
+      return;
     }
   }
 
@@ -820,6 +827,66 @@ function atomicWriteJson(path: string, value: unknown): void {
     mode: 0o600,
   });
   renameSync(temporaryPath, path);
+}
+
+function assertNoOrphanArtifactBlobs(
+  workspaceRoot: string,
+  manifest: PlanArtifactManifest | null,
+): void {
+  const revisionsPath = join(workspaceRoot, "revisions");
+  if (!existsSync(revisionsPath)) {
+    return;
+  }
+  const revisionsStats = lstatSync(revisionsPath);
+  if (revisionsStats.isSymbolicLink() || !revisionsStats.isDirectory()) {
+    throw new Error(
+      `Private plan artifact revisions path is corrupt and must be repaired before reading plan artifacts: ${revisionsPath}`,
+    );
+  }
+
+  const referencedArtifactPaths = new Set(
+    (manifest?.revisions ?? []).flatMap((revision) =>
+      revision.artifacts.map((artifact) => artifact.artifactRelativePath),
+    ),
+  );
+
+  for (const revisionName of readdirSync(revisionsPath)) {
+    const revisionPath = join(revisionsPath, revisionName);
+    const revisionStats = lstatSync(revisionPath);
+    if (revisionStats.isSymbolicLink() || !revisionStats.isDirectory()) {
+      throw new Error(
+        `Private plan artifact revision path is corrupt and must be repaired before reading plan artifacts: ${revisionPath}`,
+      );
+    }
+
+    const artifactsPath = join(revisionPath, "artifacts");
+    if (!existsSync(artifactsPath)) {
+      continue;
+    }
+    const artifactsStats = lstatSync(artifactsPath);
+    if (artifactsStats.isSymbolicLink() || !artifactsStats.isDirectory()) {
+      throw new Error(
+        `Private plan artifact artifacts path is corrupt and must be repaired before reading plan artifacts: ${artifactsPath}`,
+      );
+    }
+
+    for (const artifactName of readdirSync(artifactsPath)) {
+      const artifactPath = join(artifactsPath, artifactName);
+      const artifactStats = lstatSync(artifactPath);
+      const artifactRelativePath = relative(workspaceRoot, artifactPath)
+        .split(sep)
+        .join("/");
+      if (
+        artifactStats.isSymbolicLink() ||
+        !artifactStats.isFile() ||
+        !referencedArtifactPaths.has(artifactRelativePath)
+      ) {
+        throw new Error(
+          `Private plan artifact workspace contains an orphan blob and must be repaired before reading plan artifacts: ${artifactPath}`,
+        );
+      }
+    }
+  }
 }
 
 function readPlanArtifactManifest(path: string): PlanArtifactManifest | null {
