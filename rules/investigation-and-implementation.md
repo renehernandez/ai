@@ -35,11 +35,14 @@ These rules govern when to diagnose, when to edit, and how to route implementati
   planning-review diff must contain no `.agents/plans/**` paths. For
   `artifact_type: plan`, `.agents/plans/**` remains a valid reviewed planning
   artifact.
-- Keep local workflow artifacts out of work-project repositories. Reviewer
-  scratch, rejected generated shapes, command proof, validation evidence, and
-  private plan-support pointers belong in the chat thread or private
-  plan-support storage. Reusable agent rules, skills, fixtures, validators, and
-  runtime workflow machinery may be committed in the AI project that owns them.
+- Do not stage or commit local workflow artifacts into work-project
+  repositories. Reviewer scratch, readiness reports, reviewer reports, delivery
+  ledgers, screenshots, command proof, validation evidence, rejected generated
+  shapes, and private plan-support pointers belong in the chat thread or
+  private plan-support storage. Reusable AI repo workflow machinery, managed
+  agent rules, skills, validators, runtime scripts, and regression fixtures may
+  be committed only in the AI project that owns them and only when that
+  machinery is the feature being changed.
 
 ## Local Code Review
 

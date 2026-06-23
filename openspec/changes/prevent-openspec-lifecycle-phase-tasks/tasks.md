@@ -41,6 +41,6 @@
       validation-only tasks, final documentation/validation phases, checkbox-only
       delivery units, and committed local workflow artifacts as blocking
       planning-readiness findings.
-- [ ] 4.2 Update portable agent rules and repo-local instructions so agents do
+- [x] 4.2 Update portable agent rules and repo-local instructions so agents do
       not commit local workflow artifacts into work-project repositories while
       still allowing reusable AI repo workflow machinery and regression fixtures.

@@ -110,11 +110,36 @@ test("implementation rules keep local workflow artifacts out of work-project rep
 
   assert.match(
     text,
-    /local workflow artifacts out of work-project repositories/,
+    /local workflow artifacts into work-project\s+repositories/,
   );
+  assert.match(text, /Do not stage or commit/);
+  assert.match(text, /readiness reports/);
+  assert.match(text, /reviewer reports/);
+  assert.match(text, /delivery\s+ledgers/);
+  assert.match(text, /screenshots/);
   assert.match(text, /private\s+plan-support storage/);
-  assert.match(text, /Reusable agent rules, skills, fixtures, validators/);
+  assert.match(text, /Reusable AI repo workflow machinery/);
+  assert.match(text, /regression fixtures/);
 });
+
+for (const file of ["AGENTS.md", "instructions/AGENTS.md"] as const) {
+  test(`${file} blocks committed local workflow artifacts while preserving AI repo fixtures`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /Do not stage or commit local workflow artifacts/);
+    assert.match(text, /work-project repositories/);
+    assert.match(text, /reviewer scratch/);
+    assert.match(text, /readiness reports/);
+    assert.match(text, /reviewer reports/);
+    assert.match(text, /delivery ledgers/);
+    assert.match(text, /validation evidence/);
+    assert.match(text, /private plan-support pointers/);
+    assert.match(text, /private plan-support storage/);
+    assert.match(text, /Reusable AI repo workflow machinery/);
+    assert.match(text, /regression fixtures/);
+    assert.match(text, /feature being changed in this AI repo/);
+  });
+}
 
 test("git rules require stacked MRs to land bottom-to-top", () => {
   const text = readFileSync("rules/git-and-review.md", "utf-8");
