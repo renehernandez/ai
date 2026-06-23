@@ -33,6 +33,7 @@ const LEDGER_GATES = [
   "planning_only_diff",
   "openspec_source_plan_boundary",
   "artifact_validation",
+  "openspec_task_shape",
   "review_feedback_routing",
   "artifact_creation_update",
   "artifact_host_inspection",
@@ -53,6 +54,7 @@ type Command =
   | "request-template"
   | "validate-request"
   | "validate-planning-diff"
+  | "validate-openspec-tasks"
   | "planning-review-template"
   | "validate-planning-review"
   | "gate-template"
@@ -80,7 +82,7 @@ function main(): void {
 
   if (!isCommand(command)) {
     fail(
-      "Usage: plan-review.ts <detect|request-template|validate-request|validate-planning-diff|gate-template|validate-ledger> [--file path]",
+      "Usage: plan-review.ts <detect|request-template|validate-request|validate-planning-diff|validate-openspec-tasks|gate-template|validate-ledger> [--file path]",
     );
   }
 
@@ -101,6 +103,11 @@ function main(): void {
 
   if (command === "planning-review-template") {
     printPlanningReviewTemplate();
+    return;
+  }
+
+  if (command === "validate-openspec-tasks") {
+    validateOpenSpecTasks(args);
     return;
   }
 
@@ -379,6 +386,49 @@ function validatePlanningDiff(args: string[], stdinInput: string): void {
   );
 }
 
+function validateOpenSpecTasks(args: string[]): void {
+  const tasksPath = optionalArg(args, "--tasks") ?? taskPathFromArtifact(args);
+  if (!tasksPath) {
+    fail(
+      "validate-openspec-tasks requires --tasks <path> or --artifact-ref <openspec/changes/id>",
+    );
+  }
+
+  if (!existsSync(tasksPath)) {
+    fail(`openspec_tasks_missing: ${tasksPath}`);
+  }
+
+  const result = spawnSync(
+    "pnpm",
+    [
+      "exec",
+      "tsx",
+      "skills/openspec-tasks/scripts/openspec-tasks.ts",
+      "audit",
+      tasksPath,
+    ],
+    { encoding: "utf8" },
+  );
+
+  process.stdout.write(result.stdout);
+  process.stderr.write(result.stderr);
+
+  if (result.status !== 0) {
+    const auditStatus = parseAuditStatus(result.stdout);
+    if (auditStatus === "needs_spec_redesign") {
+      console.error(
+        [
+          "Invalid plan-review OpenSpec task shape:",
+          "- needs_spec_redesign from openspec-tasks audit",
+          "- ask the user whether to redo the spec, brainstorm, narrow the scope, or choose another planning route",
+          "- do not create or update the planning PR/MR until the task shape is fixed",
+        ].join("\n"),
+      );
+    }
+    process.exit(result.status ?? 1);
+  }
+}
+
 function validateLedger(input: string): void {
   const body = extractYaml(input);
   const section = extractSection(body, "plan_review_gate_ledger");
@@ -500,11 +550,25 @@ function isCommand(command: string | undefined): command is Command {
     "request-template",
     "validate-request",
     "validate-planning-diff",
+    "validate-openspec-tasks",
     "planning-review-template",
     "validate-planning-review",
     "gate-template",
     "validate-ledger",
   ].includes(command ?? "");
+}
+
+function taskPathFromArtifact(args: string[]): string | undefined {
+  const artifactRef = optionalArg(args, "--artifact-ref");
+  return artifactRef ? join(artifactRef, "tasks.md") : undefined;
+}
+
+function parseAuditStatus(stdout: string): string | undefined {
+  try {
+    return JSON.parse(stdout).status;
+  } catch {
+    return undefined;
+  }
 }
 
 function git(args: string[]): string | null {

@@ -89,14 +89,23 @@ and next action.
      doc validation command.
    - Linear-only plan: verify the linked ticket is reachable; do not mirror
      ticket text into the repo unless asked.
-   For OpenSpec artifacts, confirm `tasks.md` uses deliverable task groups. A
-   lifecycle-only documentation, testing, linting, review, validation, or
-   verification group anywhere in the file blocks planning review with
-   `needs_spec_redesign` unless that area is the feature being changed.
-   Deliverable-scoped proof subchecks are valid only as acceptance or
-   verification bullets inside the related deliverable task, not as OpenSpec
-   task checkboxes or independent delivery units. Do not rewrite the spec inside
-   `plan-review`; ask the user which planning route to take.
+   For OpenSpec artifacts, run the task-shape audit before publishing or
+   updating any planning PR/MR:
+
+   ```bash
+   pnpm exec tsx skills/plan-review/scripts/plan-review.ts validate-openspec-tasks --artifact-ref openspec/changes/<change-id>
+   ```
+
+   The helper delegates to `openspec-tasks audit`; its structured output is the
+   gate evidence. If it returns `needs_spec_redesign`, block planning review
+   publication and ask the user whether to redo the spec, brainstorm, narrow the
+   scope, or choose another planning route. Do not rewrite the spec inside
+   `plan-review`. A lifecycle-only documentation, testing, linting, review,
+   validation, or verification group anywhere in the file blocks planning review
+   unless that area is the feature being changed. Deliverable proof subchecks
+   are valid only as acceptance or verification bullets inside the related
+   deliverable task, not as OpenSpec task checkboxes or independent delivery
+   units.
 6. Run `review-feedback-routing` before PR/MR creation. Detect artifact host
    from remotes and route reviewer feedback separately from artifact creation.
 7. Commit and push the planning-only branch when the hosted-review creation path
@@ -156,7 +165,7 @@ implementation units until it can report `stack_ready`, or report
 | Planning-only diff | Diff contains no implementation changes, or implementation changes are explicitly split out |
 | OpenSpec source-plan boundary | OpenSpec review diffs contain no `.agents/plans/**`; atomic plan artifacts may keep them |
 | Artifact validation | OpenSpec/doc/ticket validation passes or a precise gap is reported |
-| OpenSpec task shape | Task groups represent deliverable implementation areas, or planning blocks with `needs_spec_redesign` |
+| OpenSpec task shape | `validate-openspec-tasks` passes, or planning blocks with `needs_spec_redesign` before PR/MR creation or update |
 | Review feedback routing | Artifact and feedback adapters are selected, or ambiguity is blocked |
 | Artifact creation/update | Draft PR/MR exists for the latest planning-only branch |
 | Artifact-host inspection | Host metadata, discussions, and check state are inspected |
