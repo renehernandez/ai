@@ -114,19 +114,24 @@ and next action.
      ticket text into the repo unless asked.
 6. Run `review-feedback-routing` before PR/MR creation. Detect artifact host
    from remotes and route reviewer feedback separately from artifact creation.
-7. Commit and push the planning-only branch when the hosted-review creation path
+7. Bind the validated readiness reviewer evidence to the current staged
+   planning diff with `scripts/plan-review.ts review-gate-input --diff-hash
+   <current-staged-diff-hash> --file <plan-review-request>`. This prepares the
+   shared review-gate input for the planning commit boundary; do not recompute
+   reviewer lists.
+8. Commit and push the planning-only branch when the hosted-review creation path
    requires a clean pushed branch. Do not include implementation changes in the
    commit.
-8. Create or update the routed draft PR/MR with a title and description that
+9. Create or update the routed draft PR/MR with a title and description that
    makes the planning-only state explicit:
    - state that implementation has not started;
    - name the plan/OpenSpec artifact;
    - name the requested feedback, such as Nitro and developer review;
    - include exact planning validation performed.
-9. Run the artifact-host inspection adapter (`gitlab-adapter-review` or
+10. Run the artifact-host inspection adapter (`gitlab-adapter-review` or
    `github-adapter-review`) only for host metadata, discussions, and CI/review
    state. Do not run implementation code review against a planning-only diff.
-10. Wait for routed automated feedback on the latest head:
+11. Wait for routed automated feedback on the latest head:
     - Fullscript GitLab/Nitro: use `nitro-review-feedback` first. If latest-head
       Nitro feedback is missing or stale after create/update, post the standard
       Nitro review request for the current head, then wait again.
@@ -134,11 +139,11 @@ and next action.
       substitute Codex or another reviewer for this first cut.
     - Developer review: keep the PR/MR open and report pending human review; do
       not fabricate approval.
-11. Apply only plan/documentation feedback. If feedback asks for implementation,
+12. Apply only plan/documentation feedback. If feedback asks for implementation,
     record it as a follow-up or blocker; do not start coding.
-12. If the branch head changes after feedback fixes, rerun artifact validation,
+13. If the branch head changes after feedback fixes, rerun artifact validation,
     push, and wait for latest-head automated feedback again.
-13. Before finishing, enumerate all Nitro-authored planning comments and
+14. Before finishing, enumerate all Nitro-authored planning comments and
     discussions on the planning PR/MR across every review round. Record each
     note ID, discussion ID when present, whether the discussion is resolvable
     and currently resolved, and disposition: `fixed_in_planning`,
@@ -146,13 +151,13 @@ and next action.
     planning feedback blocks implementation sequencing unless it is explicitly
     deferred to a specific implementation task or marked non-actionable with
     rationale.
-14. Generate `scripts/plan-review.ts gate-template`, fill it, and validate it
+15. Generate `scripts/plan-review.ts gate-template`, fill it, and validate it
     with `validate-ledger` as internal evidence.
-15. Emit `planning_review` with `scripts/plan-review.ts
+16. Emit `planning_review` with `scripts/plan-review.ts
     planning-review-template`, fill it with the hosted review evidence and a
     passed `nitro_feedback_gate` plus `planning_feedback_disposition`, and
     validate it with `validate-planning-review`.
-16. Finish only when the planning MR has latest-head Nitro feedback completed
+17. Finish only when the planning MR has latest-head Nitro feedback completed
     cleanly, every prior Nitro planning item has explicit disposition, and the
     reviewed head is recorded as the implementation stack base.
 
