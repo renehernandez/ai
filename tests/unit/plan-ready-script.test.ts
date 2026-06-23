@@ -374,6 +374,34 @@ test("review-gate-input rejects handoff optional reviewers in required reviewers
   });
 });
 
+test("review-gate-input requires a diff hash value", () => {
+  withTempPlan(({ artifactRef, fingerprint }) => {
+    const result = runPlanReady(
+      "review-gate-input",
+      validHandoff(artifactRef, fingerprint),
+      ["--diff-hash", "--source-ref", "handoff.yaml"],
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /review-gate-input requires --diff-hash/);
+    assert.equal(result.stdout, "");
+  });
+});
+
+test("review-gate-input rejects unsupported input contracts", () => {
+  const result = runPlanReady("review-gate-input", "example: true\n", [
+    "--diff-hash",
+    reviewGateDiffHash,
+  ]);
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /review-gate input requires plan_delivery_handoff or openspec_blueprint/,
+  );
+  assert.equal(result.stdout, "");
+});
+
 test("review-gate-input maps a validated blueprint to active gate input", () => {
   const result = runPlanReady("review-gate-input", validBlueprint(), [
     "--diff-hash",

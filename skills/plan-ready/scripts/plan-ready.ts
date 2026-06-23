@@ -1055,7 +1055,8 @@ function optionValue(args: string[], name: string): string | undefined {
   if (index === -1) {
     return undefined;
   }
-  return args[index + 1];
+  const value = args[index + 1];
+  return value && !value.startsWith("-") ? value : undefined;
 }
 
 function errorMessage(error: unknown): string {
