@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { nitroFeedbackGateErrors } from "../../../scripts/nitro-feedback-gate.ts";
+import { isAgentsPlanPath } from "../../../scripts/plan-artifacts.ts";
 import {
   extractSection,
   extractYaml,
@@ -557,10 +558,6 @@ function readDiffFile(path: string): string {
     fail(`diff_file_missing: ${path}`);
   }
   return readFileSync(path, "utf8");
-}
-
-function isAgentsPlanPath(path: string): boolean {
-  return path === ".agents/plans" || path.startsWith(".agents/plans/");
 }
 
 function optionalArg(args: string[], name: string): string | undefined {

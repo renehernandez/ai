@@ -234,6 +234,7 @@ test("runtime config manages helper scripts imported by installed planning skill
 
   for (const helper of [
     "scripts/nitro-feedback-gate.ts",
+    "scripts/plan-artifacts.ts",
     "scripts/planning-contracts.ts",
     "scripts/stack-state.ts",
   ]) {

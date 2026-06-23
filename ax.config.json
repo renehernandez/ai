@@ -5,6 +5,7 @@
     "skillSymlinkTargets": ["~/.claude/skills"],
     "reusableScripts": [
       "scripts/nitro-feedback-gate.ts",
+      "scripts/plan-artifacts.ts",
       "scripts/planning-contracts.ts",
       "scripts/review-gate.ts",
       "scripts/stack-state.ts"

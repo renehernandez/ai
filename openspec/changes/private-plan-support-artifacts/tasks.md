@@ -1,6 +1,6 @@
 ## 1. Plan Artifact Boundary
 
-- [ ] 1.1 Extract or reuse shared helpers for safe `.agents/plans/**`
+- [x] 1.1 Extract or reuse shared helpers for safe `.agents/plans/**`
       normalization, primary markdown plan classification, support-sidecar
       classification, fingerprinting, and private workspace path derivation.
 - [ ] 1.2 Update `plan-review` validation so `artifact_type: plan` accepts
