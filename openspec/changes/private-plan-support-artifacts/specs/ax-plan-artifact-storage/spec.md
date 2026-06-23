@@ -8,8 +8,9 @@ AX plan workspace outside the target repository.
 - **WHEN** an agent records a support artifact for a plan
 - **THEN** the system stores the artifact under `~/.ax/plans/`
 - **AND** the target repository receives no support sidecar file
-- **AND** the record includes the repo key, plan ref, plan path hash, plan
-  content fingerprint, artifact kind, artifact path, and artifact content
+- **AND** the record includes the repo key, normalized repo-relative plan path,
+  plan path hash, plan content fingerprint, artifact kind, artifact path, and
+  artifact content fingerprint
   fingerprint
 
 #### Scenario: Workspace is plan scoped
@@ -37,14 +38,23 @@ target repository and normalized plan path.
 
 #### Scenario: Plan or artifact path escapes workspace
 - **WHEN** `--plan`, `--file`, artifact kind, or artifact extension would
-  escape the target repo or private workspace after normalization
+  escape its allowed root after normalization
 - **THEN** the system rejects the command
 - **AND** no private workspace record is written
 
+#### Scenario: Artifact input file root is deterministic
+- **WHEN** an agent records an artifact with `--file <path>`
+- **THEN** the allowed input roots are the target repository root, the operating
+  system temp directory returned by the runtime, and the AX artifact inbox under
+  `~/.ax/plans/inbox/`
+- **AND** the private destination workspace under `~/.ax/plans/repos/` is not an
+  allowed `--file` input root
+- **AND** a `--file` path outside those roots is rejected
+
 #### Scenario: Symlink target escapes workspace
 - **WHEN** `--plan` or `--file` resolves through a symlink
-- **AND** the symlink target escapes the target repo, the allowed input file
-  location, or the private workspace after realpath resolution
+- **AND** the symlink target escapes the target repository root, the allowed
+  input roots for `--file`, or the private workspace after realpath resolution
 - **THEN** the system rejects the command
 - **AND** no private workspace record is written
 

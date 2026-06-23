@@ -8,12 +8,17 @@ support workflow artifacts under `.agents/plans/**`.
 - **WHEN** a path under `.agents/plans/**` is classified for plan-review
   validation
 - **THEN** a repo-relative markdown file with extension `.md` is classified as a
-  primary plan document
-- **AND** YAML, JSON, review-request, reviewer-selection, handoff, blueprint,
-  ledger, report, validation input, and validation output files are classified
-  as support workflow artifacts
-- **AND** classification is based on normalized path, extension, and known
-  support naming patterns rather than file contents
+  primary plan document only when it does not match a support workflow naming
+  pattern
+- **AND** support workflow naming patterns include
+  `*.review-request.*`, `*.reviewer-selection.*`, `*.handoff.*`,
+  `*.blueprint.*`, `*.ledger.*`, `*.report.*`,
+  `*.validation-input.*`, and `*.validation-output.*`
+- **AND** YAML, JSON, and JSONL files under `.agents/plans/**` are classified as
+  support workflow artifacts even when they do not match a known support
+  workflow naming pattern
+- **AND** classification is based on normalized path, extension, and the
+  enumerated support naming patterns rather than file contents
 
 #### Scenario: Atomic markdown plan is valid
 - **WHEN** `plan-review` validates a planning diff for `artifact_type: plan`

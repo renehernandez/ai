@@ -75,15 +75,18 @@ key: lowercase the host, strip protocol-specific prefixes, normalize separators,
 and remove a trailing `.git` suffix.
 
 `plan_slug` comes from the plan filename, with a short hash of the
-repo-relative plan path when needed to avoid collisions. Store the full
-`plan_path_hash` in metadata so nested plans or duplicate basenames cannot
-silently share a workspace.
+repo-relative plan path when needed to avoid collisions. Store both the
+normalized repo-relative plan path and full `plan_path_hash` in metadata so
+nested plans or duplicate basenames cannot silently share a workspace.
 
 Plan/support classification is deterministic: normalized `.md` files under
-`.agents/plans/**` are primary plan documents, while YAML, JSON,
-review-request, reviewer-selection, handoff, blueprint, ledger, report, and
-validation files are support artifacts. Classification does not inspect file
-contents.
+`.agents/plans/**` are primary plan documents only when they do not match a
+support naming pattern. Support naming patterns are suffix patterns such as
+`*.review-request.*`, `*.reviewer-selection.*`, `*.handoff.*`,
+`*.blueprint.*`, `*.ledger.*`, `*.report.*`, `*.validation-input.*`, and
+`*.validation-output.*`. YAML, JSON, and JSONL files under `.agents/plans/**`
+are support artifacts even when their names do not match those patterns.
+Classification does not inspect file contents.
 
 ### Keep The First Helper Minimal
 
@@ -117,8 +120,12 @@ sidecars are rejected for every touched name-status variant, including added,
 modified, deleted, renamed, copied, and type-changed paths.
 
 Path safety checks include realpath/symlink resolution for `--plan` and
-`--file`. A symlink that resolves outside the target repo, accepted input file
-location, or private workspace is treated as an escape.
+`--file`. The `--plan` path must resolve inside the target repo. The `--file`
+path may resolve inside the target repo, the runtime operating-system temp
+directory, or `~/.ax/plans/inbox/`; it must not resolve inside the private
+destination workspace under `~/.ax/plans/repos/`. A symlink that resolves
+outside those allowed roots or outside the private workspace for internal
+workspace writes is treated as an escape.
 
 ### Avoid Hosted Review Leakage
 
