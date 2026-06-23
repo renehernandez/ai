@@ -53,6 +53,69 @@ for (const file of [
   });
 }
 
+test("shared rules define deliverable-only OpenSpec task shape", () => {
+  const text = readFileSync("rules/docs-and-specs.md", "utf-8");
+
+  assert.match(text, /OpenSpec Task Shape/);
+  assert.match(text, /deliverable implementation areas/);
+  assert.match(text, /task groups anywhere in the file/);
+  assert.match(text, /proof subcheck/);
+  assert.match(text, /not a separate OpenSpec task checkbox/);
+  assert.match(text, /independent delivery unit/);
+  assert.match(text, /needs_spec_redesign/);
+  assert.match(text, /Do not silently rewrite `tasks\.md`/);
+});
+
+test("planning skills reject lifecycle-only OpenSpec task phases", () => {
+  const planReadyText = readFileSync("skills/plan-ready/SKILL.md", "utf-8");
+
+  assert.match(planReadyText, /documentation, testing/);
+  assert.match(planReadyText, /validation/);
+  assert.match(planReadyText, /blocked_readiness\.reason/);
+  assert.match(planReadyText, /needs_spec_redesign/);
+  assert.match(planReadyText, /proof subchecks/);
+  assert.match(planReadyText, /not as\s+OpenSpec\s+task checkboxes/);
+
+  for (const file of [
+    "skills/openspec-tasks/SKILL.md",
+    "skills/plan-review/SKILL.md",
+    "skills/plan-unit-sequencer/SKILL.md",
+  ] as const) {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /documentation, testing/);
+    assert.match(text, /validation/);
+    assert.match(text, /anywhere|anywhere in the file/);
+    assert.match(text, /proof subchecks/);
+    assert.match(text, /not as\s+OpenSpec\s+task checkboxes/);
+    assert.match(text, /needs_spec_redesign/);
+  }
+
+  const orchestratorText = readFileSync(
+    "skills/plan-orchestrator/SKILL.md",
+    "utf-8",
+  );
+
+  assert.match(orchestratorText, /lifecycle-only/i);
+  assert.match(orchestratorText, /needs_spec_redesign/);
+  assert.match(orchestratorText, /ask the user|how to proceed/);
+  assert.match(orchestratorText, /silently rewriting/);
+});
+
+test("implementation rules keep local workflow artifacts out of work-project repos", () => {
+  const text = readFileSync(
+    "rules/investigation-and-implementation.md",
+    "utf-8",
+  );
+
+  assert.match(
+    text,
+    /local workflow artifacts out of work-project repositories/,
+  );
+  assert.match(text, /private\s+plan-support storage/);
+  assert.match(text, /Reusable agent rules, skills, fixtures, validators/);
+});
+
 test("git rules require stacked MRs to land bottom-to-top", () => {
   const text = readFileSync("rules/git-and-review.md", "utf-8");
 

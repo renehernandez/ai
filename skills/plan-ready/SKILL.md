@@ -172,6 +172,21 @@ blueprint comes from a `.agents/plans/**` artifact, `source_plan.ref` and
 `plan-orchestrator` must pass as `--expected-source-plan` and
 `--expected-change-id` during source-plan cleanup.
 
+OpenSpec blueprint tasks must be deliverable units. Do not create
+documentation, testing, linting, review, validation, or verification phases
+anywhere in the task list.
+Put those activities in the acceptance or verification for the corresponding
+deliverable task. They may be separate tasks only when docs, tests, validation,
+CI, reviewer tooling, runtime validation tooling, or reusable AI workflow
+machinery is the feature being changed. Deliverable-scoped proof subchecks are
+valid only as acceptance or verification bullets inside the related deliverable
+task, not as OpenSpec task checkboxes or independent delivery units. If the
+reviewed shape would require a lifecycle-only OpenSpec task or group, return
+`blocked_readiness` and ask the user whether to redo the breakdown, brainstorm,
+narrow the scope, or choose another planning route. Set
+`blocked_readiness.reason` to `needs_spec_redesign` so downstream workflows do
+not treat the result as a generic missing-decision block.
+
 Legacy `slice_plan_review`, `reviewed_slices`,
 `plan_ready_handoff`, `plan_followthrough_slice_handoff`, and
 followthrough-ledger inputs are unsupported. Return `needs_plan_ready` and ask
@@ -211,6 +226,7 @@ Linear comments by default.
 | Accepting old handoff shapes | Return `needs_plan_ready` |
 | Starting implementation after readiness | Stop and wait for `plan-orchestrator` |
 | Treating readiness as orchestrator completion | Continue through planning review and stacked delivery until `stack_ready` or `delivery_blocked` |
+| Adding a documentation or validation OpenSpec phase anywhere | Fold proof work into deliverable tasks or block with `blocked_readiness.reason: needs_spec_redesign` |
 | Skipping baseline reviewers | Run all baseline reviewers before ready |
 | Returning YAML without a readable thread summary | Add `## Readable Summary` before the YAML |
 
