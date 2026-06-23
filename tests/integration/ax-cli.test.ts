@@ -1098,6 +1098,50 @@ test("ax commit ordinary mode reports repair guidance for invalid active gates",
   }
 });
 
+test("ax commit ordinary mode reports blocking-finding guidance for active gates", () => {
+  const cwd = createGitFixture("ax-commit-ordinary-blocking-gate-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+    const hash = stagedHash(cwd);
+    writeReviewGateState(cwd, {
+      version: 1,
+      active: true,
+      workflow: "plan-unit-delivery",
+      sourceProvenance: {
+        kind: "plan_delivery_handoff",
+        ref: "/tmp/example-handoff.yaml",
+      },
+      stagedDiffHash: hash,
+      requiredReviewPasses: ["implementation-review"],
+      results: {
+        "implementation-review": {
+          status: "passed",
+          diffHash: hash,
+        },
+      },
+      blockingFindings: [{ message: "fix me" }],
+    });
+
+    const result = runAgentRuntime(["commit", "-m", "add fixture file"], {
+      cwd,
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /unresolved blocking findings/);
+    assert.match(
+      result.stderr,
+      /next: resolve blocking review findings for workflow plan-unit-delivery, then retry with ax commit --require-review-gate/,
+    );
+    assert.match(
+      result.stderr,
+      /Active workflow-required review gate for plan-unit-delivery found/,
+    );
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
 test("ax commit help documents required review-gate mode", () => {
   const result = runAgentRuntime(["commit", "--help"]);
 
