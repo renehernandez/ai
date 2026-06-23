@@ -87,6 +87,11 @@ export type ReviewGateConsumeResult = {
   note?: string;
 };
 
+type ReviewGateReadResult =
+  | { exists: false }
+  | { exists: true; ok: true; state: unknown }
+  | { exists: true; ok: false; error: string };
+
 export function reviewGateStatePath(cwd = process.cwd()): string {
   const gitDir = gitOutput(["rev-parse", "--git-dir"], cwd);
   const resolvedGitDir = isAbsolute(gitDir) ? gitDir : resolve(cwd, gitDir);
@@ -148,32 +153,42 @@ export function consumeReviewGate(
   cwd = process.cwd(),
 ): ReviewGateConsumeResult {
   const statePath = reviewGateStatePath(cwd);
-  const state = readReviewGateState(statePath);
-  if (!state) {
+  const readResult = readReviewGateState(statePath);
+  if (!readResult.exists) {
     return {
       statePath,
       consumed: false,
       note: "No review gate state found; nothing to consume.",
     };
   }
+  if (!readResult.ok) {
+    throw new Error(
+      `Cannot consume invalid review gate state: Review gate state is not valid JSON: ${readResult.error}`,
+    );
+  }
+  const state = readResult.state;
   const schemaErrors = validateStateShape(state);
   if (schemaErrors.length > 0) {
     throw new Error(
       `Cannot consume invalid review gate state: ${schemaErrors.join("; ")}`,
     );
   }
-  if (!state.active) {
+  if (!isPlainRecord(state)) {
+    throw new Error("Cannot consume invalid review gate state.");
+  }
+  const reviewGateState = state as ReviewGateState;
+  if (!reviewGateState.active) {
     return {
       statePath,
       consumed: false,
-      state,
+      state: reviewGateState,
       note: "Review gate is already inactive; nothing to consume.",
     };
   }
 
   const now = new Date().toISOString();
   const consumedState: ReviewGateState = {
-    ...state,
+    ...reviewGateState,
     active: false,
     status: "consumed",
     updatedAt: now,
@@ -241,6 +256,7 @@ export function validateReviewGateForCommit(
   const requiredReviewPasses = normalized.requiredReviewPasses;
   const results = normalized.results;
   const active = normalized.active;
+  const stateDiffHash = normalized.stagedDiffHash;
   const completedReviewPasses = requiredReviewPasses.filter((reviewPass) => {
     const result = results[reviewPass];
     return result?.status === "passed" && result.diffHash === currentDiffHash;
@@ -294,7 +310,7 @@ export function validateReviewGateForCommit(
     errors.push("Review gate has unresolved blocking findings.");
   }
 
-  if (state.stagedDiffHash && state.stagedDiffHash !== currentDiffHash) {
+  if (stateDiffHash && stateDiffHash !== currentDiffHash) {
     errors.push("Review gate staged diff hash is stale.");
   }
 
@@ -552,11 +568,19 @@ function validateSourceProvenance(value: unknown, errors: string[]): void {
   }
 }
 
-function readReviewGateState(statePath: string): unknown {
+function readReviewGateState(statePath: string): ReviewGateReadResult {
   if (!existsSync(statePath)) {
-    return undefined;
+    return { exists: false };
   }
-  return JSON.parse(readFileSync(statePath, "utf-8"));
+  try {
+    return {
+      exists: true,
+      ok: true,
+      state: JSON.parse(readFileSync(statePath, "utf-8")),
+    };
+  } catch (error) {
+    return { exists: true, ok: false, error: errorMessage(error) };
+  }
 }
 
 function writeValidatedState(statePath: string, state: ReviewGateState): void {
@@ -583,6 +607,7 @@ function atomicWriteJson(statePath: string, state: ReviewGateState): void {
 function normalizeState(state: unknown): {
   errors: string[];
   active: boolean;
+  stagedDiffHash?: string;
   requiredReviewPasses: string[];
   results: Record<string, ReviewGateResult>;
   blockingFindings: unknown[];
@@ -592,6 +617,7 @@ function normalizeState(state: unknown): {
     return {
       errors,
       active: false,
+      stagedDiffHash: undefined,
       requiredReviewPasses: [],
       results: {},
       blockingFindings: [],
@@ -600,6 +626,10 @@ function normalizeState(state: unknown): {
   return {
     errors,
     active: state.active === true,
+    stagedDiffHash:
+      typeof state.stagedDiffHash === "string"
+        ? state.stagedDiffHash
+        : undefined,
     requiredReviewPasses: Array.isArray(state.requiredReviewPasses)
       ? state.requiredReviewPasses.filter((value) => typeof value === "string")
       : [],
