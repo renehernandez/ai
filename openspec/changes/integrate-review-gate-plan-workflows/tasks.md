@@ -26,7 +26,7 @@
 - [x] 2.3 Make `plan-ready` fail closed before readiness commits when required
   subagents are unavailable, reviewer evidence is partial, reviewer evidence is
   stale, gate writing fails, gate validation fails, or blocking findings remain.
-- [ ] 2.4 Add plan-ready tests for atomic handoff gate writing, OpenSpec
+- [x] 2.4 Add plan-ready tests for atomic handoff gate writing, OpenSpec
   blueprint gate writing, selected optional reviewer promotion, malformed
   evidence rejection, stale staged diff rejection, and blocked readiness
   behavior.
