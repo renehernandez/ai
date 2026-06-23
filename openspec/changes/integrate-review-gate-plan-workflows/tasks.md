@@ -37,7 +37,8 @@
   `skills/plan-unit-delivery/scripts/plan-unit-delivery.ts` command or helper
   that maps a validated handoff plus `reviewer_launch` and `reviewer_report`
   into the shared `scripts/review-gate.ts` API input shape.
-- [ ] 3.2 Require all required implementation reviewers to have passing
+- [ ] 3.2 Require required implementation reviewer passes in delivery gates.
+  Required implementation reviewers must have passing
   reconciled outcomes, and treat selected or non-skipped dynamic reviewers as
   required gate passes for the current staged diff.
 - [ ] 3.3 Preserve explicit `not_applicable` skipped reviewer evidence where
@@ -87,7 +88,7 @@
   plan-workflow commits require the owning phase to arm and validate the local
   review gate before `ax commit`, while preserving Rene's raw `git commit`
   escape hatch.
-- [ ] 6.3 Update instruction tests for the new phase-owned gate guidance.
+- [ ] 6.3 Update instruction tests for workflow gate guidance.
 - [ ] 6.4 Update `skills/plan-ready/agents/openai.yaml`,
   `skills/plan-unit-delivery/agents/openai.yaml`, and
   `skills/plan-orchestrator/agents/openai.yaml` so installed agents describe
@@ -99,7 +100,7 @@
 - [ ] 6.7 Run focused unit and integration tests for `review-gate`,
   `plan-ready`, `plan-unit-delivery`, `plan-orchestrator`, and `ax-cli`.
 - [ ] 6.8 Run the repo's full test command.
-- [ ] 6.9 Refresh installed runtime surfaces for all profiles with
+- [ ] 6.9 Refresh configured runtime profiles with
   `pnpm ax update --all-profiles`.
 - [ ] 6.10 Validate installed runtime surfaces with
   `pnpm ax validate --all-profiles`, `pnpm ax status --all-profiles`, and
