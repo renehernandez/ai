@@ -611,6 +611,64 @@ test("commit-planning forbids OpenSpec command overrides outside tests", () => {
   }
 });
 
+test("commit-planning skips OpenSpec provenance checks for non-OpenSpec artifacts", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
+  try {
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.com"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
+    runGit(directory, ["add", "README.md"]);
+    runGit(directory, ["commit", "-m", "initial"]);
+    mkdirSync(join(directory, ".agents", "plans"), { recursive: true });
+    writeFileSync(
+      join(directory, ".agents", "plans", "example-change.md"),
+      "planning\n",
+      "utf8",
+    );
+    runGit(directory, ["add", ".agents/plans/example-change.md"]);
+
+    const argsPath = join(directory, "ax-args.txt");
+    const fakeAxPath = join(directory, "fake-ax");
+    writeFileSync(
+      fakeAxPath,
+      `#!/bin/sh\nprintf '%s\\n' "$@" > "${argsPath}"\n`,
+      "utf8",
+    );
+    chmodSync(fakeAxPath, 0o755);
+
+    const planArtifactRequest = planReviewRequest
+      .replace("artifact_type: openspec", "artifact_type: plan")
+      .replace(
+        "artifact_ref: openspec/changes/example-change",
+        "artifact_ref: .agents/plans/example-change.md",
+      )
+      .replace(
+        / {2}blueprint_provenance:[\s\S]*? {2}unresolved_blockers: \[\]/,
+        "  unresolved_blockers: []",
+      );
+    const result = runPlanReview("commit-planning", planArtifactRequest, [
+      "--cwd",
+      directory,
+      "--message",
+      "Commit planning",
+      "--ax-command",
+      fakeAxPath,
+    ]);
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /planning_commit_committed/);
+    assert.deepEqual(readFileSync(argsPath, "utf8").trim().split("\n"), [
+      "commit",
+      "--require-review-gate",
+      "-m",
+      "Commit planning",
+    ]);
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
 test("commit-planning blocks OpenSpec gate activation when blueprint provenance is missing", () => {
   const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
   try {
@@ -711,6 +769,114 @@ test("commit-planning requires blueprint provenance as a direct request child", 
     assert.match(
       result.stderr,
       /blueprint_provenance is required for OpenSpec planning commits/,
+    );
+    assert.equal(
+      existsSync(join(directory, ".git", "ax", "review-gate.json")),
+      false,
+    );
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+test("commit-planning requires generated OpenSpec paths in blueprint provenance", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
+  try {
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.com"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
+    runGit(directory, ["add", "README.md"]);
+    runGit(directory, ["commit", "-m", "initial"]);
+    mkdirSync(join(directory, "openspec", "changes", "example-change"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "proposal.md"),
+      "planning\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "tasks.md"),
+      "- [ ] 1. Implement\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "openspec"]);
+
+    const result = runPlanReview(
+      "commit-planning",
+      planReviewRequest.replace(
+        /      generated_paths:\n        - openspec\/changes\/example-change\/proposal\.md\n        - openspec\/changes\/example-change\/tasks\.md/,
+        "      generated_paths: []",
+      ),
+      [
+        "--cwd",
+        directory,
+        "--message",
+        "Commit planning",
+        "--ax-command",
+        join(directory, "missing-fake-ax"),
+      ],
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /blueprint_provenance\.generated_change\.generated_paths is required/,
+    );
+    assert.equal(
+      existsSync(join(directory, ".git", "ax", "review-gate.json")),
+      false,
+    );
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+test("commit-planning requires strict OpenSpec validation evidence", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
+  try {
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.com"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
+    runGit(directory, ["add", "README.md"]);
+    runGit(directory, ["commit", "-m", "initial"]);
+    mkdirSync(join(directory, "openspec", "changes", "example-change"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "proposal.md"),
+      "planning\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "tasks.md"),
+      "- [ ] 1. Implement\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "openspec"]);
+
+    const result = runPlanReview(
+      "commit-planning",
+      planReviewRequest.replace(
+        "      - openspec validate example-change --strict --no-interactive\n",
+        "",
+      ),
+      [
+        "--cwd",
+        directory,
+        "--message",
+        "Commit planning",
+        "--ax-command",
+        join(directory, "missing-fake-ax"),
+      ],
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /blueprint_provenance\.validation_evidence must include openspec validate example-change --strict --no-interactive/,
     );
     assert.equal(
       existsSync(join(directory, ".git", "ax", "review-gate.json")),

@@ -180,7 +180,7 @@ and next action.
     record it as a follow-up or blocker; do not start coding.
 15. If the branch head changes after feedback fixes, rerun artifact validation,
     push, and wait for latest-head automated feedback again.
-15. Before finishing, enumerate all Nitro-authored planning comments and
+16. Before finishing, enumerate all Nitro-authored planning comments and
     discussions on the planning PR/MR across every review round. Record each
     note ID, discussion ID when present, whether the discussion is resolvable
     and currently resolved, and disposition: `fixed_in_planning`,
@@ -188,13 +188,13 @@ and next action.
     planning feedback blocks implementation sequencing unless it is explicitly
     deferred to a specific implementation task or marked non-actionable with
     rationale.
-16. Generate `scripts/plan-review.ts gate-template`, fill it, and validate it
+17. Generate `scripts/plan-review.ts gate-template`, fill it, and validate it
     with `validate-ledger` as internal evidence.
-17. Emit `planning_review` with `scripts/plan-review.ts
+18. Emit `planning_review` with `scripts/plan-review.ts
     planning-review-template`, fill it with the hosted review evidence and a
     passed `nitro_feedback_gate` plus `planning_feedback_disposition`, and
     validate it with `validate-planning-review`.
-18. Finish only when the planning MR has latest-head Nitro feedback completed
+19. Finish only when the planning MR has latest-head Nitro feedback completed
     cleanly, every prior Nitro planning item has explicit disposition, and the
     reviewed head is recorded as the implementation stack base.
 
