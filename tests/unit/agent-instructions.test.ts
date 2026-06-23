@@ -238,12 +238,13 @@ for (const file of [
   "skills/plan-review/agents/openai.yaml",
   "skills/plan-orchestrator/SKILL.md",
   "skills/plan-orchestrator/agents/openai.yaml",
+  "rules/investigation-and-implementation.md",
 ] as const) {
   test(`${file} keeps support artifacts out of committed plan sidecars`, () => {
     const text = readFileSync(file, "utf-8");
 
     assert.match(text, /\.agents\/plans/);
-    assert.match(text, /support (workflow )?(artifacts|sidecars)/i);
+    assert.match(text, /support\s+(workflow\s+)?(artifacts|sidecars)/i);
     assert.match(text, /thread/);
     assert.match(text, /pnpm ax plans artifact|private AX plan artifact/);
     assert.match(
@@ -252,3 +253,18 @@ for (const file of [
     );
   });
 }
+
+test("repo implementation rules distinguish primary atomic plan markdown from support sidecars", () => {
+  const text = readFileSync(
+    "rules/investigation-and-implementation.md",
+    "utf-8",
+  );
+
+  assert.match(text, /primary\s+atomic\s+plan\s+markdown/i);
+  assert.match(text, /valid reviewed planning artifact/i);
+  assert.match(text, /support\s+sidecars/i);
+  assert.match(
+    text,
+    /do not commit `.agents\/plans\/\*\*` support\s+sidecars/i,
+  );
+});

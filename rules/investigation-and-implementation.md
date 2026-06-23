@@ -32,9 +32,15 @@ These rules govern when to diagnose, when to edit, and how to route implementati
   available. Preserve it when creation or validation fails. If the source plan
   is already committed, block and repair the branch instead of publishing a
   deletion-only source-plan diff. For `artifact_type: openspec`, the
-  planning-review diff must contain no `.agents/plans/**` paths. For
-  `artifact_type: plan`, `.agents/plans/**` remains a valid reviewed planning
-  artifact.
+  planning-review diff must contain no `.agents/plans/**` paths.
+- For `artifact_type: plan`, only the primary atomic plan markdown document
+  under `.agents/plans/**` is a valid reviewed planning artifact. Support
+  sidecars such as review requests, reviewer selections, handoffs, blueprints,
+  ledgers, reports, validation inputs, and validation outputs must stay in
+  thread evidence by default. When file-backed recovery or correlation is
+  needed, record them with `pnpm ax plans artifact record` and recover them with
+  `pnpm ax plans artifact list`; do not commit `.agents/plans/**` support
+  sidecars.
 - Do not stage or commit local workflow artifacts into work-project
   repositories. Reviewer scratch, readiness reports, reviewer reports, delivery
   ledgers, screenshots, command proof, validation evidence, rejected generated
