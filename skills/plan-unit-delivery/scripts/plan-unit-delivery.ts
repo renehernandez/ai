@@ -1360,10 +1360,12 @@ function parseSkippedReviewers(
 
     if (!includes(REVIEW_PASSES, reviewer)) {
       errors.push(`unknown skipped reviewer: ${reviewer}`);
+      continue;
     }
 
     if (!evidence || evidence.startsWith("<")) {
       errors.push(`${reviewer} skipped evidence is required`);
+      continue;
     }
 
     parsedSkippedReviewers.push({ reviewer, evidence });

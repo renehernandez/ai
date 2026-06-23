@@ -693,6 +693,39 @@ test("validate-launch-report requires AI readiness accounting", () => {
     invalid.stderr,
     /ai-readiness-upkeep must be launched or listed/,
   );
+
+  const placeholderEvidence = runPlanUnitDelivery(
+    "validate-launch-report",
+    launchedReport.replace(
+      "    - ai-readiness-upkeep: not_applicable - no AI readiness verification or agent-surface contract changed\n",
+      "    - ai-readiness-upkeep: not_applicable - <evidence>\n",
+    ),
+  );
+
+  assert.notEqual(placeholderEvidence.status, 0);
+  assert.match(
+    placeholderEvidence.stderr,
+    /ai-readiness-upkeep skipped evidence is required/,
+  );
+  assert.match(
+    placeholderEvidence.stderr,
+    /ai-readiness-upkeep must be launched or listed/,
+  );
+
+  const unknownSkippedReviewer = runPlanUnitDelivery(
+    "validate-launch-report",
+    launchedReport.replace(
+      "    - security-review: not_applicable - no security-sensitive surface changed\n",
+      "    - unknown-review: not_applicable - no security-sensitive surface changed\n",
+    ),
+  );
+
+  assert.notEqual(unknownSkippedReviewer.status, 0);
+  assert.match(unknownSkippedReviewer.stderr, /unknown skipped reviewer/);
+  assert.match(
+    unknownSkippedReviewer.stderr,
+    /security-review must be launched or listed/,
+  );
 });
 
 test("validate-ledger accepts delivery gate evidence", () => {
