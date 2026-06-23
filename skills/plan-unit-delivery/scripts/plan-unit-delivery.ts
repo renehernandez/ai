@@ -15,6 +15,10 @@ import {
   requireValue,
   scalar,
 } from "../../../scripts/planning-contracts.ts";
+import type {
+  ActiveReviewGateInput,
+  ReviewGateResultInput,
+} from "../../../scripts/review-gate.ts";
 import {
   artifactHostHintFromRemoteText,
   validateUnitTaskDelta,
@@ -108,9 +112,11 @@ const REVIEW_OUTCOME_STATUSES = [
   "blocked",
   "not_applicable",
 ] as const;
+const PLAN_UNIT_DELIVERY_REVIEW_PHASE = "plan-unit-delivery";
 type Command =
   | "detect"
   | "validate-handoff"
+  | "review-gate-input"
   | "reviewer-template"
   | "validate-launch-report"
   | "validate-review-report"
@@ -143,12 +149,29 @@ type ParsedHandoff = {
   blockers: string[];
 };
 
+type ParsedReviewerLaunch = {
+  launchedReviewers: string[];
+  skippedReviewerNames: Set<string>;
+};
+
+type ReviewOutcome = {
+  reviewer: string;
+  status: (typeof REVIEW_OUTCOME_STATUSES)[number];
+  evidence: string;
+};
+
+type ParsedReviewerReport = {
+  launchedReviewers: string[];
+  skippedReviewerNames: Set<string>;
+  outcomes: ReviewOutcome[];
+};
+
 function main(): void {
   const [command, ...args] = process.argv.slice(2);
 
   if (!isCommand(command)) {
     fail(
-      "Usage: plan-unit-delivery.ts <detect|validate-handoff|reviewer-template|validate-launch-report|validate-review-report|refactoring-template|gate-template|validate-ledger|validate-task-delta> [--file path|--base path --head path --task id]",
+      "Usage: plan-unit-delivery.ts <detect|validate-handoff|review-gate-input|reviewer-template|validate-launch-report|validate-review-report|refactoring-template|gate-template|validate-ledger|validate-task-delta> [--file path|--base path --head path --task id]",
     );
   }
 
@@ -174,6 +197,11 @@ function main(): void {
 
   if (command === "validate-task-delta") {
     validateTaskDelta(args);
+    return;
+  }
+
+  if (command === "review-gate-input") {
+    printReviewGateInput(args);
     return;
   }
 
@@ -361,7 +389,33 @@ refactoring_execution:
 }
 
 function validateHandoff(input: string): void {
+  try {
+    validatedHandoff(input);
+  } catch (error) {
+    console.error(errorMessage(error));
+    process.exit(1);
+  }
+
+  console.log("plan_delivery_handoff valid");
+}
+
+function validatedHandoff(input: string): ParsedHandoff {
   const handoff = parseHandoff(input);
+  const errors = handoffValidationErrors(input, handoff);
+
+  if (errors.length > 0) {
+    throw new Error(
+      `Invalid plan_delivery_handoff:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+    );
+  }
+
+  return handoff;
+}
+
+function handoffValidationErrors(
+  input: string,
+  handoff: ParsedHandoff,
+): string[] {
   const errors = legacyErrors(input);
 
   requireValue(handoff.status, "status", errors);
@@ -487,14 +541,7 @@ function validateHandoff(input: string): void {
     }
   }
 
-  if (errors.length > 0) {
-    console.error(
-      `Invalid plan_delivery_handoff:\n${errors.map((error) => `- ${error}`).join("\n")}`,
-    );
-    process.exit(1);
-  }
-
-  console.log("plan_delivery_handoff valid");
+  return errors;
 }
 
 function validateTaskDelta(args: string[]): void {
@@ -523,6 +570,142 @@ function validateTaskDelta(args: string[]): void {
       2,
     ),
   );
+}
+
+function printReviewGateInput(args: string[]): void {
+  const diffHash = optionValue(args, "--diff-hash");
+  if (!diffHash) {
+    fail("review-gate-input requires --diff-hash");
+  }
+
+  const input = readInput(args);
+  const evidenceRef =
+    optionValue(args, "--source-ref") ?? optionValue(args, "--file");
+  let reviewGateInput: ActiveReviewGateInput;
+  try {
+    reviewGateInput = buildPlanUnitDeliveryReviewGateInput(input, {
+      diffHash,
+      evidenceRef,
+    });
+  } catch (error) {
+    fail(errorMessage(error));
+  }
+
+  console.log(JSON.stringify(reviewGateInput, null, 2));
+}
+
+function buildPlanUnitDeliveryReviewGateInput(
+  input: string,
+  options: {
+    diffHash: string;
+    evidenceRef?: string;
+  },
+): ActiveReviewGateInput {
+  const handoff = validatedHandoff(input);
+  const launch = validatedLaunchReport(input);
+  const report = validatedReviewReport(input);
+  assertReviewerLaunchReportConsistent(launch, report);
+
+  const requiredReviewPasses = unique(report.launchedReviewers);
+  const { results, blockingFindings } = reviewerReportGateResults(
+    report,
+    options.diffHash,
+  );
+
+  return {
+    workflow: "plan-unit-delivery",
+    unit: {
+      id: handoff.approved_unit_id,
+      title: handoff.approved_unit_title,
+    },
+    sourceProvenance: {
+      kind: "plan_delivery_handoff",
+      ref: handoff.artifact_ref,
+      phase: PLAN_UNIT_DELIVERY_REVIEW_PHASE,
+      evidence: options.evidenceRef ? [options.evidenceRef] : [],
+    },
+    requiredReviewPasses,
+    results,
+    blockingFindings: [...handoff.blockers, ...blockingFindings],
+  };
+}
+
+function assertReviewerLaunchReportConsistent(
+  launch: ParsedReviewerLaunch,
+  report: ParsedReviewerReport,
+): void {
+  const launchedOnly = launch.launchedReviewers.filter(
+    (reviewer) => !report.launchedReviewers.includes(reviewer),
+  );
+  const reportedOnly = report.launchedReviewers.filter(
+    (reviewer) => !launch.launchedReviewers.includes(reviewer),
+  );
+  const skippedLaunchOnly = [...launch.skippedReviewerNames].filter(
+    (reviewer) => !report.skippedReviewerNames.has(reviewer),
+  );
+  const skippedReportOnly = [...report.skippedReviewerNames].filter(
+    (reviewer) => !launch.skippedReviewerNames.has(reviewer),
+  );
+  const errors = [
+    ...launchedOnly.map(
+      (reviewer) => `reviewer_report missing launched reviewer: ${reviewer}`,
+    ),
+    ...reportedOnly.map(
+      (reviewer) =>
+        `reviewer_report includes reviewer not launched: ${reviewer}`,
+    ),
+    ...skippedLaunchOnly.map(
+      (reviewer) => `reviewer_report missing skipped reviewer: ${reviewer}`,
+    ),
+    ...skippedReportOnly.map(
+      (reviewer) =>
+        `reviewer_report includes skipped reviewer not listed at launch: ${reviewer}`,
+    ),
+  ];
+
+  if (errors.length > 0) {
+    throw new Error(
+      `Invalid reviewer launch/report pair:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+    );
+  }
+}
+
+function reviewerReportGateResults(
+  report: ParsedReviewerReport,
+  diffHash: string,
+): {
+  results: Record<string, ReviewGateResultInput>;
+  blockingFindings: string[];
+} {
+  const results: Record<string, ReviewGateResultInput> = {};
+  const blockingFindings: string[] = [];
+  for (const outcome of report.outcomes) {
+    const status = reviewOutcomeGateStatus(outcome.status);
+    results[outcome.reviewer] = {
+      status,
+      diffHash,
+      summary: outcome.evidence,
+    };
+    if (status !== "passed") {
+      blockingFindings.push(
+        `Reviewer ${outcome.reviewer} did not pass: ${outcome.status}`,
+      );
+    }
+  }
+
+  return { results, blockingFindings };
+}
+
+function reviewOutcomeGateStatus(
+  status: (typeof REVIEW_OUTCOME_STATUSES)[number],
+): ReviewGateResultInput["status"] {
+  if (status === "passed") {
+    return "passed";
+  }
+  if (status === "findings") {
+    return "failed";
+  }
+  return "blocked";
 }
 
 function validateLedger(input: string): void {
@@ -837,6 +1020,17 @@ function escapeRegExp(value: string): string {
 }
 
 function validateLaunchReport(input: string): void {
+  try {
+    validatedLaunchReport(input);
+  } catch (error) {
+    console.error(errorMessage(error));
+    process.exit(1);
+  }
+
+  console.log("reviewer_launch valid");
+}
+
+function validatedLaunchReport(input: string): ParsedReviewerLaunch {
   const body = extractYaml(input);
   const section = extractSection(body, "reviewer_launch");
   const errors: string[] = [];
@@ -896,16 +1090,26 @@ function validateLaunchReport(input: string): void {
   }
 
   if (errors.length > 0) {
-    console.error(
+    throw new Error(
       `Invalid reviewer_launch:\n${errors.map((error) => `- ${error}`).join("\n")}`,
     );
-    process.exit(1);
   }
 
-  console.log("reviewer_launch valid");
+  return { launchedReviewers, skippedReviewerNames };
 }
 
 function validateReviewReport(input: string): void {
+  try {
+    validatedReviewReport(input);
+  } catch (error) {
+    console.error(errorMessage(error));
+    process.exit(1);
+  }
+
+  console.log("reviewer_report valid");
+}
+
+function validatedReviewReport(input: string): ParsedReviewerReport {
   const body = extractYaml(input);
   const section = extractSection(body, "reviewer_report");
   const errors: string[] = [];
@@ -915,6 +1119,7 @@ function validateReviewReport(input: string): void {
   const outcomes = list(section, "outcomes");
   const outcomeReviewers = new Set<string>();
   const skippedReviewerNames = parseSkippedReviewers(skippedReviewers, errors);
+  const parsedOutcomes: ReviewOutcome[] = [];
 
   if (status !== "complete") {
     errors.push("reviewer_report.status must be complete");
@@ -991,6 +1196,13 @@ function validateReviewReport(input: string): void {
     }
 
     outcomeReviewers.add(reviewer);
+    if (includes(REVIEW_OUTCOME_STATUSES, outcomeStatus)) {
+      parsedOutcomes.push({
+        reviewer,
+        status: outcomeStatus,
+        evidence,
+      });
+    }
   }
 
   for (const reviewer of launchedReviewers) {
@@ -1000,13 +1212,12 @@ function validateReviewReport(input: string): void {
   }
 
   if (errors.length > 0) {
-    console.error(
+    throw new Error(
       `Invalid reviewer_report:\n${errors.map((error) => `- ${error}`).join("\n")}`,
     );
-    process.exit(1);
   }
 
-  console.log("reviewer_report valid");
+  return { launchedReviewers, skippedReviewerNames, outcomes: parsedOutcomes };
 }
 
 function requireRequiredReviewers(
@@ -1144,6 +1355,7 @@ function isCommand(command: string | undefined): command is Command {
   return [
     "detect",
     "validate-handoff",
+    "review-gate-input",
     "reviewer-template",
     "validate-launch-report",
     "validate-review-report",
@@ -1152,6 +1364,23 @@ function isCommand(command: string | undefined): command is Command {
     "validate-ledger",
     "validate-task-delta",
   ].includes(command ?? "");
+}
+
+function optionValue(args: string[], name: string): string | undefined {
+  const index = args.indexOf(name);
+  if (index === -1) {
+    return undefined;
+  }
+  const value = args[index + 1];
+  return value && !value.startsWith("-") ? value : undefined;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values)];
 }
 
 function git(args: string[]): string | null {
