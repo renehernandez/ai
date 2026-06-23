@@ -70,12 +70,20 @@ path.
 `repo_key` comes from the target repo's `origin` fetch URL when available. If
 `origin` is absent, use the selected artifact-host remote. If neither exists,
 block and ask for the intended repo identity. Do not derive identity from
-mirrored push URLs.
+mirrored push URLs. Canonicalize equivalent remote URL forms before building the
+key: lowercase the host, strip protocol-specific prefixes, normalize separators,
+and remove a trailing `.git` suffix.
 
 `plan_slug` comes from the plan filename, with a short hash of the
 repo-relative plan path when needed to avoid collisions. Store the full
 `plan_path_hash` in metadata so nested plans or duplicate basenames cannot
 silently share a workspace.
+
+Plan/support classification is deterministic: normalized `.md` files under
+`.agents/plans/**` are primary plan documents, while YAML, JSON,
+review-request, reviewer-selection, handoff, blueprint, ledger, report, and
+validation files are support artifacts. Classification does not inspect file
+contents.
 
 ### Keep The First Helper Minimal
 
@@ -107,6 +115,10 @@ path in an `artifact_type: openspec` diff is invalid.
 For `artifact_type: plan`, primary markdown plan docs are allowed. Support
 sidecars are rejected for every touched name-status variant, including added,
 modified, deleted, renamed, copied, and type-changed paths.
+
+Path safety checks include realpath/symlink resolution for `--plan` and
+`--file`. A symlink that resolves outside the target repo, accepted input file
+location, or private workspace is treated as an escape.
 
 ### Avoid Hosted Review Leakage
 

@@ -25,6 +25,9 @@ target repository and normalized plan path.
 - **WHEN** the target repository has an `origin` fetch URL
 - **THEN** the system derives `repo_key` from that URL
 - **AND** it does not use mirrored push URLs to derive the key
+- **AND** it canonicalizes equivalent remote URL forms by lowercasing the host,
+  stripping protocol-specific prefixes, normalizing path separators, and
+  removing a trailing `.git` suffix before building the key
 
 #### Scenario: Repo identity is ambiguous
 - **WHEN** the target repository has no `origin` fetch URL and no selected
@@ -35,6 +38,13 @@ target repository and normalized plan path.
 #### Scenario: Plan or artifact path escapes workspace
 - **WHEN** `--plan`, `--file`, artifact kind, or artifact extension would
   escape the target repo or private workspace after normalization
+- **THEN** the system rejects the command
+- **AND** no private workspace record is written
+
+#### Scenario: Symlink target escapes workspace
+- **WHEN** `--plan` or `--file` resolves through a symlink
+- **AND** the symlink target escapes the target repo, the allowed input file
+  location, or the private workspace after realpath resolution
 - **THEN** the system rejects the command
 - **AND** no private workspace record is written
 

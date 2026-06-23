@@ -4,6 +4,17 @@
 The system SHALL distinguish primary atomic plan markdown documents from
 support workflow artifacts under `.agents/plans/**`.
 
+#### Scenario: Plan artifact classification is deterministic
+- **WHEN** a path under `.agents/plans/**` is classified for plan-review
+  validation
+- **THEN** a repo-relative markdown file with extension `.md` is classified as a
+  primary plan document
+- **AND** YAML, JSON, review-request, reviewer-selection, handoff, blueprint,
+  ledger, report, validation input, and validation output files are classified
+  as support workflow artifacts
+- **AND** classification is based on normalized path, extension, and known
+  support naming patterns rather than file contents
+
 #### Scenario: Atomic markdown plan is valid
 - **WHEN** `plan-review` validates a planning diff for `artifact_type: plan`
 - **AND** the diff includes the primary `.agents/plans/**` markdown plan
