@@ -6,7 +6,9 @@ atomic handoffs and OpenSpec blueprints.
 
 #### Scenario: Readiness output records reviewer evidence
 - **WHEN** `plan-ready` emits a ready atomic handoff or OpenSpec blueprint
-- **THEN** the output records baseline reviewers
+- **THEN** the output records the static `plan-ready` baseline reviewers:
+  `implementation-readiness`, `edge-cases-and-risks`,
+  `simplification-and-scope-control`, and `refactoring-opportunities`
 - **AND** records selected dynamic reviewers
 - **AND** records each reviewer status, summary, artifact fingerprint, skipped
   rationale when applicable, blocking findings, completion timestamp, and final
@@ -62,7 +64,8 @@ evidence for each material implementation commit.
 - **AND** it is not counted as a required gate pass
 
 #### Scenario: Each material implementation commit requires fresh evidence
-- **WHEN** one implementation unit needs more than one material commit
+- **WHEN** one implementation unit needs more than one commit through the
+  required-gate workflow commit path
 - **THEN** each material commit requires fresh reviewer evidence for its staged
   diff
 - **AND** a consumed or stale gate from a previous commit does not satisfy the

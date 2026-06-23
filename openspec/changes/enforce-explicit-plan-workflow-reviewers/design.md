@@ -53,6 +53,10 @@ no-gate allow path for non-workflow commits.
 This avoids hidden heuristics based on branch names, changed files, commit
 messages, or marker files.
 
+A material workflow commit is any commit a plan workflow phase intentionally
+sends through the required-gate path. `ax commit` must not decide materiality by
+inspecting paths, branch names, or commit messages.
+
 ### Keep `plan-ready` As A Classifier
 
 `plan-ready` records readiness reviewer evidence and emits it in machine-readable
@@ -62,9 +66,13 @@ diff.
 
 ### Keep Gate State Centralized
 
-Phase scripts map validated evidence into shared review-gate APIs. State path
-resolution, staged diff hashing, schema validation, active writes, consumed
-state, and status formatting stay in shared review-gate/AX code.
+Phase scripts map validated evidence into shared review-gate APIs and write the
+active gate before invoking `ax commit --require-review-gate`. `ax commit` only
+validates the existing active gate for the current staged diff and consumes it
+after a successful Git commit; it does not bind reviewer evidence or duplicate
+phase-owned activation logic. State path resolution, staged diff hashing, schema
+validation, active writes, consumed state, and status formatting stay in shared
+review-gate/AX code.
 
 ### Keep Hosted Review Separate
 
