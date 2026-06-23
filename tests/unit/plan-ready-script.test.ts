@@ -233,6 +233,24 @@ test("validate-handoff rejects stale artifact fingerprints", () => {
   });
 });
 
+test("validate-handoff rejects optional reviewers in required reviewers", () => {
+  withTempPlan(({ artifactRef, fingerprint }) => {
+    const handoff = validHandoff(artifactRef, fingerprint).replace(
+      "      - refactoring-opportunities\n    optional_reviewers: []",
+      "      - refactoring-opportunities\n      - docs-and-agent-alignment\n    optional_reviewers: []",
+    );
+    const result = runPlanReady("validate-handoff", handoff);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Invalid plan_delivery_handoff/);
+    assert.match(
+      result.stderr,
+      /required_reviewers can include only baseline reviewers: docs-and-agent-alignment/,
+    );
+    assert.equal(result.stdout, "");
+  });
+});
+
 test("handoff-template emits the plan delivery contract", () => {
   const result = spawnSync(
     "pnpm",
