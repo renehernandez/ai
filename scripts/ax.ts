@@ -776,13 +776,30 @@ function formatOrdinaryCommitBlockedByGate(
   validation: ReviewGateValidation,
 ): string {
   const workflow = validation.workflow ?? "unknown";
-  const next = validation.ok
-    ? `next: retry with ax commit ${REQUIRE_REVIEW_GATE_FLAG} for workflow ${workflow}`
-    : `next: refresh required local reviews for workflow ${workflow}, then retry with ax commit ${REQUIRE_REVIEW_GATE_FLAG}`;
+  const next = ordinaryCommitBlockedNextAction(validation, workflow);
   const status = formatReviewGateStatus(validation, {
     next,
   });
   return `${status}Active workflow-required review gate for ${workflow} found; ordinary ax commit is disabled for this staged diff.\n`;
+}
+
+function ordinaryCommitBlockedNextAction(
+  validation: ReviewGateValidation,
+  workflow: string,
+): string {
+  if (validation.ok) {
+    return `next: retry with ax commit ${REQUIRE_REVIEW_GATE_FLAG} for workflow ${workflow}`;
+  }
+  if (validation.blockingFindings.length > 0) {
+    return `next: resolve blocking review findings for workflow ${workflow}, then retry with ax commit ${REQUIRE_REVIEW_GATE_FLAG}`;
+  }
+  if (
+    validation.staleReviewPasses.length > 0 ||
+    validation.missingReviewPasses.length > 0
+  ) {
+    return `next: refresh required local reviews for workflow ${workflow}, then retry with ax commit ${REQUIRE_REVIEW_GATE_FLAG}`;
+  }
+  return `next: repair the active review gate for workflow ${workflow}, or clear it and rerun required local reviews, then retry with ax commit ${REQUIRE_REVIEW_GATE_FLAG}`;
 }
 
 function parseAxCommitArgs(args: string[]): {

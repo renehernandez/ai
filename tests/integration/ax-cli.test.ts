@@ -1068,6 +1068,36 @@ test("ax commit ordinary mode reports required-gate guidance for stale active ga
   }
 });
 
+test("ax commit ordinary mode reports repair guidance for invalid active gates", () => {
+  const cwd = createGitFixture("ax-commit-ordinary-invalid-gate-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+    writeReviewGateState(cwd, {
+      version: 1,
+      active: true,
+      workflow: "plan-unit-delivery",
+    });
+
+    const result = runAgentRuntime(["commit", "-m", "add fixture file"], {
+      cwd,
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Active review gate requires stagedDiffHash/);
+    assert.match(
+      result.stderr,
+      /next: repair the active review gate for workflow plan-unit-delivery, or clear it and rerun required local reviews, then retry with ax commit --require-review-gate/,
+    );
+    assert.match(
+      result.stderr,
+      /Active workflow-required review gate for plan-unit-delivery found/,
+    );
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
 test("ax commit help documents required review-gate mode", () => {
   const result = runAgentRuntime(["commit", "--help"]);
 
