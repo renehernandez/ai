@@ -185,6 +185,7 @@ const launchedReport = `reviewer_launch:
 
 const reviewerReport = `reviewer_report:
   status: complete
+  reviewed_diff_hash: ${reviewGateDiffHash}
   launched_reviewers:
     - implementation-review
     - implementation-scrutiny
@@ -475,6 +476,24 @@ test("review-gate-input rejects mismatched launch and report evidence", () => {
   assert.match(
     result.stderr,
     /reviewer_report missing launched reviewer: security-review/,
+  );
+  assert.equal(result.stdout, "");
+});
+
+test("review-gate-input rejects stale reviewer report evidence", () => {
+  const result = runPlanUnitDelivery(
+    "review-gate-input",
+    `${validHandoff}\n${launchedReport}\n${reviewerReport.replace(
+      reviewGateDiffHash,
+      "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    )}`,
+    ["--diff-hash", reviewGateDiffHash],
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /reviewer_report\.reviewed_diff_hash is stale for current staged diff/,
   );
   assert.equal(result.stdout, "");
 });

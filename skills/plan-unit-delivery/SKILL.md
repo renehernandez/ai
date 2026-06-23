@@ -73,23 +73,35 @@ path.
 7. For OpenSpec tasks, validate the one-checkbox delta against the unit base.
 8. Launch implementation reviewers through internal subagents.
 9. Reconcile reviewer outcomes.
-10. Run review-feedback routing.
-11. Open or update one routed implementation PR/MR stacked on the expected
+10. Validate `reviewer_launch` and `reviewer_report`; the report must include
+    the staged diff hash reviewed by the implementation reviewers.
+11. Before any material implementation commit, activate the local review gate
+    for the staged diff:
+
+    ```bash
+    scripts/plan-unit-delivery.ts activate-review-gate --file <delivery-evidence> --source-ref <handoff-or-report-ref>
+    ```
+
+    If activation is blocked, gate writing fails, validation fails, reviewer
+    evidence is missing or stale, or blocking findings remain, do not run
+    `ax commit`; resolve the blocker and rerun reviewers or activation.
+12. Run review-feedback routing.
+13. Open or update one routed implementation PR/MR stacked on the expected
     stack tip from the handoff.
-12. Prove the implementation artifact is separate from the planning-review
+14. Prove the implementation artifact is separate from the planning-review
     PR/MR. If the same hosted artifact would be reused, block and split the
     implementation to a separate PR/MR.
-13. Run artifact-host review.
-14. Monitor artifact-host pipelines for the latest head until they pass, fail,
+15. Run artifact-host review.
+16. Monitor artifact-host pipelines for the latest head until they pass, fail,
     block, or are unavailable with evidence. Include child or downstream
     pipeline state when the host exposes it.
-15. Request Nitro feedback after MR creation and after every material
+17. Request Nitro feedback after MR creation and after every material
     head-changing push, including feedback fixes, restacks, conflict fixes,
     pipeline fixes, user edits, rebases, and plan or documentation feedback
     fixes.
-16. Wait for the shared latest-head `nitro_feedback_gate` to pass. A requested,
+18. Wait for the shared latest-head `nitro_feedback_gate` to pass. A requested,
     pending, stale, unavailable, or findings gate is blocking.
-17. Finish only when the unit implementation MR is stack-ready with a passed
+19. Finish only when the unit implementation MR is stack-ready with a passed
     Nitro gate, or blocked with evidence.
 
 Block with `implementation_scope_escape` when the selected unit requires
@@ -135,6 +147,8 @@ evidence, and restack state.
 | Implementing multiple OpenSpec tasks at once | Return to OpenSpec or `plan-unit-sequencer` |
 | Finishing without proving the task delta | Run `validate-task-delta` against base and unit `tasks.md` |
 | Recording task-delta proof only in chat prose | Put the command and `unit_task_delta_valid` output in `delivery_gate_ledger.unit_task_delta` |
+| Committing before activating the local review gate | Run `activate-review-gate` for the staged diff before `ax commit` |
+| Reusing reviewer reports after staging new changes | Rerun reviewers and update `reviewer_report.reviewed_diff_hash` |
 | Treating delivery gate evidence as durable state | Keep sequence state in OpenSpec |
 | Treating an open PR/MR as done before pipelines settle | Keep monitoring latest-head pipelines |
 | Assuming Nitro feedback is absent immediately after push | Request Nitro for the latest head, wait up to 10 minutes for review start, then wait for completion |
