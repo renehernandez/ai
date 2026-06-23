@@ -194,10 +194,21 @@ ${OPTIONAL_REVIEWERS.map((reviewer) => `    - ${reviewer}: ${OPTIONAL_REVIEWER_D
 selection_rules:
   - Select docs-and-agent-alignment for reusable workflow, docs, skills, rules, automation prompt, background review, reviewer rubric, local workflow artifact boundary, or PR/MR description contract changes.
   - Select ax-and-skill-compatibility for skill folder structure, skill metadata, bundled script, adapter prompt, internal subagent routing, install/update, or Agents Experience changes.
-  - For OpenSpec or blueprint readiness work, baseline reviewers must block lifecycle-only task groups, validation-only tasks, proof-only tasks, and checkbox-only delivery units before status ready.
-  - For workflow artifacts, baseline reviewers must block committed local readiness reports, reviewer reports, followthrough ledgers, screenshots, or other private workflow state in work-project repositories.
+  - For OpenSpec or blueprint readiness work, every baseline reviewer must treat lifecycle-only task groups, validation-only tasks, proof-only tasks, final documentation or validation phases, and checkbox-only delivery units as blocking planning-readiness findings before status ready.
+  - For workflow artifacts, every baseline reviewer must block committed local readiness reports, reviewer reports, followthrough ledgers, screenshots, or other private workflow state in work-project repositories.
+  - Report these blockers as required spec or plan redesign with needs_spec_redesign when task shape is the failing surface; do not downgrade them to suggestions, follow-up cleanup, or implementation nits.
   - Select only from optional_reviewer_catalog; do not invent reviewer names.
   - Use baseline_sufficient only after explaining why no optional catalog reviewer is needed.
+
+baseline_reviewer_blocking_rubric:
+  implementation-readiness:
+    - Block lifecycle-only groups, validation-only tasks, proof-only tasks, final documentation or validation phases, and checkbox-only delivery units because they are not implementation-sized deliverables.
+  edge-cases-and-risks:
+    - Block plans that defer risk discovery, rollback confidence, or verification to a final documentation, validation, testing, linting, review, or proof phase instead of attaching it to the related deliverable.
+  simplification-and-scope-control:
+    - Block standalone lifecycle groups, checklist bookkeeping units, and committed local workflow artifacts in work-project repositories.
+  refactoring-opportunities:
+    - Block cleanup, verification, documentation, or refactoring tasks that are independent OpenSpec units unless that reviewer, rule, test, documentation, runtime-validation, or reusable AI workflow machinery is itself the feature.
 `);
 }
 

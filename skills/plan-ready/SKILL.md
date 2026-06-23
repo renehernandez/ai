@@ -83,6 +83,27 @@ Local workflow artifacts include readiness reports, reviewer reports,
 followthrough ledgers, screenshots, and private workflow state that belongs in
 the thread or private workflow storage rather than a work-project repository.
 
+Baseline reviewer findings for these issues are blocking planning-readiness
+findings, not optional suggestions, follow-up nits, or implementation cleanup.
+Each baseline reviewer applies the blocker from its own angle:
+
+- `implementation-readiness` blocks when the proposed work cannot be delivered
+  as implementation-sized units because the plan has lifecycle-only groups,
+  validation-only tasks, proof-only tasks, final documentation or validation
+  phases, or checkbox-only delivery units.
+- `edge-cases-and-risks` blocks when risk discovery, verification, or rollback
+  confidence is deferred to a final documentation, validation, testing, linting,
+  review, or proof phase instead of being attached to the related deliverable.
+- `simplification-and-scope-control` blocks when a plan splits lifecycle work
+  into standalone task groups, uses checklist bookkeeping as a delivery unit, or
+  commits local readiness reports, reviewer reports, followthrough ledgers,
+  screenshots, or private workflow state into a work-project repository.
+- `refactoring-opportunities` blocks when cleanup, verification, documentation,
+  or refactoring appears as an independent OpenSpec task rather than scoped
+  acceptance or verification for the deliverable that requires it, except when
+  that reviewer/rule/test/documentation/runtime-validation machinery is itself
+  the feature being changed in the AI repo.
+
 ## Atomic Handoff Contract
 
 Use `scripts/plan-ready.ts handoff-template` and validate with

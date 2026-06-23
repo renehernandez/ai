@@ -177,6 +177,22 @@ for (const file of [
 }
 
 for (const file of [
+  "skills/plan-ready/SKILL.md",
+  "skills/plan-ready/agents/openai.yaml",
+] as const) {
+  test(`${file} makes baseline reviewer task-shape blockers non-optional`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /baseline reviewer/i);
+    assert.match(text, /blocking planning-readiness\s+findings/);
+    assert.match(text, /final documentation or validation\s+phases/);
+    assert.match(text, /checkbox-only delivery\s+units/);
+    assert.match(text, /committed local workflow artifacts/);
+    assert.match(text, /not optional suggestions|not suggestions/);
+  });
+}
+
+for (const file of [
   "skills/plan-review/SKILL.md",
   "skills/plan-review/agents/openai.yaml",
 ] as const) {

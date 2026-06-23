@@ -273,8 +273,17 @@ test("reviewer-template routes workflow artifacts and lifecycle blockers", () =>
   assert.match(result.stdout, /adapter prompt/);
   assert.match(result.stdout, /lifecycle-only task groups/);
   assert.match(result.stdout, /proof-only tasks/);
+  assert.match(result.stdout, /final documentation or validation phases/);
+  assert.match(result.stdout, /checkbox-only delivery units/);
+  assert.match(result.stdout, /blocking planning-readiness findings/);
   assert.match(result.stdout, /committed local readiness reports/);
   assert.match(result.stdout, /private workflow state/);
+  assert.match(result.stdout, /baseline_reviewer_blocking_rubric/);
+  assert.match(result.stdout, /implementation-readiness:/);
+  assert.match(result.stdout, /edge-cases-and-risks:/);
+  assert.match(result.stdout, /simplification-and-scope-control:/);
+  assert.match(result.stdout, /refactoring-opportunities:/);
+  assert.match(result.stdout, /do not downgrade them to suggestions/);
 });
 
 test("blueprint-template emits the OpenSpec blueprint contract", () => {

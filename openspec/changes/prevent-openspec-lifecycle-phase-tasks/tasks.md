@@ -37,7 +37,7 @@
 
 ## 4. Reviewer And Agent-Rule Alignment
 
-- [ ] 4.1 Update reviewer role prompts or rubrics so baseline reviewers treat
+- [x] 4.1 Update reviewer role prompts or rubrics so baseline reviewers treat
       validation-only tasks, final documentation/validation phases, checkbox-only
       delivery units, and committed local workflow artifacts as blocking
       planning-readiness findings.
