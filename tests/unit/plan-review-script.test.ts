@@ -16,6 +16,33 @@ function withTempFile(content: string, callback: (path: string) => void): void {
   }
 }
 
+function withTempTasks(
+  content: string,
+  callback: (path: string) => void,
+): void {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-script-"));
+  const path = join(directory, "tasks.md");
+  try {
+    writeFileSync(path, content, "utf8");
+    callback(path);
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+}
+
+function withTempOpenSpec(
+  tasksContent: string,
+  callback: (path: string) => void,
+): void {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-script-"));
+  try {
+    writeFileSync(join(directory, "tasks.md"), tasksContent, "utf8");
+    callback(directory);
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+}
+
 function runPlanReview(
   command: string,
   content: string,
@@ -217,6 +244,7 @@ test("gate-template emits a readable summary before YAML", () => {
       result.stdout.indexOf("plan_review_gate_ledger:"),
   );
   assert.match(result.stdout, /plan_review_gate_ledger:/);
+  assert.match(result.stdout, /openspec_task_shape:/);
 });
 
 test("planning-review-template emits a readable summary before YAML", () => {
@@ -281,6 +309,73 @@ test("validate-planning-diff accepts OpenSpec diffs without source-plan paths", 
 
   assert.equal(result.status, 0);
   assert.match(result.stdout, /planning_diff_valid/);
+});
+
+test("validate-openspec-tasks accepts deliverable OpenSpec task shapes", () => {
+  withTempTasks(
+    `## Feature Work
+
+- [ ] 1.1 Add the plan-review OpenSpec task gate
+      - Verify with the plan-review unit tests.
+`,
+    (path) => {
+      const result = runPlanReviewArgs([
+        "validate-openspec-tasks",
+        "--tasks",
+        path,
+      ]);
+
+      assert.equal(result.status, 0);
+      assert.match(result.stdout, /"status": "pass"/);
+    },
+  );
+});
+
+test("validate-openspec-tasks accepts documented artifact-ref input", () => {
+  withTempOpenSpec(
+    `## Feature Work
+
+- [ ] 1.1 Add the plan-review OpenSpec task gate
+`,
+    (path) => {
+      const result = runPlanReviewArgs([
+        "validate-openspec-tasks",
+        "--artifact-ref",
+        path,
+      ]);
+
+      assert.equal(result.status, 0);
+      assert.match(result.stdout, /"status": "pass"/);
+    },
+  );
+});
+
+test("validate-openspec-tasks blocks planning review on lifecycle task groups", () => {
+  withTempTasks(
+    `## Feature Work
+
+- [ ] 1.1 Add the plan-review OpenSpec task gate
+
+## Validation
+
+- [ ] 2.1 Run tests and lint
+`,
+    (path) => {
+      const result = runPlanReviewArgs([
+        "validate-openspec-tasks",
+        "--tasks",
+        path,
+      ]);
+
+      assert.notEqual(result.status, 0);
+      assert.match(result.stdout, /"status": "needs_spec_redesign"/);
+      assert.match(result.stderr, /needs_spec_redesign/);
+      assert.match(
+        result.stderr,
+        /do not create or update the planning PR\/MR/,
+      );
+    },
+  );
 });
 
 test("validate-planning-review accepts reviewed planning handoffs", () => {

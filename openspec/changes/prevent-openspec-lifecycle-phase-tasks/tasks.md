@@ -27,7 +27,7 @@
 - [x] 3.1 Update `openspec-tasks` documentation, adapter prompt, audit output,
       parser classification, and tests so existing bad task lists return
       `needs_spec_redesign` without rewriting specs.
-- [ ] 3.2 Update `plan-review` documentation, adapter prompt, and validation
+- [x] 3.2 Update `plan-review` documentation, adapter prompt, and validation
       helpers so OpenSpec planning-review publication runs the task-shape audit
       and blocks planning MRs or PRs on `needs_spec_redesign`.
 - [ ] 3.3 Update `plan-orchestrator`, `plan-unit-sequencer`, their adapter
