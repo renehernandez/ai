@@ -852,6 +852,11 @@ test("review-gate validate-commit accepts passed active review results", () => {
     writeReviewGateState(cwd, {
       version: 1,
       active: true,
+      workflow: "plan-unit-delivery",
+      sourceProvenance: {
+        kind: "plan_delivery_handoff",
+        ref: "/tmp/example-handoff.yaml",
+      },
       stagedDiffHash: hash,
       requiredReviewPasses: ["implementation-review", "docs-alignment-review"],
       results: {
