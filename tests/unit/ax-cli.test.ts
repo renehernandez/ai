@@ -31,7 +31,10 @@ import {
   registerCodexStartupHook,
   renderOpenSpecConfigYaml,
 } from "../../scripts/ax.ts";
-import { recordPlanArtifact } from "../../scripts/plan-artifacts.ts";
+import {
+  derivePlanArtifactIdentity,
+  recordPlanArtifact,
+} from "../../scripts/plan-artifacts.ts";
 
 const repoRoot = process.cwd();
 
@@ -292,8 +295,11 @@ test("plans artifact record stores support artifacts under target repo identity"
     });
 
     assert.equal(result.status, "recorded");
-    assert.equal(result.repoKey, "git@git.fullscript.io:team/target-repo.git");
+    assert.equal(result.repoKey, "git.fullscript.io/team/target-repo");
     assert.equal(result.normalizedPlanPath, ".agents/plans/example.md");
+    assert.match(result.planPathHash, /^[a-f0-9]{64}$/);
+    assert.match(result.planSlug, /^example-[a-f0-9]{12}$/);
+    assert.match(result.planContentFingerprint, /^[a-f0-9]{64}$/);
     assert.match(
       result.privateWorkspaceRelativePath,
       /^repos\/sha256-[a-f0-9]+\/plans\/example-[a-f0-9]{12}\/artifacts\/reviewer_selection-[a-f0-9]+\.yaml$/,
@@ -352,7 +358,7 @@ test("plans artifact record command uses invocation target repo", () => {
 
     const result = JSON.parse(output);
     assert.equal(result.status, "recorded");
-    assert.equal(result.repoKey, "git@git.fullscript.io:team/target-repo.git");
+    assert.equal(result.repoKey, "git.fullscript.io/team/target-repo");
     assert.ok(
       existsSync(
         join(home, ".ax", "plans", result.privateWorkspaceRelativePath),
@@ -432,6 +438,106 @@ test("plans artifact record rejects private workspace symlink escapes", () => {
           axPlansRoot,
         }),
       /must not be a symlink/,
+    );
+  });
+});
+
+test("plans artifact identity canonicalizes equivalent origin URLs", () => {
+  withTempDir((directory) => {
+    const sshRepo = createPlanArtifactTarget(join(directory, "ssh"));
+    const httpsRepo = createPlanArtifactTarget(join(directory, "https"));
+    const trailingRepo = createPlanArtifactTarget(join(directory, "trailing"));
+    git(httpsRepo, [
+      "remote",
+      "set-url",
+      "origin",
+      "https://GIT.fullscript.io/team/target-repo.git",
+    ]);
+    git(trailingRepo, [
+      "remote",
+      "set-url",
+      "origin",
+      "https://GIT.fullscript.io/team/target-repo.git/",
+    ]);
+
+    const first = derivePlanArtifactIdentity({
+      targetRoot: sshRepo,
+      planPath: ".agents/plans/example.md",
+    });
+    const second = derivePlanArtifactIdentity({
+      targetRoot: httpsRepo,
+      planPath: ".agents/plans/example.md",
+    });
+    const third = derivePlanArtifactIdentity({
+      targetRoot: trailingRepo,
+      planPath: ".agents/plans/example.md",
+    });
+
+    assert.equal(first.repoKey, "git.fullscript.io/team/target-repo");
+    assert.equal(second.repoKey, first.repoKey);
+    assert.equal(third.repoKey, first.repoKey);
+    assert.equal(second.planPathHash, first.planPathHash);
+    assert.equal(third.planPathHash, first.planPathHash);
+    assert.equal(second.planSlug, first.planSlug);
+    assert.equal(third.planSlug, first.planSlug);
+    assert.equal(second.planContentFingerprint, first.planContentFingerprint);
+    assert.equal(third.planContentFingerprint, first.planContentFingerprint);
+  });
+});
+
+test("plans artifact identity can use a selected artifact-host remote", () => {
+  withTempDir((directory) => {
+    const targetRepo = createPlanArtifactTarget(directory);
+    git(targetRepo, ["remote", "remove", "origin"]);
+    git(targetRepo, [
+      "remote",
+      "add",
+      "review",
+      "ssh://git@git.fullscript.io/team/review-repo.git",
+    ]);
+
+    const identity = derivePlanArtifactIdentity({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      artifactRemoteName: "review",
+    });
+
+    assert.equal(identity.repoKey, "git.fullscript.io/team/review-repo");
+  });
+});
+
+test("plans artifact identity prefers origin over selected artifact-host remote", () => {
+  withTempDir((directory) => {
+    const targetRepo = createPlanArtifactTarget(directory);
+    git(targetRepo, [
+      "remote",
+      "add",
+      "review",
+      "ssh://git@git.fullscript.io/team/review-repo.git",
+    ]);
+
+    const identity = derivePlanArtifactIdentity({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      artifactRemoteName: "review",
+    });
+
+    assert.equal(identity.repoKey, "git.fullscript.io/team/target-repo");
+  });
+});
+
+test("plans artifact identity requires origin or selected artifact-host remote", () => {
+  withTempDir((directory) => {
+    const targetRepo = createPlanArtifactTarget(directory);
+    git(targetRepo, ["remote", "remove", "origin"]);
+
+    assert.throws(
+      () =>
+        derivePlanArtifactIdentity({
+          targetRoot: targetRepo,
+          planPath: ".agents/plans/example.md",
+        }),
+      /no origin fetch URL or selected artifact-host remote/,
     );
   });
 });
