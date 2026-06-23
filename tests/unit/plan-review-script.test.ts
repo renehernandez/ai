@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -14,6 +20,16 @@ function withTempFile(content: string, callback: (path: string) => void): void {
   } finally {
     rmSync(directory, { force: true, recursive: true });
   }
+}
+
+function withoutGitRepositoryEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  for (const key of Object.keys(env)) {
+    if (key === "GIT_DIR" || key.startsWith("GIT_")) {
+      delete env[key];
+    }
+  }
+  return env;
 }
 
 function runPlanReview(
@@ -37,6 +53,7 @@ function runPlanReview(
       {
         cwd: process.cwd(),
         encoding: "utf8",
+        env: withoutGitRepositoryEnv(),
       },
     );
   });
@@ -60,6 +77,7 @@ function runPlanReviewCommand(command: string): {
     {
       cwd: process.cwd(),
       encoding: "utf8",
+      env: withoutGitRepositoryEnv(),
     },
   );
 
@@ -80,6 +98,7 @@ function runPlanReviewArgs(
     {
       cwd: process.cwd(),
       encoding: "utf8",
+      env: withoutGitRepositoryEnv(),
       input,
     },
   );
@@ -89,6 +108,15 @@ function runPlanReviewArgs(
     stderr: result.stderr,
     stdout: result.stdout,
   };
+}
+
+function runGit(cwd: string, args: string[]): void {
+  const result = spawnSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    env: withoutGitRepositoryEnv(),
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
 }
 
 const reviewGateDiffHash =
@@ -305,6 +333,69 @@ test("review-gate-input requires a diff hash value", () => {
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /review-gate-input requires --diff-hash/);
   assert.equal(result.stdout, "");
+});
+
+test("commit-planning activates review gate and invokes required-gate ax commit", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
+  try {
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.com"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
+    runGit(directory, ["add", "README.md"]);
+    runGit(directory, ["commit", "-m", "initial"]);
+    writeFileSync(join(directory, "plan.md"), "planning\n", "utf8");
+    runGit(directory, ["add", "plan.md"]);
+
+    const argsPath = join(directory, "ax-args.txt");
+    const fakeAxPath = join(directory, "fake-ax");
+    writeFileSync(
+      fakeAxPath,
+      `#!/bin/sh\nprintf '%s\\n' "$@" > "${argsPath}"\n`,
+      "utf8",
+    );
+    chmodSync(fakeAxPath, 0o755);
+
+    const result = runPlanReview("commit-planning", planReviewRequest, [
+      "--cwd",
+      directory,
+      "--message",
+      "Commit planning",
+      "--ax-command",
+      fakeAxPath,
+    ]);
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /planning_commit_committed/);
+    assert.deepEqual(readFileSync(argsPath, "utf8").trim().split("\n"), [
+      "commit",
+      "--require-review-gate",
+      "-m",
+      "Commit planning",
+    ]);
+
+    const state = JSON.parse(
+      readFileSync(join(directory, ".git", "ax", "review-gate.json"), "utf8"),
+    );
+    assert.equal(state.workflow, "plan-review");
+    assert.equal(state.status, "active");
+    assert.deepEqual(state.requiredReviewPasses, [
+      "implementation-readiness",
+      "edge-cases-and-risks",
+      "simplification-and-scope-control",
+      "refactoring-opportunities",
+      "docs-and-agent-alignment",
+    ]);
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+test("commit-planning requires a message", () => {
+  const result = runPlanReview("commit-planning", planReviewRequest);
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /commit-planning requires --message/);
 });
 
 test("request-template emits a readable summary before YAML", () => {

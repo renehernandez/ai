@@ -23,6 +23,12 @@ import type {
   ActiveReviewGateInput,
   ReviewGateResultInput,
 } from "../../../scripts/review-gate.ts";
+import {
+  hasStagedDiff,
+  stagedDiffHash,
+  validateReviewGateForCommit,
+  writeActiveReviewGate,
+} from "../../../scripts/review-gate.ts";
 
 const ARTIFACT_TYPES = ["plan", "openspec", "linear"] as const;
 const REQUEST_STATUSES = ["ready_for_review"] as const;
@@ -66,6 +72,7 @@ type Command =
   | "request-template"
   | "validate-request"
   | "review-gate-input"
+  | "commit-planning"
   | "validate-planning-diff"
   | "planning-review-template"
   | "validate-planning-review"
@@ -109,7 +116,7 @@ function main(): void {
 
   if (!isCommand(command)) {
     fail(
-      "Usage: plan-review.ts <detect|request-template|validate-request|review-gate-input|validate-planning-diff|gate-template|validate-ledger> [--file path]",
+      "Usage: plan-review.ts <detect|request-template|validate-request|review-gate-input|commit-planning|validate-planning-diff|gate-template|validate-ledger> [--file path]",
     );
   }
 
@@ -141,6 +148,11 @@ function main(): void {
 
   if (command === "review-gate-input") {
     printReviewGateInput(args, input);
+    return;
+  }
+
+  if (command === "commit-planning") {
+    commitPlanning(args, input);
     return;
   }
 
@@ -410,6 +422,68 @@ function printReviewGateInput(args: string[], input: string): void {
   } catch (error) {
     fail(error instanceof Error ? error.message : String(error));
   }
+}
+
+function commitPlanning(args: string[], input: string): void {
+  const cwd = optionalArg(args, "--cwd") ?? process.cwd();
+  const message = optionalArg(args, "--message") ?? optionalArg(args, "-m");
+  if (!message) {
+    fail("commit-planning requires --message <message>");
+  }
+
+  if (!hasStagedDiff(cwd)) {
+    fail("commit-planning requires a staged planning diff");
+  }
+
+  const diffHash = stagedDiffHash(cwd);
+  const evidenceRef =
+    optionalArg(args, "--source-ref") ?? optionalArg(args, "--file");
+  const reviewGateInput = buildPlanReviewGateInput(input, {
+    diffHash,
+    evidenceRef,
+  });
+  const writeResult = writeActiveReviewGate(reviewGateInput, cwd);
+  const validation = validateReviewGateForCommit(cwd);
+  if (!validation.ok) {
+    fail(
+      [
+        "commit-planning wrote a review gate that is not commit-ready:",
+        ...validation.errors.map((error) => `- ${error}`),
+      ].join("\n"),
+    );
+  }
+
+  const commitCommand = planningCommitCommand(args, message);
+  const result = spawnSync(commitCommand.command, commitCommand.args, {
+    cwd,
+    encoding: "utf8",
+  });
+  if (result.stdout) {
+    process.stdout.write(result.stdout);
+  }
+  if (result.stderr) {
+    process.stderr.write(result.stderr);
+  }
+  if (result.error) {
+    fail(result.error.message);
+  }
+  if (result.status !== 0) {
+    process.exit(result.status ?? 1);
+  }
+
+  console.log(
+    JSON.stringify(
+      {
+        status: "planning_commit_committed",
+        gate_outcome: "passed",
+        state_path: writeResult.statePath,
+        staged_diff_hash: validation.stagedDiffHash,
+        required_review_passes: validation.requiredReviewPasses,
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 function validatePlanningDiff(args: string[], stdinInput: string): void {
@@ -811,6 +885,7 @@ function isCommand(command: string | undefined): command is Command {
     "request-template",
     "validate-request",
     "review-gate-input",
+    "commit-planning",
     "validate-planning-diff",
     "planning-review-template",
     "validate-planning-review",
@@ -885,10 +960,37 @@ function optionalArg(args: string[], name: string): string | undefined {
   return index === -1 ? undefined : args[index + 1];
 }
 
+function allOptionalArgs(args: string[], name: string): string[] {
+  const values: string[] = [];
+  for (let index = 0; index < args.length; index += 1) {
+    if (args[index] === name && args[index + 1]) {
+      values.push(args[index + 1]);
+    }
+  }
+  return values;
+}
+
 function requiredArg(args: string[], name: string): string {
   const value = optionalArg(args, name);
   if (!value) {
     fail(`${name} is required`);
   }
   return value;
+}
+
+function planningCommitCommand(
+  args: string[],
+  message: string,
+): { command: string; args: string[] } {
+  const customCommand = optionalArg(args, "--ax-command");
+  return {
+    command: customCommand ?? "pnpm",
+    args: [
+      ...(customCommand ? allOptionalArgs(args, "--ax-arg") : ["ax"]),
+      "commit",
+      "--require-review-gate",
+      "-m",
+      message,
+    ],
+  };
 }
