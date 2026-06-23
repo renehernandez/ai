@@ -682,6 +682,9 @@ function readReviewerEvidence(
         `reviewer_results.${reviewer}.status must be passed, failed, or blocked`,
       );
     }
+    if (!itemDiffHash) {
+      throw new Error(`reviewer_results.${reviewer}.diff_hash is required`);
+    }
     if (itemDiffHash !== diffHash) {
       throw new Error(
         `reviewer_results.${reviewer}.diff_hash is stale for current staged diff`,

@@ -822,6 +822,72 @@ test("activate-review-gate rejects duplicate reviewer evidence", () => {
   });
 });
 
+test("activate-review-gate rejects unknown reviewer evidence", () => {
+  withTempPlan(({ artifactRef, fingerprint }) => {
+    withGitFixture((cwd) => {
+      writeFileSync(join(cwd, "file.txt"), "unknown-reviewer\n", "utf8");
+      git(cwd, ["add", "file.txt"]);
+      const diffHash = stagedDiffHashFor(cwd);
+      const resultsPath = writeReviewerResultsFile(cwd, [
+        ...BASELINE_REVIEWERS.map((reviewer) => ({
+          reviewer,
+          status: "passed",
+          diff_hash: diffHash,
+          summary: `${reviewer} passed.`,
+        })),
+        {
+          reviewer: "made-up-reviewer",
+          status: "passed",
+          diff_hash: diffHash,
+          summary: "unknown reviewer passed.",
+        },
+      ]);
+
+      const result = runPlanReadyInRepo(
+        "activate-review-gate",
+        validHandoff(artifactRef, fingerprint),
+        cwd,
+        ["--review-results-file", resultsPath],
+      );
+      const output = JSON.parse(result.stdout);
+
+      assert.notEqual(result.status, 0);
+      assert.equal(output.status, "blocked");
+      assert.match(output.blockers.join("\n"), /unknown reviewer/);
+    });
+  });
+});
+
+test("activate-review-gate rejects stale reviewer evidence", () => {
+  withTempPlan(({ artifactRef, fingerprint }) => {
+    withGitFixture((cwd) => {
+      writeFileSync(join(cwd, "file.txt"), "stale\n", "utf8");
+      git(cwd, ["add", "file.txt"]);
+      const resultsPath = writeReviewerResultsFile(
+        cwd,
+        BASELINE_REVIEWERS.map((reviewer) => ({
+          reviewer,
+          status: "passed",
+          diff_hash: `sha256:${"0".repeat(64)}`,
+          summary: `${reviewer} passed.`,
+        })),
+      );
+
+      const result = runPlanReadyInRepo(
+        "activate-review-gate",
+        validHandoff(artifactRef, fingerprint),
+        cwd,
+        ["--review-results-file", resultsPath],
+      );
+      const output = JSON.parse(result.stdout);
+
+      assert.notEqual(result.status, 0);
+      assert.equal(output.status, "blocked");
+      assert.match(output.blockers.join("\n"), /diff_hash is stale/);
+    });
+  });
+});
+
 test("validate-blueprint requires source plan ref", () => {
   const result = runPlanReady(
     "validate-blueprint",
