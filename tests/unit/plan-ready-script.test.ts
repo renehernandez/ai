@@ -251,6 +251,32 @@ test("handoff-template emits the plan delivery contract", () => {
   assert.doesNotMatch(result.stdout, /docs\/plans\/example\.md/);
 });
 
+test("reviewer-template routes workflow artifacts and lifecycle blockers", () => {
+  const result = spawnSync(
+    "pnpm",
+    [
+      "exec",
+      "tsx",
+      "skills/plan-ready/scripts/plan-ready.ts",
+      "reviewer-template",
+    ],
+    {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    },
+  );
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /docs-and-agent-alignment/);
+  assert.match(result.stdout, /local workflow artifact boundary/);
+  assert.match(result.stdout, /ax-and-skill-compatibility/);
+  assert.match(result.stdout, /adapter prompt/);
+  assert.match(result.stdout, /lifecycle-only task groups/);
+  assert.match(result.stdout, /proof-only tasks/);
+  assert.match(result.stdout, /committed local readiness reports/);
+  assert.match(result.stdout, /private workflow state/);
+});
+
 test("blueprint-template emits the OpenSpec blueprint contract", () => {
   const result = spawnSync(
     "pnpm",

@@ -160,6 +160,23 @@ for (const file of [
 }
 
 for (const file of [
+  "skills/plan-ready/SKILL.md",
+  "skills/plan-ready/agents/openai.yaml",
+] as const) {
+  test(`${file} routes reviewer selection for task-shape and workflow-artifact blockers`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /docs-and-agent-alignment/);
+    assert.match(text, /ax-and-skill-compatibility/);
+    assert.match(text, /local workflow artifact/i);
+    assert.match(text, /lifecycle-only/);
+    assert.match(text, /validation-only/);
+    assert.match(text, /proof-only/);
+    assert.match(text, /checkbox-only/);
+  });
+}
+
+for (const file of [
   "skills/plan-review/SKILL.md",
   "skills/plan-review/agents/openai.yaml",
 ] as const) {
