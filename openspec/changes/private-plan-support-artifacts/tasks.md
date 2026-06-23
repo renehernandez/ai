@@ -8,7 +8,7 @@
       `.agents/plans/**`.
 - [x] 1.3 Preserve `artifact_type: openspec` validation so every
       `.agents/plans/**` path remains invalid in OpenSpec planning diffs.
-- [ ] 1.4 Add validator coverage for added, modified, deleted, renamed, copied,
+- [x] 1.4 Add validator coverage for added, modified, deleted, renamed, copied,
       and type-changed support sidecars, including historical sidecars that are
       touched by the current diff.
 
