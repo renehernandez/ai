@@ -7,7 +7,7 @@ before downstream brainstorming, planning, writing, or presentation creation.
 
 The first version should create:
 
-- `research-router`
+- `research`
 - `research-technical`
 - `research-content`
 
@@ -34,7 +34,7 @@ with it?"
 
 ```mermaid
 flowchart LR
-  request[Research need] --> router[research-router]
+  request[Research need] --> router[research]
   router --> technical[research-technical]
   router --> content[research-content]
   technical --> brief[research_brief]
@@ -45,7 +45,7 @@ flowchart LR
   brief --> presentations[presentations]
 ```
 
-`research-router` classifies and hands off. Area skills produce evidence
+`research` classifies and hands off. Area skills produce evidence
 briefs. Downstream skills decide what to build, write, or present.
 
 ## Scope
@@ -53,8 +53,8 @@ briefs. Downstream skills decide what to build, write, or present.
 Implement the first usable version:
 
 - Follow `writing-skills` test discipline before shipping the new skills.
-- Add `skills/research-router/SKILL.md`.
-- Add `skills/research-router/agents/openai.yaml`.
+- Add `skills/research/SKILL.md`.
+- Add `skills/research/agents/openai.yaml`.
 - Add `skills/research-technical/SKILL.md`.
 - Add `skills/research-technical/agents/openai.yaml`.
 - Add `skills/research-content/SKILL.md`.
@@ -172,9 +172,9 @@ Use one v1 depth: standard research.
   paths require comparison, or the topic is controversial, fast-moving, or high
   risk.
 
-## Research Router Contract
+## Research Contract
 
-Use `research-router` when the user asks to research something without naming a
+Use `research` when the user asks to research something without naming a
 specific research skill.
 
 Route to `research-technical` when the request is about:
@@ -367,7 +367,7 @@ Each new `SKILL.md` must use supported frontmatter only:
 
 ```yaml
 ---
-name: research-router | research-technical | research-content
+name: research | research-technical | research-content
 description: Use when ...
 ---
 ```
@@ -400,11 +400,11 @@ Default prompts must preserve:
 
 ## Implementation Slices
 
-### Slice 1: Research Router And Two Area Skills
+### Slice 1: Research And Two Area Skills
 
 Build the narrow end-to-end proof for the research family:
 
-- Create `research-router`, `research-technical`, and `research-content` skills.
+- Create `research`, `research-technical`, and `research-content` skills.
 - Create matching `agents/openai.yaml` files.
 - Keep `SKILL.md` files concise and trigger-focused.
 - Make each skill explicitly stop at a brief or routing decision.
@@ -433,7 +433,7 @@ Build the narrow end-to-end proof for the research family:
 
 #### Acceptance Criteria
 
-- `research-router` can route a technical request and a presentation request.
+- `research` can route a technical request and a presentation request.
 - `research-technical` can produce a source-backed technical brief contract.
 - `research-content` can produce a source-backed content brief contract.
 - The first slice proves both paths without adding deferred research categories.

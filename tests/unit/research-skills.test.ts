@@ -33,7 +33,7 @@ function assertOpenAiMetadata(path: string, displayName: string): void {
 }
 
 test("research skills expose supported frontmatter and OpenAI metadata", () => {
-  assertSkillFrontmatter("skills/research-router/SKILL.md", "research-router");
+  assertSkillFrontmatter("skills/research/SKILL.md", "research");
   assertSkillFrontmatter(
     "skills/research-technical/SKILL.md",
     "research-technical",
@@ -43,10 +43,7 @@ test("research skills expose supported frontmatter and OpenAI metadata", () => {
     "research-content",
   );
 
-  assertOpenAiMetadata(
-    "skills/research-router/agents/openai.yaml",
-    "Research Router",
-  );
+  assertOpenAiMetadata("skills/research/agents/openai.yaml", "Research");
   assertOpenAiMetadata(
     "skills/research-technical/agents/openai.yaml",
     "Research Technical",
@@ -57,9 +54,9 @@ test("research skills expose supported frontmatter and OpenAI metadata", () => {
   );
 });
 
-test("research router carries technical, content, and mixed-intent routing contracts", () => {
-  const skill = read("skills/research-router/SKILL.md");
-  const metadata = read("skills/research-router/agents/openai.yaml");
+test("research skill carries technical, content, and mixed-intent routing contracts", () => {
+  const skill = read("skills/research/SKILL.md");
+  const metadata = read("skills/research/agents/openai.yaml");
 
   assert.match(skill, /research_routing:/);
   assert.match(skill, /status: routed \| ask_user \| unnecessary/);

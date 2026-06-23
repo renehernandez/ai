@@ -10,11 +10,11 @@ plan_followthrough_ledger:
     mode: ship_then_continue
     source: user_statement
   current_slice:
-    id: slice-01-research-router-and-two-area-skills
-    title: Research router and two area skills
+    id: slice-01-research-and-two-area-skills
+    title: Research and two area skills
   slices:
-    - id: slice-01-research-router-and-two-area-skills
-      title: Research router and two area skills
+    - id: slice-01-research-and-two-area-skills
+      title: Research and two area skills
       status: shipped
     - id: slice-02-optional-validator-and-follow-on-research-areas
       title: Optional validator and follow-on research areas
@@ -35,7 +35,7 @@ plan_followthrough_ledger:
 
 ## Slice 1 Reconciliation
 
-- Shipped `research-router`, `research-technical`, and `research-content`.
+- Shipped `research`, `research-technical`, and `research-content`.
 - Added OpenAI adapter metadata for each skill.
 - Added focused unit tests for router behavior, area-skill brief contracts,
   source IDs, evidence mapping, blocked-state rules, and adapter metadata.

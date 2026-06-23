@@ -1,9 +1,9 @@
 ---
-name: research-router
+name: research
 description: Use when a user asks to research, investigate, survey, or gather current evidence without naming a specific research skill, especially before brainstorming, planning, writing, presentations, talks, or technical implementation decisions.
 ---
 
-# Research Router
+# Research
 
 Route research requests to the right research skill. Stop after the routing
 decision unless the user explicitly asks you to run the selected skill.

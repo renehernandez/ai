@@ -393,6 +393,7 @@ const RETIRED_MANAGED_SKILL_NAMES = [
   "plan-to-review",
   "plan-coordinate",
   "plan-delivery",
+  "research-router",
 ] as const;
 
 export function main(): void {
