@@ -105,6 +105,11 @@ export type ReviewGateInvalidationWriteResult = {
   invalidationPath: string;
 };
 
+export type ReviewGateForceUnlockResult = {
+  lockPath: string;
+  removed: boolean;
+};
+
 type ReviewGateReadResult =
   | { exists: false }
   | { exists: true; ok: true; state: unknown }
@@ -528,6 +533,22 @@ export function clearReviewGate(cwd = process.cwd()): ReviewGateWriteResult {
     clearReviewGateInvalidation(invalidationPath);
     return { statePath, state };
   });
+}
+
+export function forceUnlockReviewGate(
+  cwd = process.cwd(),
+): ReviewGateForceUnlockResult {
+  const statePath = ensureReviewGateStateDirectory(cwd);
+  const lockPath = resolve(dirname(statePath), "review-gate.lock");
+  try {
+    unlinkSync(lockPath);
+    return { lockPath, removed: true };
+  } catch (error) {
+    if (isFileNotFoundError(error)) {
+      return { lockPath, removed: false };
+    }
+    throw error;
+  }
 }
 
 export function validateReviewGateForCommit(

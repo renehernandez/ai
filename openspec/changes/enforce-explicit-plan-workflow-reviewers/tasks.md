@@ -38,7 +38,7 @@
   concurrent consume rejection, linked-worktree rejection, branch mismatch,
   `HEAD` mismatch, workflow mismatch, unit mismatch, staged-diff mismatch,
   consume failure recovery, consumed gate validation no-op, active gate
-  blocking, and public help excluding activation.
+  blocking, manual force-unlock recovery, and public help excluding activation.
 
 ## 3. Planning Commit Boundary
 

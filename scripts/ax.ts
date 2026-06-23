@@ -37,6 +37,7 @@ import ts from "typescript";
 import {
   committedDiffHash,
   consumeReviewGateForDiff,
+  forceUnlockReviewGate,
   formatReviewGateStatus,
   hasStagedDiff,
   type ReviewGateValidation,
@@ -697,6 +698,20 @@ function addReviewGateCommands(program: Command): void {
         return;
       }
       process.stdout.write(formatReviewGateStatus(validation));
+    });
+
+  reviewGate
+    .command("force-unlock")
+    .description(
+      "Remove a stuck local review gate lock after manual inspection",
+    )
+    .action(() => {
+      const result = forceUnlockReviewGate(process.cwd());
+      if (result.removed) {
+        process.stdout.write(`removed_review_gate_lock: ${result.lockPath}\n`);
+        return;
+      }
+      process.stdout.write(`review_gate_lock_missing: ${result.lockPath}\n`);
     });
 }
 

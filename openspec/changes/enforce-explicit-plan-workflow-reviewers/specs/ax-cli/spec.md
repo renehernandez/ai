@@ -102,10 +102,18 @@ matches the reviewed staged diff before consuming the gate.
 - **AND** the diagnostic identifies the mismatched identity field
 
 ### Requirement: Review Gate Activation Remains Private
-The system SHALL keep public `ax review-gate` commands limited to diagnostics
-and validation.
+The system SHALL keep public `ax review-gate` commands limited to diagnostics,
+validation, and explicit manual recovery for stuck local lock files.
 
 #### Scenario: Public activation command is unavailable
 - **WHEN** a user inspects `ax review-gate` commands or help
 - **THEN** no public activation command is exposed
 - **AND** status and validate-commit diagnostics remain available
+
+#### Scenario: Stuck local lock can be manually removed
+- **WHEN** a user has manually inspected a stuck local review-gate lock
+- **AND** runs `ax review-gate force-unlock`
+- **THEN** the command removes the local `review-gate.lock` file when present
+- **AND** reports when no local lock file exists
+- **AND** required-gate commit mode continues to fail closed on ordinary lock
+  contention until the manual recovery command is run

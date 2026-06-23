@@ -740,6 +740,46 @@ test("CLI shows hooks scope help", () => {
   assert.match(result.stdout, /validate/);
 });
 
+test("review-gate force-unlock removes a stuck local lock", () => {
+  const cwd = createGitFixture("ax-review-gate-force-unlock-");
+  try {
+    const lockPath = join(
+      dirname(reviewGateStatePath(cwd)),
+      "review-gate.lock",
+    );
+    mkdirSync(dirname(lockPath), { recursive: true });
+    writeFileSync(lockPath, "locked\n", "utf-8");
+
+    const result = runAgentRuntime(["review-gate", "force-unlock"], { cwd });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /removed_review_gate_lock:/);
+    assert.match(result.stdout, /review-gate\.lock/);
+    assert.equal(existsSync(lockPath), false);
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("review-gate force-unlock reports when no local lock exists", () => {
+  const cwd = createGitFixture("ax-review-gate-force-unlock-missing-");
+  try {
+    const lockPath = join(
+      dirname(reviewGateStatePath(cwd)),
+      "review-gate.lock",
+    );
+
+    const result = runAgentRuntime(["review-gate", "force-unlock"], { cwd });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /review_gate_lock_missing:/);
+    assert.match(result.stdout, /review-gate\.lock/);
+    assert.equal(existsSync(lockPath), false);
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
 test("review-gate validate-commit allows missing inactive gate state", () => {
   const cwd = createGitFixture("ax-review-gate-missing-");
   try {
