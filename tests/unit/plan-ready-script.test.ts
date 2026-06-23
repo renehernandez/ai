@@ -10,7 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import test from "node:test";
 
 const repoRoot = process.cwd();
@@ -1091,6 +1091,56 @@ test("activate-review-gate fails closed when blockers remain", () => {
       assert.equal(state.unit.id, "blocked_readiness");
       assert.equal(state.sourceProvenance.kind, "blocked_readiness");
       assert.deepEqual(state.blockingFindings, output.blockers);
+    });
+  });
+});
+
+test("activate-review-gate invalidates stale passing gate when blocked gate write is locked", () => {
+  withTempPlan(({ artifactRef, fingerprint }) => {
+    withGitFixture((cwd) => {
+      writeFileSync(join(cwd, "file.txt"), "blocked\n", "utf8");
+      git(cwd, ["add", "file.txt"]);
+
+      withReviewerResultsFile(cwd, BASELINE_REVIEWERS, (resultsPath) => {
+        const passingResult = runPlanReadyInRepo(
+          "activate-review-gate",
+          validHandoff(artifactRef, fingerprint),
+          cwd,
+          ["--review-results-file", resultsPath],
+        );
+        assert.equal(passingResult.status, 0);
+      });
+
+      const statePath = join(cwd, ".git", "ax", "review-gate.json");
+      const lockPath = join(dirname(statePath), "review-gate.lock");
+      const invalidationPath = join(
+        dirname(statePath),
+        "review-gate.invalidated.json",
+      );
+      writeFileSync(lockPath, "locked\n", "utf8");
+
+      let result: ReturnType<typeof runPlanReadyInRepo> | undefined;
+      withReviewerResultsFile(cwd, BASELINE_REVIEWERS, (resultsPath) => {
+        result = runPlanReadyInRepo(
+          "activate-review-gate",
+          validHandoff(artifactRef, fingerprint).replace(
+            "  blockers: []",
+            "  blockers:\n    - reviewer found a blocking issue",
+          ),
+          cwd,
+          ["--review-results-file", resultsPath],
+        );
+      });
+      assert.ok(result);
+      const output = JSON.parse(result.stdout);
+      const invalidation = JSON.parse(readFileSync(invalidationPath, "utf8"));
+
+      assert.notEqual(result.status, 0);
+      assert.equal(output.status, "blocked");
+      assert.match(output.blockers.join("\n"), /wrote invalidation marker/);
+      assert.equal(invalidation.active, true);
+      assert.equal(invalidation.status, "invalidated");
+      assert.equal(invalidation.stagedDiffHash, stagedDiffHashFor(cwd));
     });
   });
 });

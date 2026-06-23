@@ -30,6 +30,7 @@ import {
   stagedDiffHash,
   validateReviewGateForCommit,
   writeActiveReviewGate,
+  writeReviewGateInvalidation,
 } from "../../../scripts/review-gate.ts";
 
 const BASELINE_REVIEWERS = [
@@ -648,9 +649,20 @@ function emitBlockedReviewGate(
     try {
       blockedGate = writeBlockedReviewGate(cwd, diffHash, blockers);
     } catch (error) {
-      blockers.push(
-        `failed to write blocked review gate; stale prior gate may remain: ${errorMessage(error)}`,
-      );
+      try {
+        const invalidation = writeReviewGateInvalidation(
+          cwd,
+          diffHash,
+          blockers,
+        );
+        blockers.push(
+          `failed to write blocked review gate; wrote invalidation marker to block stale prior gates: ${invalidation.invalidationPath}; cause: ${errorMessage(error)}`,
+        );
+      } catch (invalidationError) {
+        blockers.push(
+          `failed to write blocked review gate and failed to write invalidation marker; stale prior gate may remain: ${errorMessage(error)}; invalidation error: ${errorMessage(invalidationError)}`,
+        );
+      }
     }
   }
   console.log(

@@ -68,11 +68,17 @@ matches the reviewed staged diff before consuming the gate.
 - **AND** Git fails before creating a commit
 - **THEN** the active gate remains available for the same staged diff
 
-#### Scenario: Cleanup failure after commit warns only
+#### Scenario: Gate consume failure after commit fails closed
 - **WHEN** Git creates a commit after active gate validation
-- **AND** consumed-state cleanup fails afterward
-- **THEN** `ax commit` prints a warning
-- **AND** it does not fail the already-created commit retroactively
+- **AND** consumed-state cleanup fails or compare-and-consume rejects the
+  current gate state afterward
+- **THEN** `ax commit --require-review-gate` exits nonzero
+- **AND** the diagnostic says the commit was created but the review gate was not
+  consumed or failed to consume
+- **AND** the workflow treats the created head as not locally reviewed
+- **AND** the recovery diagnostic requires inspecting the created commit,
+  rerunning required local reviewers for the current gate state, and activating
+  a fresh gate before retrying the workflow step
 
 #### Scenario: Concurrent required-gate commits cannot share one gate
 - **WHEN** two required-gate commit processes attempt to validate and consume the
