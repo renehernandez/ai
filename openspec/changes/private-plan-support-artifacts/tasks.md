@@ -36,7 +36,7 @@
       to route support artifacts to thread evidence and the private workspace.
 - [x] 3.2 Update repo rules that describe `.agents/plans/**` so they
       distinguish primary atomic plan markdown docs from support sidecars.
-- [ ] 3.3 Update `skills/ax-cli/SKILL.md` so agents can discover and correctly
+- [x] 3.3 Update `skills/ax-cli/SKILL.md` so agents can discover and correctly
       use `pnpm ax plans artifact record|list`.
 - [ ] 3.4 Update hosted review guidance so MR/PR descriptions use summaries,
       hashes, thread references, or stable correlation IDs and do not expose

@@ -45,6 +45,7 @@ OpenSpec setup.
 | Repo-local OpenSpec scaffolding | `openspec` |
 | Commit through the local review gate | `commit` |
 | Inspect or validate local review-gate state | `review-gate` |
+| Private plan workflow support artifacts | `plans artifact` |
 | Drift check without file mutation | `status` or `validate` before `install`/`update` |
 
 Use `install` for first-time runtime setup. Use `update` for already managed
@@ -90,6 +91,37 @@ match the staged diff.
 V1 supports normal staged commits with `-m` or `--message`. It rejects
 commit-shape-mutating or bypass modes such as `--amend`, `-a`, `--all`,
 `--include`, `--only`, pathspec commits, and `--no-verify`.
+
+## Private Plan Support Artifacts
+
+Use `plans artifact` when a plan workflow needs file-backed recovery or
+correlation for support workflow artifacts that must not be committed under
+`.agents/plans/**`.
+
+```bash
+ax plans artifact record --plan .agents/plans/example.md --kind <kind> --file <path>
+ax plans artifact list --plan .agents/plans/example.md
+```
+
+`--plan` must be the repo-relative primary markdown plan under
+`.agents/plans/**`. `--file` must resolve inside the invocation target repo.
+`--kind` must be one of `review_request`, `reviewer_selection`, `handoff`,
+`blueprint`, `ledger`, `report`, `validation_input`, or `validation_output`.
+Keep support artifacts in the thread by default; record them only when
+file-backed recovery or correlation is needed.
+
+The command keys records to the invocation target repo identity, normalized plan
+path, plan path hash, plan slug, and plan content fingerprint. It writes
+immutable private blobs plus manifest, revision metadata, and append-only index
+records under the private AX plan workspace. Do not commit those private files,
+and do not expose local private workspace paths in PR/MR descriptions; use the
+printed JSON record data, hashes, note IDs, discussion IDs, or stable
+correlation IDs when hosted review needs evidence.
+
+When invoked from another project through the managed `~/.local/bin/ax` shim,
+the target repo is the current working directory. From this AI repo, use
+`pnpm ax plans artifact ...`. Use `list` to recover prior records for a plan
+before assuming thread-only evidence is lost.
 
 ## OpenSpec Setup
 
@@ -164,6 +196,9 @@ command before finishing.
 | Editing installed runtime copies directly | Edit source in this repo, then run the matching `ax ... update`. |
 | Calling work complete after source edits only | Refresh installed copies and run profile validation. |
 | Guessing flags from memory | Run `pnpm ax <scope> <command> --help`. |
+| Committing plan workflow support sidecars under `.agents/plans/**` | Keep them in thread evidence or record them with `ax plans artifact record`. |
+| Treating private artifact paths as hosted evidence | Use summaries, hashes, note IDs, discussion IDs, or stable correlation IDs instead. |
+| Running `plans artifact record` against the wrong repo | Invoke `ax` from the target repo so records key to the correct target identity. |
 
 ## Test Evidence
 
@@ -190,3 +225,6 @@ command before finishing.
 - GREEN: with this skill loaded, commit pressure used `ax review-gate status`
   or `ax review-gate validate-commit` for diagnostics and `ax commit -m` for
   the actual commit path, while rejecting bypass or shape-changing flags.
+- GREEN: with this skill loaded, plan workflow support artifacts use
+  `ax plans artifact record|list` for private file-backed recovery while
+  avoiding committed `.agents/plans/**` sidecars and hosted local-path leaks.
