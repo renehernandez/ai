@@ -23,6 +23,21 @@ Each checkbox task maps to one minor deliverable inside the feature milestone or
 project. Sub-bullets can describe files, acceptance notes, or verification, but
 they are not separate delivery units.
 
+Task groups represent deliverable implementation areas. Do not use
+lifecycle-only groups anywhere in the file that only run documentation, linting,
+testing, review, validation, or verification. Those activities belong inside the
+related deliverable task unless the task changes docs, tests, validation, CI,
+reviewer tooling, runtime validation tooling, or reusable AI workflow machinery
+as its feature. Deliverable-scoped proof subchecks are valid only as sub-bullets
+inside the related deliverable task, not as OpenSpec task checkboxes or
+independent delivery units.
+
+When an existing `tasks.md` has lifecycle-only groups, proof-only task
+checkboxes, or manual-looking tasks that only capture validation evidence,
+return `needs_spec_redesign`. Ask the user whether to redo the spec, brainstorm
+a better breakdown, narrow the change, or choose another planning route. Do not
+rewrite `tasks.md` automatically.
+
 OpenSpec tasks must use the native checkbox format:
 
 ```md
@@ -72,6 +87,7 @@ The audit command emits:
 | Adding tags to tasks | Use checkbox order and task text |
 | Creating a parallel slice review | Edit or audit OpenSpec tasks instead |
 | Treating a whole phase as one task | Split the phase into minor deliverables |
+| Accepting documentation, testing, or validation phase groups anywhere | Return `needs_spec_redesign` unless that area is the feature being changed |
 | Sending manual tasks to `plan-unit-delivery` | Return `needs_human_action` |
 
 ## Test Evidence

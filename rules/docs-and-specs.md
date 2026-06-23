@@ -28,6 +28,25 @@ These rules cover documentation workflow, OpenSpec, and diagrams.
 - Use `/opsx:archive` to archive completed changes.
 - This applies to any project with an `openspec/` directory.
 
+## OpenSpec Task Shape
+
+- OpenSpec `tasks.md` groups must represent deliverable implementation areas,
+  not process lifecycle phases.
+- Do not add task groups anywhere in the file that are dedicated only to
+  documentation, linting, testing, review, validation, or verification.
+- Documentation, linting, testing, review, validation, and verification belong
+  in the corresponding deliverable task as acceptance or verification work. When
+  warranted, make them a proof subcheck or acceptance/verification bullet inside
+  the related deliverable task, not a separate OpenSpec task checkbox or
+  independent delivery unit.
+- A docs, testing, validation, CI, reviewer-tooling, runtime-validation-tooling,
+  or reusable AI workflow task is valid only when that area is the feature being
+  changed. Deliverable-scoped proof subchecks are valid only inside the related
+  deliverable task, not as OpenSpec task checkboxes.
+- Existing bad task shape must block with `needs_spec_redesign`. Ask the user
+  whether to redo the spec, brainstorm a better breakdown, narrow the change, or
+  choose another planning route. Do not silently rewrite `tasks.md`.
+
 ## Diagrams in Documentation
 
 - Always use Mermaid for diagrams in Markdown docs, including READMEs, guides, ADRs, and solution docs.

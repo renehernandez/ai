@@ -89,6 +89,14 @@ and next action.
      doc validation command.
    - Linear-only plan: verify the linked ticket is reachable; do not mirror
      ticket text into the repo unless asked.
+   For OpenSpec artifacts, confirm `tasks.md` uses deliverable task groups. A
+   lifecycle-only documentation, testing, linting, review, validation, or
+   verification group anywhere in the file blocks planning review with
+   `needs_spec_redesign` unless that area is the feature being changed.
+   Deliverable-scoped proof subchecks are valid only as acceptance or
+   verification bullets inside the related deliverable task, not as OpenSpec
+   task checkboxes or independent delivery units. Do not rewrite the spec inside
+   `plan-review`; ask the user which planning route to take.
 6. Run `review-feedback-routing` before PR/MR creation. Detect artifact host
    from remotes and route reviewer feedback separately from artifact creation.
 7. Commit and push the planning-only branch when the hosted-review creation path
@@ -148,6 +156,7 @@ implementation units until it can report `stack_ready`, or report
 | Planning-only diff | Diff contains no implementation changes, or implementation changes are explicitly split out |
 | OpenSpec source-plan boundary | OpenSpec review diffs contain no `.agents/plans/**`; atomic plan artifacts may keep them |
 | Artifact validation | OpenSpec/doc/ticket validation passes or a precise gap is reported |
+| OpenSpec task shape | Task groups represent deliverable implementation areas, or planning blocks with `needs_spec_redesign` |
 | Review feedback routing | Artifact and feedback adapters are selected, or ambiguity is blocked |
 | Artifact creation/update | Draft PR/MR exists for the latest planning-only branch |
 | Artifact-host inspection | Host metadata, discussions, and check state are inspected |
@@ -238,6 +247,7 @@ planning_review:
 | Implementing after the plan is published | Stop and emit `planning_review` for `plan-unit-sequencer` |
 | Accepting legacy handoffs | Return `needs_plan_ready` |
 | Publishing implementation files in the review branch | Split them out before creating the planning review |
+| Publishing an OpenSpec with a documentation or validation phase anywhere | Block with `needs_spec_redesign` and ask the user how to proceed |
 | Treating routing metadata as sufficient after pushing a new head to an existing Fullscript MR | Request a fresh Nitro review for the current head, then wait for latest-head feedback or pending state |
 | Requesting Nitro repeatedly when a fresh latest-head Nitro review is already pending | Stop polling after recording the pending review state, MR head, and request evidence |
 | Calling pending developer review a pass | Report it as published and pending with the PR/MR URL |

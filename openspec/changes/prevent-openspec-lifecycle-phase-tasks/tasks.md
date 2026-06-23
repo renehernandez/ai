@@ -1,6 +1,6 @@
 ## 1. Task-Shape Contract
 
-- [ ] 1.1 Define the shared OpenSpec task-shape contract in AI repo rules and
+- [x] 1.1 Define the shared OpenSpec task-shape contract in AI repo rules and
       planning workflow documentation, including deliverable-only tasks,
       lifecycle-phase blocking, documentation exceptions, validation exceptions,
       private support artifact boundaries, and `needs_spec_redesign`.

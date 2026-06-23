@@ -74,7 +74,9 @@ For `openspec_blueprint` outputs:
    applicable validation step fails, preserve the source plan for repair.
 6. Run `plan-review` against the OpenSpec change. For `artifact_type:
    openspec`, the planning branch diff must contain the OpenSpec change and no
-   `.agents/plans/**` files.
+   `.agents/plans/**` files. Honor `plan-review` if it blocks lifecycle-only
+   task shape with `needs_spec_redesign`; ask the user how to proceed instead
+   of silently rewriting the OpenSpec change.
 7. Do not start implementation until `plan-review` emits valid
    `planning_review`.
 
@@ -146,6 +148,7 @@ validate-stack-ready`.
 | Legacy slice, followthrough ledger, or coordinate handoff | Return `needs_plan_ready`. |
 | No `planning_review` before sequencing | Return `needs_reviewed_planning`. |
 | OpenSpec validation failure | Return `openspec_proposal_blocked`. |
+| Lifecycle-only OpenSpec task shape | Return `needs_spec_redesign` and ask how to proceed. |
 | Pending planning review | Return `planning_review_blocked`. |
 | Unsupported review or stack host | Return `delivery_blocked` with routing evidence. |
 
