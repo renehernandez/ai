@@ -39,8 +39,8 @@ These rules cover documentation workflow, OpenSpec, and diagrams.
   warranted, make them a proof subcheck or acceptance/verification bullet inside
   the related deliverable task, not a separate OpenSpec task checkbox or
   independent delivery unit.
-- A docs, testing, validation, CI, reviewer-tooling, runtime-validation-tooling,
-  or reusable AI workflow machinery is valid only when that area is the feature being
+- Docs, testing, validation, CI, reviewer tooling, runtime validation tooling,
+  or reusable AI workflow machinery are valid only when that area is the feature being
   changed. Deliverable-scoped proof subchecks are valid only inside the related
   deliverable task, not as OpenSpec task checkboxes.
 - Existing bad task shape must block with `needs_spec_redesign`. Ask the user
