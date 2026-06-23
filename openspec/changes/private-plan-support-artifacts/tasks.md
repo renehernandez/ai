@@ -53,5 +53,5 @@
       profiles.
 - [x] 4.4 Refresh and validate managed instruction/rule surfaces for personal
       and work profiles.
-- [ ] 4.5 Inspect `ax.lock.json` and confirm runtime metadata drift is expected.
+- [x] 4.5 Inspect `ax.lock.json` and confirm runtime metadata drift is expected.
 - [ ] 4.6 Run `pnpm test` and `git diff --check`.
