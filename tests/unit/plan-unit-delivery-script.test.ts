@@ -204,6 +204,40 @@ const reviewerReport = `reviewer_report:
     - docs-alignment-review: passed - docs-alignment-review verdict clean for touched skill surfaces
 `;
 
+function reviewerEvidenceWithLaunchedSecurityReview(): {
+  launch: string;
+  report: string;
+} {
+  const launch = launchedReport
+    .replace(
+      "    - docs-alignment-review\n",
+      "    - docs-alignment-review\n    - security-review\n",
+    )
+    .replace(
+      "    - ai-readiness-upkeep: not_applicable - no AI readiness verification or agent-surface contract changed\n    - security-review: not_applicable - no security-sensitive surface changed\n",
+      "    - ai-readiness-upkeep: not_applicable - no AI readiness verification or agent-surface contract changed\n",
+    )
+    .replace(
+      "    - docs-alignment-review: inline-f\n",
+      "    - docs-alignment-review: inline-f\n    - security-review: inline-g\n",
+    );
+  const report = reviewerReport
+    .replace(
+      "    - docs-alignment-review\n",
+      "    - docs-alignment-review\n    - security-review\n",
+    )
+    .replace(
+      "    - ai-readiness-upkeep: not_applicable - no AI readiness verification or agent-surface contract changed\n    - security-review: not_applicable - no security-sensitive surface changed\n",
+      "    - ai-readiness-upkeep: not_applicable - no AI readiness verification or agent-surface contract changed\n",
+    )
+    .replace(
+      "    - docs-alignment-review: passed - docs-alignment-review verdict clean for touched skill surfaces\n",
+      "    - docs-alignment-review: passed - docs-alignment-review verdict clean for touched skill surfaces\n    - security-review: passed - security review found no sensitive surface issues\n",
+    );
+
+  return { launch, report };
+}
+
 const deliveryLedger = `nitro_feedback_gate:
   artifact: https://git.fullscript.io/group/project/-/merge_requests/2
   head_sha: abc789
@@ -406,22 +440,10 @@ test("review-gate-input requires a diff hash value", () => {
 });
 
 test("review-gate-input rejects mismatched launch and report evidence", () => {
-  const launchWithSecurityReview = launchedReport
-    .replace(
-      "    - docs-alignment-review\n",
-      "    - docs-alignment-review\n    - security-review\n",
-    )
-    .replace(
-      "    - ai-readiness-upkeep: not_applicable - no AI readiness verification or agent-surface contract changed\n    - security-review: not_applicable - no security-sensitive surface changed\n",
-      "    - ai-readiness-upkeep: not_applicable - no AI readiness verification or agent-surface contract changed\n",
-    )
-    .replace(
-      "    - docs-alignment-review: inline-f\n",
-      "    - docs-alignment-review: inline-f\n    - security-review: inline-g\n",
-    );
+  const evidence = reviewerEvidenceWithLaunchedSecurityReview();
   const result = runPlanUnitDelivery(
     "review-gate-input",
-    `${validHandoff}\n${launchWithSecurityReview}\n${reviewerReport}`,
+    `${validHandoff}\n${evidence.launch}\n${reviewerReport}`,
     ["--diff-hash", reviewGateDiffHash],
   );
 
@@ -430,6 +452,40 @@ test("review-gate-input rejects mismatched launch and report evidence", () => {
   assert.match(
     result.stderr,
     /reviewer_report missing launched reviewer: security-review/,
+  );
+  assert.equal(result.stdout, "");
+});
+
+test("review-gate-input promotes launched dynamic reviewers to required gate passes", () => {
+  const evidence = reviewerEvidenceWithLaunchedSecurityReview();
+  const result = runPlanUnitDelivery(
+    "review-gate-input",
+    `${validHandoff}\n${evidence.launch}\n${evidence.report}`,
+    ["--diff-hash", reviewGateDiffHash],
+  );
+  const output = JSON.parse(result.stdout);
+
+  assert.equal(result.status, 0);
+  assert.ok(output.requiredReviewPasses.includes("security-review"));
+  assert.equal(output.results["security-review"].status, "passed");
+  assert.equal(output.results["security-review"].diffHash, reviewGateDiffHash);
+});
+
+test("review-gate-input rejects nonpassing launched required gate passes", () => {
+  const result = runPlanUnitDelivery(
+    "review-gate-input",
+    `${validHandoff}\n${launchedReport}\n${reviewerReport.replace(
+      "    - code-simplifier: passed - simplification review found no needed changes\n",
+      "    - code-simplifier: not_applicable - simplification review skipped after launch\n",
+    )}`,
+    ["--diff-hash", reviewGateDiffHash],
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Invalid delivery review gate evidence/);
+  assert.match(
+    result.stderr,
+    /required review pass must be passed: code-simplifier/,
   );
   assert.equal(result.stdout, "");
 });
