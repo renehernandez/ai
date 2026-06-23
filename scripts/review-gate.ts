@@ -532,12 +532,17 @@ function normalizeResultInput(
         `Review pass ${reviewPass} has stale diff hash ${diffHash}; expected ${currentDiffHash}.`,
       );
     }
-    normalized[reviewPass] = {
+    const normalizedResult: ReviewGateResult = {
       status: result.status,
       diffHash,
-      completedAt: result.completedAt,
-      summary: result.summary,
     };
+    if (result.completedAt !== undefined) {
+      normalizedResult.completedAt = result.completedAt;
+    }
+    if (result.summary !== undefined) {
+      normalizedResult.summary = result.summary;
+    }
+    normalized[reviewPass] = normalizedResult;
   }
   return normalized;
 }
