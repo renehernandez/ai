@@ -1,6 +1,23 @@
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import {
+  copyFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+} from "node:fs";
 import { homedir } from "node:os";
-import { join, posix } from "node:path";
+import {
+  extname,
+  isAbsolute,
+  join,
+  posix,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 
 export const AGENTS_PLANS_ROOT = ".agents/plans";
 
@@ -15,6 +32,17 @@ export const PLAN_SUPPORT_ARTIFACT_KINDS = [
   "validation-output",
 ] as const;
 
+export const PLAN_ARTIFACT_RECORD_KINDS = [
+  "review_request",
+  "reviewer_selection",
+  "handoff",
+  "blueprint",
+  "ledger",
+  "report",
+  "validation_input",
+  "validation_output",
+] as const;
+
 const STRUCTURED_SUPPORT_EXTENSIONS = new Set([
   ".json",
   ".jsonl",
@@ -24,6 +52,9 @@ const STRUCTURED_SUPPORT_EXTENSIONS = new Set([
 
 export type PlanSupportArtifactKind =
   (typeof PLAN_SUPPORT_ARTIFACT_KINDS)[number];
+
+export type PlanArtifactRecordKind =
+  (typeof PLAN_ARTIFACT_RECORD_KINDS)[number];
 
 export type AgentsPlanArtifactClassification =
   | {
@@ -49,6 +80,15 @@ export type PlanArtifactWorkspaceIdentity = {
   artifactsPath: string;
   manifestPath: string;
   indexPath: string;
+};
+
+export type PlanArtifactRecordResult = {
+  status: "recorded";
+  repoKey: string;
+  normalizedPlanPath: string;
+  artifactKind: PlanArtifactRecordKind;
+  artifactContentFingerprint: string;
+  privateWorkspaceRelativePath: string;
 };
 
 export function normalizeRepoRelativePath(input: string): string | null {
@@ -121,6 +161,20 @@ export function isPlanSupportSidecar(input: string): boolean {
   return classifyAgentsPlanArtifact(input).type === "support_sidecar";
 }
 
+export function normalizePlanArtifactRecordKind(
+  input: string,
+): PlanArtifactRecordKind | null {
+  const normalized = input.trim();
+  if (!/^[a-z0-9_-]+$/.test(normalized)) {
+    return null;
+  }
+  return PLAN_ARTIFACT_RECORD_KINDS.includes(
+    normalized as PlanArtifactRecordKind,
+  )
+    ? (normalized as PlanArtifactRecordKind)
+    : null;
+}
+
 export function sha256Hex(input: string | Uint8Array): string {
   return createHash("sha256").update(input).digest("hex");
 }
@@ -162,6 +216,155 @@ export function derivePlanArtifactWorkspaceIdentity(options: {
     manifestPath: join(workspacePath, "manifest.json"),
     indexPath: join(workspacePath, "index.jsonl"),
   };
+}
+
+export function recordPlanArtifact(options: {
+  targetRoot: string;
+  planPath: string;
+  kind: string;
+  filePath: string;
+  axPlansRoot?: string;
+}): PlanArtifactRecordResult {
+  const targetRoot = realpathSync(options.targetRoot);
+  const normalizedPlanPath = normalizeAgentsPlanRef(options.planPath);
+  if (!normalizedPlanPath || !isPrimaryMarkdownPlan(normalizedPlanPath)) {
+    throw new Error(
+      "--plan must be a primary markdown file under .agents/plans",
+    );
+  }
+
+  const artifactKind = normalizePlanArtifactRecordKind(options.kind);
+  if (!artifactKind) {
+    throw new Error(
+      "--kind must be one of: review_request, reviewer_selection, handoff, blueprint, ledger, report, validation_input, validation_output",
+    );
+  }
+
+  const planRealPath = realpathSync(join(targetRoot, normalizedPlanPath));
+  assertPathInside(
+    planRealPath,
+    targetRoot,
+    "--plan must resolve inside target repo",
+  );
+
+  const artifactRealPath = realpathSync(resolve(targetRoot, options.filePath));
+  assertPathInside(
+    artifactRealPath,
+    targetRoot,
+    "--file must resolve inside target repo for artifact record v1",
+  );
+
+  const repoKey = repoKeyForTargetRoot(targetRoot);
+  const identity = derivePlanArtifactWorkspaceIdentity({
+    repoKey,
+    planPath: normalizedPlanPath,
+    axPlansRoot: options.axPlansRoot,
+  });
+  const axPlansRoot = resolve(
+    options.axPlansRoot ?? join(homedir(), ".ax", "plans"),
+  );
+  const repoRoot = join(axPlansRoot, "repos", `sha256-${identity.repoHash}`);
+  ensurePrivateDirectory(axPlansRoot);
+  ensurePrivateDirectory(join(axPlansRoot, "repos"));
+  ensurePrivateDirectory(repoRoot);
+  ensurePrivateDirectory(join(repoRoot, "plans"));
+  ensurePrivateDirectory(resolve(identity.workspacePath));
+  ensurePrivateDirectory(resolve(identity.artifactsPath));
+
+  const artifactContentFingerprint = sha256Hex(readFileSync(artifactRealPath));
+  const artifactsRealPath = realpathSync(identity.artifactsPath);
+  const artifactPath = join(
+    artifactsRealPath,
+    `${artifactKind}-${artifactContentFingerprint}${safeArtifactExtension(artifactRealPath)}`,
+  );
+  assertPathInside(
+    artifactPath,
+    realpathSync(identity.workspacePath),
+    "artifact destination must remain inside private plan workspace",
+  );
+  if (!existsSync(artifactPath)) {
+    copyFileSync(artifactRealPath, artifactPath);
+  }
+
+  return {
+    status: "recorded",
+    repoKey,
+    normalizedPlanPath,
+    artifactKind,
+    artifactContentFingerprint,
+    privateWorkspaceRelativePath: relative(
+      realpathSync(axPlansRoot),
+      artifactPath,
+    )
+      .split(sep)
+      .join("/"),
+  };
+}
+
+function repoKeyForTargetRoot(targetRoot: string): string {
+  const remoteUrl = gitRemoteUrlForRoot(targetRoot, "origin");
+  if (!remoteUrl) {
+    throw new Error(
+      "Target repository has no origin fetch URL; provide a repo identity before recording plan artifacts.",
+    );
+  }
+  return remoteUrl.trim();
+}
+
+function gitRemoteUrlForRoot(
+  targetRoot: string,
+  remoteName: string,
+): string | undefined {
+  const result = spawnSync(
+    "git",
+    ["-C", targetRoot, "remote", "get-url", remoteName],
+    {
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  if (result.status !== 0) {
+    return undefined;
+  }
+  return result.stdout.trim() || undefined;
+}
+
+function ensurePrivateDirectory(path: string): void {
+  if (existsSync(path)) {
+    const stats = lstatSync(path);
+    if (stats.isSymbolicLink()) {
+      throw new Error(
+        `Private plan workspace path must not be a symlink: ${path}`,
+      );
+    }
+    if (!stats.isDirectory()) {
+      throw new Error(
+        `Private plan workspace path is not a directory: ${path}`,
+      );
+    }
+    if ((stats.mode & 0o077) !== 0) {
+      throw new Error(
+        `Private plan workspace directory must not be readable, writable, or traversable by other users: ${path}`,
+      );
+    }
+    return;
+  }
+  mkdirSync(path, { mode: 0o700, recursive: true });
+}
+
+function assertPathInside(path: string, root: string, message: string): void {
+  const relativePath = relative(root, path);
+  if (
+    relativePath !== "" &&
+    (relativePath.startsWith("..") || isAbsolute(relativePath))
+  ) {
+    throw new Error(message);
+  }
+}
+
+function safeArtifactExtension(path: string): string {
+  const extension = extname(path).toLowerCase();
+  return extension && /^\.[a-z0-9]+$/.test(extension) ? extension : ".artifact";
 }
 
 function isAbsoluteLikePath(input: string): boolean {
