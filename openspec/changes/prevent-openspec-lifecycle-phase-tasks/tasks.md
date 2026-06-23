@@ -24,7 +24,7 @@
 
 ## 3. OpenSpec Review And Delivery Gates
 
-- [ ] 3.1 Update `openspec-tasks` documentation, adapter prompt, audit output,
+- [x] 3.1 Update `openspec-tasks` documentation, adapter prompt, audit output,
       parser classification, and tests so existing bad task lists return
       `needs_spec_redesign` without rewriting specs.
 - [ ] 3.2 Update `plan-review` documentation, adapter prompt, and validation
