@@ -46,6 +46,7 @@ function withTempOpenSpec(
 function runPlanReview(
   command: string,
   content: string,
+  extraArgs: string[] = [],
 ): { status: number | null; stderr: string; stdout: string } {
   let result: ReturnType<typeof spawnSync> | undefined;
   withTempFile(content, (path) => {
@@ -58,6 +59,7 @@ function runPlanReview(
         command,
         "--file",
         path,
+        ...extraArgs,
       ],
       {
         cwd: process.cwd(),
@@ -115,6 +117,9 @@ function runPlanReviewArgs(
     stdout: result.stdout,
   };
 }
+
+const reviewGateDiffHash =
+  "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
 const planReviewRequest = `plan_review_request:
   status: ready_for_review
@@ -300,6 +305,51 @@ test("validate-request rejects blocking readiness findings", () => {
     result.stderr,
     /readiness_reviewer_evidence\.blocking_findings must be empty/,
   );
+});
+
+test("review-gate-input binds readiness evidence to staged planning diff", () => {
+  const result = runPlanReview("review-gate-input", planReviewRequest, [
+    "--diff-hash",
+    reviewGateDiffHash,
+    "--source-ref",
+    "request.yaml",
+  ]);
+  const output = JSON.parse(result.stdout);
+
+  assert.equal(result.status, 0);
+  assert.equal(output.workflow, "plan-review");
+  assert.equal(output.unit.id, "openspec/changes/example-change");
+  assert.equal(output.sourceProvenance.kind, "plan_review_request");
+  assert.equal(output.sourceProvenance.ref, "openspec/changes/example-change");
+  assert.equal(output.sourceProvenance.phase, "plan-review");
+  assert.deepEqual(output.sourceProvenance.evidence, ["request.yaml"]);
+  assert.deepEqual(output.requiredReviewPasses, [
+    "implementation-readiness",
+    "edge-cases-and-risks",
+    "simplification-and-scope-control",
+    "refactoring-opportunities",
+    "docs-and-agent-alignment",
+  ]);
+  assert.equal(
+    output.results["docs-and-agent-alignment"].diffHash,
+    reviewGateDiffHash,
+  );
+  assert.equal(output.results["docs-and-agent-alignment"].status, "passed");
+  assert.equal(
+    output.results["docs-and-agent-alignment"].completedAt,
+    "2026-06-23T18:00:00.000Z",
+  );
+  assert.deepEqual(output.blockingFindings, []);
+});
+
+test("review-gate-input requires a diff hash value", () => {
+  const result = runPlanReview("review-gate-input", planReviewRequest, [
+    "--diff-hash",
+  ]);
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /review-gate-input requires --diff-hash/);
+  assert.equal(result.stdout, "");
 });
 
 test("request-template emits a readable summary before YAML", () => {

@@ -74,6 +74,7 @@ type Command =
   | "detect"
   | "request-template"
   | "validate-request"
+  | "review-gate-input"
   | "validate-planning-diff"
   | "validate-openspec-tasks"
   | "planning-review-template"
@@ -111,6 +112,30 @@ type ReadinessReviewerEvidence = {
   blocking_findings: string[];
 };
 
+type ReviewGateResultInput = {
+  status: "passed" | "failed" | "blocked";
+  diffHash: string;
+  completedAt?: string;
+  summary?: string;
+};
+
+type ActiveReviewGateInput = {
+  workflow: string;
+  unit?: {
+    id?: string;
+    title?: string;
+  };
+  sourceProvenance: {
+    kind: string;
+    ref: string;
+    phase?: string;
+    evidence?: string[];
+  };
+  requiredReviewPasses: string[];
+  results: Record<string, ReviewGateResultInput>;
+  blockingFindings?: unknown[];
+};
+
 main();
 
 function main(): void {
@@ -118,7 +143,7 @@ function main(): void {
 
   if (!isCommand(command)) {
     fail(
-      "Usage: plan-review.ts <detect|request-template|validate-request|validate-planning-diff|validate-openspec-tasks|planning-review-template|validate-planning-review|gate-template|validate-ledger> [--file path] [--expected-head-sha sha] [--expected-artifact url]",
+      "Usage: plan-review.ts <detect|request-template|validate-request|review-gate-input|validate-planning-diff|validate-openspec-tasks|planning-review-template|validate-planning-review|gate-template|validate-ledger> [--file path] [--expected-head-sha sha] [--expected-artifact url]",
     );
   }
 
@@ -150,6 +175,11 @@ function main(): void {
   const input = readInput(args);
   if (command === "validate-request") {
     validateRequest(input);
+    return;
+  }
+
+  if (command === "review-gate-input") {
+    printReviewGateInput(args, input);
     return;
   }
 
@@ -362,7 +392,7 @@ planning_review:
 
 function validateRequest(input: string): void {
   const request = parseRequest(input);
-  const errors: string[] = [];
+  const errors = requestValidationErrors(request);
 
   if (request.source === "ambiguous") {
     console.error(
@@ -377,6 +407,19 @@ function validateRequest(input: string): void {
     );
     process.exit(1);
   }
+
+  if (errors.length > 0) {
+    console.error(
+      `Invalid ${request.source}:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+    );
+    process.exit(1);
+  }
+
+  console.log(`${request.source} valid`);
+}
+
+function requestValidationErrors(request: ParsedRequest): string[] {
+  const errors: string[] = [];
 
   requireValue(request.status, "status", errors);
   requireValue(request.artifact_type, "artifact_type", errors);
@@ -425,14 +468,27 @@ function validateRequest(input: string): void {
     );
   }
 
-  if (errors.length > 0) {
-    console.error(
-      `Invalid ${request.source}:\n${errors.map((error) => `- ${error}`).join("\n")}`,
-    );
-    process.exit(1);
+  return errors;
+}
+
+function printReviewGateInput(args: string[], input: string): void {
+  const diffHashIndex = args.indexOf("--diff-hash");
+  const diffHash = diffHashIndex === -1 ? undefined : args[diffHashIndex + 1];
+  if (!diffHash || diffHash.startsWith("--")) {
+    fail("review-gate-input requires --diff-hash");
   }
 
-  console.log(`${request.source} valid`);
+  try {
+    const evidenceRef =
+      optionalArg(args, "--source-ref") ?? optionalArg(args, "--file");
+    const reviewGateInput = buildPlanReviewGateInput(input, {
+      diffHash,
+      evidenceRef,
+    });
+    console.log(JSON.stringify(reviewGateInput, null, 2));
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
+  }
 }
 
 function validatePlanningDiff(args: string[], stdinInput: string): void {
@@ -850,6 +906,75 @@ function map(input: string, key: string): Record<string, string> {
   return values;
 }
 
+function buildPlanReviewGateInput(
+  input: string,
+  options: {
+    diffHash: string;
+    evidenceRef?: string;
+  },
+): ActiveReviewGateInput {
+  const request = parseRequest(input);
+  if (request.source !== "plan_review_request") {
+    throw new Error("review-gate-input requires plan_review_request");
+  }
+
+  const errors = requestValidationErrors(request);
+  if (errors.length > 0) {
+    throw new Error(
+      `Invalid plan_review_request:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+    );
+  }
+
+  const evidence = request.readiness_reviewer_evidence;
+  if (!evidence) {
+    throw new Error("readiness_reviewer_evidence is required");
+  }
+
+  const requiredReviewPasses = unique([
+    ...evidence.baseline_reviewers,
+    ...evidence.selected_dynamic_reviewers,
+  ]);
+
+  return {
+    workflow: "plan-review",
+    unit: {
+      id: request.artifact_ref,
+      title: request.review_goal,
+    },
+    sourceProvenance: {
+      kind: "plan_review_request",
+      ref: request.artifact_ref ?? options.evidenceRef ?? "unknown",
+      phase: "plan-review",
+      evidence: options.evidenceRef ? [options.evidenceRef] : [],
+    },
+    requiredReviewPasses,
+    results: readinessReviewGateResults(
+      requiredReviewPasses,
+      evidence,
+      options.diffHash,
+    ),
+    blockingFindings: evidence.blocking_findings,
+  };
+}
+
+function readinessReviewGateResults(
+  reviewers: string[],
+  evidence: ReadinessReviewerEvidence,
+  diffHash: string,
+): Record<string, ReviewGateResultInput> {
+  return Object.fromEntries(
+    reviewers.map((reviewer) => [
+      reviewer,
+      {
+        status: "passed",
+        diffHash,
+        completedAt: evidence.completed_at,
+        summary: `PlanReview readiness evidence satisfied ${reviewer}.`,
+      },
+    ]),
+  );
+}
+
 function validatePlanningReview(input: string, args: string[] = []): void {
   const errors = legacyPlanContractErrors(input);
   validatePlanningReviewContract(input, errors, {
@@ -879,6 +1004,7 @@ function isCommand(command: string | undefined): command is Command {
     "detect",
     "request-template",
     "validate-request",
+    "review-gate-input",
     "validate-planning-diff",
     "validate-openspec-tasks",
     "planning-review-template",
@@ -926,6 +1052,10 @@ function findRepoRoot(): string | null {
     }
     current = parent;
   }
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values)];
 }
 
 function git(args: string[]): string | null {

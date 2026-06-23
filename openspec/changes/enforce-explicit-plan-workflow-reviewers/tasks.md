@@ -50,7 +50,7 @@
   materialized OpenSpec changes, blueprint provenance evidence.
 - [x] 3.2 Update `plan-review` to accept and validate readiness reviewer
   evidence from `plan_review_request` before committing a planning branch.
-- [ ] 3.3 Bind readiness evidence to the current staged planning diff before
+- [x] 3.3 Bind readiness evidence to the current staged planning diff before
   arming the local review gate.
 - [ ] 3.4 Call required-gate `ax commit` mode for planning workflow commits.
 - [ ] 3.5 Migrate normal readiness-gate activation ownership out of `plan-ready`
