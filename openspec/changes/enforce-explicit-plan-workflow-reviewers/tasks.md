@@ -26,7 +26,7 @@
   warn without failing retroactively when post-commit cleanup fails.
 - [x] 2.5 Update `ax review-gate status` and `validate-commit` so missing,
   active, blocking, stale, and consumed gates are reported clearly.
-- [ ] 2.6 Verify the created commit still matches the reviewed staged diff
+- [x] 2.6 Verify the created commit still matches the reviewed staged diff
   before consuming a required gate; fail the command and preserve or mark the
   gate blocked when commit-time mutation produces a different diff.
 - [ ] 2.7 Add atomic validate-and-consume behavior with repo/worktree-scoped

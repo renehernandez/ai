@@ -35,6 +35,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { Command } from "commander";
 import ts from "typescript";
 import {
+  committedDiffHash,
   consumeReviewGate,
   formatReviewGateStatus,
   hasStagedDiff,
@@ -751,6 +752,7 @@ function addCommitCommand(program: Command): void {
         process.exitCode = 1;
         return;
       }
+      const reviewedDiffHash = validation.stagedDiffHash;
       const result = spawnSync("git", ["commit", ...parsed.gitArgs], {
         cwd: process.cwd(),
         encoding: "utf-8",
@@ -758,6 +760,34 @@ function addCommitCommand(program: Command): void {
         stdio: "inherit",
       });
       if (result.status === 0 && options.requireReviewGate === true) {
+        let commitSha: string;
+        let committedHash: string;
+        try {
+          commitSha = currentGitCommit(process.cwd());
+          committedHash = committedDiffHash(commitSha, process.cwd());
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          process.stderr.write(
+            `error: committed successfully but could not verify the created commit diff before consuming the review gate: ${message.split(/\r?\n/, 1)[0]}\n`,
+          );
+          process.stderr.write(
+            "next: leave the review gate active, inspect the created commit, then rerun required local reviews before retrying.\n",
+          );
+          process.exitCode = 1;
+          return;
+        }
+        if (committedHash !== reviewedDiffHash) {
+          process.stderr.write(
+            formatCreatedCommitDiffMismatch({
+              commitSha,
+              reviewedDiffHash,
+              committedDiffHash: committedHash,
+            }),
+          );
+          process.exitCode = 1;
+          return;
+        }
         try {
           const consumed = consumeReviewGate(process.cwd());
           if (!consumed.consumed) {
@@ -817,6 +847,35 @@ function ordinaryCommitBlockedNextAction(
     return `next: refresh required local reviews for workflow ${workflow}, then retry with ax commit ${REQUIRE_REVIEW_GATE_FLAG}`;
   }
   return `next: repair the active review gate for workflow ${workflow}, or clear it and rerun required local reviews, then retry with ax commit ${REQUIRE_REVIEW_GATE_FLAG}`;
+}
+
+function currentGitCommit(cwd: string): string {
+  const result = spawnSync("git", ["rev-parse", "--verify", "HEAD"], {
+    cwd,
+    encoding: "utf-8",
+    env: withoutGitRepositoryEnv(),
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      (result.stderr || result.stdout || "git rev-parse failed").trim(),
+    );
+  }
+  return result.stdout.trim();
+}
+
+function formatCreatedCommitDiffMismatch(input: {
+  commitSha: string;
+  reviewedDiffHash: string;
+  committedDiffHash: string;
+}): string {
+  return [
+    "error: created commit does not match the reviewed staged diff; review gate was not consumed.",
+    `created_commit: ${input.commitSha}`,
+    `reviewed_staged_diff_hash: ${input.reviewedDiffHash}`,
+    `created_commit_diff_hash: ${input.committedDiffHash}`,
+    "next: inspect or undo the created commit, rerun required local reviews for the committed diff, then retry ax commit --require-review-gate.",
+    "",
+  ].join("\n");
 }
 
 function parseAxCommitArgs(args: string[]): {

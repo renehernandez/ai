@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import test from "node:test";
 import {
+  committedDiffHash,
   consumeReviewGate,
   reviewGateStatePath,
   stagedDiffHash,
@@ -197,6 +198,22 @@ test("staged diff fingerprint is stable until the staged diff changes", () => {
 
     runGit(["add", "file.txt"], cwd);
     assert.notEqual(stagedDiffHash(cwd), firstHash);
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("created commit diff fingerprint matches its reviewed staged diff", () => {
+  const cwd = createGitFixture("review-gate-commit-hash-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], cwd);
+    const reviewedHash = stagedDiffHash(cwd);
+
+    runGit(["commit", "-m", "add fixture file"], cwd);
+    const commitSha = runGit(["rev-parse", "HEAD"], cwd);
+
+    assert.equal(committedDiffHash(commitSha, cwd), reviewedHash);
   } finally {
     rmSync(cwd, { force: true, recursive: true });
   }

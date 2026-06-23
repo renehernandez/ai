@@ -112,6 +112,20 @@ export function stagedDiffHash(cwd = process.cwd()): string {
   return `sha256:${createHash("sha256").update(diff).digest("hex")}`;
 }
 
+export function committedDiffHash(
+  commitSha: string,
+  cwd = process.cwd(),
+): string {
+  const parentLine = gitOutput(
+    ["rev-list", "--parents", "-n", "1", commitSha],
+    cwd,
+  );
+  const [, parentSha] = parentLine.split(/\s+/);
+  const baseSha = parentSha ?? "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+  const diff = gitOutputBuffer(["diff", "--binary", baseSha, commitSha], cwd);
+  return `sha256:${createHash("sha256").update(diff).digest("hex")}`;
+}
+
 export function hasStagedDiff(cwd = process.cwd()): boolean {
   const result = spawnSync("git", ["diff", "--cached", "--quiet"], {
     cwd,
