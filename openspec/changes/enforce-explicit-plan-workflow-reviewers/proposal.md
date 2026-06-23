@@ -3,8 +3,8 @@
 Plan workflow commits can still fall through the ordinary no-gate `ax commit`
 path when reviewer evidence is implicit, stale, or only described in prose. The
 existing local review-gate work gives agents a commit-time validator, but the
-workflow needs an explicit phase contract for when a gate is required and which
-reviewers must pass.
+workflow needs an explicit phase contract for when a gate is required, which
+reviewers must pass, and which exact worktree/staged diff the gate was bound to.
 
 The durable fix is to make reviewer sets explicit in plan workflow outputs,
 bind phase evidence to the staged diff at the commit-owning phase, and add an
@@ -25,13 +25,19 @@ delivery completion.
   commit it owns.
 - Add a required-gate `ax commit` mode for workflow phases while preserving the
   ordinary no-gate wrapper path for non-workflow commits.
+- Make ordinary `ax commit` fail with a required-gate diagnostic when an active
+  workflow-required gate exists.
+- Make required-gate validation and consumption atomic for one worktree, bind
+  gates to worktree identity, and reject linked-worktree or branch drift.
+- Define post-commit mismatch recovery when a commit is created but does not
+  match the reviewed staged diff.
 - Keep `plan-orchestrator` limited to validating phase evidence and routing
   stale or missing evidence back to the owning phase.
 - Keep hosted `planning_review`, `nitro_feedback_gate`, MR approval, CI or
   no-pipeline inspection, and unsupported-host routing separate from local
   reviewer gates.
-- Align skill docs, adapter prompts, root and portable instructions, tests, and
-  linked rule files, tests, and installed runtime validation.
+- Align skill docs, adapter prompts, root and portable instructions, linked rule
+  files, tests, and installed runtime validation.
 
 ## Capabilities
 

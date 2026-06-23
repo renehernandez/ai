@@ -30,18 +30,20 @@ The system SHALL make `plan-review` bind valid readiness reviewer evidence to
 the staged planning diff before committing planning artifacts.
 
 #### Scenario: Plan review binds readiness evidence to staged diff
-- **WHEN** `plan-review` prepares a planning commit from `plan-ready` output
-- **THEN** it validates the readiness reviewer evidence
+- **WHEN** `plan-review` prepares a planning commit from `plan_review_request`
+- **THEN** it validates the readiness reviewer evidence carried by the request
 - **AND** it validates the reviewed artifact fingerprint
 - **AND** it binds that evidence to the current staged planning diff hash before
   arming the local review gate
 
 #### Scenario: OpenSpec planning proves blueprint provenance before commit
-- **WHEN** `plan-review` prepares a planning commit from a materialized OpenSpec
-  change created from an `openspec_blueprint`
-- **THEN** it validates source plan, change id, reviewed artifact fingerprint,
-  generated paths, and strict OpenSpec validation evidence before arming the
-  local review gate
+- **WHEN** `plan-orchestrator` materializes an OpenSpec change from an
+  `openspec_blueprint`
+- **THEN** it carries readiness reviewer evidence and blueprint provenance
+  evidence into `plan_review_request`
+- **AND** `plan-review` validates source plan, change id, reviewed artifact
+  fingerprint, generated paths, and strict OpenSpec validation evidence before
+  arming the local review gate
 - **AND** if blueprint-to-OpenSpec provenance cannot be proven, readiness
   reviewers rerun against the materialized OpenSpec diff before commit
 
@@ -113,6 +115,11 @@ validation and routing without writing local review-gate state.
 #### Scenario: Orchestrator routes stale delivery evidence
 - **WHEN** `plan-orchestrator` finds missing or stale delivery evidence
 - **THEN** it routes the workflow back to `plan-unit-delivery`
+- **AND** it does not write review-gate state
+
+#### Scenario: Orchestrator routes missing planning commit evidence
+- **WHEN** `plan-orchestrator` finds missing or stale planning commit evidence
+- **THEN** it routes the workflow back to `plan-review`
 - **AND** it does not write review-gate state
 
 #### Scenario: Orchestrator does not invent reviewers
