@@ -45,7 +45,7 @@
 - [x] 3.1 Update `plan-orchestrator` plan-review request creation so
   `plan_review_request` carries explicit readiness reviewer evidence and, for
   materialized OpenSpec changes, blueprint provenance evidence.
-- [ ] 3.2 Update `plan-review` to accept and validate readiness reviewer
+- [x] 3.2 Update `plan-review` to accept and validate readiness reviewer
   evidence from `plan_review_request` before committing a planning branch.
 - [ ] 3.3 Bind readiness evidence to the current staged planning diff before
   arming the local review gate.
