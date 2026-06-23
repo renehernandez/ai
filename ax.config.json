@@ -108,7 +108,13 @@
           "url": "https://git.fullscript.io/ai/skills.git",
           "ref": "main",
           "basePath": ".",
-          "names": ["glab-cli", "glab-stacked-diffs", "legoland", "terraform"]
+          "names": [
+            "gitlab-ci",
+            "glab-cli",
+            "glab-stacked-diffs",
+            "legoland",
+            "terraform"
+          ]
         }
       ]
     }
