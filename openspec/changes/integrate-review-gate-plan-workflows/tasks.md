@@ -12,7 +12,7 @@
 - [x] 1.3 Extend `scripts/review-gate.ts` with typed active-gate write and
   consume/clear helpers that own path resolution, staged diff hashing, schema
   validation, atomic writes, status semantics, and consumed-state behavior.
-- [ ] 1.4 Add shared review-gate unit tests for active writes, malformed input
+- [x] 1.4 Add shared review-gate unit tests for active writes, malformed input
   rejection, consumed-state validation behavior, and linked-worktree Git-dir
   isolation.
 

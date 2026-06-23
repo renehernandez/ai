@@ -1,13 +1,22 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import test from "node:test";
 import {
+  consumeReviewGate,
   reviewGateStatePath,
   stagedDiffHash,
   validateReviewGateForCommit,
+  writeActiveReviewGate,
 } from "../../scripts/review-gate.ts";
 
 function withoutGitRepositoryEnv(): NodeJS.ProcessEnv {
@@ -46,6 +55,36 @@ function writeGateState(cwd: string, json: string): void {
   writeFileSync(statePath, json, "utf-8");
 }
 
+function validReviewGateInput(cwd: string) {
+  const diffHash = stagedDiffHash(cwd);
+  return {
+    workflow: "test-workflow",
+    unit: {
+      id: "unit-1",
+      title: "Fixture unit",
+    },
+    sourceProvenance: {
+      kind: "test",
+      ref: "fixture",
+      evidence: ["fixture-evidence"],
+    },
+    requiredReviewPasses: ["implementation-readiness", "edge-cases-and-risks"],
+    results: {
+      "implementation-readiness": {
+        status: "passed" as const,
+        diffHash,
+        summary: "Ready for implementation.",
+      },
+      "edge-cases-and-risks": {
+        status: "passed" as const,
+        diffHash,
+        summary: "No blocking edge cases.",
+      },
+    },
+    blockingFindings: [],
+  };
+}
+
 test("review gate state path resolves under the repository Git directory", () => {
   const cwd = createGitFixture("review-gate-path-");
   try {
@@ -75,6 +114,74 @@ test("review gate state path resolves under linked worktree metadata", () => {
   } finally {
     rmSync(worktree, { force: true, recursive: true });
     rmSync(repo, { force: true, recursive: true });
+  }
+});
+
+test("active review gate writes persisted state for the staged diff", () => {
+  const cwd = createGitFixture("review-gate-active-write-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], cwd);
+
+    const { state, statePath } = writeActiveReviewGate(
+      validReviewGateInput(cwd),
+      cwd,
+    );
+    const persisted = JSON.parse(readFileSync(statePath, "utf-8"));
+    const validation = validateReviewGateForCommit(cwd);
+
+    assert.equal(state.active, true);
+    assert.equal(state.status, "active");
+    assert.equal(state.workflow, "test-workflow");
+    assert.equal(state.sourceProvenance?.kind, "test");
+    assert.equal(state.stagedDiffHash, stagedDiffHash(cwd));
+    assert.deepEqual(state.requiredReviewPasses, [
+      "implementation-readiness",
+      "edge-cases-and-risks",
+    ]);
+    assert.equal(persisted.active, true);
+    assert.equal(persisted.status, "active");
+    assert.equal(persisted.stagedDiffHash, state.stagedDiffHash);
+    assert.equal(validation.ok, true);
+    assert.equal(validation.active, true);
+    assert.deepEqual(validation.completedReviewPasses, [
+      "implementation-readiness",
+      "edge-cases-and-risks",
+    ]);
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("active review gate rejects missing and stale result diff hashes", () => {
+  const cwd = createGitFixture("review-gate-active-rejects-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], cwd);
+
+    const missingDiffHashInput = validReviewGateInput(cwd);
+    missingDiffHashInput.results["implementation-readiness"] = {
+      status: "passed",
+    } as {
+      status: "passed";
+      diffHash: string;
+    };
+
+    assert.throws(
+      () => writeActiveReviewGate(missingDiffHashInput, cwd),
+      /requires a diff hash/,
+    );
+
+    const staleDiffHashInput = validReviewGateInput(cwd);
+    staleDiffHashInput.results["implementation-readiness"].diffHash =
+      `sha256:${"0".repeat(64)}`;
+
+    assert.throws(
+      () => writeActiveReviewGate(staleDiffHashInput, cwd),
+      /has stale diff hash/,
+    );
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
   }
 });
 
@@ -139,6 +246,61 @@ test("malformed review gate state blocks validation", () => {
   }
 });
 
+test("non-object review gate state blocks validation without throwing", () => {
+  const cwd = createGitFixture("review-gate-non-object-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], cwd);
+    writeGateState(cwd, "null\n");
+
+    const validation = validateReviewGateForCommit(cwd);
+
+    assert.equal(validation.ok, false);
+    assert.match(validation.errors.join("\n"), /must be an object/);
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("malformed review gate state cannot be consumed", () => {
+  const cwd = createGitFixture("review-gate-consume-malformed-");
+  try {
+    writeGateState(cwd, "{ nope\n");
+
+    assert.throws(
+      () => consumeReviewGate(cwd),
+      /Review gate state is not valid JSON/,
+    );
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("consumed review gate state is inactive for commit validation", () => {
+  const cwd = createGitFixture("review-gate-consumed-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], cwd);
+    writeActiveReviewGate(validReviewGateInput(cwd), cwd);
+
+    const consumed = consumeReviewGate(cwd);
+    const consumedValidation = validateReviewGateForCommit(cwd);
+
+    assert.equal(consumed.consumed, true);
+    assert.equal(consumed.state?.active, false);
+    assert.equal(consumed.state?.status, "consumed");
+    assert.equal(typeof consumed.state?.consumedAt, "string");
+    assert.equal(consumedValidation.ok, true);
+    assert.equal(consumedValidation.active, false);
+    assert.equal(
+      consumedValidation.note,
+      "Review gate is inactive; allowing commit.",
+    );
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
 test("incomplete active review gate state blocks validation", () => {
   const cwd = createGitFixture("review-gate-incomplete-");
   try {
@@ -181,5 +343,43 @@ test("active review gate state requires at least one review pass", () => {
     assert.match(validation.errors.join("\n"), /at least one review pass/);
   } finally {
     rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("active and consumed review gate state stays under linked worktree metadata", () => {
+  const repo = createGitFixture("review-gate-write-worktree-repo-");
+  const worktree = mkdtempSync(join(tmpdir(), "review-gate-write-worktree-"));
+  try {
+    writeFileSync(join(repo, "base.txt"), "base\n", "utf-8");
+    runGit(["add", "base.txt"], repo);
+    runGit(["commit", "-m", "base"], repo);
+    rmSync(worktree, { force: true, recursive: true });
+    runGit(["worktree", "add", worktree], repo);
+    writeFileSync(join(worktree, "feature.txt"), "feature\n", "utf-8");
+    runGit(["add", "feature.txt"], worktree);
+
+    const parentStatePath = join(repo, ".git", "ax", "review-gate.json");
+    const { statePath } = writeActiveReviewGate(
+      validReviewGateInput(worktree),
+      worktree,
+    );
+    const gitDir = runGit(["rev-parse", "--git-dir"], worktree);
+    const expectedGitDir = isAbsolute(gitDir) ? gitDir : join(worktree, gitDir);
+
+    assert.equal(dirname(statePath), join(expectedGitDir, "ax"));
+    assert.equal(existsSync(statePath), true);
+    assert.equal(existsSync(parentStatePath), false);
+
+    const consumed = consumeReviewGate(worktree);
+    const persisted = JSON.parse(readFileSync(statePath, "utf-8"));
+
+    assert.equal(consumed.consumed, true);
+    assert.equal(consumed.statePath, statePath);
+    assert.equal(consumed.state?.status, "consumed");
+    assert.equal(persisted.status, "consumed");
+    assert.equal(existsSync(parentStatePath), false);
+  } finally {
+    rmSync(worktree, { force: true, recursive: true });
+    rmSync(repo, { force: true, recursive: true });
   }
 });
