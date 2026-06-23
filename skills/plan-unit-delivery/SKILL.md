@@ -77,13 +77,25 @@ path.
 7. For OpenSpec delivery units, validate the unit delta against the unit base.
 8. Launch implementation reviewers through internal subagents.
 9. Reconcile reviewer outcomes.
-10. Run review-feedback routing.
-11. Open or update one routed implementation PR/MR stacked on the expected
+10. Validate `reviewer_launch` and `reviewer_report`; the report must include
+    the staged diff hash reviewed by the implementation reviewers.
+11. Before any material implementation commit, activate the local review gate
+    for the staged diff:
+
+    ```bash
+    scripts/plan-unit-delivery.ts activate-review-gate --file <delivery-evidence> --source-ref <handoff-or-report-ref>
+    ```
+
+    If activation is blocked, gate writing fails, validation fails, reviewer
+    evidence is missing or stale, or blocking findings remain, do not run
+    `ax commit`; resolve the blocker and rerun reviewers or activation.
+12. Run review-feedback routing.
+13. Open or update one routed implementation PR/MR stacked on the expected
     stack tip from the handoff.
-12. Prove the implementation artifact is separate from the planning-review
+14. Prove the implementation artifact is separate from the planning-review
     PR/MR. If the same hosted artifact would be reused, block and split the
     implementation to a separate PR/MR.
-13. Run the hosted-description gate through the selected description policy
+15. Run the hosted-description gate through the selected description policy
     owner (`change-request-create`, `glab-mr-create`, `github-pr-create`, or an
     equivalent provider adapter in harnesses where the named skill is
     unavailable). For existing PRs/MRs, read the current hosted body before
@@ -101,18 +113,18 @@ path.
     with recovery evidence. Metadata-only reuse is allowed only when the
     existing body remains accurate for the current head and the ledger records a
     metadata-only materiality decision plus reuse rationale.
-14. Run artifact-host review.
-15. Monitor artifact-host pipelines for the latest head until they pass, fail,
+16. Run artifact-host review.
+17. Monitor artifact-host pipelines for the latest head until they pass, fail,
     block, or are unavailable with evidence. Include child or downstream
     pipeline state when the host exposes it.
-16. Request Nitro feedback after MR creation and after every material
+18. Request Nitro feedback after MR creation and after every material
     head-changing push, including feedback fixes, restacks, conflict fixes,
     pipeline fixes, user edits, rebases, and plan or documentation feedback
     fixes. Refresh the hosted-description gate before the request whenever the
     change affects reviewer understanding.
-17. Wait for the shared latest-head `nitro_feedback_gate` to pass. A requested,
+19. Wait for the shared latest-head `nitro_feedback_gate` to pass. A requested,
     pending, stale, unavailable, or findings gate is blocking.
-18. Finish only when the unit implementation MR is stack-ready with passed
+20. Finish only when the unit implementation MR is stack-ready with passed
     description-policy and Nitro gates, or blocked with evidence.
 
 Block with `implementation_scope_escape` when the selected unit requires
@@ -168,6 +180,8 @@ checkbox delta exists.
 | Finishing without proving the delivery-unit delta | Run `validate-task-delta --unit` against base and unit `tasks.md` |
 | Fabricating delivery-unit delta proof for an atomic plan | Mark `delivery_unit_delta` not applicable with `selected_unit_id: atomic` |
 | Recording delta proof only in chat prose | Put the command and `delivery_unit_delta_valid` output in `delivery_gate_ledger.delivery_unit_delta` |
+| Committing before activating the local review gate | Run `activate-review-gate` for the staged diff before `ax commit` |
+| Reusing reviewer reports after staging new changes | Rerun reviewers and update `reviewer_report.reviewed_diff_hash` |
 | Treating delivery gate evidence as durable state | Keep sequence state in OpenSpec |
 | Treating an open PR/MR as done before pipelines settle | Keep monitoring latest-head pipelines |
 | Assuming Nitro feedback is absent immediately after push | Request Nitro for the latest head, wait up to 10 minutes for review start, then wait for completion |

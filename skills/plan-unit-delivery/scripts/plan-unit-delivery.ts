@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { nitroFeedbackGateErrors } from "./lib/nitro-feedback-gate.ts";
 import {
   extractSection,
@@ -20,6 +20,15 @@ import {
 import type {
   ActiveReviewGateInput,
   ReviewGateResultInput,
+  ReviewGateValidation,
+  ReviewGateWriteResult,
+} from "./lib/review-gate.ts";
+import {
+  hasStagedDiff,
+  reviewGateStatePath,
+  stagedDiffHash,
+  validateReviewGateForCommit,
+  writeActiveReviewGate,
 } from "./lib/review-gate.ts";
 import {
   artifactHostHintFromRemoteText,
@@ -117,6 +126,7 @@ const REVIEW_OUTCOME_STATUSES = [
   "blocked",
   "not_applicable",
 ] as const;
+const REVIEWED_DIFF_HASH_PATTERN = /^sha256:[a-f0-9]{64}$/;
 const PLAN_UNIT_DELIVERY_REVIEW_PHASE = "plan-unit-delivery";
 type Command =
   | "detect"
@@ -127,6 +137,7 @@ type Command =
   | "validate-review-report"
   | "refactoring-template"
   | "gate-template"
+  | "activate-review-gate"
   | "validate-ledger"
   | "validate-task-delta";
 
@@ -166,6 +177,7 @@ type ReviewOutcome = {
 };
 
 type ParsedReviewerReport = {
+  reviewedDiffHash?: string;
   launchedReviewers: string[];
   skippedReviewerNames: Set<string>;
   skippedReviewers: SkippedReviewer[];
@@ -182,7 +194,7 @@ function main(): void {
 
   if (!isCommand(command)) {
     fail(
-      "Usage: plan-unit-delivery.ts <detect|validate-handoff|review-gate-input|reviewer-template|validate-launch-report|validate-review-report|refactoring-template|gate-template|validate-ledger|validate-task-delta> [--file path|--base path --head path --unit id|--task id] [--expected-head-sha sha] [--expected-artifact url]",
+      "Usage: plan-unit-delivery.ts <detect|validate-handoff|review-gate-input|activate-review-gate|reviewer-template|validate-launch-report|validate-review-report|refactoring-template|gate-template|validate-ledger|validate-task-delta> [--file path|--source-ref ref|--cwd path|--base path --head path --unit id|--task id] [--expected-head-sha sha] [--expected-artifact url]",
     );
   }
 
@@ -213,6 +225,11 @@ function main(): void {
 
   if (command === "review-gate-input") {
     printReviewGateInput(args);
+    return;
+  }
+
+  if (command === "activate-review-gate") {
+    activateReviewGate(args);
     return;
   }
 
@@ -364,6 +381,7 @@ reviewer_launch:
 
 reviewer_report:
   status: complete
+  reviewed_diff_hash: <staged diff hash reviewed by the reviewer passes>
   launched_reviewers:
     - implementation-review
     - implementation-scrutiny
@@ -388,6 +406,7 @@ review_execution_rules:
   - Omit model overrides unless the user explicitly asks for one.
   - Print and validate reviewer_launch before waiting for review outcomes.
   - Validate reviewer_report before PR/MR creation or final delivery.
+  - Set reviewer_report.reviewed_diff_hash to the staged diff hash reviewed by the reviewer passes.
 \`\`\`
 `);
 }
@@ -657,6 +676,164 @@ function printReviewGateInput(args: string[]): void {
   console.log(JSON.stringify(reviewGateInput, null, 2));
 }
 
+function activateReviewGate(args: string[]): void {
+  const cwd = optionValue(args, "--cwd") ?? process.cwd();
+  const input = readInput(args);
+  let reviewGateInput: ActiveReviewGateInput;
+  let diffHash = "";
+
+  try {
+    if (!hasStagedDiff(cwd)) {
+      emitBlockedReviewGate([
+        "plan-unit-delivery review gate requires a staged diff",
+      ]);
+    }
+    diffHash = stagedDiffHash(cwd);
+
+    const evidenceRef =
+      optionValue(args, "--source-ref") ?? optionValue(args, "--file");
+    reviewGateInput = buildPlanUnitDeliveryReviewGateInput(input, {
+      diffHash,
+      evidenceRef,
+    });
+  } catch (error) {
+    emitBlockedReviewGate([errorMessage(error)], undefined, cwd, diffHash);
+  }
+
+  try {
+    const writeResult = writeActiveReviewGate(reviewGateInput, cwd);
+    const validation = validateReviewGateForCommit(cwd);
+    if (!validation.ok) {
+      emitBlockedReviewGate(validation.errors, validation, cwd, diffHash);
+    }
+
+    console.log(
+      JSON.stringify(
+        {
+          status: "ready",
+          gate_outcome: "passed",
+          state_path: writeResult.statePath,
+          staged_diff_hash: validation.stagedDiffHash,
+          required_review_passes: validation.requiredReviewPasses,
+        },
+        null,
+        2,
+      ),
+    );
+  } catch (error) {
+    emitBlockedReviewGate([errorMessage(error)], undefined, cwd, diffHash);
+  }
+}
+
+function emitBlockedReviewGate(
+  blockers: string[],
+  validation?: ReviewGateValidation,
+  cwd?: string,
+  diffHash?: string,
+): never {
+  let blockedGate: ReviewGateWriteResult | undefined;
+  if (cwd && diffHash) {
+    try {
+      blockedGate = writeBlockedReviewGate(cwd, diffHash, blockers);
+    } catch (error) {
+      try {
+        blockedGate = writePoisonedReviewGate(cwd, diffHash, blockers);
+        blockers.push(
+          `failed to write blocked review gate through shared API; wrote fail-closed poison gate instead: ${errorMessage(error)}`,
+        );
+      } catch (poisonError) {
+        blockers.push(
+          `failed to write blocked review gate and failed to write fail-closed poison gate: ${errorMessage(error)}; ${errorMessage(poisonError)}`,
+        );
+      }
+    }
+  }
+  console.log(
+    JSON.stringify(
+      {
+        status: "blocked",
+        gate_outcome: "blocked",
+        blockers,
+        state_path: validation?.statePath ?? blockedGate?.statePath,
+        staged_diff_hash: validation?.stagedDiffHash ?? diffHash,
+      },
+      null,
+      2,
+    ),
+  );
+  process.exit(1);
+}
+
+function writePoisonedReviewGate(
+  cwd: string,
+  diffHash: string,
+  blockers: string[],
+): ReviewGateWriteResult {
+  const statePath = reviewGateStatePath(cwd);
+  const now = new Date().toISOString();
+  const state: ReviewGateWriteResult["state"] = {
+    version: 1,
+    active: true,
+    status: "active",
+    workflow: "plan-unit-delivery",
+    unit: {
+      id: "blocked_implementation",
+      title: "Blocked Plan Unit Delivery implementation gate",
+    },
+    sourceProvenance: {
+      kind: "blocked_implementation",
+      ref: "plan-unit-delivery",
+      phase: PLAN_UNIT_DELIVERY_REVIEW_PHASE,
+      evidence: ["blocked review-gate API write fallback"],
+    },
+    stagedDiffHash: diffHash,
+    requiredReviewPasses: ["implementation-review"],
+    results: {
+      "implementation-review": {
+        status: "blocked",
+        diffHash,
+        summary: blockers.join("; "),
+      },
+    },
+    blockingFindings: blockers,
+    updatedAt: now,
+  };
+  mkdirSync(dirname(statePath), { recursive: true });
+  writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`);
+  return { statePath, state };
+}
+
+function writeBlockedReviewGate(
+  cwd: string,
+  diffHash: string,
+  blockers: string[],
+): ReviewGateWriteResult {
+  return writeActiveReviewGate(
+    {
+      workflow: "plan-unit-delivery",
+      unit: {
+        id: "blocked_implementation",
+        title: "Blocked Plan Unit Delivery implementation gate",
+      },
+      sourceProvenance: {
+        kind: "blocked_implementation",
+        ref: "plan-unit-delivery",
+        phase: PLAN_UNIT_DELIVERY_REVIEW_PHASE,
+      },
+      requiredReviewPasses: ["implementation-review"],
+      results: {
+        "implementation-review": {
+          status: "blocked",
+          diffHash,
+          summary: blockers.join("; "),
+        },
+      },
+      blockingFindings: blockers,
+    },
+    cwd,
+  );
+}
+
 function buildPlanUnitDeliveryReviewGateInput(
   input: string,
   options: {
@@ -668,6 +845,7 @@ function buildPlanUnitDeliveryReviewGateInput(
   const launch = validatedLaunchReport(input);
   const report = validatedReviewReport(input);
   assertReviewerLaunchReportConsistent(launch, report);
+  assertReviewerReportFresh(report, options.diffHash);
 
   const requiredReviewPasses = unique(report.launchedReviewers);
   const { results, blockingFindings } = reviewerReportGateResults(
@@ -695,6 +873,17 @@ function buildPlanUnitDeliveryReviewGateInput(
     results,
     blockingFindings: [...handoff.blockers, ...blockingFindings],
   };
+}
+
+function assertReviewerReportFresh(
+  report: ParsedReviewerReport,
+  diffHash: string,
+): void {
+  if (report.reviewedDiffHash !== diffHash) {
+    throw new Error(
+      `reviewer_report.reviewed_diff_hash is stale for current staged diff: expected ${diffHash}, got ${report.reviewedDiffHash ?? "<missing>"}`,
+    );
+  }
 }
 
 function assertReviewerLaunchReportConsistent(
@@ -1336,6 +1525,7 @@ function validatedReviewReport(input: string): ParsedReviewerReport {
   const section = extractSection(body, "reviewer_report");
   const errors: string[] = [];
   const status = scalar(section, "status");
+  const reviewedDiffHash = scalar(section, "reviewed_diff_hash");
   const launchedReviewers = list(section, "launched_reviewers");
   const skippedReviewers = list(section, "skipped_reviewers");
   const outcomes = list(section, "outcomes");
@@ -1351,6 +1541,14 @@ function validatedReviewReport(input: string): ParsedReviewerReport {
 
   if (status !== "complete") {
     errors.push("reviewer_report.status must be complete");
+  }
+
+  if (!reviewedDiffHash) {
+    errors.push("reviewer_report.reviewed_diff_hash is required");
+  } else if (!REVIEWED_DIFF_HASH_PATTERN.test(reviewedDiffHash)) {
+    errors.push(
+      "reviewer_report.reviewed_diff_hash must be a sha256 diff hash",
+    );
   }
 
   requireRequiredReviewers(launchedReviewers, errors);
@@ -1447,6 +1645,7 @@ function validatedReviewReport(input: string): ParsedReviewerReport {
   }
 
   return {
+    reviewedDiffHash,
     launchedReviewers,
     skippedReviewerNames,
     skippedReviewers: parsedSkippedReviewers,
@@ -1602,6 +1801,7 @@ function isCommand(command: string | undefined): command is Command {
     "detect",
     "validate-handoff",
     "review-gate-input",
+    "activate-review-gate",
     "reviewer-template",
     "validate-launch-report",
     "validate-review-report",
