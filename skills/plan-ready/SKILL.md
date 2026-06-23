@@ -63,9 +63,10 @@ Baseline reviewers always run:
 
 Optional reviewers must come from the bundled reviewer catalog. Select
 `docs-and-agent-alignment` for workflow, docs, skills, rules, automation prompt,
-review rubric, or PR/MR description contract changes. Select
-`ax-and-skill-compatibility` for skill metadata, scripts, adapter
-prompts, install/update behavior, or runtime compatibility changes.
+review rubric, local workflow artifact boundary, or PR/MR description contract
+changes. Select `ax-and-skill-compatibility` for skill metadata, scripts,
+adapter prompts, install/update behavior, internal subagent routing, Agents
+Experience behavior, or runtime compatibility changes.
 
 Use `scripts/plan-ready.ts reviewer-template` and validate the judge output with
 `scripts/plan-ready.ts validate-selection`.
@@ -74,6 +75,13 @@ Reviewer execution is part of the `plan-ready` workflow. Once this skill is
 invoked, launch the selected reviewers as internal subagents in the current
 harness; do not ask for separate confirmation. If internal subagents are
 unavailable, emit `blocked_readiness` with the specific missing capability.
+
+Baseline readiness reviewers must block lifecycle-only OpenSpec or blueprint
+task groups, validation-only tasks, proof-only tasks, checkbox-only delivery
+units, and committed local workflow artifacts before readiness succeeds.
+Local workflow artifacts include readiness reports, reviewer reports,
+followthrough ledgers, screenshots, and private workflow state that belongs in
+the thread or private workflow storage rather than a work-project repository.
 
 ## Atomic Handoff Contract
 

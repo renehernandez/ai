@@ -41,7 +41,7 @@ const OPTIONAL_REVIEWER_DESCRIPTIONS = {
   "infra-and-cloud":
     "Terraform, Kubernetes, Cloudflare, AWS, DNS, queues, storage, environment config",
   "docs-and-agent-alignment":
-    "docs, agent instructions, skill/rule updates, automation prompts, background-review rubrics, PR description expectations",
+    "docs, agent instructions, skill/rule updates, automation prompts, background-review rubrics, PR description expectations, local workflow artifact boundaries",
   "performance-and-scale":
     "hot paths, concurrency, caching, queues, rate limits, batch behavior, operational limits",
   "ax-and-skill-compatibility":
@@ -192,8 +192,10 @@ ${OPTIONAL_REVIEWERS.map((reviewer) => `    - ${reviewer}: ${OPTIONAL_REVIEWER_D
     default: <why the selected reviewers are sufficient>
 
 selection_rules:
-  - Select docs-and-agent-alignment for reusable workflow, docs, skills, rules, automation prompt, background review, or PR/MR description contract changes.
+  - Select docs-and-agent-alignment for reusable workflow, docs, skills, rules, automation prompt, background review, reviewer rubric, local workflow artifact boundary, or PR/MR description contract changes.
   - Select ax-and-skill-compatibility for skill folder structure, skill metadata, bundled script, adapter prompt, internal subagent routing, install/update, or Agents Experience changes.
+  - For OpenSpec or blueprint readiness work, baseline reviewers must block lifecycle-only task groups, validation-only tasks, proof-only tasks, and checkbox-only delivery units before status ready.
+  - For workflow artifacts, baseline reviewers must block committed local readiness reports, reviewer reports, followthrough ledgers, screenshots, or other private workflow state in work-project repositories.
   - Select only from optional_reviewer_catalog; do not invent reviewer names.
   - Use baseline_sufficient only after explaining why no optional catalog reviewer is needed.
 `);

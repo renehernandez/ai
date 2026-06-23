@@ -18,7 +18,7 @@
 - [x] 2.1 Update `plan-ready` skill instructions, adapter prompt, blueprint
       template, and blueprint validator so generated blueprints use deliverable
       tasks only and reject validation-only or proof-only task entries.
-- [ ] 2.2 Update `plan-ready` reviewer selection and readiness review guidance
+- [x] 2.2 Update `plan-ready` reviewer selection and readiness review guidance
       so workflow/rule/skill changes select the relevant optional reviewers and
       block lifecycle-phase task shapes before readiness succeeds.
 
