@@ -55,7 +55,9 @@ Use the hybrid local structure:
 
 The global index is append-only for audit and broad lookup. The manifest is the
 current plan-local map. Revision directories contain immutable metadata and
-artifact blobs.
+artifact blobs. Private workspace directories must be created with owner-only
+permissions and rejected if an existing directory is readable, writable, or
+traversable by other users.
 
 Alternative considered: a single global `~/.ax/plans/artifacts/` bucket. That
 was simpler for writes but weaker for future plan-scoped debugging and resume.
@@ -74,10 +76,10 @@ mirrored push URLs. Canonicalize equivalent remote URL forms before building the
 key: lowercase the host, strip protocol-specific prefixes, normalize separators,
 and remove a trailing `.git` suffix.
 
-`plan_slug` comes from the plan filename, with a short hash of the
-repo-relative plan path when needed to avoid collisions. Store both the
-normalized repo-relative plan path and full `plan_path_hash` in metadata so
-nested plans or duplicate basenames cannot silently share a workspace.
+`plan_slug` always combines a sanitized plan filename stem with a short hash of
+the normalized repo-relative plan path. Store both the normalized
+repo-relative plan path and full `plan_path_hash` in metadata so nested plans or
+duplicate basenames cannot silently share a workspace.
 
 Plan/support classification is deterministic: normalized `.md` files under
 `.agents/plans/**` are primary plan documents only when they do not match a
@@ -98,17 +100,20 @@ pnpm ax plans artifact list --plan .agents/plans/example.md
 ```
 
 Record writes one file-backed support artifact and updates the index/manifest.
-List prints the current plan workspace records. Correlation search by branch,
-thread id, hosted review URL, and richer artifact lifecycle management can be
-added later.
+Artifact `kind` is path-safe and allowlisted to the first workflow artifact
+types: `review_request`, `reviewer_selection`, `handoff`, `blueprint`,
+`ledger`, `report`, `validation_input`, and `validation_output`. List prints the
+current plan workspace records. Correlation search by branch, thread id, hosted
+review URL, and richer artifact lifecycle management can be added later.
 
 ### Make Writes Recoverable
 
-Artifact blobs are content-addressed and immutable. Manifest writes use a temp
-file plus atomic rename. Append to `index.jsonl` only after blob and manifest
-writes succeed. Duplicate records for the same artifact hash are tolerated.
-Corrupt manifests, truncated JSONL rows, and orphan blobs produce deterministic
-repair guidance instead of silent evidence loss.
+Artifact blobs are content-addressed and immutable. Manifest writes use a
+plan-local advisory lock or equivalent single-writer mechanism, then a temp file
+plus atomic rename. Append to `index.jsonl` only after blob and manifest writes
+succeed. Duplicate records for the same artifact hash are tolerated. Corrupt
+manifests, truncated JSONL rows, and orphan blobs produce deterministic repair
+guidance instead of silent evidence loss.
 
 ### Validate The Boundary Before Hosted Review
 

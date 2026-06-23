@@ -12,6 +12,13 @@ AX plan workspace outside the target repository.
   repo-relative plan path, full plan path hash, plan content fingerprint,
   artifact kind, artifact path, and artifact content fingerprint
 
+#### Scenario: Private workspace permissions are enforced
+- **WHEN** the system initializes or uses `~/.ax/plans/`
+- **THEN** it creates missing private workspace directories with owner-only
+  permissions equivalent to mode `0700`
+- **AND** it rejects an existing private workspace when ownership or permissions
+  would allow other users to read, write, or traverse it
+
 #### Scenario: Workspace is plan scoped
 - **WHEN** two plans have the same basename in different repo-relative paths
 - **THEN** the system assigns them distinct plan identities
@@ -34,6 +41,22 @@ target repository and normalized plan path.
   artifact-host remote
 - **THEN** the system blocks artifact recording
 - **AND** asks for the intended repository identity
+
+#### Scenario: Plan slug is deterministic
+- **WHEN** the system derives `plan_slug`
+- **THEN** it always combines a sanitized plan filename stem with a short hash
+  of the normalized repo-relative plan path
+- **AND** it does not depend on current filesystem contents or collision
+  detection at write time
+
+#### Scenario: Artifact kind is safe for path construction
+- **WHEN** an agent records an artifact with `--kind <kind>`
+- **THEN** `kind` must match `^[a-z0-9_-]+$`
+- **AND** `kind` must be one of the supported workflow artifact kinds:
+  `review_request`, `reviewer_selection`, `handoff`, `blueprint`, `ledger`,
+  `report`, `validation_input`, or `validation_output`
+- **AND** unsupported or unsafe kind values are rejected before path
+  construction
 
 #### Scenario: Plan or artifact path escapes workspace
 - **WHEN** `--plan`, `--file`, artifact kind, or artifact extension would
@@ -63,7 +86,10 @@ The system SHALL write private plan artifact records in a recoverable order.
 #### Scenario: Artifact record write succeeds
 - **WHEN** artifact recording succeeds
 - **THEN** the system writes the content-addressed artifact blob
-- **AND** writes `manifest.json` through an atomic replace
+- **AND** coordinates plan-local manifest updates with an advisory lock or
+  equivalent single-writer mechanism
+- **AND** writes `manifest.json` through an atomic replace while holding that
+  writer coordination
 - **AND** appends an `index.jsonl` row after the blob and manifest writes
   succeed
 
