@@ -980,6 +980,94 @@ test("ax commit required review-gate mode delegates with an active fresh gate", 
   }
 });
 
+test("ax commit ordinary mode fails when an active review gate exists", () => {
+  const cwd = createGitFixture("ax-commit-ordinary-active-gate-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+    const hash = stagedHash(cwd);
+    writeReviewGateState(cwd, {
+      version: 1,
+      active: true,
+      workflow: "plan-unit-delivery",
+      sourceProvenance: {
+        kind: "plan_delivery_handoff",
+        ref: "/tmp/example-handoff.yaml",
+      },
+      stagedDiffHash: hash,
+      requiredReviewPasses: ["implementation-review"],
+      results: {
+        "implementation-review": {
+          status: "passed",
+          diffHash: hash,
+        },
+      },
+      blockingFindings: [],
+    });
+
+    const result = runAgentRuntime(["commit", "-m", "add fixture file"], {
+      cwd,
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /Active workflow-required review gate for plan-unit-delivery found; ordinary ax commit is disabled/,
+    );
+    assert.match(
+      result.stderr,
+      /next: retry with ax commit --require-review-gate for workflow plan-unit-delivery/,
+    );
+    assert.equal(runGit(["status", "--short"], { cwd }), "A  file.txt");
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("ax commit ordinary mode reports required-gate guidance for stale active gates", () => {
+  const cwd = createGitFixture("ax-commit-ordinary-stale-gate-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+    writeReviewGateState(cwd, {
+      version: 1,
+      active: true,
+      workflow: "plan-unit-delivery",
+      sourceProvenance: {
+        kind: "plan_delivery_handoff",
+        ref: "/tmp/example-handoff.yaml",
+      },
+      stagedDiffHash: "sha256:old",
+      requiredReviewPasses: ["implementation-review"],
+      results: {
+        "implementation-review": {
+          status: "passed",
+          diffHash: "sha256:old",
+        },
+      },
+      blockingFindings: [],
+    });
+
+    const result = runAgentRuntime(["commit", "-m", "add fixture file"], {
+      cwd,
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Stale review pass/);
+    assert.match(result.stderr, /Review gate staged diff hash is stale/);
+    assert.match(
+      result.stderr,
+      /next: refresh required local reviews for workflow plan-unit-delivery, then retry with ax commit --require-review-gate/,
+    );
+    assert.match(
+      result.stderr,
+      /Active workflow-required review gate for plan-unit-delivery found/,
+    );
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
 test("ax commit help documents required review-gate mode", () => {
   const result = runAgentRuntime(["commit", "--help"]);
 

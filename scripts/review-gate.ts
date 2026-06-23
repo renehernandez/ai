@@ -52,6 +52,7 @@ export type ReviewGateValidation = {
   ok: boolean;
   statePath: string;
   active: boolean;
+  workflow?: string;
   stagedDiffHash: string;
   requiredReviewPasses: string[];
   completedReviewPasses: string[];
@@ -224,6 +225,7 @@ export function validateReviewGateForCommit(
   const base: Omit<ReviewGateValidation, "ok" | "errors"> = {
     statePath,
     active: false,
+    workflow: undefined,
     stagedDiffHash: currentDiffHash,
     requiredReviewPasses: [],
     completedReviewPasses: [],
@@ -257,6 +259,7 @@ export function validateReviewGateForCommit(
   const requiredReviewPasses = normalized.requiredReviewPasses;
   const results = normalized.results;
   const active = normalized.active;
+  const workflow = normalized.workflow;
   const stateDiffHash = normalized.stagedDiffHash;
   const completedReviewPasses = requiredReviewPasses.filter((reviewPass) => {
     const result = results[reviewPass];
@@ -276,6 +279,7 @@ export function validateReviewGateForCommit(
       ...base,
       ok: schemaErrors.length === 0,
       active: false,
+      workflow,
       requiredReviewPasses,
       completedReviewPasses,
       missingReviewPasses,
@@ -319,6 +323,7 @@ export function validateReviewGateForCommit(
     ...base,
     ok: errors.length === 0,
     active: true,
+    workflow,
     requiredReviewPasses,
     completedReviewPasses,
     missingReviewPasses,
@@ -621,6 +626,7 @@ function atomicWriteJson(statePath: string, state: ReviewGateState): void {
 function normalizeState(state: unknown): {
   errors: string[];
   active: boolean;
+  workflow?: string;
   stagedDiffHash?: string;
   requiredReviewPasses: string[];
   results: Record<string, ReviewGateResult>;
@@ -631,6 +637,7 @@ function normalizeState(state: unknown): {
     return {
       errors,
       active: false,
+      workflow: undefined,
       stagedDiffHash: undefined,
       requiredReviewPasses: [],
       results: {},
@@ -640,6 +647,7 @@ function normalizeState(state: unknown): {
   return {
     errors,
     active: state.active === true,
+    workflow: typeof state.workflow === "string" ? state.workflow : undefined,
     stagedDiffHash:
       typeof state.stagedDiffHash === "string"
         ? state.stagedDiffHash

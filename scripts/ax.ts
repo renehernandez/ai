@@ -37,6 +37,7 @@ import ts from "typescript";
 import {
   formatReviewGateStatus,
   hasStagedDiff,
+  type ReviewGateValidation,
   validateReviewGateForCommit,
 } from "./review-gate.ts";
 
@@ -734,13 +735,18 @@ function addCommitCommand(program: Command): void {
         return;
       }
 
-      if (!validation.ok) {
-        process.stderr.write(formatReviewGateStatus(validation));
+      if (options.requireReviewGate === true && !validation.active) {
+        process.stderr.write(formatRequiredReviewGateMissing(validation));
         process.exitCode = 1;
         return;
       }
-      if (options.requireReviewGate === true && !validation.active) {
-        process.stderr.write(formatRequiredReviewGateMissing(validation));
+      if (options.requireReviewGate !== true && validation.active) {
+        process.stderr.write(formatOrdinaryCommitBlockedByGate(validation));
+        process.exitCode = 1;
+        return;
+      }
+      if (!validation.ok) {
+        process.stderr.write(formatReviewGateStatus(validation));
         process.exitCode = 1;
         return;
       }
@@ -764,6 +770,19 @@ function formatRequiredReviewGateMissing(
     },
   );
   return `${status}${REQUIRE_REVIEW_GATE_FLAG} requires an active fresh review gate for this staged diff.\n`;
+}
+
+function formatOrdinaryCommitBlockedByGate(
+  validation: ReviewGateValidation,
+): string {
+  const workflow = validation.workflow ?? "unknown";
+  const next = validation.ok
+    ? `next: retry with ax commit ${REQUIRE_REVIEW_GATE_FLAG} for workflow ${workflow}`
+    : `next: refresh required local reviews for workflow ${workflow}, then retry with ax commit ${REQUIRE_REVIEW_GATE_FLAG}`;
+  const status = formatReviewGateStatus(validation, {
+    next,
+  });
+  return `${status}Active workflow-required review gate for ${workflow} found; ordinary ax commit is disabled for this staged diff.\n`;
 }
 
 function parseAxCommitArgs(args: string[]): {
