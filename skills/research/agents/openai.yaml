@@ -1,4 +1,4 @@
 interface:
   display_name: "Research"
-  short_description: "Route research requests to the right research skill"
-  default_prompt: "Use $research to route this research request. Return only the research_routing decision with selected_skill, secondary_skill, reason, and next_step."
+  short_description: "Dispatch research requests to the right area skill"
+  default_prompt: "Use $research to choose exactly one research area skill, load and apply it, and return that selected skill's source-backed research_brief. Return research_routing only for explicit route-only/classify requests, unclear intent, or unnecessary research. Stop before brainstorming, planning, drafting, deck creation, or coding."

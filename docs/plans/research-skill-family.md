@@ -22,8 +22,8 @@ Some work needs external or current-state grounding before design. Examples:
   examples, version constraints, security concerns, and known failure modes;
 - talks and presentations need current discourse, credible examples, careful
   claims, audience assumptions, and tired framing to avoid;
-- broad "research this" prompts need routing before they enter brainstorming or
-  drafting.
+- broad "research this" prompts need one research lane before they enter
+  brainstorming or drafting.
 
 Without a dedicated research step, `brainstorming` either starts from weak facts
 or expands into source-gathering and design at the same time. The research
@@ -34,9 +34,9 @@ with it?"
 
 ```mermaid
 flowchart LR
-  request[Research need] --> router[research]
-  router --> technical[research-technical]
-  router --> content[research-content]
+  request[Research need] --> dispatcher[research]
+  dispatcher --> technical[research-technical]
+  dispatcher --> content[research-content]
   technical --> brief[research_brief]
   content --> brief
   brief --> brainstorming[brainstorming]
@@ -45,8 +45,10 @@ flowchart LR
   brief --> presentations[presentations]
 ```
 
-`research` classifies and hands off. Area skills produce evidence
-briefs. Downstream skills decide what to build, write, or present.
+`research` chooses one area skill by default, applies it, and returns that
+area skill's evidence brief. Explicit route-only requests still return a
+`research_routing` decision. Downstream skills decide what to build, write, or
+present.
 
 ## Scope
 
@@ -93,7 +95,7 @@ Follow `writing-skills` validation before writing final skill text:
 
 1. Read `skills/writing-skills/SKILL.md` and the directly relevant
    forward-testing guidance.
-2. Define pressure scenarios for the router and both area skills.
+2. Define pressure scenarios for the research dispatcher and both area skills.
 3. Run baseline prompts without the new skills loaded and capture the failure
    pattern.
 4. Write minimal `SKILL.md` files and adapter metadata that address those
@@ -189,18 +191,22 @@ Route to `research-content` when the request is about:
   content framing, examples, stats, discourse, or audience assumptions.
 
 If the user invokes `research-technical` or `research-content` directly, skip
-the router.
+the dispatcher.
 
-For mixed technical-plus-content requests, route to the primary intent only and
-record the deferred secondary lane in `secondary_skill`. Ask one question when
-the primary intent is unclear. Do not run both area skills in v1 unless the user
-explicitly asks for both.
+For normal research requests, `research` chooses one primary area skill, loads
+and applies it, and returns that area skill's `research_brief`.
+
+For mixed technical-plus-content requests, choose the primary intent only and
+record the deferred secondary lane in `secondary_skill` or equivalent
+deferred-lane language. Ask one question when the primary intent is unclear. Do
+not run both area skills in v1 unless the user explicitly asks for both.
 
 If research is unnecessary, say so and recommend the next skill.
 
 If routing depends on missing intent, ask one question and stop.
 
-Router output:
+Explicit route-only requests, unclear intent, and unnecessary research use this
+output:
 
 ```yaml
 research_routing:
@@ -391,7 +397,9 @@ interface:
 
 Default prompts must preserve:
 
-- router routing-only behavior;
+- default `research` behavior that returns one selected area skill's
+  `research_brief`;
+- explicit route-only behavior;
 - area-skill brief-only output;
 - 5-10 source target;
 - stable source IDs and evidence mapping;
@@ -409,15 +417,19 @@ Build the narrow end-to-end proof for the research family:
 - Keep `SKILL.md` files concise and trigger-focused.
 - Make each skill explicitly stop at a brief or routing decision.
 - Include the shared `research_brief` contract in both area skills.
-- Include the `research_routing` contract in the router.
+- Include the `research_routing` contract for explicit route-only, unclear, and
+  unnecessary `research` outcomes.
 - Include source hierarchy and 5-10 source target rules.
 - Add test or fixture coverage proving:
-  - router technical prompt selects `research-technical`;
-  - router presentation prompt selects `research-content`;
-  - router mixed-intent prompt chooses one primary skill and records the
+  - default technical prompt selects `research-technical` and returns its
+    brief;
+  - default presentation prompt selects `research-content` and returns its
+    brief;
+  - explicit route-only prompt emits `research_routing`;
+  - mixed-intent prompt chooses one primary skill and records the
     secondary lane or asks one question;
-  - router contract includes `research_routing.status`, `selected_skill`, and
-    `secondary_skill`;
+  - route-only contract includes `research_routing.status`, `selected_skill`,
+    and `secondary_skill`;
   - technical skill prompt/template includes evidence mapping and technical
     fields;
   - content skill prompt/template includes audience, tired framing, claim
@@ -428,12 +440,14 @@ Build the narrow end-to-end proof for the research family:
 - Forward-test the two generic research prompts from the Implementation
   Discipline section and record the result.
 - Run skill validation and runtime update/validation.
-- Run `pnpm ax skills status --profile personal` after the skills
-  update and record whether `agent-runtime.lock.json` changed.
+- Run `pnpm ax skills status --profile personal` and
+  `pnpm ax skills status --profile work` after the skills update and record
+  whether `ax.lock.json` changed.
 
 #### Acceptance Criteria
 
-- `research` can route a technical request and a presentation request.
+- `research` can dispatch a technical request and a presentation request to one
+  area skill and return that area skill's brief.
 - `research-technical` can produce a source-backed technical brief contract.
 - `research-content` can produce a source-backed content brief contract.
 - The first slice proves both paths without adding deferred research categories.
@@ -448,7 +462,7 @@ Build the narrow end-to-end proof for the research family:
 - Later consumers: possible future `research-message`, `research-customer`,
   `research-market`, and `research-synthesis`.
 - Behavior-preserving verification: skill validation, adapter prompt checks,
-  and focused tests/fixtures for routing and brief contracts.
+  and focused tests/fixtures for dispatch, route-only, and brief contracts.
 - Why this is not premature: the shared brief is consumed by both first-slice
   area skills immediately.
 
@@ -462,7 +476,7 @@ Only after Slice 1 is used:
   - `research-customer`;
   - `research-market`;
   - `research-synthesis`.
-- Update router rules for the new area.
+- Update research dispatch rules for the new area.
 
 #### Acceptance Criteria
 
@@ -504,13 +518,16 @@ Expected first-slice verification:
 pnpm exec biome check <touched scripts/tests if any>
 pnpm test:unit
 pnpm ax skills update --profile personal
+pnpm ax skills update --profile work
 pnpm ax skills status --profile personal
-pnpm ax validate --all-profiles
+pnpm ax skills status --profile work
+pnpm ax skills validate --profile personal
+pnpm ax skills validate --profile work
 ```
 
 If the broad runtime update path hits unrelated non-symlink instruction targets,
-use the narrower `pnpm ax skills update --profile personal` path and
-report the skipped broader update.
+use the narrower profile-scoped `pnpm ax skills update` and validation paths
+and report the skipped broader update.
 
 ## Open Questions
 
