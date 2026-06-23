@@ -5,12 +5,12 @@
   selected dynamic reviewers, per-reviewer status, artifact fingerprint,
   skipped rationale, blocking findings, completion timestamp, and gate outcome.
   - Proof location: command `pnpm exec node --import tsx --test tests/unit/plan-ready-script.test.ts` reports passing and failing reviewer-evidence cases.
-- [ ] 1.2 Add `plan-ready` reviewer catalog enforcement so baseline reviewers
+- [x] 1.2 Add `plan-ready` reviewer catalog enforcement so baseline reviewers
   are always present and selected dynamic reviewers can come only from the
   optional reviewer catalog.
-- [ ] 1.3 Promote selected optional reviewers into downstream required gate
+- [x] 1.3 Promote selected optional reviewers into downstream required gate
   passes for the readiness run.
-- [ ] 1.4 Add `plan-ready` tests for missing baseline reviewers, invalid dynamic
+- [x] 1.4 Add `plan-ready` tests for missing baseline reviewers, invalid dynamic
   reviewers, missing reviewer evidence, stale artifact fingerprints, blocking
   findings, skipped reviewers, and selected optional reviewer promotion.
 
@@ -20,42 +20,54 @@
   `ax commit --require-review-gate -m "..."`.
 - [ ] 2.2 Make required-gate mode fail when no active fresh gate exists while
   ordinary `ax commit -m "..."` keeps the no-gate allow path for non-workflow
-  commits.
-- [ ] 2.3 Reuse existing active-gate consume/clear semantics for required-gate
+  commits only when no active workflow-required gate exists.
+- [ ] 2.3 Make ordinary `ax commit` fail with a required-gate diagnostic when an
+  active workflow-required gate exists.
+- [ ] 2.4 Reuse existing active-gate consume/clear semantics for required-gate
   commits, preserve active gates when Git fails before creating a commit, and
   warn without failing retroactively when post-commit cleanup fails.
-- [ ] 2.4 Update `ax review-gate status` and `validate-commit` so missing,
+- [ ] 2.5 Update `ax review-gate status` and `validate-commit` so missing,
   active, blocking, stale, and consumed gates are reported clearly.
-- [ ] 2.5 Implement post-commit reviewed-diff verification so the created
+- [ ] 2.6 Implement post-commit reviewed-diff verification so the created
   commit must still match the reviewed staged diff before a required gate is
   consumed; fail the command and preserve or mark the gate blocked when
   commit-time mutation produces a different diff.
-- [ ] 2.6 Add AX unit and integration tests for required-gate missing-state
-  failure, no-gate ordinary commits, successful consumption, failed commit
-  preservation, post-commit diff mismatch, cleanup warning behavior, consumed
-  gate validation no-op, active gate blocking, and public help excluding
-  activation.
+- [ ] 2.7 Add atomic validate-and-consume behavior with repo/worktree-scoped
+  locking or equivalent compare-and-consume semantics.
+- [ ] 2.8 Bind active gates to worktree identity and reject linked-worktree,
+  branch, `HEAD`, workflow, unit, or staged-diff mismatches.
+- [ ] 2.9 Add AX unit and integration tests for required-gate missing-state
+  failure, no-gate ordinary commits, ordinary active-gate failure, successful
+  consumption, failed commit preservation, post-commit diff mismatch recovery,
+  concurrent consume rejection, linked-worktree rejection, branch mismatch,
+  `HEAD` mismatch, workflow mismatch, unit mismatch, staged-diff mismatch,
+  cleanup warning behavior, consumed gate validation no-op, active gate
+  blocking, and public help excluding activation.
 
 ## 3. Planning Commit Boundary
 
-- [ ] 3.1 Update `plan-review` to accept and validate readiness reviewer
-  evidence from `plan-ready` outputs before committing a planning branch.
-- [ ] 3.2 Bind readiness evidence to the current staged planning diff before
+- [ ] 3.1 Update `plan-orchestrator` plan-review request creation so
+  `plan_review_request` carries explicit readiness reviewer evidence and, for
+  materialized OpenSpec changes, blueprint provenance evidence.
+- [ ] 3.2 Update `plan-review` to accept and validate readiness reviewer
+  evidence from `plan_review_request` before committing a planning branch.
+- [ ] 3.3 Bind readiness evidence to the current staged planning diff before
   arming the local review gate.
-- [ ] 3.3 Call required-gate `ax commit` mode for planning workflow commits.
-- [ ] 3.4 Migrate normal readiness-gate activation ownership out of `plan-ready`
+- [ ] 3.4 Call required-gate `ax commit` mode for planning workflow commits.
+- [ ] 3.5 Migrate normal readiness-gate activation ownership out of `plan-ready`
   so `plan-ready` emits and validates readiness evidence while `plan-review`
   owns readiness-to-planning-commit gate binding; legacy `plan-ready` activation
   callers are rejected with a route-to-`plan-review` diagnostic instead of
   silently writing state or no-oping.
-- [ ] 3.5 Before arming the gate for materialized OpenSpec planning files,
+- [ ] 3.6 Before arming the gate for materialized OpenSpec planning files,
   validate blueprint-to-OpenSpec provenance by checking source plan, change id,
   artifact fingerprint, generated paths, and strict OpenSpec validation; rerun
   readiness reviewers on the materialized OpenSpec diff when provenance cannot
   be proven.
-- [ ] 3.6 Add `plan-review` tests for missing, stale, malformed, and blocking
-  readiness evidence at the planning commit boundary.
-- [ ] 3.7 Add migration tests proving `plan-ready` normal workflows no longer
+- [ ] 3.7 Add `plan-review` tests for missing, stale, malformed, blocking,
+  wrong-fingerprint, and materialized-provenance evidence failures at the
+  planning commit boundary.
+- [ ] 3.8 Add migration tests proving `plan-ready` normal workflows no longer
   write readiness review-gate state and `plan-review` writes it only at the
   planning commit boundary, including a rejected legacy activation-path test.
 
@@ -85,7 +97,7 @@
 - [ ] 5.2 Prove `plan-orchestrator` does not write review-gate state.
 - [ ] 5.3 Prove `plan-orchestrator` does not invent or recompute reviewer lists.
 - [ ] 5.4 Add tests for missing readiness evidence routing to `plan-ready` and
-  missing delivery evidence routing to `plan-unit-delivery`.
+  missing planning or delivery evidence routing to the owning phase.
 
 ## 6. Local Gate And Hosted Gate Separation
 
@@ -129,6 +141,9 @@
 - [ ] 8.4 Discover configured runtime profiles from `ax.config.json`, then run
   `pnpm ax update --all-profiles`.
 - [ ] 8.5 Add runtime-refresh completion evidence for installed surfaces by
-  recording the required `pnpm ax validate --all-profiles`,
-  `pnpm ax status --all-profiles`, and `pnpm ax hooks validate` results in the
-  delivery ledger or final stack evidence.
+  recording the required `pnpm ax validate --all-profiles` and
+  `pnpm ax status --all-profiles` results in the delivery ledger or final stack
+  evidence.
+- [ ] 8.6 Add hook validation completion evidence with
+  `pnpm ax hooks validate` only when hook source or hook registration behavior
+  changes in the implementation stack.

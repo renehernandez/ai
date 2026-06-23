@@ -50,7 +50,9 @@ produce evidence and `plan-review` owns readiness-to-planning-commit binding.
 `ax commit --require-review-gate -m "..."` is the workflow commit path. It
 fails when no active gate exists, then validates the gate against the staged
 diff before delegating to Git. Ordinary `ax commit -m "..."` keeps the existing
-no-gate allow path for non-workflow commits.
+no-gate allow path only when no active workflow-required gate exists. If an
+active workflow-required gate exists, ordinary `ax commit` fails with a
+diagnostic that names the owning workflow and gives the required-gate command.
 
 This avoids hidden heuristics based on branch names, changed files, commit
 messages, or marker files.
@@ -81,14 +83,30 @@ matches the reviewed staged diff before consuming the gate. If a pre-commit hook
 or commit-time index mutation causes the committed diff to diverge from the
 validated gate hash, `ax commit` must leave evidence unconsumed or mark it
 blocked, report the created commit SHA, and fail the command so the workflow
-does not treat that head as locally reviewed.
+does not treat that head as locally reviewed. The recovery output must require a
+human-controlled repair such as reverting or resetting the invalid commit before
+reviewers are rerun.
 
-For OpenSpec planning, `plan-review` must prove that materialized OpenSpec files
-come from the reviewed `openspec_blueprint` before arming the planning gate. The
-proof can be direct blueprint-to-change provenance validation using source plan,
-change id, artifact fingerprint, and generated path checks. If provenance cannot
-be proven, the workflow must rerun readiness reviewers against the materialized
-OpenSpec diff before committing.
+Gate validation and consumption must be atomic. Required-gate commit should use
+a repo/worktree-scoped lock or equivalent compare-and-consume transition, then
+re-read state under the lock before consumption. The consume step confirms the
+gate identity, staged diff hash, required reviewers, workflow, unit id, and
+worktree binding still match the pre-commit validation.
+
+Active gate state must include enough identity to reject linked-worktree or
+branch drift: Git common directory, worktree-specific Git directory or worktree
+path, branch or detached `HEAD` ref, pre-commit `HEAD` SHA, staged diff hash,
+owning workflow, and unit id. A gate armed in one linked worktree must not be
+consumable from another worktree that shares the same common Git directory.
+
+For OpenSpec planning, `plan-orchestrator` owns blueprint materialization and
+creates a `plan_review_request`. `plan-review` consumes that request, including
+explicit readiness reviewer evidence and OpenSpec provenance evidence, before
+arming the planning gate. The proof can be direct blueprint-to-change provenance
+validation using source plan, change id, artifact fingerprint, generated path
+checks, and strict OpenSpec validation. If provenance cannot be proven, the
+workflow must rerun readiness reviewers against the materialized OpenSpec diff
+before committing.
 
 Every head-changing commit owned by `plan-unit-delivery` for a selected unit is
 material for this workflow, including implementation edits, tests, OpenSpec task
@@ -113,7 +131,8 @@ planning and implementation MRs.
 - Dynamic reviewers can become noisy. Require explicit selection rationale and
   catalog validation.
 - Runtime profiles can lag source changes. Treat profile update, validation,
-  status, and hook validation as required delivery evidence.
+  and status as required delivery evidence. Run hook validation only if hook
+  source or hook registration behavior changes.
 
 ## Migration Plan
 
