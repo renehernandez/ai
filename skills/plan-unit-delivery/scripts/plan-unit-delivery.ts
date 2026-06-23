@@ -668,6 +668,7 @@ function buildPlanUnitDeliveryReviewGateInput(
     report,
     options.diffHash,
   );
+  assertRequiredReviewPassesPassed(requiredReviewPasses, results);
 
   return {
     workflow: "plan-unit-delivery",
@@ -723,6 +724,30 @@ function assertReviewerLaunchReportConsistent(
   if (errors.length > 0) {
     throw new Error(
       `Invalid reviewer launch/report pair:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+    );
+  }
+}
+
+function assertRequiredReviewPassesPassed(
+  requiredReviewPasses: string[],
+  results: Record<string, ReviewGateResultInput>,
+): void {
+  const missing = requiredReviewPasses.filter((reviewer) => !results[reviewer]);
+  const notPassed = requiredReviewPasses.filter(
+    (reviewer) => results[reviewer] && results[reviewer].status !== "passed",
+  );
+  const errors = [
+    ...missing.map(
+      (reviewer) => `missing outcome for required review pass: ${reviewer}`,
+    ),
+    ...notPassed.map(
+      (reviewer) => `required review pass must be passed: ${reviewer}`,
+    ),
+  ];
+
+  if (errors.length > 0) {
+    throw new Error(
+      `Invalid delivery review gate evidence:\n${errors.map((error) => `- ${error}`).join("\n")}`,
     );
   }
 }
