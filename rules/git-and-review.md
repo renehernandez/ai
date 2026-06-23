@@ -52,6 +52,11 @@ These rules cover Git, GitHub, GitLab, Linear, review routing, and external comm
 - Reviewers only see the final diff. Keep the description aligned to the current branch, not intermediate approaches or reverted work.
 - Do not narrate intermediate decisions, reverted approaches, or scoped-out work in the description unless there is a lasting consequence a reviewer needs to know, such as a follow-up issue or deliberate coverage gap.
 - The `Summary`, `Testing`, `Deployment Notes`, and `Review Notes` sections must describe the MR or PR as it currently stands.
+- Do not expose local private support artifact paths such as `~/.ax/plans/...`,
+  raw private support artifacts, or private thread metadata in MR or PR
+  descriptions by default. When support-artifact evidence is relevant, use
+  summaries, hashes, thread references, note IDs, discussion IDs, or stable
+  correlation IDs instead of local filesystem paths.
 - Use `glab mr update <IID> --description "..."` for GitLab and `gh pr edit <number> --body "..."` for GitHub.
 
 ## Creating Hosted Reviews from a Dirty Working Tree
