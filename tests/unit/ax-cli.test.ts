@@ -526,6 +526,25 @@ test("plans artifact identity prefers origin over selected artifact-host remote"
   });
 });
 
+test("plans artifact identity preserves remote URL ports", () => {
+  withTempDir((directory) => {
+    const targetRepo = createPlanArtifactTarget(directory);
+    git(targetRepo, [
+      "remote",
+      "set-url",
+      "origin",
+      "https://git.fullscript.io:8443/team/target-repo.git",
+    ]);
+
+    const identity = derivePlanArtifactIdentity({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+    });
+
+    assert.equal(identity.repoKey, "git.fullscript.io:8443/team/target-repo");
+  });
+});
+
 test("plans artifact identity requires origin or selected artifact-host remote", () => {
   withTempDir((directory) => {
     const targetRepo = createPlanArtifactTarget(directory);

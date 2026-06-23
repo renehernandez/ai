@@ -347,12 +347,12 @@ function repoKeyForTargetRoot(
   targetRoot: string,
   artifactRemoteName?: string,
 ): string {
-  const remoteName = gitRemoteUrlForRoot(targetRoot, "origin")
-    ? "origin"
-    : artifactRemoteName;
-  const remoteUrl = remoteName
-    ? gitRemoteUrlForRoot(targetRoot, remoteName)
-    : undefined;
+  const originUrl = gitRemoteUrlForRoot(targetRoot, "origin");
+  const remoteUrl =
+    originUrl ??
+    (artifactRemoteName
+      ? gitRemoteUrlForRoot(targetRoot, artifactRemoteName)
+      : undefined);
   if (!remoteUrl) {
     throw new Error(
       "Target repository has no origin fetch URL or selected artifact-host remote; provide a repo identity before recording plan artifacts.",
@@ -388,7 +388,10 @@ function canonicalRepoRemoteUrl(remoteUrl: string): string {
 
   try {
     const parsed = new URL(trimmed);
-    return `${parsed.hostname.toLowerCase()}/${normalizeRemotePath(parsed.pathname)}`;
+    const host = parsed.port
+      ? `${parsed.hostname.toLowerCase()}:${parsed.port}`
+      : parsed.hostname.toLowerCase();
+    return `${host}/${normalizeRemotePath(parsed.pathname)}`;
   } catch {
     return trimmed.toLowerCase();
   }
