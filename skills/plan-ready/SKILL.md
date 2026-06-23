@@ -150,6 +150,12 @@ openspec_blueprint:
       dependencies: []
   recommended_first_task: "1.1"
   review:
+    required_reviewers:
+      - implementation-readiness
+      - edge-cases-and-risks
+      - simplification-and-scope-control
+      - refactoring-opportunities
+    optional_reviewers: []
     reviewers_used:
       - implementation-readiness
       - edge-cases-and-risks
@@ -171,6 +177,11 @@ blueprint comes from a `.agents/plans/**` artifact, `source_plan.ref` and
 `source_plan.change_id` are the machine-readable cleanup authority that
 `plan-orchestrator` must pass as `--expected-source-plan` and
 `--expected-change-id` during source-plan cleanup.
+
+For `openspec_blueprint.review`, keep `required_reviewers` as the baseline
+reviewers required for readiness, put selected catalog reviewers in
+`optional_reviewers`, and preserve `reviewers_used` plus `findings` as the
+review execution summary.
 
 Legacy `slice_plan_review`, `reviewed_slices`,
 `plan_ready_handoff`, `plan_followthrough_slice_handoff`, and
