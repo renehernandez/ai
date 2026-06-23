@@ -783,9 +783,6 @@ function parseAxCommitArgs(args: string[]): {
       errors.push(`Unsupported ax commit mode: ${arg}`);
       continue;
     }
-    if (arg === REQUIRE_REVIEW_GATE_FLAG) {
-      continue;
-    }
     if (arg === "-m" || arg === "--message") {
       const message = args[index + 1];
       if (!message) {
