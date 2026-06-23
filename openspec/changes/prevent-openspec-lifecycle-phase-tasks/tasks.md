@@ -4,7 +4,7 @@
       planning workflow documentation, including deliverable-only tasks,
       lifecycle-phase blocking, documentation exceptions, validation exceptions,
       private support artifact boundaries, and `needs_spec_redesign`.
-- [ ] 1.2 Extend the existing OpenSpec task parser/classifier surface with one
+- [x] 1.2 Extend the existing OpenSpec task parser/classifier surface with one
       shared task-shape classifier and minimized AI repo regression fixtures for
       validation-only tasks, final documentation or validation groups,
       manual-looking proof tasks, valid deliverable tasks with embedded
