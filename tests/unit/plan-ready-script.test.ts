@@ -902,6 +902,32 @@ test("review-gate-input still emits readiness gate input without writing state",
   });
 });
 
+test("blueprint review-gate-input stays side-effect free for migration", () => {
+  withGitFixture((cwd) => {
+    const fingerprint = writeBlueprintSourcePlan(cwd);
+    const result = runPlanReadyInRepo(
+      "review-gate-input",
+      validBlueprint().replace("source-plan-fingerprint", fingerprint),
+      cwd,
+      ["--diff-hash", reviewGateDiffHash],
+    );
+    const output = JSON.parse(result.stdout);
+
+    assert.equal(result.status, 0);
+    assert.equal(output.workflow, "plan-ready");
+    assert.equal(output.sourceProvenance.phase, "plan-ready");
+    assert.deepEqual(output.requiredReviewPasses, BASELINE_REVIEWERS);
+    assert.equal(
+      existsSync(join(cwd, ".git", "ax", "review-gate.json")),
+      false,
+    );
+    assert.equal(
+      existsSync(join(cwd, ".git", "ax", "review-gate.invalidated.json")),
+      false,
+    );
+  });
+});
+
 test("validate-blueprint requires source plan ref", () => {
   const result = runPlanReady(
     "validate-blueprint",
