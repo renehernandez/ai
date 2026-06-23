@@ -60,7 +60,7 @@
   artifact fingerprint, generated paths, and strict OpenSpec validation; rerun
   readiness reviewers on the materialized OpenSpec diff when provenance cannot
   be proven.
-- [ ] 3.7 Add `plan-review` tests for missing, stale, malformed, blocking,
+- [x] 3.7 Add `plan-review` tests for missing, stale, malformed, blocking,
   wrong-fingerprint, and materialized-provenance evidence failures at the
   planning commit boundary.
 - [ ] 3.8 Add migration tests proving `plan-ready` normal workflows no longer

@@ -358,6 +358,115 @@ test("review-gate-input requires a diff hash value", () => {
   assert.equal(result.stdout, "");
 });
 
+test("review-gate-input rejects missing readiness artifact fingerprints", () => {
+  const result = runPlanReview(
+    "review-gate-input",
+    planReviewRequest.replace(
+      "    artifact_fingerprint: source-plan-fingerprint\n",
+      "",
+    ),
+    ["--diff-hash", reviewGateDiffHash],
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /readiness_reviewer_evidence\.artifact_fingerprint/,
+  );
+  assert.equal(result.stdout, "");
+});
+
+test("review-gate-input rejects readiness evidence outside the request", () => {
+  const detachedEvidenceRequest = `${planReviewRequest.replace(
+    / {2}readiness_reviewer_evidence:[\s\S]*?(?= {2}blueprint_provenance:)/,
+    "",
+  )}external_wrapper:
+  readiness_reviewer_evidence:
+    artifact_fingerprint: source-plan-fingerprint
+    completed_at: 2026-06-23T18:00:00.000Z
+    gate_outcome: passed
+    baseline_reviewers:
+      - implementation-readiness
+      - edge-cases-and-risks
+      - simplification-and-scope-control
+      - refactoring-opportunities
+    selected_dynamic_reviewers:
+      - docs-and-agent-alignment
+    per_reviewer_status:
+      implementation-readiness: passed
+      edge-cases-and-risks: passed
+      simplification-and-scope-control: passed
+      refactoring-opportunities: passed
+      docs-and-agent-alignment: passed
+    skipped_reviewers: []
+    skipped_rationale: []
+    blocking_findings: []
+`;
+
+  const result = runPlanReview("review-gate-input", detachedEvidenceRequest, [
+    "--diff-hash",
+    reviewGateDiffHash,
+  ]);
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /readiness_reviewer_evidence is required/);
+  assert.equal(result.stdout, "");
+});
+
+test("review-gate-input rejects malformed readiness timestamps", () => {
+  const result = runPlanReview(
+    "review-gate-input",
+    planReviewRequest.replace(
+      "    completed_at: 2026-06-23T18:00:00.000Z",
+      "    completed_at: yesterday",
+    ),
+    ["--diff-hash", reviewGateDiffHash],
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /readiness_reviewer_evidence\.completed_at must be an ISO-8601 UTC timestamp/,
+  );
+  assert.equal(result.stdout, "");
+});
+
+test("review-gate-input rejects blocking readiness reviewer statuses", () => {
+  const result = runPlanReview(
+    "review-gate-input",
+    planReviewRequest.replace(
+      "      edge-cases-and-risks: passed",
+      "      edge-cases-and-risks: blocked",
+    ),
+    ["--diff-hash", reviewGateDiffHash],
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /readiness_reviewer_evidence\.per_reviewer_status\.edge-cases-and-risks must be passed/,
+  );
+  assert.equal(result.stdout, "");
+});
+
+test("review-gate-input rejects readiness blocking findings", () => {
+  const result = runPlanReview(
+    "review-gate-input",
+    planReviewRequest.replace(
+      "    blocking_findings: []",
+      "    blocking_findings:\n      - reviewer found a blocker",
+    ),
+    ["--diff-hash", reviewGateDiffHash],
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /readiness_reviewer_evidence\.blocking_findings must be empty/,
+  );
+  assert.equal(result.stdout, "");
+});
+
 test("commit-planning activates review gate and invokes required-gate ax commit", () => {
   const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
   try {
@@ -779,6 +888,118 @@ test("commit-planning requires blueprint provenance as a direct request child", 
   }
 });
 
+test("commit-planning rejects non-blueprint materialized OpenSpec provenance", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
+  try {
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.com"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
+    runGit(directory, ["add", "README.md"]);
+    runGit(directory, ["commit", "-m", "initial"]);
+    mkdirSync(join(directory, "openspec", "changes", "example-change"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "proposal.md"),
+      "planning\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "tasks.md"),
+      "- [ ] 1. Implement\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "openspec"]);
+
+    const result = runPlanReview(
+      "commit-planning",
+      planReviewRequest.replace(
+        "    source: openspec_blueprint",
+        "    source: copied_open_spec",
+      ),
+      [
+        "--cwd",
+        directory,
+        "--message",
+        "Commit planning",
+        "--ax-command",
+        join(directory, "missing-fake-ax"),
+      ],
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /blueprint_provenance\.source must be openspec_blueprint/,
+    );
+    assert.equal(
+      existsSync(join(directory, ".git", "ax", "review-gate.json")),
+      false,
+    );
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+test("commit-planning rejects mismatched materialized OpenSpec change identity", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
+  try {
+    runGit(directory, ["init"]);
+    runGit(directory, ["config", "user.email", "test@example.com"]);
+    runGit(directory, ["config", "user.name", "Test User"]);
+    writeFileSync(join(directory, "README.md"), "hello\n", "utf8");
+    runGit(directory, ["add", "README.md"]);
+    runGit(directory, ["commit", "-m", "initial"]);
+    mkdirSync(join(directory, "openspec", "changes", "example-change"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "proposal.md"),
+      "planning\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(directory, "openspec", "changes", "example-change", "tasks.md"),
+      "- [ ] 1. Implement\n",
+      "utf8",
+    );
+    runGit(directory, ["add", "openspec"]);
+
+    const result = runPlanReview(
+      "commit-planning",
+      planReviewRequest.replace(
+        "      change_id: example-change\n      ref: openspec/changes/example-change",
+        "      change_id: other-change\n      ref: openspec/changes/other-change",
+      ),
+      [
+        "--cwd",
+        directory,
+        "--message",
+        "Commit planning",
+        "--ax-command",
+        join(directory, "missing-fake-ax"),
+      ],
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /blueprint_provenance\.generated_change\.ref must match artifact_ref/,
+    );
+    assert.match(
+      result.stderr,
+      /blueprint_provenance source_plan\.change_id, generated_change\.change_id, and artifact_ref change id must match/,
+    );
+    assert.equal(
+      existsSync(join(directory, ".git", "ax", "review-gate.json")),
+      false,
+    );
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
 test("commit-planning requires generated OpenSpec paths in blueprint provenance", () => {
   const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
   try {
@@ -806,7 +1027,7 @@ test("commit-planning requires generated OpenSpec paths in blueprint provenance"
     const result = runPlanReview(
       "commit-planning",
       planReviewRequest.replace(
-        /      generated_paths:\n        - openspec\/changes\/example-change\/proposal\.md\n        - openspec\/changes\/example-change\/tasks\.md/,
+        / {6}generated_paths:\n {8}- openspec\/changes\/example-change\/proposal\.md\n {8}- openspec\/changes\/example-change\/tasks\.md/,
         "      generated_paths: []",
       ),
       [

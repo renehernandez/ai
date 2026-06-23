@@ -92,11 +92,27 @@ export function findSection(input: string, sectionName: string): string | null {
     return null;
   }
 
-  return lines
-    .slice(start + 1)
-    .filter((line) => line.startsWith(" ") || line.trim() === "")
-    .map((line) => line.replace(/^ {2}/, ""))
-    .join("\n");
+  const sectionIndent = lines[start].match(/^(\s*)/)?.[1].length ?? 0;
+  const childIndent = sectionIndent + 2;
+  const values: string[] = [];
+
+  for (const line of lines.slice(start + 1)) {
+    if (line.trim() === "") {
+      values.push("");
+      continue;
+    }
+
+    const indent = line.match(/^(\s*)/)?.[1].length ?? 0;
+    if (indent <= sectionIndent) {
+      break;
+    }
+
+    values.push(
+      line.startsWith(" ".repeat(childIndent)) ? line.slice(childIndent) : line,
+    );
+  }
+
+  return values.join("\n");
 }
 
 export function hasSection(input: string, sectionName: string): boolean {
