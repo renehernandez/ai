@@ -161,6 +161,12 @@ test("audit returns needs_spec_redesign for lifecycle-only task shapes", () => {
   );
 
   assert.notEqual(result.status, 0);
+  const parsed = JSON.parse(result.stdout);
+
+  assert.equal(parsed.status, "needs_spec_redesign");
+  assert.equal(parsed.next_action, "ask_user_for_redesign_direction");
+  assert.equal(parsed.invalid_tasks[0].id, "2.1");
+  assert.equal(parsed.invalid_tasks[0].reason, "lifecycle_phase_group");
   assert.match(result.stderr, /needs_spec_redesign/);
   assert.match(result.stderr, /lifecycle_phase_group/);
 });
@@ -219,8 +225,30 @@ test("audit rejects manual-looking validation evidence tasks", () => {
   );
 
   assert.notEqual(result.status, 0);
+  const parsed = JSON.parse(result.stdout);
+
+  assert.equal(parsed.status, "needs_spec_redesign");
+  assert.equal(parsed.invalid_tasks[0].reason, "proof_only_task");
   assert.match(result.stderr, /needs_spec_redesign/);
   assert.match(result.stderr, /proof_only_task/);
+});
+
+test("audit emits structured invalid output for non-redesign task errors", () => {
+  const result = runOpenSpecTasks(
+    "audit",
+    `# Tasks
+
+- [ ] 1.1 Implement parser and delivery and PR workflow
+`,
+  );
+
+  assert.notEqual(result.status, 0);
+  const parsed = JSON.parse(result.stdout);
+
+  assert.equal(parsed.status, "invalid");
+  assert.equal(parsed.next_action, "fix_tasks");
+  assert.deepEqual(parsed.invalid_tasks, []);
+  assert.match(result.stderr, /task 1\.1 must be under a numbered heading/);
 });
 
 test("audit rejects common lifecycle heading variants", () => {

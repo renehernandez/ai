@@ -218,6 +218,31 @@ function auditTasks(tasks: OpenSpecTask[]): void {
   const nextTask = firstUncheckedDeliverable(tasks);
 
   if (errors.length > 0) {
+    const invalidTasks = tasks
+      .filter((task) => task.kind === "needs_spec_redesign")
+      .map((task) => ({
+        id: task.id,
+        title: task.title,
+        line: task.line,
+        heading: task.heading,
+        reason: task.shape_reason ?? "not a deliverable implementation unit",
+      }));
+    const status = invalidTasks.length > 0 ? "needs_spec_redesign" : "invalid";
+    console.log(
+      JSON.stringify(
+        {
+          status,
+          errors,
+          invalid_tasks: invalidTasks,
+          next_action:
+            status === "needs_spec_redesign"
+              ? "ask_user_for_redesign_direction"
+              : "fix_tasks",
+        },
+        null,
+        2,
+      ),
+    );
     console.error(
       `Invalid openspec_tasks:\n${errors.map((error) => `- ${error}`).join("\n")}`,
     );

@@ -57,7 +57,10 @@ No tags, schema extensions, or hidden state are added.
 3. Run `scripts/openspec-tasks.ts audit <tasks.md>`.
 4. Block when a checkbox is too broad, lacks a heading, duplicates an ID, or
    hides multiple reviewable deliverables.
-5. Classify manual, deployment, monitoring, and external-prerequisite tasks so
+5. If the audit returns `status: needs_spec_redesign`, stop and ask the user
+   whether to redo the spec, brainstorm a better breakdown, narrow the change,
+   or choose another planning route. Do not rewrite `tasks.md` automatically.
+6. Classify manual, deployment, monitoring, and external-prerequisite tasks so
    `plan-unit-sequencer` pauses with `needs_human_action` instead of sending them
    to `plan-unit-delivery`.
 
@@ -77,6 +80,26 @@ The audit command emits:
     "kind": "deliverable"
   },
   "manual_pending": []
+}
+```
+
+For lifecycle-only, validation-only, proof-only, or manual-looking proof task
+lists, failed audits also emit structured output before exiting non-zero:
+
+```json
+{
+  "status": "needs_spec_redesign",
+  "errors": ["needs_spec_redesign: task 2.1 is lifecycle_phase_group"],
+  "invalid_tasks": [
+    {
+      "id": "2.1",
+      "title": "Update user-facing docs",
+      "line": 8,
+      "heading": "2. Documentation Updates",
+      "reason": "lifecycle_phase_group"
+    }
+  ],
+  "next_action": "ask_user_for_redesign_direction"
 }
 ```
 
