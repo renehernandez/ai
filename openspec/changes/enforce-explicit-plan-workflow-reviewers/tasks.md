@@ -42,7 +42,9 @@
 - [ ] 3.3 Call required-gate `ax commit` mode for planning workflow commits.
 - [ ] 3.4 Migrate normal readiness-gate activation ownership out of `plan-ready`
   so `plan-ready` emits and validates readiness evidence while `plan-review`
-  owns readiness-to-planning-commit gate binding.
+  owns readiness-to-planning-commit gate binding; legacy `plan-ready` activation
+  callers are rejected with a route-to-`plan-review` diagnostic instead of
+  silently writing state or no-oping.
 - [ ] 3.5 Before arming the gate for materialized OpenSpec planning files,
   validate blueprint-to-OpenSpec provenance by checking source plan, change id,
   artifact fingerprint, generated paths, and strict OpenSpec validation; rerun
@@ -52,7 +54,7 @@
   readiness evidence at the planning commit boundary.
 - [ ] 3.7 Add migration tests proving `plan-ready` normal workflows no longer
   write readiness review-gate state and `plan-review` writes it only at the
-  planning commit boundary.
+  planning commit boundary, including a rejected legacy activation-path test.
 
 ## 4. Implementation Commit Boundary
 

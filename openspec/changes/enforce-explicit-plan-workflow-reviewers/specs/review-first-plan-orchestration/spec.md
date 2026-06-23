@@ -57,6 +57,14 @@ the staged planning diff before committing planning artifacts.
   state, commit, or publish the planning branch
 - **AND** `plan-review` remains the planning commit owner
 
+#### Scenario: Legacy plan-ready gate activation is retired
+- **WHEN** an existing caller attempts to use `plan-ready` as the
+  readiness-to-planning-commit gate writer
+- **THEN** the workflow rejects that path with a diagnostic that routes the
+  caller to `plan-review`
+- **AND** the retired path does not silently write active readiness review-gate
+  state, no-op, or commit planning artifacts
+
 ### Requirement: Implementation Commit Reviewer Gate
 The system SHALL make `plan-unit-delivery` require fresh explicit reviewer
 evidence for each material implementation commit.

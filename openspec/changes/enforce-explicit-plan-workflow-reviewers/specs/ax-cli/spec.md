@@ -4,12 +4,12 @@
 The system SHALL provide an explicit `ax commit` mode for workflow phases that
 requires an active fresh local review gate.
 
-#### Scenario: Existing commit validation splits into explicit modes
+#### Scenario: Required-gate mode adds strict workflow path
 - **WHEN** the required-gate commit mode is implemented
-- **THEN** unconditional review-gate validation in ordinary `ax commit` is split
-  into explicit required-gate validation and ordinary wrapper commit behavior
-- **AND** existing ordinary `ax commit` calls are not blocked solely because no
-  active local review gate exists
+- **THEN** existing ordinary `ax commit` calls keep their no-gate allow behavior
+  when no active local review gate exists
+- **AND** workflow phases that require local reviewer evidence use the explicit
+  required-gate path instead of relying on ordinary commit behavior
 
 #### Scenario: Required-gate commit blocks missing gate
 - **WHEN** a workflow phase invokes required-gate `ax commit`
