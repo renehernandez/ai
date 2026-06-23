@@ -41,7 +41,7 @@
 - [x] 3.4 Update hosted review guidance so MR/PR descriptions use summaries,
       hashes, thread references, or stable correlation IDs and do not expose
       local `~/.ax/plans/...` paths by default.
-- [ ] 3.5 Run `writing-skills` review or validation against the changed planning
+- [x] 3.5 Run `writing-skills` review or validation against the changed planning
       and AX CLI skill behavior, then address blocking findings.
 
 ## 4. Runtime Refresh And Verification
