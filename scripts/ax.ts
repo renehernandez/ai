@@ -47,6 +47,10 @@ type ShimCommand = "install" | "status" | "uninstall";
 
 const REQUIRE_REVIEW_GATE_FLAG = "--require-review-gate";
 
+type CommitOptions = {
+  requireReviewGate?: boolean;
+};
+
 type RemoteSkillSource = {
   url: string;
   ref: string;
@@ -704,7 +708,7 @@ function addCommitCommand(program: Command): void {
     .allowUnknownOption(true)
     .allowExcessArguments(true)
     .argument("[args...]", "Supported git commit arguments")
-    .action((args: string[]) => {
+    .action((args: string[], options: CommitOptions) => {
       const parsed = parseAxCommitArgs(args);
       if (parsed.errors.length > 0) {
         for (const error of parsed.errors) {
@@ -735,6 +739,11 @@ function addCommitCommand(program: Command): void {
         process.exitCode = 1;
         return;
       }
+      if (options.requireReviewGate === true && !validation.active) {
+        process.stderr.write(formatRequiredReviewGateMissing(validation));
+        process.exitCode = 1;
+        return;
+      }
       const result = spawnSync("git", ["commit", ...parsed.gitArgs], {
         cwd: process.cwd(),
         encoding: "utf-8",
@@ -743,6 +752,18 @@ function addCommitCommand(program: Command): void {
       });
       process.exitCode = result.status ?? 1;
     });
+}
+
+function formatRequiredReviewGateMissing(
+  validation: ReturnType<typeof validateReviewGateForCommit>,
+): string {
+  const status = formatReviewGateStatus(
+    { ...validation, note: undefined },
+    {
+      next: `next: run required local reviews, activate the review gate, then retry ax commit ${REQUIRE_REVIEW_GATE_FLAG}`,
+    },
+  );
+  return `${status}${REQUIRE_REVIEW_GATE_FLAG} requires an active fresh review gate for this staged diff.\n`;
 }
 
 function parseAxCommitArgs(args: string[]): {

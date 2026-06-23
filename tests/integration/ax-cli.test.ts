@@ -906,8 +906,8 @@ test("ax commit delegates normal staged commits after review-gate validation", (
   }
 });
 
-test("ax commit accepts required review-gate mode as a workflow flag", () => {
-  const cwd = createGitFixture("ax-commit-required-gate-flag-");
+test("ax commit required review-gate mode fails without an active gate", () => {
+  const cwd = createGitFixture("ax-commit-required-gate-missing-");
   try {
     writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
     runGit(["add", "file.txt"], { cwd });
@@ -919,11 +919,58 @@ test("ax commit accepts required review-gate mode as a workflow flag", () => {
       },
     );
 
-    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /--require-review-gate requires an active fresh review gate/,
+    );
+    assert.match(
+      result.stderr,
+      /next: run required local reviews, activate the review gate, then retry ax commit --require-review-gate/,
+    );
+    assert.doesNotMatch(result.stderr, /allowing commit/);
     assert.doesNotMatch(
       result.stderr,
       /unknown option|Unsupported ax commit option|Pathspec commits are not supported/i,
     );
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("ax commit required review-gate mode delegates with an active fresh gate", () => {
+  const cwd = createGitFixture("ax-commit-required-gate-active-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+    const hash = stagedHash(cwd);
+    writeReviewGateState(cwd, {
+      version: 1,
+      active: true,
+      workflow: "plan-unit-delivery",
+      sourceProvenance: {
+        kind: "plan_delivery_handoff",
+        ref: "/tmp/example-handoff.yaml",
+      },
+      stagedDiffHash: hash,
+      requiredReviewPasses: ["implementation-review"],
+      results: {
+        "implementation-review": {
+          status: "passed",
+          diffHash: hash,
+        },
+      },
+      blockingFindings: [],
+    });
+
+    const result = runAgentRuntime(
+      ["commit", "--require-review-gate", "-m", "add fixture file"],
+      {
+        cwd,
+      },
+    );
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.equal(
       runGit(["log", "-1", "--pretty=%s"], { cwd }),
       "add fixture file",
