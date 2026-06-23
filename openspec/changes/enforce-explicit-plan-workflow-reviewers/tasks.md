@@ -42,7 +42,7 @@
 
 ## 3. Planning Commit Boundary
 
-- [ ] 3.1 Update `plan-orchestrator` plan-review request creation so
+- [x] 3.1 Update `plan-orchestrator` plan-review request creation so
   `plan_review_request` carries explicit readiness reviewer evidence and, for
   materialized OpenSpec changes, blueprint provenance evidence.
 - [ ] 3.2 Update `plan-review` to accept and validate readiness reviewer
