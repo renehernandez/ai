@@ -35,6 +35,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { Command } from "commander";
 import ts from "typescript";
 import {
+  consumeReviewGate,
   formatReviewGateStatus,
   hasStagedDiff,
   type ReviewGateValidation,
@@ -756,6 +757,22 @@ function addCommitCommand(program: Command): void {
         env: withoutGitRepositoryEnv(),
         stdio: "inherit",
       });
+      if (result.status === 0 && options.requireReviewGate === true) {
+        try {
+          const consumed = consumeReviewGate(process.cwd());
+          if (!consumed.consumed) {
+            process.stderr.write(
+              `warning: committed successfully but review gate was not consumed: ${consumed.note ?? "review gate is inactive"}\n`,
+            );
+          }
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          process.stderr.write(
+            `warning: committed successfully but failed to consume review gate: ${message.split(/\r?\n/, 1)[0]}\n`,
+          );
+        }
+      }
       process.exitCode = result.status ?? 1;
     });
 }
