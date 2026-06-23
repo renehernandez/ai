@@ -21,7 +21,7 @@
 - [x] 2.1 Add a private `skills/plan-ready/scripts/plan-ready.ts` command or
   helper that maps validated `plan_delivery_handoff` and `openspec_blueprint`
   reviewer evidence into the shared `scripts/review-gate.ts` API input shape.
-- [ ] 2.2 Promote selected optional reviewers into required gate passes for the
+- [x] 2.2 Promote selected optional reviewers into required gate passes for the
   current readiness run and record phase provenance in the active gate.
 - [ ] 2.3 Make `plan-ready` fail closed before readiness commits when required
   subagents are unavailable, reviewer evidence is partial, reviewer evidence is

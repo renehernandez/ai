@@ -50,6 +50,7 @@ const OPTIONAL_REVIEWER_DESCRIPTIONS = {
 const OPTIONAL_REVIEWERS = Object.keys(OPTIONAL_REVIEWER_DESCRIPTIONS) as Array<
   keyof typeof OPTIONAL_REVIEWER_DESCRIPTIONS
 >;
+const PLAN_READY_REVIEW_PHASE = "plan-ready";
 const ARTIFACT_TYPES = ["plan", "openspec", "linear"] as const;
 const ROUTES = ["atomic_plan", "openspec_task"] as const;
 const EXPECTED_HOSTS = ["github_pr", "gitlab_mr"] as const;
@@ -496,6 +497,11 @@ function handoffReviewGateInput(
   handoff: ParsedHandoff,
   options: ReviewGateInputOptions,
 ): ActiveReviewGateInput {
+  const requiredReviewPasses = readinessReviewers(
+    handoff.required_reviewers,
+    handoff.optional_reviewers,
+  );
+
   return {
     workflow: "plan-ready",
     unit: {
@@ -505,13 +511,11 @@ function handoffReviewGateInput(
     sourceProvenance: {
       kind: "plan_delivery_handoff",
       ref: handoff.artifact_ref ?? options.fallbackRef ?? "unknown",
+      phase: PLAN_READY_REVIEW_PHASE,
       evidence: sourceEvidence(options),
     },
-    requiredReviewPasses: baselineReviewers(handoff.required_reviewers),
-    results: reviewerResults(
-      baselineReviewers(handoff.required_reviewers),
-      options.diffHash,
-    ),
+    requiredReviewPasses,
+    results: reviewerResults(requiredReviewPasses, options.diffHash),
     blockingFindings: handoff.blockers,
   };
 }
@@ -520,6 +524,11 @@ function blueprintReviewGateInput(
   blueprint: ParsedBlueprint,
   options: ReviewGateInputOptions,
 ): ActiveReviewGateInput {
+  const requiredReviewPasses = readinessReviewers(
+    blueprint.required_reviewers,
+    blueprint.optional_reviewers,
+  );
+
   return {
     workflow: "plan-ready",
     unit: {
@@ -529,19 +538,35 @@ function blueprintReviewGateInput(
     sourceProvenance: {
       kind: "openspec_blueprint",
       ref: blueprint.source_plan_ref ?? options.fallbackRef ?? "unknown",
+      phase: PLAN_READY_REVIEW_PHASE,
       evidence: sourceEvidence(options),
     },
-    requiredReviewPasses: baselineReviewers(blueprint.required_reviewers),
-    results: reviewerResults(
-      baselineReviewers(blueprint.required_reviewers),
-      options.diffHash,
-    ),
+    requiredReviewPasses,
+    results: reviewerResults(requiredReviewPasses, options.diffHash),
     blockingFindings: blueprint.blockers,
   };
 }
 
+function readinessReviewers(
+  requiredReviewers: string[],
+  ...optionalReviewerSources: string[][]
+): string[] {
+  return unique([
+    ...baselineReviewers(requiredReviewers),
+    ...optionalReviewerSources.flatMap(optionalReviewers),
+  ]);
+}
+
 function baselineReviewers(reviewers: string[]): string[] {
   return reviewers.filter((reviewer) => includes(BASELINE_REVIEWERS, reviewer));
+}
+
+function optionalReviewers(reviewers: string[]): string[] {
+  return reviewers.filter((reviewer) => includes(OPTIONAL_REVIEWERS, reviewer));
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values)];
 }
 
 function reviewerResults(

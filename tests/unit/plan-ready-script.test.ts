@@ -332,6 +332,7 @@ test("review-gate-input maps a validated handoff to active gate input", () => {
     assert.equal(output.unit.title, "Example atomic unit");
     assert.equal(output.sourceProvenance.kind, "plan_delivery_handoff");
     assert.equal(output.sourceProvenance.ref, artifactRef);
+    assert.equal(output.sourceProvenance.phase, "plan-ready");
     assert.deepEqual(output.sourceProvenance.evidence, ["handoff.yaml"]);
     assert.deepEqual(output.requiredReviewPasses, [
       "implementation-readiness",
@@ -348,7 +349,7 @@ test("review-gate-input maps a validated handoff to active gate input", () => {
   });
 });
 
-test("review-gate-input does not promote handoff optional reviewers before activation", () => {
+test("review-gate-input promotes handoff optional reviewers", () => {
   withTempPlan(({ artifactRef, fingerprint }) => {
     const handoff = validHandoff(artifactRef, fingerprint).replace(
       "    optional_reviewers: []",
@@ -366,8 +367,13 @@ test("review-gate-input does not promote handoff optional reviewers before activ
       "edge-cases-and-risks",
       "simplification-and-scope-control",
       "refactoring-opportunities",
+      "docs-and-agent-alignment",
     ]);
-    assert.equal(output.results["docs-and-agent-alignment"], undefined);
+    assert.equal(output.results["docs-and-agent-alignment"].status, "passed");
+    assert.equal(
+      output.results["docs-and-agent-alignment"].diffHash,
+      reviewGateDiffHash,
+    );
   });
 });
 
@@ -435,6 +441,7 @@ test("review-gate-input maps a validated blueprint to active gate input", () => 
   assert.equal(output.unit.title, "Add PlanReady OpenSpec blueprints");
   assert.equal(output.sourceProvenance.kind, "openspec_blueprint");
   assert.equal(output.sourceProvenance.ref, ".agents/plans/example.md");
+  assert.equal(output.sourceProvenance.phase, "plan-ready");
   assert.deepEqual(output.sourceProvenance.evidence, ["blueprint.yaml"]);
   assert.deepEqual(output.requiredReviewPasses, [
     "implementation-readiness",
@@ -448,6 +455,34 @@ test("review-gate-input maps a validated blueprint to active gate input", () => 
   );
   assert.equal(output.results["edge-cases-and-risks"].status, "passed");
   assert.deepEqual(output.blockingFindings, []);
+});
+
+test("review-gate-input promotes only blueprint selected optional reviewers", () => {
+  const blueprint = validBlueprint()
+    .replace(
+      "    optional_reviewers: []\n    reviewers_used:",
+      "    optional_reviewers:\n      - docs-and-agent-alignment\n    reviewers_used:",
+    )
+    .replace(
+      "      - refactoring-opportunities\n    findings:",
+      "      - refactoring-opportunities\n      - ax-and-skill-compatibility\n    findings:",
+    );
+  const result = runPlanReady("review-gate-input", blueprint, [
+    "--diff-hash",
+    reviewGateDiffHash,
+  ]);
+  const output = JSON.parse(result.stdout);
+
+  assert.equal(result.status, 0);
+  assert.deepEqual(output.requiredReviewPasses, [
+    "implementation-readiness",
+    "edge-cases-and-risks",
+    "simplification-and-scope-control",
+    "refactoring-opportunities",
+    "docs-and-agent-alignment",
+  ]);
+  assert.equal(output.results["docs-and-agent-alignment"].status, "passed");
+  assert.equal(output.results["ax-and-skill-compatibility"], undefined);
 });
 
 test("review-gate-input rejects partial blueprints before mapping", () => {

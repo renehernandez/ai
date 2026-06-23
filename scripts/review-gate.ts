@@ -25,6 +25,7 @@ export type ReviewGateStatus = "active" | "consumed" | "cleared";
 export type ReviewGateSourceProvenance = {
   kind: string;
   ref: string;
+  phase?: string;
   evidence?: string[];
 };
 
@@ -557,6 +558,12 @@ function validateSourceProvenance(value: unknown, errors: string[]): void {
   }
   if (typeof value.ref !== "string" || value.ref.length === 0) {
     errors.push("sourceProvenance.ref must be a non-empty string.");
+  }
+  if (
+    hasOwn(value, "phase") &&
+    (typeof value.phase !== "string" || value.phase.length === 0)
+  ) {
+    errors.push("sourceProvenance.phase must be a non-empty string.");
   }
   if (hasOwn(value, "evidence")) {
     if (!Array.isArray(value.evidence)) {
