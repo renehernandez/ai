@@ -66,7 +66,7 @@
 - [x] 3.7 Add `plan-review` tests for missing, stale, malformed, blocking,
   wrong-fingerprint, and materialized-provenance evidence failures at the
   planning commit boundary.
-- [ ] 3.8 Add migration tests proving `plan-ready` normal workflows no longer
+- [x] 3.8 Add migration tests proving `plan-ready` normal workflows no longer
   write readiness review-gate state and `plan-review` writes it only at the
   planning commit boundary, including a rejected legacy activation-path test.
 
