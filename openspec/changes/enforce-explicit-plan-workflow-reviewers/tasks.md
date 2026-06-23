@@ -53,7 +53,7 @@
 - [x] 3.3 Bind readiness evidence to the current staged planning diff before
   arming the local review gate.
 - [x] 3.4 Call required-gate `ax commit` mode for planning workflow commits.
-- [ ] 3.5 Migrate normal readiness-gate activation ownership out of `plan-ready`
+- [x] 3.5 Migrate normal readiness-gate activation ownership out of `plan-ready`
   so `plan-ready` emits and validates readiness evidence while `plan-review`
   owns readiness-to-planning-commit gate binding; legacy `plan-ready` activation
   callers are rejected with a route-to-`plan-review` diagnostic instead of
