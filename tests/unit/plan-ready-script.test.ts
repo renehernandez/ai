@@ -120,6 +120,26 @@ function withReviewerResultsFile(
   callback(path);
 }
 
+function writeReviewerResultsFile(
+  cwd: string,
+  reviewerResults: Array<Record<string, string>>,
+): string {
+  const path = join(cwd, "reviewer-results.json");
+  writeFileSync(
+    path,
+    `${JSON.stringify(
+      {
+        reviewer_results: reviewerResults,
+        blocking_findings: [],
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  return path;
+}
+
 function runPlanReady(
   command: string,
   content: string,
@@ -762,6 +782,42 @@ test("activate-review-gate fails closed when reviewer evidence is missing", () =
       assert.equal(state.active, true);
       assert.deepEqual(state.requiredReviewPasses, ["plan-ready-readiness"]);
       assert.equal(state.results["plan-ready-readiness"].status, "blocked");
+    });
+  });
+});
+
+test("activate-review-gate rejects duplicate reviewer evidence", () => {
+  withTempPlan(({ artifactRef, fingerprint }) => {
+    withGitFixture((cwd) => {
+      writeFileSync(join(cwd, "file.txt"), "duplicate\n", "utf8");
+      git(cwd, ["add", "file.txt"]);
+      const diffHash = stagedDiffHashFor(cwd);
+      const resultsPath = writeReviewerResultsFile(cwd, [
+        ...BASELINE_REVIEWERS.map((reviewer) => ({
+          reviewer,
+          status: "passed",
+          diff_hash: diffHash,
+          summary: `${reviewer} passed.`,
+        })),
+        {
+          reviewer: "implementation-readiness",
+          status: "blocked",
+          diff_hash: diffHash,
+          summary: "duplicate conflicting result",
+        },
+      ]);
+
+      const result = runPlanReadyInRepo(
+        "activate-review-gate",
+        validHandoff(artifactRef, fingerprint),
+        cwd,
+        ["--review-results-file", resultsPath],
+      );
+      const output = JSON.parse(result.stdout);
+
+      assert.notEqual(result.status, 0);
+      assert.equal(output.status, "blocked");
+      assert.match(output.blockers.join("\n"), /duplicate reviewer/);
     });
   });
 });

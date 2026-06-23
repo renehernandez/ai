@@ -550,7 +550,7 @@ function activateReviewGate(args: string[]): void {
     const writeResult = writeActiveReviewGate(reviewGateInput, cwd);
     const validation = validateReviewGateForCommit(cwd);
     if (!validation.ok) {
-      emitBlockedReviewGate(validation.errors, validation);
+      emitBlockedReviewGate(validation.errors, validation, cwd, diffHash);
     }
 
     console.log(
@@ -685,6 +685,11 @@ function readReviewerEvidence(
     if (itemDiffHash !== diffHash) {
       throw new Error(
         `reviewer_results.${reviewer}.diff_hash is stale for current staged diff`,
+      );
+    }
+    if (results[reviewer]) {
+      throw new Error(
+        `reviewer_results contains duplicate reviewer: ${reviewer}`,
       );
     }
     results[reviewer] = {
