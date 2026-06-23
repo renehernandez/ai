@@ -646,7 +646,19 @@ function acquirePlanArtifactWriteLock(workspacePath: string): () => void {
       ) {
         throw error;
       }
-      const stats = lstatSync(lockPath);
+      let stats: ReturnType<typeof lstatSync>;
+      try {
+        stats = lstatSync(lockPath);
+      } catch (statError) {
+        if (
+          statError instanceof Error &&
+          "code" in statError &&
+          statError.code === "ENOENT"
+        ) {
+          continue;
+        }
+        throw statError;
+      }
       if (stats.isSymbolicLink() || !stats.isDirectory()) {
         throw new Error(
           `Private plan artifact lock path is not a directory: ${lockPath}`,
