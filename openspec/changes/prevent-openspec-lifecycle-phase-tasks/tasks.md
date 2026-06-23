@@ -30,7 +30,7 @@
 - [x] 3.2 Update `plan-review` documentation, adapter prompt, and validation
       helpers so OpenSpec planning-review publication runs the task-shape audit
       and blocks planning MRs or PRs on `needs_spec_redesign`.
-- [ ] 3.3 Update `plan-orchestrator`, `plan-unit-sequencer`, their adapter
+- [x] 3.3 Update `plan-orchestrator`, `plan-unit-sequencer`, their adapter
       prompts, and any shared stack validation helpers so delivery sequencing
       refuses validation-only tasks and lifecycle-phase cleanup tasks if they
       slip through earlier.

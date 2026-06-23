@@ -102,6 +102,10 @@ The resume state must account for:
 - stack-tip `tasks.md` fingerprint;
 - concrete stack-tip `tasks.md` content and task-to-artifact evidence for
   checked deliverables;
+- no lifecycle-only, validation-only, proof-only, or manual-looking proof task
+  shapes in stack-tip `tasks.md`; if validation reports `needs_spec_redesign`,
+  stop and ask the user whether to redo the spec, brainstorm, narrow scope, or
+  choose another route before continuing delivery;
 - predecessor artifact, task-delta validation, and cumulative task-state
   evidence for every implementation artifact;
 - restack requirements and evidence.
@@ -123,7 +127,8 @@ Finish with `stack_ready` only after:
 - the planning MR and every implementation MR have latest-head Nitro gate
   outcome `passed`;
 - stack base/head relationships are valid;
-- stack-tip task state has all deliverable tasks checked;
+- stack-tip task state has all deliverable tasks checked and no invalid
+  lifecycle/proof-only task shapes;
 - `restack_required` is `false`.
 
 Validate the final result with `scripts/plan-orchestrator.ts

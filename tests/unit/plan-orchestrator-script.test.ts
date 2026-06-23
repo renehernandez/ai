@@ -681,6 +681,20 @@ test("validate-resume blocks resume-ready with invalid cumulative task state", (
   );
 });
 
+test("validate-resume blocks lifecycle or proof-only task shapes", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport.replace(
+      "- [ ] 1.2 Future deliverable",
+      "- [ ] 1.2 Run validation checks",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /needs_spec_redesign/);
+  assert.match(result.stderr, /ask the user whether to redo the spec/);
+});
+
 test("validate-resume blocks implementation entries without predecessor artifacts", () => {
   const result = runPlanOrchestrator(
     "validate-resume",
@@ -881,6 +895,20 @@ test("validate-stack-ready rejects partial stacks with unchecked deliverables", 
     result.stderr,
     /partial stack: unchecked deliverable tasks 1\.2/,
   );
+});
+
+test("validate-stack-ready blocks lifecycle or proof-only task shapes", () => {
+  const result = runPlanOrchestrator(
+    "validate-stack-ready",
+    stackReady.replace(
+      "- [x] 1.2 Second deliverable",
+      "- [x] 1.2 Run validation checks",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /needs_spec_redesign/);
+  assert.match(result.stderr, /ask the user whether to redo the spec/);
 });
 
 test("validate-stack-ready rejects checked tasks without artifact evidence", () => {
