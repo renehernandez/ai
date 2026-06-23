@@ -342,6 +342,20 @@ test("select-next-task rejects lifecycle-only task shapes", () => {
   assert.match(result.stderr, /lifecycle_phase_group/);
 });
 
+test("select-next-task rejects proof-only task shapes before handoff", () => {
+  const result = runSelectNextTask(`# Tasks
+
+## 1. Delivery
+
+- [x] 1.1 Implement the parser
+- [ ] 1.2 Run validation checks
+`);
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /needs_spec_redesign/);
+  assert.match(result.stderr, /proof_only_task/);
+});
+
 test("select-next-task coerces plan-orchestrator calls to full-change delivery", () => {
   const result = runSelectNextTask(
     `# Tasks

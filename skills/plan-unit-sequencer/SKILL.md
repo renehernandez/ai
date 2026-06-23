@@ -122,6 +122,10 @@ Before selecting another task, verify:
   feedback gates have passed;
 - no unresolved blocking comments remain;
 - stack tip `tasks.md` is valid and cumulative;
+- stack tip `tasks.md` has no lifecycle-only, validation-only, proof-only, or
+  manual-looking proof task shapes; if validation reports `needs_spec_redesign`,
+  ask the user whether to redo the spec, brainstorm, narrow scope, or choose
+  another route before selecting or handing off work;
 - no future task is checked early.
 
 Every new stacked unit must add exactly one checked deliverable task relative to

@@ -61,12 +61,10 @@ export function validateUnitTaskDelta(
   const errors: string[] = [];
   const baseTasks = parseTasks(baseMarkdown);
   const headTasks = parseTasks(headMarkdown);
-  const baseErrors = validateTasks(baseTasks);
-  const headErrors = validateTasks(headTasks);
 
   errors.push(
-    ...baseErrors.map((error) => `base tasks.md: ${error}`),
-    ...headErrors.map((error) => `head tasks.md: ${error}`),
+    ...taskShapeErrors(baseTasks, "base tasks.md"),
+    ...taskShapeErrors(headTasks, "head tasks.md"),
   );
 
   const baseById = new Map(baseTasks.map((task) => [task.id, task]));
@@ -176,7 +174,7 @@ export function validateStackTipTaskState(
   }
 
   const tasks = parseTasks(tasksMarkdown);
-  errors.push(...validateTasks(tasks).map((error) => `tasks.md: ${error}`));
+  errors.push(...taskShapeErrors(tasks, "tasks.md"));
 
   const tasksById = new Map(tasks.map((task) => [task.id, task]));
   const artifactByTask = new Map<string, string>();
@@ -228,4 +226,12 @@ export function validateStackTipTaskState(
   }
 
   return errors;
+}
+
+function taskShapeErrors(tasks: OpenSpecTask[], prefix: string): string[] {
+  return validateTasks(tasks).map((error) =>
+    error.startsWith("needs_spec_redesign")
+      ? `${prefix}: ${error}; ask the user whether to redo the spec, brainstorm, narrow scope, or choose another route before continuing delivery`
+      : `${prefix}: ${error}`,
+  );
 }
