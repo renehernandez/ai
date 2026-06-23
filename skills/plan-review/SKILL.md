@@ -82,7 +82,12 @@ and next action.
    For `artifact_type: openspec`, `.agents/plans/**` files are scratch intake
    only and must not appear in the planning diff as added, modified, deleted,
    renamed, copied, or type-changed paths. For `artifact_type: plan`, atomic
-   plan review may still publish `.agents/plans/**` as the reviewed artifact.
+   plan review may still publish the primary `.agents/plans/**` markdown plan
+   as the reviewed artifact, but support sidecars under `.agents/plans/**` must
+   not be committed. Keep review requests, reviewer selections, handoffs,
+   blueprints, ledgers, reports, validation inputs, and validation outputs in
+   the thread; if file-backed recovery is needed, record them privately with
+   `pnpm ax plans artifact record --plan <plan> --kind <kind> --file <path>`.
 5. Run artifact-specific validation:
    - OpenSpec: `openspec validate <change-id> --strict --no-interactive`.
    - Markdown plan: check links or render only when the repo has an established
@@ -117,6 +122,10 @@ and next action.
    - name the plan/OpenSpec artifact;
    - name the requested feedback, such as Nitro and developer review;
    - include exact planning validation performed.
+   Do not expose local `~/.ax/plans/...` paths, raw private support artifacts,
+   or private thread metadata in hosted descriptions. Use summaries, hashes,
+   note IDs, discussion IDs, or stable correlation IDs when support-artifact
+   evidence is relevant.
 9. Run the artifact-host inspection adapter (`gitlab-adapter-review` or
    `github-adapter-review`) only for host metadata, discussions, and CI/review
    state. Do not run implementation code review against a planning-only diff.
@@ -163,7 +172,7 @@ implementation units until it can report `stack_ready`, or report
 | Request validation | Exactly one valid `plan_review_request` or `plan_delivery_handoff` is available |
 | Session start | Live repo, branch, remotes, existing artifacts, and planning artifact are inspected |
 | Planning-only diff | Diff contains no implementation changes, or implementation changes are explicitly split out |
-| OpenSpec source-plan boundary | OpenSpec review diffs contain no `.agents/plans/**`; atomic plan artifacts may keep them |
+| OpenSpec source-plan boundary | OpenSpec review diffs contain no `.agents/plans/**`; atomic plan artifacts may keep only the primary `.agents/plans/**` markdown plan, not support sidecars |
 | Artifact validation | OpenSpec/doc/ticket validation passes or a precise gap is reported |
 | OpenSpec task shape | `validate-openspec-tasks` passes, or planning blocks with `needs_spec_redesign` before PR/MR creation or update |
 | Review feedback routing | Artifact and feedback adapters are selected, or ambiguity is blocked |

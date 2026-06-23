@@ -16,7 +16,13 @@ continues until delivery is complete or a blocker must be reported.
 All work goes through planning review before implementation:
 
 1. Use brainstorming when the request is still fuzzy.
-2. Write or update plans under `.agents/plans/`.
+2. Write or update primary atomic plan markdown under `.agents/plans/`.
+   Supporting workflow artifacts are private evidence: keep review requests,
+   reviewer selections, handoffs, blueprints, ledgers, reports, validation
+   inputs, and validation outputs in the thread, and record file-backed copies
+   with the AX plan artifact command when recovery or correlation is needed.
+   Use `pnpm ax plans artifact list --plan <plan>` to recover prior private
+   support artifacts. Do not commit `.agents/plans/**` support sidecars.
 3. Run `plan-ready`.
 4. If `plan-ready` emits `plan_delivery_handoff`, create a
    `plan_review_request` and run `plan-review`.
@@ -83,7 +89,8 @@ For `openspec_blueprint` outputs:
 Atomic plan review is unchanged: when `plan-ready` emits
 `plan_delivery_handoff` for `artifact_type: plan`, `.agents/plans/**` remains
 the durable reviewed planning artifact and must not be deleted by this
-OpenSpec cleanup rule.
+OpenSpec cleanup rule. This exception applies only to the primary markdown plan
+artifact, not support sidecars.
 
 ## Resume Flow
 

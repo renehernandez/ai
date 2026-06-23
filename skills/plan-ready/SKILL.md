@@ -26,6 +26,22 @@ slice reviews, followthrough ledgers, or OpenSpec files directly.
 When `plan-ready` or the user asks to write a plan artifact, write it under
 `.agents/plans/`. Do not create new planning files under `docs/plans/`.
 
+Only primary atomic plan markdown documents belong in `.agents/plans/**`.
+Supporting workflow artifacts are private evidence, not repo artifacts. Keep
+review requests, reviewer selections, handoffs, blueprints, ledgers, reports,
+validation inputs, and validation outputs in the thread by default. When a
+file-backed copy is needed for recovery or correlation, write the file outside
+the repo and record it with:
+
+```bash
+pnpm ax plans artifact record --plan .agents/plans/example.md --kind <kind> --file <path>
+```
+
+Use `pnpm ax plans artifact list --plan .agents/plans/example.md` to recover
+previous support artifacts for that plan. Do not commit `.agents/plans/**`
+support sidecars such as `*.reviewer-selection.yaml`, `*.handoff.json`, or
+`*.validation-output.jsonl`.
+
 ## Workflow
 
 1. Run `scripts/plan-ready.ts detect <artifact-ref-if-known>`.

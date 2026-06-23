@@ -230,3 +230,25 @@ for (const file of [
     assert.match(text, /delivery_blocked/);
   });
 }
+
+for (const file of [
+  "skills/plan-ready/SKILL.md",
+  "skills/plan-ready/agents/openai.yaml",
+  "skills/plan-review/SKILL.md",
+  "skills/plan-review/agents/openai.yaml",
+  "skills/plan-orchestrator/SKILL.md",
+  "skills/plan-orchestrator/agents/openai.yaml",
+] as const) {
+  test(`${file} keeps support artifacts out of committed plan sidecars`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /\.agents\/plans/);
+    assert.match(text, /support (workflow )?(artifacts|sidecars)/i);
+    assert.match(text, /thread/);
+    assert.match(text, /pnpm ax plans artifact|private AX plan artifact/);
+    assert.match(
+      text,
+      /Do not commit|must\s+not\s+be\s+committed|must be rejected/,
+    );
+  });
+}
