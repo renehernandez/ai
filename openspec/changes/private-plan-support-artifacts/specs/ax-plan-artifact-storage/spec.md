@@ -8,10 +8,9 @@ AX plan workspace outside the target repository.
 - **WHEN** an agent records a support artifact for a plan
 - **THEN** the system stores the artifact under `~/.ax/plans/`
 - **AND** the target repository receives no support sidecar file
-- **AND** the record includes the repo key, normalized repo-relative plan path,
-  plan path hash, plan content fingerprint, artifact kind, artifact path, and
-  artifact content fingerprint
-  fingerprint
+- **AND** the record includes the repo key, plan slug, normalized
+  repo-relative plan path, full plan path hash, plan content fingerprint,
+  artifact kind, artifact path, and artifact content fingerprint
 
 #### Scenario: Workspace is plan scoped
 - **WHEN** two plans have the same basename in different repo-relative paths
