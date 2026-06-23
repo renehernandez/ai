@@ -34,7 +34,7 @@ import {
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Command } from "commander";
 import ts from "typescript";
-import { recordPlanArtifact } from "./plan-artifacts.ts";
+import { listPlanArtifacts, recordPlanArtifact } from "./plan-artifacts.ts";
 import {
   formatReviewGateStatus,
   hasStagedDiff,
@@ -748,7 +748,7 @@ function addPlansCommands(program: Command): void {
     .description("Manage private plan workflow support artifacts");
   const artifact = plans
     .command("artifact")
-    .description("Record private plan support artifacts");
+    .description("Record and list private plan support artifacts");
 
   artifact
     .command("record")
@@ -778,6 +778,26 @@ function addPlansCommands(program: Command): void {
         console.error(message);
         process.exitCode = 1;
       }
+    });
+
+  artifact
+    .command("list")
+    .description("List private support artifact records for a plan")
+    .requiredOption(
+      "--plan <path>",
+      "Repo-relative .agents/plans markdown plan",
+    )
+    .option("--config <path>", "Path to Agents Experience config", CONFIG_FILE)
+    .action((first: CommandOptions | Command, second?: Command) => {
+      const { options, commandObject } = actionContext(first, second);
+      const runtimeContext = createRuntimeInvocationContext(
+        configPathFor(commandObject, options),
+      );
+      const result = listPlanArtifacts({
+        targetRoot: runtimeContext.targetRoot,
+        planPath: requireStringOption(options.plan, "--plan"),
+      });
+      console.log(JSON.stringify(result, null, 2));
     });
 }
 
