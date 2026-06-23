@@ -36,6 +36,15 @@ the staged planning diff before committing planning artifacts.
 - **AND** it binds that evidence to the current staged planning diff hash before
   arming the local review gate
 
+#### Scenario: OpenSpec planning proves blueprint provenance before commit
+- **WHEN** `plan-review` prepares a planning commit from a materialized OpenSpec
+  change created from an `openspec_blueprint`
+- **THEN** it validates source plan, change id, reviewed artifact fingerprint,
+  generated paths, and strict OpenSpec validation evidence before arming the
+  local review gate
+- **AND** if blueprint-to-OpenSpec provenance cannot be proven, readiness
+  reviewers rerun against the materialized OpenSpec diff before commit
+
 #### Scenario: Planning commit requires active local gate
 - **WHEN** `plan-review` commits material planning workflow changes
 - **THEN** it invokes the required-gate `ax commit` path
@@ -44,18 +53,31 @@ the staged planning diff before committing planning artifacts.
 
 #### Scenario: Plan ready remains classifier only
 - **WHEN** `plan-ready` emits readiness reviewer evidence
-- **THEN** it does not commit or publish the planning branch
+- **THEN** normal readiness workflows do not write active readiness review-gate
+  state, commit, or publish the planning branch
 - **AND** `plan-review` remains the planning commit owner
 
 ### Requirement: Implementation Commit Reviewer Gate
 The system SHALL make `plan-unit-delivery` require fresh explicit reviewer
 evidence for each material implementation commit.
 
+Every head-changing commit owned by `plan-unit-delivery` for a selected unit is
+material for this workflow. This includes implementation edits, tests, OpenSpec
+task checkbox updates, review-feedback fixes, pipeline fixes, conflict fixes,
+and restack fixes. `ax commit` SHALL NOT decide materiality by inspecting paths,
+branch names, or commit messages.
+
 #### Scenario: Implementation evidence binds to staged diff
 - **WHEN** `plan-unit-delivery` prepares a material implementation commit
 - **THEN** it validates required reviewer outcomes for the current staged diff
 - **AND** selected non-skipped dynamic reviewers are required gate passes for
   that commit
+
+#### Scenario: Implementation commit uses required-gate path
+- **WHEN** `plan-unit-delivery` creates a head-changing commit for the selected
+  implementation unit
+- **THEN** it invokes the required-gate `ax commit` path
+- **AND** ordinary no-gate `ax commit` is not used for that workflow-owned commit
 
 #### Scenario: Skipped implementation reviewer remains evidence only
 - **WHEN** an implementation reviewer is recorded as `not_applicable`

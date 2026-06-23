@@ -21,7 +21,8 @@ delivery completion.
   planning diff, arm the local gate, and use a required-gate `ax commit` path
   for planning commits.
 - Make `plan-unit-delivery` require explicit implementation reviewer evidence
-  for material implementation commits.
+  and required-gate `ax commit` for every head-changing implementation-unit
+  commit it owns.
 - Add a required-gate `ax commit` mode for workflow phases while preserving the
   ordinary no-gate wrapper path for non-workflow commits.
 - Keep `plan-orchestrator` limited to validating phase evidence and routing
@@ -30,7 +31,7 @@ delivery completion.
   no-pipeline inspection, and unsupported-host routing separate from local
   reviewer gates.
 - Align skill docs, adapter prompts, root and portable instructions, tests, and
-  installed runtime validation.
+  linked rule files, tests, and installed runtime validation.
 
 ## Capabilities
 
@@ -43,8 +44,8 @@ None.
 - `review-first-plan-orchestration`: explicit reviewer evidence, commit-owning
   phase boundaries, local gate versus hosted gate separation, and orchestrator
   evidence routing.
-- `ax-cli`: required-gate commit mode and post-commit gate consumption behavior
-  for workflow-owned review gates.
+- `ax-cli`: required-gate commit mode, ordinary-wrapper migration, and
+  post-commit reviewed-diff verification for workflow-owned review gates.
 
 ## Impact
 
@@ -52,6 +53,6 @@ None.
   `skills/plan-orchestrator`
 - `scripts/review-gate.ts` and `scripts/ax.ts`
 - Plan workflow adapter prompts under affected skills
-- `AGENTS.md`, `instructions/AGENTS.md`, and instruction tests
+- `AGENTS.md`, `instructions/AGENTS.md`, linked `rules/`, and instruction tests
 - `tests/unit/*` and `tests/integration/ax-cli.test.ts`
 - Runtime profile refresh and validation surfaces

@@ -14,7 +14,9 @@ There are two commit boundaries:
   reports against the current staged implementation diff.
 
 `plan-orchestrator` coordinates these phases but does not write review-gate
-state or invent reviewer lists.
+state or invent reviewer lists. Existing `plan-ready` review-gate activation
+commands are migration surface only; after this change, normal readiness runs
+produce evidence and `plan-review` owns readiness-to-planning-commit binding.
 
 ## Goals / Non-Goals
 
@@ -73,6 +75,27 @@ after a successful Git commit; it does not bind reviewer evidence or duplicate
 phase-owned activation logic. State path resolution, staged diff hashing, schema
 validation, active writes, consumed state, and status formatting stay in shared
 review-gate/AX code.
+
+For required-gate commits, `ax commit` also verifies the created commit still
+matches the reviewed staged diff before consuming the gate. If a pre-commit hook
+or commit-time index mutation causes the committed diff to diverge from the
+validated gate hash, `ax commit` must leave evidence unconsumed or mark it
+blocked, report the created commit SHA, and fail the command so the workflow
+does not treat that head as locally reviewed.
+
+For OpenSpec planning, `plan-review` must prove that materialized OpenSpec files
+come from the reviewed `openspec_blueprint` before arming the planning gate. The
+proof can be direct blueprint-to-change provenance validation using source plan,
+change id, artifact fingerprint, and generated path checks. If provenance cannot
+be proven, the workflow must rerun readiness reviewers against the materialized
+OpenSpec diff before committing.
+
+Every head-changing commit owned by `plan-unit-delivery` for a selected unit is
+material for this workflow, including implementation edits, tests, OpenSpec task
+checkbox updates, review-feedback fixes, pipeline fixes, conflict fixes, and
+restack fixes. Those commits use required-gate mode. Ordinary `ax commit` remains
+available for non-workflow commits and Rene's manual escape hatch via raw
+`git commit`.
 
 ### Keep Hosted Review Separate
 

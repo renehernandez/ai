@@ -4,6 +4,13 @@
 The system SHALL provide an explicit `ax commit` mode for workflow phases that
 requires an active fresh local review gate.
 
+#### Scenario: Existing commit validation splits into explicit modes
+- **WHEN** the required-gate commit mode is implemented
+- **THEN** unconditional review-gate validation in ordinary `ax commit` is split
+  into explicit required-gate validation and ordinary wrapper commit behavior
+- **AND** existing ordinary `ax commit` calls are not blocked solely because no
+  active local review gate exists
+
 #### Scenario: Required-gate commit blocks missing gate
 - **WHEN** a workflow phase invokes required-gate `ax commit`
 - **AND** no active local review gate exists
@@ -21,19 +28,30 @@ requires an active fresh local review gate.
 - **WHEN** a workflow phase invokes required-gate `ax commit`
 - **AND** an active local review gate exists
 - **THEN** the gate is validated against the current staged diff
-- **AND** stale reviewer passes, missing reviewer passes, malformed state,
-  inactive state, and unresolved blocking findings reject the commit
+- **AND** staged diff hash mismatch, stale reviewer passes, missing reviewer
+  passes, malformed state, inactive state, and unresolved blocking findings
+  reject the commit
 
 ### Requirement: Review Gate Consumption
-The system SHALL consume or clear active review-gate state after a successful
-gated `ax commit`.
+The system SHALL reuse existing active review-gate consumption semantics after a
+successful required-gate `ax commit` and SHALL verify that the created commit
+matches the reviewed staged diff before consuming the gate.
 
 #### Scenario: Successful gated commit consumes active gate
 - **WHEN** `ax commit` validates an active review gate
 - **AND** Git creates a commit
+- **AND** the created commit diff matches the reviewed staged diff hash
 - **THEN** the active gate is marked consumed with the created commit SHA or
   cleared
 - **AND** consumed gates do not satisfy later required-gate commits
+
+#### Scenario: Commit-time diff mutation blocks gate consumption
+- **WHEN** `ax commit` validates an active review gate
+- **AND** Git creates a commit whose diff does not match the reviewed staged diff
+  hash
+- **THEN** the active gate is not consumed as a passing gate
+- **AND** the command reports the created commit SHA and the diff mismatch
+- **AND** the workflow treats the commit as not locally reviewed
 
 #### Scenario: Failed Git commit preserves active gate
 - **WHEN** `ax commit` validates an active review gate

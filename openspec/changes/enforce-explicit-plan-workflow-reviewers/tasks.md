@@ -19,15 +19,19 @@
 - [ ] 2.2 Make required-gate mode fail when no active fresh gate exists while
   ordinary `ax commit -m "..."` keeps the no-gate allow path for non-workflow
   commits.
-- [ ] 2.3 Consume or clear active gates after successful gated commits, preserve
-  active gates when Git fails before creating a commit, and warn without failing
-  retroactively when post-commit cleanup fails.
+- [ ] 2.3 Reuse existing active-gate consume/clear semantics for required-gate
+  commits, preserve active gates when Git fails before creating a commit, and
+  warn without failing retroactively when post-commit cleanup fails.
 - [ ] 2.4 Update `ax review-gate status` and `validate-commit` so missing,
   active, blocking, stale, and consumed gates are reported clearly.
-- [ ] 2.5 Add AX unit and integration tests for required-gate missing-state
+- [ ] 2.5 Verify the created commit still matches the reviewed staged diff
+  before consuming a required gate; fail the command and preserve or mark the
+  gate blocked when commit-time mutation produces a different diff.
+- [ ] 2.6 Add AX unit and integration tests for required-gate missing-state
   failure, no-gate ordinary commits, successful consumption, failed commit
-  preservation, cleanup warning behavior, consumed gate validation no-op, active
-  gate blocking, and public help excluding activation.
+  preservation, post-commit diff mismatch, cleanup warning behavior, consumed
+  gate validation no-op, active gate blocking, and public help excluding
+  activation.
 
 ## 3. Planning Commit Boundary
 
@@ -36,8 +40,19 @@
 - [ ] 3.2 Bind readiness evidence to the current staged planning diff before
   arming the local review gate.
 - [ ] 3.3 Call required-gate `ax commit` mode for planning workflow commits.
-- [ ] 3.4 Add `plan-review` tests for missing, stale, malformed, and blocking
+- [ ] 3.4 Migrate normal readiness-gate activation ownership out of `plan-ready`
+  so `plan-ready` emits and validates readiness evidence while `plan-review`
+  owns readiness-to-planning-commit gate binding.
+- [ ] 3.5 Before arming the gate for materialized OpenSpec planning files,
+  validate blueprint-to-OpenSpec provenance by checking source plan, change id,
+  artifact fingerprint, generated paths, and strict OpenSpec validation; rerun
+  readiness reviewers on the materialized OpenSpec diff when provenance cannot
+  be proven.
+- [ ] 3.6 Add `plan-review` tests for missing, stale, malformed, and blocking
   readiness evidence at the planning commit boundary.
+- [ ] 3.7 Add migration tests proving `plan-ready` normal workflows no longer
+  write readiness review-gate state and `plan-review` writes it only at the
+  planning commit boundary.
 
 ## 4. Implementation Commit Boundary
 
@@ -48,10 +63,14 @@
   skipped reviewers as required gate passes.
 - [ ] 4.3 Ensure any direct blocked-gate fallback does not become a second
   review-gate state implementation outside shared review-gate APIs.
-- [ ] 4.4 Add `plan-unit-delivery` tests for required reviewer extraction,
+- [ ] 4.4 Invoke required-gate `ax commit` for every head-changing
+  implementation-unit commit owned by `plan-unit-delivery`, including
+  implementation edits, tests, task-state updates, review-feedback fixes,
+  pipeline fixes, conflict fixes, and restack fixes.
+- [ ] 4.5 Add `plan-unit-delivery` tests for required reviewer extraction,
   skipped reviewers, blocking outcomes, missing outcomes, stale evidence,
-  missing subagents, linked worktrees, and multiple material commits requiring
-  fresh gates.
+  missing subagents, linked worktrees, required-gate invocation, and multiple
+  implementation-unit commits requiring fresh gates.
 
 ## 5. Orchestrator Evidence Boundary
 
@@ -76,9 +95,10 @@
 
 ## 7. Instructions, Prompts, And Runtime Alignment
 
-- [ ] 7.1 Update root `AGENTS.md` and `instructions/AGENTS.md` so agents use
-  `ax commit`, workflow skills use required-gate mode for material workflow
-  commits, and raw `git commit` remains Rene's manual escape hatch.
+- [ ] 7.1 Update root `AGENTS.md`, `instructions/AGENTS.md`, and linked rule
+  files such as `rules/git-and-review.md` so agents use `ax commit`, workflow
+  skills use required-gate mode for workflow-owned commits, and raw
+  `git commit` remains Rene's manual escape hatch.
 - [ ] 7.2 Update `skills/ax-cli`, affected plan workflow skills, and adapter
   prompts for explicit reviewer evidence and required-gate commit behavior.
 - [ ] 7.3 Add or update instruction and skill validation tests for the new
