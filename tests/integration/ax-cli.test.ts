@@ -1403,14 +1403,13 @@ test("ax commit required review-gate mode rejects workflow, unit, and staged-dif
     {
       name: "staged-diff",
       expected: /Review gate staged diff hash is stale/,
+      unexpected: /Review gate identity mismatch: stagedDiffHash/,
       mutate: (state: Record<string, unknown>) => {
         const changedHash = `sha256:${"0".repeat(64)}`;
-        const identity = state.identity as Record<string, unknown>;
         const results = state.results as Record<
           string,
           Record<string, unknown>
         >;
-        identity.stagedDiffHash = changedHash;
         state.stagedDiffHash = changedHash;
         results["implementation-review"].diffHash = changedHash;
       },
@@ -1464,6 +1463,9 @@ test("ax commit required review-gate mode rejects workflow, unit, and staged-dif
 
       assert.equal(result.status, 1, scenario.name);
       assert.match(result.stderr, scenario.expected);
+      if ("unexpected" in scenario) {
+        assert.doesNotMatch(result.stderr, scenario.unexpected);
+      }
       assert.match(result.stderr, /complete or rerun required local reviews/);
       assert.equal(runGit(["status", "--short"], { cwd }), "A  file.txt");
     } finally {
