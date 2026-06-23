@@ -1,7 +1,14 @@
 #!/usr/bin/env tsx
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, isAbsolute, join } from "node:path";
+import { createHash } from "node:crypto";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { nitroFeedbackGateErrors } from "./lib/nitro-feedback-gate.ts";
 import {
   firstUncheckedDeliverable,
@@ -75,6 +82,7 @@ type Command =
   | "request-template"
   | "validate-request"
   | "review-gate-input"
+  | "commit-planning"
   | "validate-planning-diff"
   | "validate-openspec-tasks"
   | "planning-review-template"
@@ -136,6 +144,46 @@ type ActiveReviewGateInput = {
   blockingFindings?: unknown[];
 };
 
+type ReviewGateResult = ReviewGateResultInput;
+
+type ReviewGateIdentity = {
+  gitCommonDir: string;
+  gitDir: string;
+  worktreeRoot: string;
+  branchRef: string | null;
+  headSha: string | null;
+  stagedDiffHash: string;
+  workflow: string;
+  unitId: string | null;
+};
+
+type ReviewGateState = {
+  version: 1;
+  active: boolean;
+  status: "active";
+  workflow: string;
+  unit?: ActiveReviewGateInput["unit"];
+  sourceProvenance: ActiveReviewGateInput["sourceProvenance"];
+  identity: ReviewGateIdentity;
+  stagedDiffHash: string;
+  requiredReviewPasses: string[];
+  results: Record<string, ReviewGateResult>;
+  blockingFindings: unknown[];
+  updatedAt: string;
+};
+
+type ReviewGateWriteResult = {
+  statePath: string;
+  state: ReviewGateState;
+};
+
+type ReviewGateValidation = {
+  ok: boolean;
+  errors: string[];
+  stagedDiffHash: string;
+  requiredReviewPasses: string[];
+};
+
 main();
 
 function main(): void {
@@ -143,7 +191,7 @@ function main(): void {
 
   if (!isCommand(command)) {
     fail(
-      "Usage: plan-review.ts <detect|request-template|validate-request|review-gate-input|validate-planning-diff|validate-openspec-tasks|planning-review-template|validate-planning-review|gate-template|validate-ledger> [--file path] [--expected-head-sha sha] [--expected-artifact url]",
+      "Usage: plan-review.ts <detect|request-template|validate-request|review-gate-input|commit-planning|validate-planning-diff|validate-openspec-tasks|planning-review-template|validate-planning-review|gate-template|validate-ledger> [--file path] [--expected-head-sha sha] [--expected-artifact url]",
     );
   }
 
@@ -180,6 +228,11 @@ function main(): void {
 
   if (command === "review-gate-input") {
     printReviewGateInput(args, input);
+    return;
+  }
+
+  if (command === "commit-planning") {
+    commitPlanning(args, input);
     return;
   }
 
@@ -489,6 +542,271 @@ function printReviewGateInput(args: string[], input: string): void {
   } catch (error) {
     fail(error instanceof Error ? error.message : String(error));
   }
+}
+
+function commitPlanning(args: string[], input: string): void {
+  const cwd = optionalArg(args, "--cwd") ?? process.cwd();
+  const message = optionalArg(args, "--message") ?? optionalArg(args, "-m");
+  if (!message) {
+    fail("commit-planning requires --message <message>");
+  }
+
+  if (!hasStagedDiff(cwd)) {
+    fail("commit-planning requires a staged planning diff");
+  }
+
+  const diffHash = stagedDiffHash(cwd);
+  const evidenceRef =
+    optionalArg(args, "--source-ref") ?? optionalArg(args, "--file");
+  const reviewGateInput = buildPlanReviewGateInput(input, {
+    diffHash,
+    evidenceRef,
+  });
+  const writeResult = writeActiveReviewGate(reviewGateInput, cwd);
+  const validation = validateReviewGateForCommit(cwd);
+  if (!validation.ok) {
+    fail(
+      [
+        "commit-planning wrote a review gate that is not commit-ready:",
+        ...validation.errors.map((error) => `- ${error}`),
+      ].join("\n"),
+    );
+  }
+
+  const commitCommand = planningCommitCommand(args, message);
+  const result = spawnSync(commitCommand.command, commitCommand.args, {
+    cwd,
+    encoding: "utf8",
+  });
+  if (result.stdout) {
+    process.stdout.write(result.stdout);
+  }
+  if (result.stderr) {
+    process.stderr.write(result.stderr);
+  }
+  if (result.error) {
+    fail(result.error.message);
+  }
+  if (result.status !== 0) {
+    process.exit(result.status ?? 1);
+  }
+
+  console.log(
+    JSON.stringify(
+      {
+        status: "planning_commit_committed",
+        gate_outcome: "passed",
+        state_path: writeResult.statePath,
+        staged_diff_hash: validation.stagedDiffHash,
+        required_review_passes: validation.requiredReviewPasses,
+      },
+      null,
+      2,
+    ),
+  );
+}
+
+function hasStagedDiff(cwd: string): boolean {
+  const result = spawnSync("git", ["diff", "--cached", "--quiet"], {
+    cwd,
+    encoding: "utf8",
+    env: withoutGitRepositoryEnv(),
+  });
+  if (result.status === 0) {
+    return false;
+  }
+  if (result.status === 1) {
+    return true;
+  }
+  throw new Error((result.stderr || result.stdout || "git diff failed").trim());
+}
+
+function stagedDiffHash(cwd: string): string {
+  const diff = gitOutputBuffer(["diff", "--cached", "--binary"], cwd);
+  return `sha256:${createHash("sha256").update(diff).digest("hex")}`;
+}
+
+function writeActiveReviewGate(
+  input: ActiveReviewGateInput,
+  cwd: string,
+): ReviewGateWriteResult {
+  const statePath = reviewGateStatePath(cwd);
+  const diffHash = stagedDiffHash(cwd);
+  const now = new Date().toISOString();
+  const state: ReviewGateState = {
+    version: 1,
+    active: true,
+    status: "active",
+    workflow: input.workflow,
+    unit: input.unit,
+    sourceProvenance: input.sourceProvenance,
+    identity: currentReviewGateIdentity({
+      cwd,
+      stagedDiffHash: diffHash,
+      workflow: input.workflow,
+      unit: input.unit,
+    }),
+    stagedDiffHash: diffHash,
+    requiredReviewPasses: input.requiredReviewPasses,
+    results: normalizeReviewGateResults(input.results, diffHash),
+    blockingFindings: input.blockingFindings ?? [],
+    updatedAt: now,
+  };
+
+  mkdirSync(dirname(statePath), { recursive: true });
+  writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+  rmSync(reviewGateInvalidationPath(cwd), { force: true });
+  return { statePath, state };
+}
+
+function validateReviewGateForCommit(cwd: string): ReviewGateValidation {
+  const statePath = reviewGateStatePath(cwd);
+  const currentDiffHash = stagedDiffHash(cwd);
+  const errors: string[] = [];
+  let state: ReviewGateState | undefined;
+
+  try {
+    state = JSON.parse(readFileSync(statePath, "utf8")) as ReviewGateState;
+  } catch (error) {
+    errors.push(`Review gate state is not readable: ${String(error)}`);
+  }
+
+  if (state) {
+    if (!state.active || state.status !== "active") {
+      errors.push("Review gate state must be active.");
+    }
+    if (state.stagedDiffHash !== currentDiffHash) {
+      errors.push("Review gate staged diff hash must match the staged diff.");
+    }
+    if (state.requiredReviewPasses.length === 0) {
+      errors.push("Review gate requires at least one review pass.");
+    }
+    for (const reviewPass of state.requiredReviewPasses) {
+      const result = state.results[reviewPass];
+      if (!result) {
+        errors.push(`Review gate missing required pass: ${reviewPass}.`);
+      } else if (
+        result.status !== "passed" ||
+        result.diffHash !== currentDiffHash
+      ) {
+        errors.push(`Review gate required pass is stale: ${reviewPass}.`);
+      }
+    }
+    if (state.blockingFindings.length > 0) {
+      errors.push("Review gate has unresolved blocking findings.");
+    }
+  }
+
+  return {
+    ok: errors.length === 0,
+    errors,
+    stagedDiffHash: currentDiffHash,
+    requiredReviewPasses: state?.requiredReviewPasses ?? [],
+  };
+}
+
+function normalizeReviewGateResults(
+  results: Record<string, ReviewGateResultInput>,
+  currentDiffHash: string,
+): Record<string, ReviewGateResult> {
+  const normalized: Record<string, ReviewGateResult> = {};
+  for (const [reviewPass, result] of Object.entries(results)) {
+    if (result.diffHash !== currentDiffHash) {
+      throw new Error(
+        `Review pass ${reviewPass} has stale diff hash ${result.diffHash}; expected ${currentDiffHash}.`,
+      );
+    }
+    normalized[reviewPass] = { ...result };
+  }
+  return normalized;
+}
+
+function currentReviewGateIdentity(input: {
+  cwd: string;
+  stagedDiffHash: string;
+  workflow: string;
+  unit?: ActiveReviewGateInput["unit"];
+}): ReviewGateIdentity {
+  return {
+    gitCommonDir: absoluteGitPath(
+      gitOutput(["rev-parse", "--git-common-dir"], input.cwd),
+      input.cwd,
+    ),
+    gitDir: absoluteGitPath(
+      gitOutput(["rev-parse", "--git-dir"], input.cwd),
+      input.cwd,
+    ),
+    worktreeRoot: absoluteGitPath(
+      gitOutput(["rev-parse", "--show-toplevel"], input.cwd),
+      input.cwd,
+    ),
+    branchRef: gitOutputOptional(
+      ["symbolic-ref", "--quiet", "HEAD"],
+      input.cwd,
+    ),
+    headSha: gitOutputOptional(["rev-parse", "--verify", "HEAD"], input.cwd),
+    stagedDiffHash: input.stagedDiffHash,
+    workflow: input.workflow,
+    unitId: input.unit?.id ?? null,
+  };
+}
+
+function reviewGateStatePath(cwd: string): string {
+  return resolve(
+    absoluteGitPath(gitOutput(["rev-parse", "--git-dir"], cwd), cwd),
+    "ax",
+    "review-gate.json",
+  );
+}
+
+function reviewGateInvalidationPath(cwd: string): string {
+  return resolve(
+    dirname(reviewGateStatePath(cwd)),
+    "review-gate.invalidated.json",
+  );
+}
+
+function absoluteGitPath(path: string, cwd: string): string {
+  return isAbsolute(path) ? path : resolve(cwd, path);
+}
+
+function gitOutputBuffer(args: string[], cwd: string): Buffer {
+  const result = spawnSync("git", args, {
+    cwd,
+    encoding: "buffer",
+    env: withoutGitRepositoryEnv(),
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      (
+        result.stderr.toString() ||
+        result.stdout.toString() ||
+        "git failed"
+      ).trim(),
+    );
+  }
+  return result.stdout;
+}
+
+function gitOutput(args: string[], cwd: string): string {
+  const result = spawnSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    env: withoutGitRepositoryEnv(),
+  });
+  if (result.status !== 0) {
+    throw new Error((result.stderr || result.stdout || "git failed").trim());
+  }
+  return result.stdout.trim();
+}
+
+function gitOutputOptional(args: string[], cwd: string): string | null {
+  const result = spawnSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    env: withoutGitRepositoryEnv(),
+  });
+  return result.status === 0 ? result.stdout.trim() : null;
 }
 
 function validatePlanningDiff(args: string[], stdinInput: string): void {
@@ -1005,6 +1323,7 @@ function isCommand(command: string | undefined): command is Command {
     "request-template",
     "validate-request",
     "review-gate-input",
+    "commit-planning",
     "validate-planning-diff",
     "validate-openspec-tasks",
     "planning-review-template",
@@ -1170,10 +1489,37 @@ function optionalArg(args: string[], name: string): string | undefined {
   return value;
 }
 
+function allOptionalArgs(args: string[], name: string): string[] {
+  const values: string[] = [];
+  for (let index = 0; index < args.length; index += 1) {
+    if (args[index] === name && args[index + 1]) {
+      values.push(args[index + 1]);
+    }
+  }
+  return values;
+}
+
 function requiredArg(args: string[], name: string): string {
   const value = optionalArg(args, name);
   if (!value) {
     fail(`${name} is required`);
   }
   return value;
+}
+
+function planningCommitCommand(
+  args: string[],
+  message: string,
+): { command: string; args: string[] } {
+  const customCommand = optionalArg(args, "--ax-command");
+  return {
+    command: customCommand ?? "pnpm",
+    args: [
+      ...(customCommand ? allOptionalArgs(args, "--ax-arg") : ["ax"]),
+      "commit",
+      "--require-review-gate",
+      "-m",
+      message,
+    ],
+  };
 }
