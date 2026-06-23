@@ -23,7 +23,7 @@
   reviewer evidence into the shared `scripts/review-gate.ts` API input shape.
 - [x] 2.2 Promote selected optional reviewers into required gate passes for the
   current readiness run and record phase provenance in the active gate.
-- [ ] 2.3 Make `plan-ready` fail closed before readiness commits when required
+- [x] 2.3 Make `plan-ready` fail closed before readiness commits when required
   subagents are unavailable, reviewer evidence is partial, reviewer evidence is
   stale, gate writing fails, gate validation fails, or blocking findings remain.
 - [ ] 2.4 Add plan-ready tests for atomic handoff gate writing, OpenSpec
