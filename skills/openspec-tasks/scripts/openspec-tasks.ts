@@ -48,6 +48,7 @@ const LIFECYCLE_HEADING_CONNECTORS = new Set([
   "evidence",
   "notes",
   "proof",
+  "update",
   "updates",
 ]);
 const FEATURE_EXCEPTION_PATTERNS = [

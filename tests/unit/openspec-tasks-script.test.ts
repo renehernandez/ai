@@ -239,6 +239,10 @@ test("audit rejects common lifecycle heading variants", () => {
 ## 3. Validation Evidence
 
 - [ ] 3.1 Capture CI proof
+
+## 4. Update Documentation
+
+- [ ] 4.1 Update user-facing docs
 `,
   );
 
@@ -246,6 +250,7 @@ test("audit rejects common lifecycle heading variants", () => {
   assert.match(result.stderr, /needs_spec_redesign/);
   assert.match(result.stderr, /task 2\.1 is lifecycle_phase_group/);
   assert.match(result.stderr, /task 3\.1 is lifecycle_phase_group/);
+  assert.match(result.stderr, /task 4\.1 is lifecycle_phase_group/);
 });
 
 test("audit lets lifecycle groups override manual task classification", () => {
