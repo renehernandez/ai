@@ -34,6 +34,24 @@ plan_review_request:
   requested_reviewers:
     - nitro
     - developers
+  readiness_reviewer_evidence:
+    artifact_fingerprint: <plan-ready reviewer evidence fingerprint>
+    completed_at: <plan-ready reviewer evidence completion timestamp>
+    gate_outcome: passed
+    baseline_reviewers:
+      - implementation-readiness
+      - edge-cases-and-risks
+      - simplification-and-scope-control
+      - refactoring-opportunities
+    selected_dynamic_reviewers: []
+    per_reviewer_status:
+      implementation-readiness: passed
+      edge-cases-and-risks: passed
+      simplification-and-scope-control: passed
+      refactoring-opportunities: passed
+    skipped_reviewers: []
+    skipped_rationale: []
+    blocking_findings: []
   unresolved_blockers: []
 ```
 
@@ -47,7 +65,10 @@ unsupported. Return `needs_plan_ready` so the thread reruns `plan-ready`.
 Run `scripts/plan-review.ts validate-request` from this skill directory
 before publishing anything. If input is missing, ambiguous, stale, or has
 unresolved blockers, stop and ask for `plan-ready` or a valid
-`plan_review_request`.
+`plan_review_request`. For `plan_review_request`, validation must pass only
+when `readiness_reviewer_evidence` is present, every baseline and selected
+dynamic reviewer has a passing status, and no readiness blocking findings
+remain.
 
 ## Progress Output
 
@@ -65,7 +86,9 @@ and next action.
 
 ## Workflow
 
-1. Validate the input with `scripts/plan-review.ts validate-request`.
+1. Validate the input with `scripts/plan-review.ts validate-request`, including
+   the readiness reviewer evidence copied from the validated `plan-ready`
+   output.
 2. Run `scripts/plan-review.ts detect` and start from live state with
    `session-start`: repo rules, branch/worktree, dirty state, remotes, existing
    PRs/MRs, CI, and the referenced planning artifact.
