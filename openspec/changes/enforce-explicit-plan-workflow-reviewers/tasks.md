@@ -1,6 +1,6 @@
 ## 1. Readiness Reviewer Evidence
 
-- [ ] 1.1 Update `plan-ready` contracts, validators, docs, and prompts so
+- [x] 1.1 Update `plan-ready` contracts, validators, docs, and prompts so
   atomic handoffs and OpenSpec blueprints carry explicit baseline reviewers,
   selected dynamic reviewers, per-reviewer status, artifact fingerprint,
   skipped rationale, blocking findings, completion timestamp, and gate outcome.
