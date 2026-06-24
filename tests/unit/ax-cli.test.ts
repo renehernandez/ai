@@ -1031,6 +1031,56 @@ test("plans artifact record recovers an already copied blob without a manifest",
   });
 });
 
+test("plans artifact record recovers prior copied blobs when recording another artifact", () => {
+  withTempDir((directory) => {
+    const targetRepo = createPlanArtifactTarget(directory);
+    const axPlansRoot = join(directory, "ax-plans");
+    mkdirSync(axPlansRoot, { mode: 0o700 });
+    chmodSync(axPlansRoot, 0o700);
+    writeFileSync(
+      join(targetRepo, "review-request.yaml"),
+      "review:\n  request: nitro\n",
+      "utf-8",
+    );
+
+    const interrupted = recordPlanArtifact({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      kind: "reviewer_selection",
+      filePath: "reviewer-selection.yaml",
+      axPlansRoot,
+    });
+    rmSync(join(axPlansRoot, interrupted.manifestRelativePath));
+    rmSync(join(axPlansRoot, interrupted.indexRelativePath));
+    rmSync(join(axPlansRoot, interrupted.metadataRelativePath));
+
+    const recovered = recordPlanArtifact({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      kind: "review_request",
+      filePath: "review-request.yaml",
+      axPlansRoot,
+    });
+
+    assert.equal(
+      readFileSync(join(axPlansRoot, recovered.indexRelativePath), "utf-8")
+        .trim()
+        .split("\n").length,
+      2,
+    );
+    const listed = listPlanArtifacts({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      axPlansRoot,
+    });
+    assert.equal(listed.status, "found");
+    assert.deepEqual(
+      listed.artifacts.map((artifact) => artifact.artifactKind).sort(),
+      ["review_request", "reviewer_selection"],
+    );
+  });
+});
+
 test("plans artifact list rejects corrupt revisions paths", () => {
   withTempDir((directory) => {
     const targetRepo = createPlanArtifactTarget(directory);
