@@ -151,6 +151,11 @@ test("merge-followthrough requires default-branch CI graph completion", () => {
   assert.match(skill, /Include child,\nbridge, downstream, or triggered/);
   assert.match(
     skill,
+    /including child\/bridge\/downstream\/triggered\n\s+graph components/,
+  );
+  assert.match(skill, /including child\/bridge\/downstream\/triggered checks/);
+  assert.match(
+    skill,
     /poll for graph creation once per minute for up to 10 minutes/,
   );
   assert.match(
