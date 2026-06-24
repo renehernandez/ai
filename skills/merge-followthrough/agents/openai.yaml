@@ -1,4 +1,4 @@
 interface:
   display_name: "Merge Followthrough"
   short_description: "Finish PR merge and sync loops"
-  default_prompt: "Use $merge-followthrough to finish this PR merge workflow."
+  default_prompt: "Use $merge-followthrough in finish mode for one active PR/MR: update requested metadata, watch gates, and merge or queue when acceptable. Use check-only mode only when the user asks to watch, inspect, report status, update only, or not merge yet. Ask for explicit stack scope before merging multiple PRs/MRs."

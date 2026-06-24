@@ -1,6 +1,6 @@
 ## 1. Merge Followthrough Finish Contract
 
-- [ ] 1.1 Define finish and check-only modes in
+- [x] 1.1 Define finish and check-only modes in
       `skills/merge-followthrough/SKILL.md`, update the skill frontmatter and
       adapter prompt for MR/PR finish mode and explicit stacks, and add focused
       behavioral coverage for prompt-to-mode examples.
