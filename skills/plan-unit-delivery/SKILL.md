@@ -158,7 +158,7 @@ evidence, and restack state.
 | Implementing multiple OpenSpec tasks at once | Return to OpenSpec or `plan-unit-sequencer` |
 | Finishing without proving the task delta | Run `validate-task-delta` against base and unit `tasks.md` |
 | Recording task-delta proof only in chat prose | Put the command and `unit_task_delta_valid` output in `delivery_gate_ledger.unit_task_delta` |
-| Committing before activating the local review gate | Run `activate-review-gate` for the staged diff before `ax commit --require-review-gate` |
+| Committing without the implementation helper | Run `commit-implementation` so gate activation and `ax commit --require-review-gate` stay in one workflow step |
 | Reusing reviewer evidence after staging new changes | Rerun reviewers and update both `reviewer_launch.staged_diff_hash` and `reviewer_report.reviewed_diff_hash` |
 | Treating delivery gate evidence as durable state | Keep sequence state in OpenSpec |
 | Treating an open PR/MR as done before pipelines settle | Keep monitoring latest-head pipelines |
