@@ -1,11 +1,18 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
   reviewGateStatePath,
+  stagedDiffHash,
   validateReviewGateForCommit,
 } from "../../scripts/review-gate.ts";
 
@@ -653,7 +660,7 @@ test("activate-review-gate blocked fallback writes shared review-gate state", ()
         GIT_INDEX_FILE: join(poisonCwd, ".git", "index"),
       },
     );
-    const output = JSON.parse(result.stdout);
+    const output = JSON.parse(result.stdout.slice(result.stdout.indexOf("{")));
 
     assert.notEqual(result.status, 0);
     assert.equal(output.status, "blocked");
@@ -678,6 +685,52 @@ test("activate-review-gate blocked fallback writes shared review-gate state", ()
   } finally {
     rmSync(cwd, { force: true, recursive: true });
     rmSync(poisonCwd, { force: true, recursive: true });
+  }
+});
+
+test("commit-implementation activates review gate and invokes required-gate ax commit", () => {
+  const cwd = createGitFixture("plan-unit-delivery-commit-");
+  try {
+    const diffHash = stagedDiffHash(cwd);
+    const argsPath = join(cwd, "pnpm-args.txt");
+    const fakeAxPath = join(cwd, "fake-ax");
+    writeFileSync(
+      join(cwd, "package.json"),
+      JSON.stringify({ scripts: { ax: "./fake-ax" } }),
+      "utf8",
+    );
+    writeFileSync(
+      fakeAxPath,
+      `#!/bin/sh\nprintf '%s\\n' "$@" > "${argsPath}"\n`,
+      "utf8",
+    );
+    chmodSync(fakeAxPath, 0o755);
+
+    const result = runPlanUnitDeliveryInCwd(
+      "commit-implementation",
+      cwd,
+      `${validHandoff}\n${launchedReport.replace(
+        reviewGateDiffHash,
+        diffHash,
+      )}\n${reviewerReport.replace(reviewGateDiffHash, diffHash)}`,
+      ["--message", "Commit implementation"],
+    );
+    const output = JSON.parse(result.stdout.slice(result.stdout.indexOf("{")));
+
+    assert.equal(result.status, 0);
+    assert.deepEqual(readFileSync(argsPath, "utf8").trim().split("\n"), [
+      "commit",
+      "--require-review-gate",
+      "-m",
+      "Commit implementation",
+    ]);
+    assert.equal(output.status, "implementation_commit_committed");
+    assert.equal(output.gate_outcome, "passed");
+    assert.equal(output.state_path, reviewGateStatePath(cwd));
+    assert.equal(output.staged_diff_hash, diffHash);
+    assert.ok(output.required_review_passes.includes("implementation-review"));
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
   }
 });
 

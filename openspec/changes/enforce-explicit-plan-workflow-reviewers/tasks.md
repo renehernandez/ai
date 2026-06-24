@@ -76,7 +76,7 @@
   skipped reviewers as required gate passes.
 - [x] 4.3 Ensure any direct blocked-gate fallback does not become a second
   review-gate state implementation outside shared review-gate APIs.
-- [ ] 4.4 Invoke required-gate `ax commit` for every head-changing
+- [x] 4.4 Invoke required-gate `ax commit` for every head-changing
   implementation-unit commit owned by `plan-unit-delivery`, including
   implementation edits, tests, task-state updates, review-feedback fixes,
   pipeline fixes, conflict fixes, and restack fixes.
