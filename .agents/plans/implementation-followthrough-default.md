@@ -122,7 +122,10 @@ disclosing the limitation in the PR/MR description or final handoff.
 
 - [ ] 1.1 Reword the broad no-commit/no-push safety rule in
   `instructions/AGENTS.md` so it allows ordinary implementation followthrough
-  on feature branches.
+  on feature branches. Split the current bundled safety line into separate
+  statements: one commit/push rule with the new accepted-implementation
+  conditional, and one dependency-install/destructive-command rule that remains
+  behind explicit user permission.
 - [ ] 1.2 Apply the same rewording to the repo-local `AGENTS.md`.
 - [ ] 1.3 Keep destructive commands, dependency installs, default-branch
   pushes, and force pushes behind explicit user permission.
@@ -162,9 +165,11 @@ disclosing the limitation in the PR/MR description or final handoff.
   publish; allow publish with blocked external verification only when the
   limitation is disclosed and no safety, product, or delivery decision is
   pending.
-- [ ] 3.5 Update `rules/fullscript/nitro-review.md` so Nitro request and
-  re-request behavior is clearly Fullscript GitLab-only and triggered by MR
-  creation or material follow-up pushes.
+- [ ] 3.5 Inspect `rules/fullscript/nitro-review.md` and preserve the existing
+  Nitro request and re-request behavior when it already clearly says Nitro is
+  Fullscript GitLab-only and triggered by MR creation or material follow-up
+  pushes; edit only if the surrounding instruction changes make the existing
+  wording ambiguous.
 - [ ] 3.6 Preserve the existing Nitro exclusions for personal machines,
   personal GitHub repositories, and repositories where Nitro is unavailable.
 
