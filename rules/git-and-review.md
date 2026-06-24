@@ -42,6 +42,12 @@ These rules cover Git, GitHub, GitLab, Linear, review routing, and external comm
 - For this repo, treat GitLab `origin` as the primary hosted-review and publishing remote. The `github` remote remains a mirror path; use it only when the user explicitly asks or GitLab is unavailable.
 - A hosted delivery for this repo is complete only after the GitLab MR exists, CI or no-pipeline state is inspected, Nitro review is requested with `/request_review @nitro`, and latest-head Nitro feedback is clean or fully resolved.
 - For feature work, run the pre-commit quality gate, commit the feature branch, push it, create or update the artifact-host PR/MR, monitor CI, and fix branch-caused failures.
+- For host-neutral work, choose the hosted-review provider from project
+  instructions, existing artifact URLs, or `change-request-create`; pause when
+  provider routing remains ambiguous.
+- Select the hosted-review provider before pushing a branch. If a remote has
+  multiple push URLs, push only to the selected provider URL or a
+  provider-specific remote, not to every configured mirror.
 - Never include `Co-Authored-By: Claude` or similar co-author attribution lines in MR or PR descriptions.
 
 ## MR and PR Description Maintenance

@@ -25,7 +25,25 @@ These rules govern when to diagnose, when to edit, and how to route implementati
 - Skills and workflows may delegate to available local, cloud, or custom subagents when they define a bounded implementation, exploration, or verification lane.
 - Do not refer to retired agent names or require a subagent that is not available in the current harness.
 - For implementation work that needs planning, review-first delivery, stacked PRs/MRs, or multi-step coordination, use `plan-orchestrator` and its related plan workflow skills.
-- Do not commit or push non-feature implementation work unless the user explicitly asks or the approved plan requires it.
+- Accepted implementation work includes direct user requests to implement, fix,
+  build, apply a plan, or deliver review-feedback changes, plus approved plan
+  workflow delivery units. It excludes brainstorming, planning, OpenSpec
+  proposal creation, `plan-ready` output, planning review, troubleshooting-only
+  findings, and review-only work until the user or workflow enters an
+  implementation or delivery step.
+- After accepted implementation work is complete, verify the change, stage only
+  the intended files, commit on the feature branch, push to the selected
+  hosted-review remote, create or update a PR/MR when the project has a
+  hosted-review workflow, inspect CI or no-pipeline state, and follow
+  branch-caused review or CI feedback through to closure. Select the
+  hosted-review provider before pushing, and push only to that provider's remote
+  or URL when a configured remote fans out to multiple hosts.
+- Pause instead of publishing when the diff contains secrets, unrelated user
+  changes, generated noise, unresolved product or safety decisions, or ambiguous
+  hosted-review provider routing. If verification is blocked by external state
+  or missing local tooling and no product, safety, or routing decision is
+  pending, publish only after disclosing the limitation in the hosted review
+  artifact or final handoff.
 - In plan-to-OpenSpec conversion, `.agents/plans/**` files are scratch intake.
   Delete the source plan only after the OpenSpec change is created, strict
   validation passes, and repo-local OpenSpec scaffolding validation passes when
@@ -36,9 +54,10 @@ These rules govern when to diagnose, when to edit, and how to route implementati
 - For `artifact_type: plan`, only the primary atomic plan markdown document
   under `.agents/plans/**` is a valid reviewed planning artifact. Support
   sidecars such as review requests, reviewer selections, handoffs, blueprints,
-  ledgers, reports, validation inputs, and validation outputs must stay in
-  thread evidence by default. When file-backed recovery or correlation is
-  needed, record them with `pnpm ax plans artifact record` and recover them with
+  ledgers, reports, validation inputs, and validation outputs must not be
+  committed and must stay in thread evidence by default. When file-backed
+  recovery or correlation is needed, record them with
+  `pnpm ax plans artifact record` and recover them with
   `pnpm ax plans artifact list`; do not commit `.agents/plans/**` support
   sidecars.
 - Do not stage or commit local workflow artifacts into work-project

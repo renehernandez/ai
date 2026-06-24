@@ -38,6 +38,22 @@ for (const file of ["AGENTS.md", "instructions/AGENTS.md"] as const) {
   });
 }
 
+for (const file of ["AGENTS.md", "instructions/AGENTS.md"] as const) {
+  test(`${file} defaults accepted implementation work to branch publication`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /accepted implementation work/);
+    assert.match(text, /committing/);
+    assert.match(text, /pushing to the selected hosted-review remote/);
+    assert.match(text, /creating or updating a\s+PR\/MR/);
+    assert.match(text, /hosted-review workflow/);
+    assert.match(
+      text,
+      /Do not install dependencies or run destructive commands/,
+    );
+  });
+}
+
 for (const file of [
   "AGENTS.md",
   "instructions/AGENTS.md",
@@ -122,6 +138,26 @@ test("implementation rules keep local workflow artifacts out of work-project rep
   assert.match(text, /regression fixtures/);
 });
 
+test("implementation rules define accepted implementation followthrough", () => {
+  const text = readFileSync(
+    "rules/investigation-and-implementation.md",
+    "utf-8",
+  );
+
+  assert.match(text, /Accepted implementation work includes/);
+  assert.match(text, /implement, fix,\s+build, apply a plan/);
+  assert.match(text, /review-feedback changes/);
+  assert.match(text, /planning review/);
+  assert.match(text, /troubleshooting-only\s+findings/);
+  assert.match(text, /commit on the feature branch/);
+  assert.match(text, /push to the selected\s+hosted-review remote/);
+  assert.match(text, /create or\s+update a PR\/MR/);
+  assert.match(text, /Select the\s+hosted-review provider before pushing/);
+  assert.match(text, /remote fans out to multiple\s+hosts/);
+  assert.match(text, /inspect CI or\s+no-pipeline state/);
+  assert.match(text, /ambiguous\s+hosted-review provider routing/);
+});
+
 for (const file of ["AGENTS.md", "instructions/AGENTS.md"] as const) {
   test(`${file} blocks committed local workflow artifacts while preserving AI repo fixtures`, () => {
     const text = readFileSync(file, "utf-8");
@@ -152,12 +188,24 @@ test("git rules require stacked MRs to land bottom-to-top", () => {
   assert.match(text, /resolve the conflict on that MR's source branch/);
 });
 
+test("git rules route host-neutral hosted review requests", () => {
+  const text = readFileSync("rules/git-and-review.md", "utf-8");
+
+  assert.match(text, /host-neutral work/);
+  assert.match(text, /project\s+instructions/);
+  assert.match(text, /existing artifact URLs/);
+  assert.match(text, /change-request-create/);
+  assert.match(text, /provider routing remains ambiguous/);
+  assert.match(text, /Select the hosted-review provider before pushing/);
+  assert.match(text, /multiple push URLs/);
+  assert.match(text, /not to every configured mirror/);
+});
+
 test("ai repo delivery uses GitLab MRs with Nitro review by default", () => {
   const agentsText = readFileSync("AGENTS.md", "utf-8");
-  const portableAgentsText = readFileSync("instructions/AGENTS.md", "utf-8");
   const gitRulesText = readFileSync("rules/git-and-review.md", "utf-8");
 
-  for (const text of [agentsText, portableAgentsText, gitRulesText]) {
+  for (const text of [agentsText, gitRulesText]) {
     assert.match(text, /GitLab `origin`/);
     assert.match(
       text,
@@ -169,6 +217,32 @@ test("ai repo delivery uses GitLab MRs with Nitro review by default", () => {
     assert.doesNotMatch(text, /GitHub is the primary `main` publishing remote/);
     assert.doesNotMatch(text, /ordinary direct-publish guidance/);
   }
+});
+
+test("portable instructions keep hosted review routing project-specific", () => {
+  const text = readFileSync("instructions/AGENTS.md", "utf-8");
+
+  assert.match(text, /Project-specific instructions define/);
+  assert.match(text, /hosted-review route/);
+  assert.match(text, /Do not push default branches/);
+  assert.match(text, /Fullscript GitLab merge requests/);
+  assert.match(text, /do not request Nitro for GitHub PRs/);
+  assert.match(text, /project-selected hosted-review route/);
+  assert.doesNotMatch(text, /For this repo/);
+  assert.doesNotMatch(text, /GitLab `origin`/);
+  assert.doesNotMatch(text, /merge requests against `main`/);
+});
+
+test("Fullscript Nitro rules stay scoped to Fullscript GitLab MRs", () => {
+  const text = readFileSync("rules/fullscript/nitro-review.md", "utf-8");
+
+  assert.match(text, /Fullscript repositories/);
+  assert.match(text, /GitLab MR/);
+  assert.match(text, /After creating a GitLab MR/);
+  assert.match(text, /After pushing a follow-up commit to a GitLab MR/);
+  assert.match(text, /materially changed/);
+  assert.match(text, /personal GitHub repositories/);
+  assert.match(text, /Nitro is unavailable/);
 });
 
 for (const file of [
