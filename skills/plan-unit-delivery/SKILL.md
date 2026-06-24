@@ -73,8 +73,9 @@ path.
 7. For OpenSpec tasks, validate the one-checkbox delta against the unit base.
 8. Launch implementation reviewers through internal subagents.
 9. Reconcile reviewer outcomes.
-10. Validate `reviewer_launch` and `reviewer_report`; the report must include
-    the staged diff hash reviewed by the implementation reviewers.
+10. Validate `reviewer_launch` and `reviewer_report`; the launch must include
+    the staged diff hash given to implementation reviewers, and the report must
+    include the same staged diff hash reviewed by the reviewers.
 11. Before any material implementation commit, activate the local review gate
     for the staged diff:
 
@@ -156,7 +157,7 @@ evidence, and restack state.
 | Finishing without proving the task delta | Run `validate-task-delta` against base and unit `tasks.md` |
 | Recording task-delta proof only in chat prose | Put the command and `unit_task_delta_valid` output in `delivery_gate_ledger.unit_task_delta` |
 | Committing before activating the local review gate | Run `activate-review-gate` for the staged diff before `ax commit --require-review-gate` |
-| Reusing reviewer reports after staging new changes | Rerun reviewers and update `reviewer_report.reviewed_diff_hash` |
+| Reusing reviewer evidence after staging new changes | Rerun reviewers and update both `reviewer_launch.staged_diff_hash` and `reviewer_report.reviewed_diff_hash` |
 | Treating delivery gate evidence as durable state | Keep sequence state in OpenSpec |
 | Treating an open PR/MR as done before pipelines settle | Keep monitoring latest-head pipelines |
 | Assuming Nitro feedback is absent immediately after push | Request Nitro for the latest head, wait up to 10 minutes for review start, then wait for completion |
