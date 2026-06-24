@@ -318,13 +318,19 @@ test("validate-planning-diff accepts atomic plan source-plan artifacts", () => {
   assert.match(result.stdout, /planning_diff_valid/);
 });
 
-test("validate-planning-diff rejects atomic plan support sidecars", () => {
+test("validate-planning-diff rejects atomic plan support sidecars across name-status entries", () => {
   const result = runPlanReviewArgs(
     ["validate-planning-diff", "--artifact-type", "plan"],
     [
       "A\t.agents/plans/source.review-request.md",
       "M\t.agents/plans/source.handoff.yaml",
-      "A\t.agents/plans/source.md",
+      "D\t.agents/plans/source.validation-output.json",
+      "R100\t.agents/plans/old.review-request.md\tdocs/old.review-request.md",
+      "R100\tdocs/new.handoff.yaml\t.agents/plans/new.handoff.yaml",
+      "C100\t.agents/plans/copy-source.validation-output.json\tdocs/copy-source.validation-output.json",
+      "C100\tdocs/copied.report.json\t.agents/plans/copied.report.json",
+      "T\t.agents/plans/source.ledger.yaml",
+      "A\t.agents/plans/primary-plan.md",
     ].join("\n"),
   );
 
@@ -336,7 +342,19 @@ test("validate-planning-diff rejects atomic plan support sidecars", () => {
   );
   assert.match(result.stderr, /A: \.agents\/plans\/source\.review-request\.md/);
   assert.match(result.stderr, /M: \.agents\/plans\/source\.handoff\.yaml/);
-  assert.doesNotMatch(result.stderr, /\.agents\/plans\/source\.md/);
+  assert.match(
+    result.stderr,
+    /D: \.agents\/plans\/source\.validation-output\.json/,
+  );
+  assert.match(result.stderr, /R100: \.agents\/plans\/old\.review-request\.md/);
+  assert.match(result.stderr, /R100: \.agents\/plans\/new\.handoff\.yaml/);
+  assert.match(
+    result.stderr,
+    /C100: \.agents\/plans\/copy-source\.validation-output\.json/,
+  );
+  assert.match(result.stderr, /C100: \.agents\/plans\/copied\.report\.json/);
+  assert.match(result.stderr, /T: \.agents\/plans\/source\.ledger\.yaml/);
+  assert.doesNotMatch(result.stderr, /\.agents\/plans\/primary-plan\.md/);
 });
 
 test("validate-planning-diff rejects Git-quoted atomic plan support sidecars", () => {
