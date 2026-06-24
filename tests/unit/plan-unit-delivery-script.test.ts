@@ -870,7 +870,7 @@ test("commit-implementation rejects reused reviewer evidence after staged diff c
       firstEvidence,
       ["--message", "Second implementation commit"],
     );
-    const output = JSON.parse(second.stdout);
+    const output = JSON.parse(second.stdout.slice(second.stdout.indexOf("{")));
 
     assert.notEqual(second.status, 0);
     assert.notEqual(secondDiffHash, firstDiffHash);
