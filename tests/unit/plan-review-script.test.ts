@@ -187,6 +187,24 @@ planning_review:
   target_base_sha: abc123
   planning_branch: plan/example
   reviewed_head: def456
+  description_policy:
+    status: passed
+    owner: glab-mr-create
+    artifact: https://example.test/review/1
+    head_sha: def456
+    update_mode: updated
+    materiality_decision: material_update
+    readback_head_sha: def456
+    read_before_update: true
+    pre_update_body_evidence: prior body hash retained for manual-section recovery
+    readback_after_update: true
+    readback_outcome: clean
+    preserved_manual_sections: true
+    rollback_or_restore_evidence: none
+    evidence:
+      - MR body read before update and read back at current planning head
+    omitted_process_history: true
+    omitted_private_artifacts: true
   stack_base_ref: plan/example
   stack_base_evidence: latest-head Nitro feedback completed cleanly
   stack_identity:
@@ -486,6 +504,186 @@ test("validate-planning-review rejects missing Nitro gate", () => {
 
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /nitro_feedback_gate.artifact/);
+});
+
+test("validate-planning-review rejects missing description policy", () => {
+  const result = runPlanReview(
+    "validate-planning-review",
+    planningReview.replace(
+      / {2}description_policy:[\s\S]*? {2}stack_base_ref:/,
+      "  stack_base_ref:",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /planning_review\.description_policy is required/,
+  );
+});
+
+test("validate-planning-review rejects description policy missing evidence despite sibling evidence", () => {
+  const result = runPlanReview(
+    "validate-planning-review",
+    planningReview.replace(
+      / {4}evidence:\n {6}- MR body read before update and read back at current planning head\n/,
+      "",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /planning_review\.description_policy\.evidence is required/,
+  );
+});
+
+test("validate-planning-review rejects placeholder description policy evidence", () => {
+  const result = runPlanReview(
+    "validate-planning-review",
+    planningReview.replace(
+      "- MR body read before update and read back at current planning head",
+      "- <description create/update/readback evidence>",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /planning_review\.description_policy\.evidence must not contain placeholder values/,
+  );
+});
+
+test("validate-planning-review accepts created description policy with explicit not applicable update fields", () => {
+  const result = runPlanReview(
+    "validate-planning-review",
+    planningReview
+      .replace("    update_mode: updated", "    update_mode: created")
+      .replace(
+        "    read_before_update: true",
+        "    read_before_update: not_applicable_for_created",
+      )
+      .replace(
+        "    pre_update_body_evidence: prior body hash retained for manual-section recovery",
+        "    pre_update_body_evidence: not_applicable_for_created",
+      )
+      .replace(
+        "    preserved_manual_sections: true",
+        "    preserved_manual_sections: not_applicable_for_created",
+      )
+      .replace(
+        "    rollback_or_restore_evidence: none",
+        "    rollback_or_restore_evidence: not_applicable_for_created",
+      ),
+  );
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /planning_review valid/);
+});
+
+test("validate-planning-review rejects stale description readback head", () => {
+  const result = runPlanReview(
+    "validate-planning-review",
+    planningReview.replace(
+      "    readback_head_sha: def456",
+      "    readback_head_sha: old123",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /planning_review\.description_policy\.readback_head_sha must match current artifact head/,
+  );
+});
+
+test("validate-planning-review rejects self-consistent stale head when expected head differs", () => {
+  const result = runPlanReviewArgs(
+    [
+      "validate-planning-review",
+      "--expected-artifact",
+      "https://example.test/review/1",
+      "--expected-head-sha",
+      "new789",
+    ],
+    planningReview,
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /planning_review\.reviewed_head must match expected current artifact head/,
+  );
+  assert.match(
+    result.stderr,
+    /planning_review\.description_policy\.head_sha must match current artifact head/,
+  );
+});
+
+test("validate-planning-review rejects restored readback without restore evidence", () => {
+  const result = runPlanReview(
+    "validate-planning-review",
+    planningReview.replace(
+      "    readback_outcome: clean",
+      "    readback_outcome: restored",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /planning_review\.description_policy\.rollback_or_restore_evidence is required when readback_outcome is restored/,
+  );
+});
+
+test("validate-planning-review rejects metadata reuse without rationale", () => {
+  const result = runPlanReview(
+    "validate-planning-review",
+    planningReview
+      .replace("    update_mode: updated", "    update_mode: reused_current")
+      .replace(
+        "    materiality_decision: material_update",
+        "    materiality_decision: metadata_only_reuse",
+      ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /planning_review\.description_policy\.reuse_rationale/,
+  );
+});
+
+test("validate-planning-review rejects metadata-only materiality for updated descriptions", () => {
+  const result = runPlanReview(
+    "validate-planning-review",
+    planningReview.replace(
+      "    materiality_decision: material_update",
+      "    materiality_decision: metadata_only_reuse",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /planning_review\.description_policy\.materiality_decision metadata_only_reuse requires update_mode reused_current/,
+  );
+});
+
+test("validate-planning-review rejects process-history description drift evidence", () => {
+  const result = runPlanReview(
+    "validate-planning-review",
+    planningReview.replace(
+      "    omitted_process_history: true",
+      "    omitted_process_history: false",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /planning_review\.description_policy\.omitted_process_history must be true/,
+  );
 });
 
 test("validate-planning-review rejects missing planning feedback disposition", () => {

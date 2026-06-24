@@ -20,6 +20,24 @@ export const PLANNING_REVIEW_ARTIFACT_TYPES = [
   "linear",
 ] as const;
 
+const DESCRIPTION_POLICY_OWNERS = [
+  "change-request-create",
+  "glab-mr-create",
+  "github-pr-create",
+  "equivalent_provider_adapter",
+] as const;
+
+const DESCRIPTION_POLICY_UPDATE_MODES = [
+  "created",
+  "updated",
+  "reused_current",
+] as const;
+
+const DESCRIPTION_POLICY_MATERIALITY_DECISIONS = [
+  "material_update",
+  "metadata_only_reuse",
+] as const;
+
 export type PlanningReview = {
   status?: string;
   artifact_type?: string;
@@ -31,6 +49,7 @@ export type PlanningReview = {
   target_base_sha?: string;
   planning_branch?: string;
   reviewed_head?: string;
+  description_policy?: DescriptionPolicy;
   stack_base_ref?: string;
   stack_base_evidence?: string;
   stack_identity_expected_base_ref?: string;
@@ -44,6 +63,31 @@ export type PlanningReview = {
   planning_feedback_evidence: string[];
   planning_feedback_items: PlanningFeedbackDispositionItem[];
   blockers: string[];
+};
+
+type PlanningReviewValidationOptions = {
+  expectedReviewArtifact?: string;
+  expectedReviewedHead?: string;
+};
+
+export type DescriptionPolicy = {
+  status?: string;
+  owner?: string;
+  artifact?: string;
+  head_sha?: string;
+  update_mode?: string;
+  materiality_decision?: string;
+  reuse_rationale?: string;
+  readback_head_sha?: string;
+  read_before_update?: string;
+  pre_update_body_evidence?: string;
+  readback_after_update?: string;
+  readback_outcome?: string;
+  preserved_manual_sections?: string;
+  rollback_or_restore_evidence?: string;
+  evidence: string[];
+  omitted_process_history?: string;
+  omitted_private_artifacts?: string;
 };
 
 type PlanningFeedbackDispositionItem = {
@@ -60,6 +104,12 @@ const PLANNING_FEEDBACK_DISPOSITIONS = [
   "fixed_in_planning",
   "deferred_to_task",
   "non_actionable",
+  "blocked",
+] as const;
+
+const DESCRIPTION_POLICY_READBACK_OUTCOMES = [
+  "clean",
+  "restored",
   "blocked",
 ] as const;
 
@@ -92,11 +142,24 @@ export function findSection(input: string, sectionName: string): string | null {
     return null;
   }
 
-  return lines
-    .slice(start + 1)
-    .filter((line) => line.startsWith(" ") || line.trim() === "")
-    .map((line) => line.replace(/^ {2}/, ""))
-    .join("\n");
+  const sectionIndent = lines[start].match(/^(\s*)/)?.[1].length ?? 0;
+  const sectionLines: string[] = [];
+
+  for (const line of lines.slice(start + 1)) {
+    if (line.trim() === "") {
+      sectionLines.push("");
+      continue;
+    }
+
+    const indent = line.match(/^(\s*)/)?.[1].length ?? 0;
+    if (indent <= sectionIndent) {
+      break;
+    }
+
+    sectionLines.push(line.slice(Math.min(indent, sectionIndent + 2)));
+  }
+
+  return sectionLines.join("\n");
 }
 
 export function hasSection(input: string, sectionName: string): boolean {
@@ -174,6 +237,7 @@ export function legacyPlanContractErrors(input: string): string[] {
 export function parsePlanningReview(input: string): PlanningReview {
   const body = extractYaml(input);
   const section = findSection(body, "planning_review") ?? "";
+  const descriptionPolicy = findSection(section, "description_policy") ?? "";
   const stackIdentity = findSection(section, "stack_identity") ?? "";
   const validation = findSection(section, "validation") ?? "";
   const review = findSection(section, "review") ?? "";
@@ -191,6 +255,7 @@ export function parsePlanningReview(input: string): PlanningReview {
     target_base_sha: scalar(section, "target_base_sha"),
     planning_branch: scalar(section, "planning_branch"),
     reviewed_head: scalar(section, "reviewed_head"),
+    description_policy: parseDescriptionPolicySection(descriptionPolicy),
     stack_base_ref: scalar(section, "stack_base_ref"),
     stack_base_evidence: scalar(section, "stack_base_evidence"),
     stack_identity_expected_base_ref: scalar(
@@ -219,6 +284,7 @@ export function parsePlanningReview(input: string): PlanningReview {
 export function validatePlanningReviewContract(
   input: string,
   errors: string[] = [],
+  options: PlanningReviewValidationOptions = {},
 ): PlanningReview {
   const review = parsePlanningReview(input);
 
@@ -244,6 +310,32 @@ export function validatePlanningReviewContract(
     errors,
   );
   requireValue(review.reviewed_head, "planning_review.reviewed_head", errors);
+  if (
+    options.expectedReviewArtifact &&
+    review.review_artifact &&
+    review.review_artifact !== options.expectedReviewArtifact
+  ) {
+    errors.push("planning_review.review_artifact must match expected artifact");
+  }
+  if (
+    options.expectedReviewedHead &&
+    review.reviewed_head &&
+    review.reviewed_head !== options.expectedReviewedHead
+  ) {
+    errors.push(
+      "planning_review.reviewed_head must match expected current artifact head",
+    );
+  }
+  validateDescriptionPolicy(
+    review.description_policy,
+    "planning_review.description_policy",
+    errors,
+    {
+      expectedArtifact:
+        options.expectedReviewArtifact ?? review.review_artifact,
+      expectedHeadSha: options.expectedReviewedHead ?? review.reviewed_head,
+    },
+  );
   requireValue(
     review.task_state_fingerprint,
     "planning_review.task_state_fingerprint",
@@ -342,6 +434,249 @@ export function validatePlanningReviewContract(
   }
 
   return review;
+}
+
+export function parseDescriptionPolicySection(
+  section: string,
+): DescriptionPolicy | undefined {
+  if (!section.trim()) {
+    return undefined;
+  }
+
+  return {
+    status: scalar(section, "status"),
+    owner: scalar(section, "owner"),
+    artifact: scalar(section, "artifact"),
+    head_sha: scalar(section, "head_sha"),
+    update_mode: scalar(section, "update_mode"),
+    materiality_decision: scalar(section, "materiality_decision"),
+    reuse_rationale: scalar(section, "reuse_rationale"),
+    readback_head_sha: scalar(section, "readback_head_sha"),
+    read_before_update: scalar(section, "read_before_update"),
+    pre_update_body_evidence: scalar(section, "pre_update_body_evidence"),
+    readback_after_update: scalar(section, "readback_after_update"),
+    readback_outcome: scalar(section, "readback_outcome"),
+    preserved_manual_sections: scalar(section, "preserved_manual_sections"),
+    rollback_or_restore_evidence: scalar(
+      section,
+      "rollback_or_restore_evidence",
+    ),
+    evidence: descriptionPolicyEvidence(section),
+    omitted_process_history: scalar(section, "omitted_process_history"),
+    omitted_private_artifacts: scalar(section, "omitted_private_artifacts"),
+  };
+}
+
+function descriptionPolicyEvidence(section: string): string[] {
+  const listed = list(section, "evidence");
+  if (listed.length > 0) {
+    return listed;
+  }
+
+  const inline = scalar(section, "evidence");
+  return inline ? [inline] : [];
+}
+
+export function validateDescriptionPolicy(
+  policy: DescriptionPolicy | undefined,
+  label: string,
+  errors: string[],
+  options: {
+    expectedArtifact?: string;
+    expectedHeadSha?: string;
+  } = {},
+): void {
+  if (!policy) {
+    errors.push(`${label} is required`);
+    return;
+  }
+
+  requireValue(policy.status, `${label}.status`, errors);
+  requireValue(policy.owner, `${label}.owner`, errors);
+  requireValue(policy.artifact, `${label}.artifact`, errors);
+  requireValue(policy.head_sha, `${label}.head_sha`, errors);
+  requireValue(policy.update_mode, `${label}.update_mode`, errors);
+  requireValue(
+    policy.materiality_decision,
+    `${label}.materiality_decision`,
+    errors,
+  );
+  requireValue(policy.readback_head_sha, `${label}.readback_head_sha`, errors);
+  requireValue(
+    policy.read_before_update,
+    `${label}.read_before_update`,
+    errors,
+  );
+  requireValue(
+    policy.pre_update_body_evidence,
+    `${label}.pre_update_body_evidence`,
+    errors,
+  );
+  requireValue(
+    policy.readback_after_update,
+    `${label}.readback_after_update`,
+    errors,
+  );
+  requireValue(policy.readback_outcome, `${label}.readback_outcome`, errors);
+  requireValue(
+    policy.preserved_manual_sections,
+    `${label}.preserved_manual_sections`,
+    errors,
+  );
+  requireValue(
+    policy.rollback_or_restore_evidence,
+    `${label}.rollback_or_restore_evidence`,
+    errors,
+  );
+  requireValue(
+    policy.omitted_process_history,
+    `${label}.omitted_process_history`,
+    errors,
+  );
+  requireValue(
+    policy.omitted_private_artifacts,
+    `${label}.omitted_private_artifacts`,
+    errors,
+  );
+
+  if (policy.status && policy.status !== "passed") {
+    errors.push(`${label}.status must be passed`);
+  }
+  if (
+    policy.readback_outcome &&
+    !includes(DESCRIPTION_POLICY_READBACK_OUTCOMES, policy.readback_outcome)
+  ) {
+    errors.push(
+      `${label}.readback_outcome must be one of: ${DESCRIPTION_POLICY_READBACK_OUTCOMES.join(", ")}`,
+    );
+  }
+  if (policy.readback_outcome === "blocked") {
+    errors.push(`${label}.readback_outcome blocked prevents readiness`);
+  }
+  if (policy.owner && !includes(DESCRIPTION_POLICY_OWNERS, policy.owner)) {
+    errors.push(
+      `${label}.owner must be one of: ${DESCRIPTION_POLICY_OWNERS.join(", ")}`,
+    );
+  }
+  if (
+    policy.update_mode &&
+    !includes(DESCRIPTION_POLICY_UPDATE_MODES, policy.update_mode)
+  ) {
+    errors.push(
+      `${label}.update_mode must be one of: ${DESCRIPTION_POLICY_UPDATE_MODES.join(", ")}`,
+    );
+  }
+  if (
+    policy.materiality_decision &&
+    !includes(
+      DESCRIPTION_POLICY_MATERIALITY_DECISIONS,
+      policy.materiality_decision,
+    )
+  ) {
+    errors.push(
+      `${label}.materiality_decision must be one of: ${DESCRIPTION_POLICY_MATERIALITY_DECISIONS.join(", ")}`,
+    );
+  }
+
+  if (policy.evidence.length === 0) {
+    errors.push(`${label}.evidence is required`);
+  }
+  if (policy.evidence.some((item) => item.startsWith("<"))) {
+    errors.push(`${label}.evidence must not contain placeholder values`);
+  }
+  if (
+    policy.readback_outcome === "restored" &&
+    (!policy.rollback_or_restore_evidence ||
+      policy.rollback_or_restore_evidence === "none" ||
+      policy.rollback_or_restore_evidence === "not_applicable_for_created")
+  ) {
+    errors.push(
+      `${label}.rollback_or_restore_evidence is required when readback_outcome is restored`,
+    );
+  }
+
+  validateBooleanOrCreatedNotApplicable(
+    policy.read_before_update,
+    `${label}.read_before_update`,
+    policy.update_mode,
+    errors,
+  );
+  validateBooleanOrCreatedNotApplicable(
+    policy.preserved_manual_sections,
+    `${label}.preserved_manual_sections`,
+    policy.update_mode,
+    errors,
+  );
+  for (const key of [
+    ["readback_after_update", policy.readback_after_update],
+    ["omitted_process_history", policy.omitted_process_history],
+    ["omitted_private_artifacts", policy.omitted_private_artifacts],
+  ] as const) {
+    if (key[1] && key[1] !== "true") {
+      errors.push(`${label}.${key[0]} must be true`);
+    }
+  }
+
+  if (
+    options.expectedArtifact &&
+    policy.artifact &&
+    policy.artifact !== options.expectedArtifact
+  ) {
+    errors.push(`${label}.artifact must match current artifact`);
+  }
+  if (
+    options.expectedHeadSha &&
+    policy.head_sha &&
+    policy.head_sha !== options.expectedHeadSha
+  ) {
+    errors.push(`${label}.head_sha must match current artifact head`);
+  }
+  if (
+    options.expectedHeadSha &&
+    policy.readback_head_sha &&
+    policy.readback_head_sha !== options.expectedHeadSha
+  ) {
+    errors.push(`${label}.readback_head_sha must match current artifact head`);
+  }
+  if (
+    policy.head_sha &&
+    policy.readback_head_sha &&
+    policy.head_sha !== policy.readback_head_sha
+  ) {
+    errors.push(`${label}.readback_head_sha must match head_sha`);
+  }
+  if (policy.update_mode === "reused_current") {
+    if (policy.materiality_decision !== "metadata_only_reuse") {
+      errors.push(
+        `${label}.update_mode reused_current requires materiality_decision metadata_only_reuse`,
+      );
+    }
+    requireValue(policy.reuse_rationale, `${label}.reuse_rationale`, errors);
+    if (policy.reuse_rationale?.startsWith("<")) {
+      errors.push(`${label}.reuse_rationale is required`);
+    }
+  } else if (policy.materiality_decision === "metadata_only_reuse") {
+    errors.push(
+      `${label}.materiality_decision metadata_only_reuse requires update_mode reused_current`,
+    );
+  }
+}
+
+function validateBooleanOrCreatedNotApplicable(
+  value: string | undefined,
+  label: string,
+  updateMode: string | undefined,
+  errors: string[],
+): void {
+  if (!value || value === "true") {
+    return;
+  }
+
+  if (value === "not_applicable_for_created" && updateMode === "created") {
+    return;
+  }
+
+  errors.push(`${label} must be true unless update_mode is created`);
 }
 
 function validatePlanningFeedbackDisposition(

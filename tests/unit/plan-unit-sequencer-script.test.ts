@@ -165,6 +165,24 @@ const planningReview = `planning_review:
   target_base_sha: abc123
   planning_branch: plan/example
   reviewed_head: def456
+  description_policy:
+    status: passed
+    owner: glab-mr-create
+    artifact: https://example.test/review/1
+    head_sha: def456
+    update_mode: updated
+    materiality_decision: material_update
+    readback_head_sha: def456
+    read_before_update: true
+    pre_update_body_evidence: prior body hash retained for manual-section recovery
+    readback_after_update: true
+    readback_outcome: clean
+    preserved_manual_sections: true
+    rollback_or_restore_evidence: none
+    evidence:
+      - MR body read before update and read back at current planning head
+    omitted_process_history: true
+    omitted_private_artifacts: true
   stack_base_ref: plan/example
   stack_base_evidence: latest-head Nitro feedback completed cleanly
   stack_identity:

@@ -127,10 +127,28 @@ and next action.
    private thread metadata in hosted descriptions. Use summaries, hashes, note
    IDs, discussion IDs, or stable correlation IDs when support-artifact evidence
    is relevant.
-9. Run the artifact-host inspection adapter (`gitlab-adapter-review` or
+9. Run the hosted-description gate before requesting Nitro or reporting
+   readiness. Use the selected description policy owner
+   (`change-request-create`, `glab-mr-create`, `github-pr-create`, or an
+   equivalent provider adapter in harnesses where the named skill is
+   unavailable) to create or update the body. If a PR/MR already exists, read
+   the current hosted body before updating and retain enough pre-update evidence
+   to restore manual sections, links, checklist state, reviewer-authored notes,
+   and template content if readback shows damage. Read the hosted body back
+   after create/update and tie that readback to the current planning artifact
+   head. The body must describe current scope, behavior, boundaries, requested
+   feedback, and reviewer-relevant validation. It must omit author-process
+   history, local workflow detail, raw private support artifacts, and private
+   paths. If readback finds lost manual content, wrong-section updates, stale
+   prior-head content, or a less accurate body, restore through the selected
+   policy owner or block with recovery evidence. Metadata-only reuse is allowed
+   only when the existing body remains accurate for the current head and the
+   final evidence records a metadata-only materiality decision plus reuse
+   rationale.
+10. Run the artifact-host inspection adapter (`gitlab-adapter-review` or
    `github-adapter-review`) only for host metadata, discussions, and CI/review
    state. Do not run implementation code review against a planning-only diff.
-10. Wait for routed automated feedback on the latest head:
+11. Wait for routed automated feedback on the latest head:
     - Fullscript GitLab/Nitro: use `nitro-review-feedback` first. If latest-head
       Nitro feedback is missing or stale after create/update, post the standard
       Nitro review request for the current head, then wait again.
@@ -138,11 +156,12 @@ and next action.
       substitute Codex or another reviewer for this first cut.
     - Developer review: keep the PR/MR open and report pending human review; do
       not fabricate approval.
-11. Apply only plan/documentation feedback. If feedback asks for implementation,
+12. Apply only plan/documentation feedback. If feedback asks for implementation,
     record it as a follow-up or blocker; do not start coding.
-12. If the branch head changes after feedback fixes, rerun artifact validation,
-    push, and wait for latest-head automated feedback again.
-13. Before finishing, enumerate all Nitro-authored planning comments and
+13. If the branch head changes after feedback fixes, rerun artifact validation,
+    push, refresh the hosted-description gate when the change affects reviewer
+    understanding, and wait for latest-head automated feedback again.
+14. Before finishing, enumerate all Nitro-authored planning comments and
     discussions on the planning PR/MR across every review round. Record each
     note ID, discussion ID when present, whether the discussion is resolvable
     and currently resolved, and disposition: `fixed_in_planning`,
@@ -150,15 +169,23 @@ and next action.
     planning feedback blocks implementation sequencing unless it is explicitly
     deferred to a specific implementation task or marked non-actionable with
     rationale.
-14. Generate `scripts/plan-review.ts gate-template`, fill it, and validate it
+15. Generate `scripts/plan-review.ts gate-template`, fill it, and validate it
     with `validate-ledger` as internal evidence.
-15. Emit `planning_review` with `scripts/plan-review.ts
+16. Emit `planning_review` with `scripts/plan-review.ts
     planning-review-template`, fill it with the hosted review evidence and a
-    passed `nitro_feedback_gate` plus `planning_feedback_disposition`, and
-    validate it with `validate-planning-review`.
-16. Finish only when the planning MR has latest-head Nitro feedback completed
+    passed `nitro_feedback_gate`, passed `description_policy`, and
+    `planning_feedback_disposition`, then validate it with:
+
+    ```bash
+    scripts/plan-review.ts validate-planning-review --file <handoff> --expected-artifact <hosted-url> --expected-head-sha <current-hosted-head>
+    ```
+
+    The expected values must come from the latest host inspection or live
+    branch/head inspection, not from the handoff YAML being validated.
+17. Finish only when the planning MR has latest-head Nitro feedback completed
     cleanly, every prior Nitro planning item has explicit disposition, and the
-    reviewed head is recorded as the implementation stack base.
+    reviewed head plus current hosted description readback are recorded as the
+    implementation stack base.
 
 Planning review is not terminal success for `plan-orchestrator`. In a
 `plan-orchestrator` run, the emitted `planning_review` is the reviewed stack
@@ -177,6 +204,7 @@ implementation units until it can report `stack_ready`, or report
 | Artifact validation | OpenSpec/doc/ticket validation passes or a precise gap is reported |
 | OpenSpec task shape | `validate-openspec-tasks` passes, or planning blocks with `needs_spec_redesign` before PR/MR creation or update |
 | Review feedback routing | Artifact and feedback adapters are selected, or ambiguity is blocked |
+| Description policy | Hosted description was created or updated through the selected policy owner, read back at the current artifact head, preserves manual content, omits process-history/private-artifact drift, and has restore-or-block evidence |
 | Artifact creation/update | Draft PR/MR exists for the latest planning-only branch |
 | Artifact-host inspection | Host metadata, discussions, and check state are inspected |
 | Planning feedback disposition | Every Nitro planning comment or discussion is enumerated by note/discussion ID with explicit disposition |
@@ -231,6 +259,25 @@ planning_review:
   target_base_sha: <target branch sha reviewed by planning artifact>
   planning_branch: <planning branch name>
   reviewed_head: <planning artifact head sha>
+  description_policy:
+    status: passed
+    owner: change-request-create | glab-mr-create | github-pr-create | equivalent_provider_adapter
+    artifact: <planning PR or MR URL>
+    head_sha: <planning artifact head sha>
+    update_mode: created | updated | reused_current
+    materiality_decision: material_update | metadata_only_reuse
+    reuse_rationale: <required when update_mode is reused_current>
+    readback_head_sha: <planning artifact head sha>
+    read_before_update: true | not_applicable_for_created
+    pre_update_body_evidence: <summary, hash, artifact note, recovery evidence, or not_applicable_for_created>
+    readback_after_update: true
+    readback_outcome: clean | restored | blocked
+    preserved_manual_sections: true | not_applicable_for_created
+    rollback_or_restore_evidence: none | not_applicable_for_created | <restore evidence>
+    evidence:
+      - <description create/update/readback evidence>
+    omitted_process_history: true
+    omitted_private_artifacts: true
   stack_base_ref: <planning PR or MR branch/ref>
   stack_base_evidence: <latest-head Nitro feedback and stack-base evidence>
   stack_identity:
@@ -269,6 +316,9 @@ planning_review:
 | Publishing an OpenSpec with a documentation or validation phase anywhere | Block with `needs_spec_redesign` and ask the user how to proceed |
 | Treating routing metadata as sufficient after pushing a new head to an existing Fullscript MR | Request a fresh Nitro review for the current head, then wait for latest-head feedback or pending state |
 | Requesting Nitro repeatedly when a fresh latest-head Nitro review is already pending | Stop polling after recording the pending review state, MR head, and request evidence |
+| Requesting Nitro before hosted description readback proves current reviewer-facing content | Run the description policy gate first, then request Nitro |
+| Letting a planning MR describe author iteration such as "What Changed In The Plan" instead of current scope | Rewrite through the description policy owner so the section describes current plan scope, behavior, boundaries, and verification |
+| Reusing prior-head description evidence after a material planning change | Refresh the description policy gate, or record metadata-only reuse with current-head readback and rationale |
 | Calling pending developer review a pass | Report it as published and pending with the PR/MR URL |
 | Applying code changes from review feedback | Convert implementation requests into plan changes or follow-ups |
 | Treating latest-head Nitro clean as enough when prior planning comments exist | Enumerate prior Nitro planning comments and record explicit disposition before emitting `planning_review` |
@@ -283,3 +333,5 @@ planning_review:
   `plan_delivery_handoff`, and rejects legacy slice/followthrough shapes.
 - GREEN: `planning_review` validates as the only review-to-implementation
   handoff.
+- GREEN: `planning_review` validation requires passed, current-head
+  `description_policy` evidence before implementation sequencing.

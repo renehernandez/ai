@@ -4,6 +4,7 @@ import {
   extractSection,
   extractYaml,
   fail,
+  findSection,
   includes,
   list,
   readInput,
@@ -264,7 +265,7 @@ function validateGateOutcome(
 
 function parseGate(input: string) {
   const body = extractYaml(input);
-  const section = extractSection(body, "nitro_feedback_gate");
+  const section = findSection(body, "nitro_feedback_gate") ?? "";
   const request = extractSection(section, "request");
   const start = extractSection(section, "start");
   const completion = extractSection(section, "completion");

@@ -11,9 +11,11 @@ import {
   includes,
   legacyPlanContractErrors,
   list,
+  parseDescriptionPolicySection,
   readInput,
   requireValue,
   scalar,
+  validateDescriptionPolicy,
 } from "./lib/planning-contracts.ts";
 import {
   artifactHostHintFromRemoteText,
@@ -86,6 +88,7 @@ const LEDGER_GATES = [
   "docs_alignment",
   "review_feedback_routing",
   "implementation_artifact_separation",
+  "description_policy",
   "artifact_creation_update",
   "stack_identity",
   "artifact_host_review",
@@ -99,6 +102,7 @@ const LEDGER_NOT_APPLICABLE_GATES = [
   "security_review",
   "ai_readiness_upkeep",
   "docs_alignment",
+  "unit_task_delta",
 ] as const;
 
 const LEDGER_STATUSES = ["passed", "blocked", "not_applicable"] as const;
@@ -148,7 +152,7 @@ function main(): void {
 
   if (!isCommand(command)) {
     fail(
-      "Usage: plan-unit-delivery.ts <detect|validate-handoff|reviewer-template|validate-launch-report|validate-review-report|refactoring-template|gate-template|validate-ledger|validate-task-delta> [--file path|--base path --head path --task id]",
+      "Usage: plan-unit-delivery.ts <detect|validate-handoff|reviewer-template|validate-launch-report|validate-review-report|refactoring-template|gate-template|validate-ledger|validate-task-delta> [--file path|--base path --head path --task id] [--expected-head-sha sha] [--expected-artifact url]",
     );
   }
 
@@ -193,7 +197,7 @@ function main(): void {
     return;
   }
 
-  validateLedger(input);
+  validateLedger(input, args);
 }
 
 function detect(): void {
@@ -223,8 +227,27 @@ function printGateTemplate(): void {
     if (gate !== "stack_identity") {
       if (gate === "unit_task_delta") {
         return `${base}
-    command: <validate-task-delta command>
-    output: <validate-task-delta output containing unit_task_delta_valid>`;
+    command: <validate-task-delta command, or omit when selected_task_id is atomic>
+    output: <validate-task-delta output containing unit_task_delta_valid, or omit when selected_task_id is atomic>`;
+      }
+
+      if (gate === "description_policy") {
+        return `${base}
+    owner: change-request-create | glab-mr-create | github-pr-create | equivalent_provider_adapter
+    artifact: <implementation PR or MR URL>
+    head_sha: <implementation artifact latest head sha>
+    update_mode: created | updated | reused_current
+    materiality_decision: material_update | metadata_only_reuse
+    reuse_rationale: <required when update_mode is reused_current>
+    readback_head_sha: <implementation artifact latest head sha>
+    read_before_update: true | not_applicable_for_created
+    pre_update_body_evidence: <summary, hash, artifact note, recovery evidence, or not_applicable_for_created>
+    readback_after_update: true
+    readback_outcome: clean | restored | blocked
+    preserved_manual_sections: true | not_applicable_for_created
+    rollback_or_restore_evidence: none | not_applicable_for_created | <restore evidence>
+    omitted_process_history: true
+    omitted_private_artifacts: true`;
       }
 
       return base;
@@ -525,7 +548,7 @@ function validateTaskDelta(args: string[]): void {
   );
 }
 
-function validateLedger(input: string): void {
+function validateLedger(input: string, args: string[] = []): void {
   const body = extractYaml(input);
   const section = extractSection(body, "delivery_gate_ledger");
   const errors: string[] = [];
@@ -565,7 +588,10 @@ function validateLedger(input: string): void {
     }
   }
 
-  validateDeliveryGateSemantics(body, section, errors);
+  validateDeliveryGateSemantics(body, section, errors, {
+    expectedArtifact: optionalArg(args, "--expected-artifact"),
+    expectedHeadSha: optionalArg(args, "--expected-head-sha"),
+  });
 
   if (errors.length > 0) {
     console.error(
@@ -581,6 +607,10 @@ function validateDeliveryGateSemantics(
   body: string,
   section: string,
   errors: string[],
+  options: {
+    expectedArtifact?: string;
+    expectedHeadSha?: string;
+  } = {},
 ): void {
   const nitroArtifact = scalar(body, "artifact");
   const nitroHeadSha = scalar(body, "head_sha");
@@ -647,54 +677,98 @@ function validateDeliveryGateSemantics(
       "nitro_feedback_gate.head_sha must match stack_identity.implementation_head_sha",
     );
   }
+  if (
+    options.expectedArtifact &&
+    implementationArtifact &&
+    implementationArtifact !== options.expectedArtifact
+  ) {
+    errors.push(
+      "stack_identity.implementation_artifact must match expected artifact",
+    );
+  }
+  if (
+    options.expectedHeadSha &&
+    implementationHeadSha &&
+    implementationHeadSha !== options.expectedHeadSha
+  ) {
+    errors.push(
+      "stack_identity.implementation_head_sha must match expected current artifact head",
+    );
+  }
+
+  validateDescriptionPolicy(
+    parseDescriptionPolicySection(
+      findSection(section, "description_policy") ?? "",
+    ),
+    "description_policy",
+    errors,
+    {
+      expectedArtifact: options.expectedArtifact ?? implementationArtifact,
+      expectedHeadSha: options.expectedHeadSha ?? implementationHeadSha,
+    },
+  );
 
   const unitTaskDeltaGate = findSection(section, "unit_task_delta");
+  const unitTaskDeltaStatus = unitTaskDeltaGate
+    ? scalar(unitTaskDeltaGate, "status")
+    : undefined;
   const unitTaskDeltaCommand = unitTaskDeltaGate
     ? scalar(unitTaskDeltaGate, "command")
     : undefined;
   const unitTaskDeltaOutput = unitTaskDeltaGate
     ? scalarOrBlock(unitTaskDeltaGate, "output")
     : undefined;
-  requireValue(unitTaskDeltaCommand, "unit_task_delta.command", errors);
-  requireValue(unitTaskDeltaOutput, "unit_task_delta.output", errors);
-  if (
-    unitTaskDeltaCommand &&
-    !unitTaskDeltaCommand.includes("validate-task-delta")
-  ) {
-    errors.push("unit_task_delta.command must run validate-task-delta");
-  }
-  if (
-    unitTaskDeltaOutput &&
-    !unitTaskDeltaOutput.includes("unit_task_delta_valid")
-  ) {
-    errors.push("unit_task_delta.output must include unit_task_delta_valid");
-  }
-  if (unitTaskDeltaCommand && selectedTaskId) {
-    const commandTaskId = parseTaskDeltaCommandTask(unitTaskDeltaCommand);
-    if (!commandTaskId) {
+  const atomicPlanDelivery =
+    selectedTaskId === "atomic" && unitTaskDeltaStatus === "not_applicable";
+
+  if (atomicPlanDelivery) {
+    if (unitTaskDeltaCommand || unitTaskDeltaOutput) {
       errors.push(
-        "unit_task_delta.command must include --task <selected_task_id>",
-      );
-    } else if (commandTaskId !== selectedTaskId) {
-      errors.push(
-        "unit_task_delta.command --task must match stack_identity.selected_task_id",
+        "unit_task_delta.command and output must be omitted for atomic plan delivery",
       );
     }
-  }
-  if (unitTaskDeltaOutput && selectedTaskId) {
-    const parsedOutput = parseTaskDeltaOutput(unitTaskDeltaOutput);
-    if (!parsedOutput) {
-      errors.push("unit_task_delta.output must be parseable validator JSON");
-    } else {
-      if (parsedOutput.status !== "unit_task_delta_valid") {
+  } else {
+    requireValue(unitTaskDeltaCommand, "unit_task_delta.command", errors);
+    requireValue(unitTaskDeltaOutput, "unit_task_delta.output", errors);
+    if (
+      unitTaskDeltaCommand &&
+      !unitTaskDeltaCommand.includes("validate-task-delta")
+    ) {
+      errors.push("unit_task_delta.command must run validate-task-delta");
+    }
+    if (
+      unitTaskDeltaOutput &&
+      !unitTaskDeltaOutput.includes("unit_task_delta_valid")
+    ) {
+      errors.push("unit_task_delta.output must include unit_task_delta_valid");
+    }
+    if (unitTaskDeltaCommand && selectedTaskId) {
+      const commandTaskId = parseTaskDeltaCommandTask(unitTaskDeltaCommand);
+      if (!commandTaskId) {
         errors.push(
-          "unit_task_delta.output status must be unit_task_delta_valid",
+          "unit_task_delta.command must include --task <selected_task_id>",
+        );
+      } else if (commandTaskId !== selectedTaskId) {
+        errors.push(
+          "unit_task_delta.command --task must match stack_identity.selected_task_id",
         );
       }
-      if (parsedOutput.addedTaskId !== selectedTaskId) {
-        errors.push(
-          "unit_task_delta.output added_task.id must match stack_identity.selected_task_id",
-        );
+    }
+    if (unitTaskDeltaOutput && selectedTaskId) {
+      const parsedOutput = parseTaskDeltaOutput(unitTaskDeltaOutput);
+      if (!parsedOutput) {
+        errors.push("unit_task_delta.output must be parseable validator JSON");
+      } else {
+        if (parsedOutput.status !== "unit_task_delta_valid") {
+          errors.push(
+            "unit_task_delta.output status must be unit_task_delta_valid",
+          );
+        }
+        if (parsedOutput.addedTaskId !== selectedTaskId) {
+          errors.push(
+            "unit_task_delta.output added_task.id must match stack_identity.selected_task_id",
+          );
+        }
       }
     }
   }
@@ -770,6 +844,20 @@ function validateDeliveryGateSemantics(
       "automatic_review_feedback_wait.evidence must show resolved Nitro feedback, no posted feedback after timeout, or unavailable review system evidence",
     );
   }
+}
+
+function optionalArg(args: string[], name: string): string | undefined {
+  const index = args.indexOf(name);
+  if (index === -1) {
+    return undefined;
+  }
+
+  const value = args[index + 1];
+  if (!value || value.startsWith("--")) {
+    fail(`${name} requires a value`);
+  }
+
+  return value;
 }
 
 function scalarOrBlock(input: string, key: string): string | undefined {
