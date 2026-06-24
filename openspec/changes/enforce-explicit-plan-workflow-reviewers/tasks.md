@@ -93,7 +93,7 @@
 - [x] 5.1 Update `plan-orchestrator` docs, prompts, validators, and tests so it
   validates phase evidence freshness and routes stale or missing evidence back
   to the owning phase.
-- [ ] 5.2 Prove `plan-orchestrator` does not write review-gate state.
+- [x] 5.2 Prove `plan-orchestrator` does not write review-gate state.
 - [ ] 5.3 Prove `plan-orchestrator` does not invent or recompute reviewer lists.
 - [ ] 5.4 Add tests for missing readiness evidence routing to `plan-ready` and
   missing planning or delivery evidence routing to the owning phase.
