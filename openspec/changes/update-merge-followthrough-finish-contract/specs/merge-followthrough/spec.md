@@ -95,9 +95,15 @@ completion.
 
 #### Scenario: Missing default-branch CI is a verification gap
 - **WHEN** no default-branch pipeline or check graph is created after the
-  polling window
+  10-minute polling window
 - **THEN** the skill reports a verification gap
 - **AND** it does not claim the workflow is fully done
+
+#### Scenario: Default-branch CI graph polling window expires
+- **WHEN** the host does not immediately expose the default-branch CI graph
+- **THEN** the skill polls every 1 minute for up to 10 minutes
+- **AND** reports a verification gap if no graph is created by the end of that
+  window
 
 #### Scenario: Stack stops on default-branch CI problem
 - **WHEN** a stack merge leaves default-branch CI failed, blocked, or missing
@@ -114,9 +120,18 @@ automatically.
 #### Scenario: High-confidence fix-forward is proposed
 - **WHEN** default-branch CI fails after merge
 - **AND** the failure is evidence-backed branch-caused
-- **AND** diagnosis and fix confidence are above 0.90
+- **AND** diagnosis and fix confidence are above 0.90 under the repo confidence
+  framework
 - **THEN** the skill may create a fix-forward branch, commit, push, and MR or PR
   through the repo's normal delivery route
+
+#### Scenario: Fix-forward confidence is evidence-backed
+- **WHEN** the skill reports fix-forward confidence above 0.90
+- **THEN** the report identifies the failing default-branch job or check
+- **AND** explains why the failure is caused by the merged change instead of
+  infrastructure or unrelated changes
+- **AND** identifies the minimal fix
+- **AND** includes local or hosted verification for that fix when available
 
 #### Scenario: Nitro is requested for fix-forward
 - **WHEN** a fix-forward artifact is created in a Nitro-gated repo

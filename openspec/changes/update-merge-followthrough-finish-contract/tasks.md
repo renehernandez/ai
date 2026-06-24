@@ -10,11 +10,13 @@
       behavioral coverage.
 - [ ] 1.3 Add required default-branch CI graph completion rules to the skill
       contract, including no-pipeline verification gaps and child/downstream CI
-      graph proof when required, with focused behavioral coverage.
+      graph proof when required, 10-minute creation polling, and focused
+      behavioral coverage.
 - [ ] 1.4 Add post-merge fix-forward boundary rules to the skill contract,
       including the above-0.90 confidence threshold, normal hosted-review route,
-      Nitro request requirement where applicable, and never-auto-merge behavior,
-      with focused behavioral coverage.
+      evidence-backed confidence inputs, Nitro request requirement where
+      applicable, and never-auto-merge behavior, with focused behavioral
+      coverage.
 
 ## Proof Expectations
 

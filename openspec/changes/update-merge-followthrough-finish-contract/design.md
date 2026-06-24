@@ -76,6 +76,12 @@ the merge commit or resulting default-branch head. The proof includes child or
 downstream pipelines when the host exposes them as required. Deployment checks
 remain explicit-only or repo-required-only.
 
+The skill should wait up to 10 minutes for the default-branch CI graph to be
+created, polling every 1 minute when the host does not immediately expose the
+graph. If the host reports that no graph will be created, or the graph still
+does not exist after that window, the skill reports a verification gap instead
+of continuing to poll indefinitely.
+
 Alternative considered: keep deployment verification in the default workflow.
 That overstates the normal requirement for this skill and makes "done" depend
 on environments that may not exist for the repo.
@@ -87,6 +93,13 @@ default-branch CI failure is evidence-backed branch-caused and both diagnosis
 and fix confidence are above 0.90. The fix-forward artifact uses the repo's
 normal commit and hosted-review route, including `ax commit` and Nitro where
 applicable. The skill must never merge the fix-forward artifact automatically.
+
+The confidence score is the agent's explicit confidence score under the repo
+confidence framework, backed by concrete evidence. To exceed 0.90, the report
+must cite the failing default-branch job/check, explain why the failure is
+caused by the merged change rather than infrastructure or an unrelated change,
+identify the minimal fix, and include local or hosted verification for that fix
+when such verification is available before opening the fix-forward artifact.
 
 Alternative considered: investigate and always ask before authoring a fix. That
 is safer but misses the requested behavior for high-confidence fix-forward
