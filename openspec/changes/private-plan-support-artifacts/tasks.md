@@ -31,7 +31,7 @@
 
 ## 3. Skill, Prompt, Rule, And CLI Guidance
 
-- [ ] 3.1 Update `skills/plan-ready`, `skills/plan-review`, and
+- [x] 3.1 Update `skills/plan-ready`, `skills/plan-review`, and
       `skills/plan-orchestrator` source instructions plus OpenAI adapter prompts
       to route support artifacts to thread evidence and the private workspace.
 - [ ] 3.2 Update repo rules that describe `.agents/plans/**` so they
