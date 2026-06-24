@@ -38,6 +38,16 @@ return `needs_spec_redesign`. Ask the user whether to redo the spec, brainstorm
 a better breakdown, narrow the change, or choose another planning route. Do not
 rewrite `tasks.md` automatically.
 
+Existing `tasks.md` files must also identify earliest objective proof. The first
+deliverable should prove the named capability by default. If the first
+deliverable is setup-only, the second deliverable must contain explicit
+`Proof location:` or `First real confirmation:` wording. The marker can appear
+in the checkbox text or nested task-local bullets, but it must name the real
+entrypoint and visible success or failure evidence. Missing proof, proof first
+appearing after the second deliverable, deferred proof markers,
+setup/config/metadata-only markers, and marker text without visible outcome
+evidence return `needs_spec_redesign`.
+
 OpenSpec tasks must use the native checkbox format:
 
 ```md
@@ -111,6 +121,7 @@ lists, failed audits also emit structured output before exiting non-zero:
 | Creating a parallel slice review | Edit or audit OpenSpec tasks instead |
 | Treating a whole phase as one task | Split the phase into minor deliverables |
 | Accepting documentation, testing, or validation phase groups anywhere | Return `needs_spec_redesign` unless that area is the feature being changed |
+| Accepting a deliverable-shaped task list where first real confirmation is task 3 or later | Return `needs_spec_redesign` and ask for redesign direction |
 | Sending manual tasks to `plan-unit-delivery` | Return `needs_human_action` |
 
 ## Test Evidence

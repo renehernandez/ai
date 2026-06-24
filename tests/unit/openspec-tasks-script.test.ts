@@ -51,6 +51,7 @@ const validTasks = `# Tasks
 ## 1. Core delivery
 
 - [x] 1.1 Add the delivery detector
+  - Proof location: run the delivery detector CLI entrypoint and observe pass or failure output.
 - [ ] 1.2 Implement the delivery handoff validator
 - [ ] 1.3 Manual production verification after merge
 
@@ -92,6 +93,7 @@ test("audit rejects broad deliverable tasks", () => {
 ## 1. Delivery
 
 - [ ] 1.1 Implement parser and delivery and PR workflow
+  - Proof location: run the parser CLI entrypoint and observe pass or failure output.
 `,
   );
 
@@ -179,6 +181,7 @@ test("audit accepts feature exceptions for workflow machinery", () => {
 ## 1. Documentation Feature
 
 - [ ] 1.1 Build documentation generator
+  - Proof location: run the documentation generator CLI entrypoint and observe generated output.
 
 ## 2. Testing Tooling
 
@@ -239,6 +242,7 @@ test("audit emits structured invalid output for non-redesign task errors", () =>
     `# Tasks
 
 - [ ] 1.1 Implement parser and delivery and PR workflow
+  - Proof location: run the parser CLI entrypoint and observe pass or failure output.
 `,
   );
 
@@ -309,6 +313,7 @@ test("audit keeps production verification as manual work", () => {
 ## 1. Delivery
 
 - [x] 1.1 Implement the parser
+  - Proof location: run the parser CLI entrypoint and observe pass or failure output.
 - [ ] 1.2 Manual production verification
 `,
   );
@@ -318,4 +323,116 @@ test("audit keeps production verification as manual work", () => {
 
   assert.equal(parsed.next_deliverable, null);
   assert.equal(parsed.manual_pending[0].id, "1.2");
+});
+
+test("audit accepts objective proof in the first deliverable", () => {
+  const result = runOpenSpecTasks(
+    "audit",
+    `# Tasks
+
+## 1. Delivery
+
+- [ ] 1.1 Implement target verification
+  - Proof location: run the hosted verification workflow entrypoint against hw-admin and observe success or failure evidence in the summary artifact.
+- [ ] 1.2 Add cleanup handling
+`,
+  );
+
+  assert.equal(result.status, 0);
+  const parsed = JSON.parse(result.stdout);
+
+  assert.equal(parsed.status, "pass");
+});
+
+test("audit accepts one setup-only deliverable before objective proof", () => {
+  const result = runOpenSpecTasks(
+    "audit",
+    `# Tasks
+
+## 1. Delivery
+
+- [ ] 1.1 Register target metadata
+  - Target metadata is available to verification setup.
+  - run pnpm test:unit
+- [ ] 1.2 Add hw-admin verification path
+  - First real confirmation: run the hosted verification workflow entrypoint against hw-admin and observe success or failure evidence in the summary artifact.
+`,
+  );
+
+  assert.equal(result.status, 0);
+});
+
+test("audit rejects task 2 proof after a non-setup first task", () => {
+  const result = runOpenSpecTasks(
+    "audit",
+    `# Tasks
+
+## 1. Delivery
+
+- [ ] 1.1 Implement blueprint validation
+  - Valid blueprints pass validation.
+- [ ] 1.2 Add CLI validation path
+  - First real confirmation: run the plan-ready validate-blueprint CLI entrypoint and observe pass or failure output.
+`,
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /objective proof is allowed only when task 1\.1 is setup-only/,
+  );
+});
+
+test("audit rejects deliverable-shaped tasks with objective proof at task 3", () => {
+  const result = runOpenSpecTasks(
+    "audit",
+    `# Tasks
+
+## 1. Delivery
+
+- [ ] 1.1 Register target metadata
+  - Target metadata is available to verification setup.
+- [ ] 1.2 Generate target probes
+  - Generated probe metadata is available for the target.
+- [ ] 1.3 Add hw-admin verification path
+  - First real confirmation: run the hosted verification workflow entrypoint against hw-admin and observe success or failure evidence in the summary artifact.
+`,
+  );
+
+  assert.notEqual(result.status, 0);
+  const parsed = JSON.parse(result.stdout);
+
+  assert.equal(parsed.status, "needs_spec_redesign");
+  assert.match(result.stderr, /objective proof first appears in task 1\.3/);
+});
+
+test("audit rejects missing and marker-only objective proof", () => {
+  const missing = runOpenSpecTasks(
+    "audit",
+    `# Tasks
+
+## 1. Delivery
+
+- [ ] 1.1 Register target metadata
+- [ ] 1.2 Generate target probes
+`,
+  );
+  const markerOnly = runOpenSpecTasks(
+    "audit",
+    `# Tasks
+
+## 1. Delivery
+
+- [ ] 1.1 Add target result path
+  - Proof location: target readiness is documented.
+`,
+  );
+
+  assert.notEqual(missing.status, 0);
+  assert.match(missing.stderr, /objective proof must be explicit/);
+  assert.notEqual(markerOnly.status, 0);
+  assert.match(
+    markerOnly.stderr,
+    /real entrypoint and visible success or failure evidence/,
+  );
 });

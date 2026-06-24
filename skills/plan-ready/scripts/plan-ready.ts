@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
+import { analyzeObjectiveProof } from "../../../scripts/objective-proof.ts";
 import { isSafeAgentsPlanRef } from "../../../scripts/plan-artifacts.ts";
 import {
   cleanScalar,
@@ -525,6 +526,28 @@ function validateBlueprint(input: string): void {
           `${label}.dependencies includes unknown task ${dependency}`,
         );
       }
+    }
+  }
+
+  const objectiveProof = analyzeObjectiveProof(
+    blueprint.tasks.map((task) => ({
+      id: task.id ?? "unknown",
+      text: [
+        task.title,
+        task.deliverable,
+        ...task.acceptance,
+        ...task.verification,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      setupText: [task.title, task.deliverable, ...task.acceptance]
+        .filter(Boolean)
+        .join("\n"),
+    })),
+  );
+  if (objectiveProof.status === "needs_spec_redesign") {
+    for (const issue of objectiveProof.issues) {
+      errors.push(issue.message);
     }
   }
 

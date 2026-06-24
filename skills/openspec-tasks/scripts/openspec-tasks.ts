@@ -1,6 +1,7 @@
 #!/usr/bin/env tsx
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import { analyzeObjectiveProof } from "../../../scripts/objective-proof.ts";
 
 const MANUAL_PATTERNS = [
   /\bmanual\b/i,
@@ -81,6 +82,7 @@ type Command = "parse" | "audit";
 export type OpenSpecTask = {
   id: string;
   title: string;
+  text: string;
   checked: boolean;
   line: number;
   heading: string;
@@ -112,11 +114,13 @@ function main(): void {
 export function parseTasks(markdown: string): OpenSpecTask[] {
   const tasks: OpenSpecTask[] = [];
   let heading = "";
+  let currentTask: OpenSpecTask | undefined;
 
   markdown.split(/\r?\n/).forEach((line, index) => {
     const headingMatch = line.match(/^##\s+(.+)$/);
     if (headingMatch) {
       heading = headingMatch[1].trim();
+      currentTask = undefined;
       return;
     }
 
@@ -124,20 +128,25 @@ export function parseTasks(markdown: string): OpenSpecTask[] {
       /^- \[([ xX])\]\s+([0-9]+(?:\.[0-9]+)+)\s+(.+)$/,
     );
     if (!taskMatch) {
+      if (/^\s+/.test(line) && currentTask) {
+        currentTask.text = `${currentTask.text}\n${line.trim()}`;
+      }
       return;
     }
 
     const title = taskMatch[3].trim();
     const shape = classifyTaskShape(heading, title);
-    tasks.push({
+    currentTask = {
       id: taskMatch[2],
       title,
+      text: title,
       checked: taskMatch[1].toLowerCase() === "x",
       line: index + 1,
       heading,
       kind: shape.kind,
       shape_reason: shape.reason,
-    });
+    };
+    tasks.push(currentTask);
   });
 
   return tasks;
@@ -172,7 +181,10 @@ export function classifyTaskShape(
   return { kind: "deliverable" };
 }
 
-export function validateTasks(tasks: OpenSpecTask[]): string[] {
+export function validateTasks(
+  tasks: OpenSpecTask[],
+  options: { requireObjectiveProof?: boolean } = {},
+): string[] {
   const errors: string[] = [];
   const seenIds = new Set<string>();
 
@@ -204,6 +216,17 @@ export function validateTasks(tasks: OpenSpecTask[]): string[] {
     }
   }
 
+  if (options.requireObjectiveProof) {
+    const objectiveProof = analyzeObjectiveProof(
+      tasks
+        .filter((task) => task.kind === "deliverable")
+        .map((task) => ({ id: task.id, text: task.text })),
+    );
+    if (objectiveProof.status === "needs_spec_redesign") {
+      errors.push(...objectiveProof.issues.map((issue) => issue.message));
+    }
+  }
+
   return errors;
 }
 
@@ -214,7 +237,7 @@ export function firstUncheckedDeliverable(
 }
 
 function auditTasks(tasks: OpenSpecTask[]): void {
-  const errors = validateTasks(tasks);
+  const errors = validateTasks(tasks, { requireObjectiveProof: true });
   const nextTask = firstUncheckedDeliverable(tasks);
 
   if (errors.length > 0) {
@@ -227,7 +250,13 @@ function auditTasks(tasks: OpenSpecTask[]): void {
         heading: task.heading,
         reason: task.shape_reason ?? "not a deliverable implementation unit",
       }));
-    const status = invalidTasks.length > 0 ? "needs_spec_redesign" : "invalid";
+    const hasRedesignError = errors.some((error) =>
+      error.startsWith("needs_spec_redesign"),
+    );
+    const status =
+      invalidTasks.length > 0 || hasRedesignError
+        ? "needs_spec_redesign"
+        : "invalid";
     console.log(
       JSON.stringify(
         {

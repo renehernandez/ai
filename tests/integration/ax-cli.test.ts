@@ -88,6 +88,10 @@ function withFixture(
       targetPath: "scripts/nitro-feedback-gate.ts",
     },
     {
+      sourcePath: join(repoRoot, "scripts/objective-proof.ts"),
+      targetPath: "scripts/objective-proof.ts",
+    },
+    {
       sourcePath: join(repoRoot, "scripts/review-gate.ts"),
       targetPath: "scripts/review-gate.ts",
     },
@@ -490,6 +494,7 @@ test("global status reports runtime roots and target OpenSpec readiness", () => 
       mkdirSync(scriptsDir, { recursive: true });
       for (const scriptName of [
         "nitro-feedback-gate.ts",
+        "objective-proof.ts",
         "plan-artifacts.ts",
         "planning-contracts.ts",
         "review-gate.ts",

@@ -120,6 +120,14 @@ Each baseline reviewer applies the blocker from its own angle:
   that reviewer/rule/test/documentation/runtime-validation machinery is itself
   the feature being changed in the AI repo.
 
+Readiness must also block late objective proof. OpenSpec blueprints must include
+explicit `Proof location:` or `First real confirmation:` wording in task 1, or
+in task 2 after at most one setup-only task. The marker must name the real
+entrypoint and visible success or failure evidence. Missing proof, proof first
+appearing in task 3 or later, deferred proof markers, setup/config/metadata-only
+markers, and marker text without visible outcome evidence return
+`needs_spec_redesign`.
+
 ## Atomic Handoff Contract
 
 Use `scripts/plan-ready.ts handoff-template` and validate with
@@ -239,6 +247,10 @@ readiness block: report `needs_spec_redesign` and ask the user how to proceed.
 Do not silently rewrite the blueprint, do not create the OpenSpec change, and
 do not move the rejected lifecycle work into standalone OpenSpec task
 checkboxes.
+
+`validate-blueprint` also enforces earliest objective proof with the shared
+objective-proof analyzer. It must reject missing, implicit, late, deferred,
+setup-only, or marker-only objective proof with `needs_spec_redesign`.
 
 Legacy `slice_plan_review`, `reviewed_slices`,
 `plan_ready_handoff`, `plan_followthrough_slice_handoff`, and
