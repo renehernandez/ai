@@ -452,6 +452,25 @@ test("review-gate-input maps validated delivery evidence to active gate input", 
   assert.deepEqual(output.blockingFindings, []);
 });
 
+test("review-gate-input preserves skipped reviewers as evidence only", () => {
+  const result = runPlanUnitDelivery(
+    "review-gate-input",
+    `${validHandoff}\n${launchedReport}\n${reviewerReport}`,
+    ["--diff-hash", reviewGateDiffHash, "--source-ref", "handoff.yaml"],
+  );
+  const output = JSON.parse(result.stdout);
+
+  assert.equal(result.status, 0);
+  assert.deepEqual(output.sourceProvenance.evidence.slice(1), [
+    "skipped reviewer ai-readiness-upkeep: not_applicable - no AI readiness verification or agent-surface contract changed",
+    "skipped reviewer security-review: not_applicable - no security-sensitive surface changed",
+  ]);
+  assert.ok(!output.requiredReviewPasses.includes("ai-readiness-upkeep"));
+  assert.ok(!output.requiredReviewPasses.includes("security-review"));
+  assert.equal(output.results["ai-readiness-upkeep"], undefined);
+  assert.equal(output.results["security-review"], undefined);
+});
+
 test("review-gate-input requires a diff hash value", () => {
   const result = runPlanUnitDelivery(
     "review-gate-input",

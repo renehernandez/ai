@@ -76,6 +76,8 @@ path.
 10. Validate `reviewer_launch` and `reviewer_report`; the launch must include
     the staged diff hash given to implementation reviewers, and the report must
     include the same staged diff hash reviewed by the reviewers.
+    `not_applicable` skipped reviewers must remain explicit evidence in
+    source provenance, but must not become required local gate passes.
 11. Before any material implementation commit, activate the local review gate
     for the staged diff:
 

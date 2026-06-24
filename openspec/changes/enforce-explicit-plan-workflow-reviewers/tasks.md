@@ -72,7 +72,7 @@
 - [x] 4.1 Update `plan-unit-delivery` reviewer launch and report contracts so
   implementation commits require fresh explicit reviewer evidence for the
   current staged implementation diff.
-- [ ] 4.2 Preserve explicit `not_applicable` reviewer evidence without counting
+- [x] 4.2 Preserve explicit `not_applicable` reviewer evidence without counting
   skipped reviewers as required gate passes.
 - [ ] 4.3 Ensure any direct blocked-gate fallback does not become a second
   review-gate state implementation outside shared review-gate APIs.
