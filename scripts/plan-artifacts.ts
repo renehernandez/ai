@@ -177,6 +177,11 @@ type PlanArtifactIndexRecord = PlanArtifactStoredRecord & {
   planContentFingerprint: string;
 };
 
+type PlanArtifactRecoveryIdentity = Pick<
+  PlanArtifactManifest,
+  "repoKey" | "repoHash" | "normalizedPlanPath" | "planPathHash" | "planSlug"
+>;
+
 export function normalizeRepoRelativePath(input: string): string | null {
   const trimmed = input.trim();
   if (!trimmed || trimmed.includes("\0") || isAbsoluteLikePath(trimmed)) {
@@ -385,10 +390,25 @@ export function recordPlanArtifact(options: {
       .join("/");
     const createdAt = new Date().toISOString();
     const manifest = readPlanArtifactManifest(manifestPath);
-    const recoveredArtifacts = recoverValidArtifactBlobs(
+    const recoveredRevisions = recoverValidArtifactRevisions(
       workspaceRealPath,
-      artifactsRealPath,
-      createdAt,
+      revisionsPath,
+      {
+        revisionId,
+        createdAt,
+        planContentFingerprint: artifactIdentity.planContentFingerprint,
+        metadataRelativePath,
+      },
+      {
+        repoKey: artifactIdentity.repoKey,
+        repoHash: identity.repoHash,
+        normalizedPlanPath: artifactIdentity.normalizedPlanPath,
+        planPathHash: artifactIdentity.planPathHash,
+        planSlug: artifactIdentity.planSlug,
+      },
+    );
+    const recoveredArtifacts = recoveredRevisions.flatMap(
+      (revision) => revision.artifacts,
     );
     assertManifestMatchesIdentity(manifest, artifactIdentity, identity);
     assertNoOrphanArtifactBlobs(
@@ -411,7 +431,10 @@ export function recordPlanArtifact(options: {
         artifact.artifactKind === artifactKind &&
         artifact.artifactContentFingerprint === artifactContentFingerprint,
     );
-    const recoveredArtifact = recoveredArtifacts.find(
+    const recoveredRevision = recoveredRevisions.find(
+      (revision) => revision.revisionId === revisionId,
+    );
+    const recoveredArtifact = recoveredRevision?.artifacts.find(
       (artifact) =>
         artifact.artifactKind === artifactKind &&
         artifact.artifactContentFingerprint === artifactContentFingerprint,
@@ -425,7 +448,7 @@ export function recordPlanArtifact(options: {
       };
     const revisionArtifacts = mergeArtifactRecords(
       existingRevision?.artifacts ?? [],
-      recoveredArtifacts,
+      recoveredRevision?.artifacts ?? [],
       [artifactRecord],
     );
     const revisionRecord = existingRevision
@@ -435,9 +458,10 @@ export function recordPlanArtifact(options: {
         }
       : {
           revisionId,
-          createdAt,
+          createdAt: recoveredRevision?.createdAt ?? createdAt,
           planContentFingerprint: artifactIdentity.planContentFingerprint,
-          metadataRelativePath,
+          metadataRelativePath:
+            recoveredRevision?.metadataRelativePath ?? metadataRelativePath,
           artifacts: revisionArtifacts,
         };
     const revisionMetadata: PlanArtifactRevisionMetadata = {
@@ -451,14 +475,32 @@ export function recordPlanArtifact(options: {
     };
     atomicWriteJson(metadataPath, revisionMetadata);
 
+    const nextRevisionsById = new Map<string, PlanArtifactRevisionRecord>();
+    for (const revision of manifest?.revisions ?? []) {
+      nextRevisionsById.set(revision.revisionId, revision);
+    }
+    for (const recoveredRevision of recoveredRevisions) {
+      const existingRecoveredRevision = nextRevisionsById.get(
+        recoveredRevision.revisionId,
+      );
+      nextRevisionsById.set(
+        recoveredRevision.revisionId,
+        existingRecoveredRevision
+          ? {
+              ...existingRecoveredRevision,
+              artifacts: mergeArtifactRecords(
+                existingRecoveredRevision.artifacts,
+                recoveredRevision.artifacts,
+              ),
+            }
+          : recoveredRevision,
+      );
+    }
+    nextRevisionsById.set(revisionId, revisionRecord);
     const nextManifest: PlanArtifactManifest = manifest
       ? {
           ...manifest,
-          revisions: existingRevision
-            ? manifest.revisions.map((revision) =>
-                revision.revisionId === revisionId ? revisionRecord : revision,
-              )
-            : [...manifest.revisions, revisionRecord],
+          revisions: [...nextRevisionsById.values()],
         }
       : {
           version: 1,
@@ -467,25 +509,27 @@ export function recordPlanArtifact(options: {
           normalizedPlanPath: artifactIdentity.normalizedPlanPath,
           planPathHash: artifactIdentity.planPathHash,
           planSlug: artifactIdentity.planSlug,
-          revisions: [revisionRecord],
+          revisions: [...nextRevisionsById.values()],
         };
     atomicWriteJson(manifestPath, nextManifest);
-    for (const artifact of revisionRecord.artifacts) {
-      appendIndexRecordIfMissing(
-        indexPath,
-        {
-          version: 1,
-          repoKey: artifactIdentity.repoKey,
-          repoHash: identity.repoHash,
-          normalizedPlanPath: artifactIdentity.normalizedPlanPath,
-          planPathHash: artifactIdentity.planPathHash,
-          planSlug: artifactIdentity.planSlug,
-          revisionId,
-          planContentFingerprint: artifactIdentity.planContentFingerprint,
-          ...artifact,
-        },
-        workspaceRealPath,
-      );
+    for (const revision of nextManifest.revisions) {
+      for (const artifact of revision.artifacts) {
+        appendIndexRecordIfMissing(
+          indexPath,
+          {
+            version: 1,
+            repoKey: artifactIdentity.repoKey,
+            repoHash: identity.repoHash,
+            normalizedPlanPath: artifactIdentity.normalizedPlanPath,
+            planPathHash: artifactIdentity.planPathHash,
+            planSlug: artifactIdentity.planSlug,
+            revisionId: revision.revisionId,
+            planContentFingerprint: revision.planContentFingerprint,
+            ...artifact,
+          },
+          workspaceRealPath,
+        );
+      }
     }
   } finally {
     releaseLock();
@@ -851,6 +895,71 @@ function atomicWriteJson(path: string, value: unknown): void {
   renameSync(temporaryPath, path);
 }
 
+function recoverValidArtifactRevisions(
+  workspaceRoot: string,
+  revisionsPath: string,
+  currentRevision: Pick<
+    PlanArtifactRevisionRecord,
+    | "revisionId"
+    | "createdAt"
+    | "planContentFingerprint"
+    | "metadataRelativePath"
+  >,
+  identity: PlanArtifactRecoveryIdentity,
+): PlanArtifactRevisionRecord[] {
+  return readdirSync(revisionsPath).flatMap((revisionName) => {
+    const revisionPath = join(revisionsPath, revisionName);
+    const revisionStats = lstatSync(revisionPath);
+    if (revisionStats.isSymbolicLink() || !revisionStats.isDirectory()) {
+      return [];
+    }
+
+    const artifactsPath = join(revisionPath, "artifacts");
+    if (!existsSync(artifactsPath)) {
+      return [];
+    }
+    const artifactsStats = lstatSync(artifactsPath);
+    if (artifactsStats.isSymbolicLink() || !artifactsStats.isDirectory()) {
+      return [];
+    }
+    const artifacts = recoverValidArtifactBlobs(
+      workspaceRoot,
+      artifactsPath,
+      currentRevision.createdAt,
+    );
+    if (artifacts.length === 0) {
+      return [];
+    }
+    if (revisionName === currentRevision.revisionId) {
+      return [{ ...currentRevision, artifacts }];
+    }
+
+    const recoveredMetadata = readRecoverableRevisionMetadata(
+      join(revisionPath, "metadata.json"),
+      workspaceRoot,
+      revisionName,
+      identity,
+    );
+    if (!recoveredMetadata) {
+      return [];
+    }
+    return [
+      {
+        ...recoveredMetadata,
+        artifacts: recoveredMetadata.artifacts.filter((record) =>
+          artifacts.some(
+            (artifact) =>
+              artifact.artifactKind === record.artifactKind &&
+              artifact.artifactContentFingerprint ===
+                record.artifactContentFingerprint &&
+              artifact.artifactRelativePath === record.artifactRelativePath,
+          ),
+        ),
+      },
+    ];
+  });
+}
+
 function recoverValidArtifactBlobs(
   workspaceRoot: string,
   artifactsPath: string,
@@ -881,6 +990,84 @@ function recoverValidArtifactBlobs(
       },
     ];
   });
+}
+
+function readRecoverableRevisionMetadata(
+  path: string,
+  workspaceRoot: string,
+  revisionId: string,
+  identity: PlanArtifactRecoveryIdentity,
+): PlanArtifactRevisionRecord | null {
+  if (!existsSync(path)) {
+    return null;
+  }
+  const stats = lstatSync(path);
+  if (stats.isSymbolicLink() || !stats.isFile()) {
+    return null;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(path, "utf-8"));
+  } catch {
+    return null;
+  }
+  if (!isObjectRecord(parsed)) {
+    return null;
+  }
+  if (
+    parsed.version !== 1 ||
+    parsed.repoKey !== identity.repoKey ||
+    parsed.repoHash !== identity.repoHash ||
+    parsed.normalizedPlanPath !== identity.normalizedPlanPath ||
+    parsed.planPathHash !== identity.planPathHash ||
+    parsed.planSlug !== identity.planSlug ||
+    parsed.revisionId !== revisionId ||
+    typeof parsed.createdAt !== "string" ||
+    typeof parsed.planContentFingerprint !== "string"
+  ) {
+    return null;
+  }
+  const metadataRelativePath = relative(workspaceRoot, path)
+    .split(sep)
+    .join("/");
+  return {
+    revisionId,
+    createdAt: parsed.createdAt,
+    planContentFingerprint: parsed.planContentFingerprint,
+    metadataRelativePath,
+    artifacts: Array.isArray(parsed.artifacts)
+      ? parsed.artifacts.flatMap((artifact) =>
+          parseStoredArtifactRecord(artifact),
+        )
+      : [],
+  };
+}
+
+function parseStoredArtifactRecord(value: unknown): PlanArtifactStoredRecord[] {
+  if (
+    isObjectRecord(value) &&
+    typeof value.recordedAt === "string" &&
+    typeof value.artifactKind === "string" &&
+    normalizePlanArtifactRecordKind(value.artifactKind) !== null &&
+    typeof value.artifactContentFingerprint === "string" &&
+    /^[a-f0-9]{64}$/.test(value.artifactContentFingerprint) &&
+    typeof value.artifactRelativePath === "string"
+  ) {
+    return [
+      {
+        recordedAt: value.recordedAt,
+        artifactKind: value.artifactKind as PlanArtifactRecordKind,
+        artifactContentFingerprint: value.artifactContentFingerprint,
+        artifactRelativePath: value.artifactRelativePath,
+      },
+    ];
+  }
+  return [];
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function parseArtifactBlobName(
