@@ -4,6 +4,12 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import {
+  reviewGateStatePath,
+  validateReviewGateForCommit,
+} from "../../scripts/review-gate.ts";
+
+const repoRoot = process.cwd();
 
 function withTempFile(content: string, callback: (path: string) => void): void {
   const directory = mkdtempSync(join(tmpdir(), "plan-unit-delivery-script-"));
@@ -82,6 +88,100 @@ function runPlanUnitDelivery(
     stderr: result.stderr,
     stdout: result.stdout,
   };
+}
+
+function runPlanUnitDeliveryInCwd(
+  command: string,
+  cwd: string,
+  content = "",
+  extraArgs: string[] = [],
+  extraEnv: NodeJS.ProcessEnv = {},
+): { status: number | null; stderr: string; stdout: string } {
+  let result: ReturnType<typeof spawnSync> | undefined;
+  if (content) {
+    withTempFile(content, (path) => {
+      result = spawnSync(
+        "pnpm",
+        [
+          "exec",
+          "tsx",
+          "skills/plan-unit-delivery/scripts/plan-unit-delivery.ts",
+          command,
+          "--file",
+          path,
+          "--cwd",
+          cwd,
+          ...extraArgs,
+        ],
+        {
+          cwd: repoRoot,
+          encoding: "utf8",
+          env: { ...process.env, ...extraEnv },
+        },
+      );
+    });
+  } else {
+    result = spawnSync(
+      "pnpm",
+      [
+        "exec",
+        "tsx",
+        "skills/plan-unit-delivery/scripts/plan-unit-delivery.ts",
+        command,
+        "--cwd",
+        cwd,
+        ...extraArgs,
+      ],
+      {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env: { ...process.env, ...extraEnv },
+      },
+    );
+  }
+
+  assert.ok(result);
+  return {
+    status: result.status,
+    stderr: result.stderr,
+    stdout: result.stdout,
+  };
+}
+
+function createGitFixture(prefix: string): string {
+  const directory = mkdtempSync(join(tmpdir(), prefix));
+  runGit(directory, ["init"]);
+  runGit(directory, ["config", "user.email", "test@example.com"]);
+  runGit(directory, ["config", "user.name", "Test User"]);
+  writeFileSync(join(directory, "file.txt"), "base\n", "utf8");
+  runGit(directory, ["add", "file.txt"]);
+  runGit(directory, ["commit", "-m", "initial"]);
+  writeFileSync(join(directory, "file.txt"), "changed\n", "utf8");
+  runGit(directory, ["add", "file.txt"]);
+  return directory;
+}
+
+function runGit(cwd: string, args: string[]): void {
+  const result = spawnSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    env: withoutGitRepositoryEnv(),
+  });
+  assert.equal(
+    result.status,
+    0,
+    `git ${args.join(" ")} failed\n${result.stderr}`,
+  );
+}
+
+function withoutGitRepositoryEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  delete env.GIT_DIR;
+  delete env.GIT_WORK_TREE;
+  delete env.GIT_INDEX_FILE;
+  delete env.GIT_OBJECT_DIRECTORY;
+  delete env.GIT_ALTERNATE_OBJECT_DIRECTORIES;
+  return env;
 }
 
 const reviewGateDiffHash =
@@ -536,6 +636,49 @@ test("review-gate-input rejects stale reviewer report evidence", () => {
     /reviewer_report\.reviewed_diff_hash is stale for current staged diff/,
   );
   assert.equal(result.stdout, "");
+});
+
+test("activate-review-gate blocked fallback writes shared review-gate state", () => {
+  const cwd = createGitFixture("plan-unit-delivery-blocked-gate-");
+  const poisonCwd = createGitFixture("plan-unit-delivery-poison-git-env-");
+  try {
+    const result = runPlanUnitDeliveryInCwd(
+      "activate-review-gate",
+      cwd,
+      `${validHandoff}\n${launchedReport}\n${reviewerReport}`,
+      [],
+      {
+        GIT_DIR: join(poisonCwd, ".git"),
+        GIT_WORK_TREE: poisonCwd,
+        GIT_INDEX_FILE: join(poisonCwd, ".git", "index"),
+      },
+    );
+    const output = JSON.parse(result.stdout);
+
+    assert.notEqual(result.status, 0);
+    assert.equal(output.status, "blocked");
+    assert.equal(output.gate_outcome, "blocked");
+    assert.equal(output.state_path, reviewGateStatePath(cwd));
+    assert.match(
+      output.blockers.join("\n"),
+      /reviewer_launch\.staged_diff_hash is stale for current staged diff/,
+    );
+
+    const validation = validateReviewGateForCommit(cwd);
+    assert.equal(validation.ok, false);
+    assert.equal(validation.stateStatus, "active");
+    assert.deepEqual(validation.requiredReviewPasses, [
+      "implementation-review",
+    ]);
+    assert.match(validation.errors.join("\n"), /Review pass is not passed/);
+    assert.match(
+      validation.errors.join("\n"),
+      /Review gate has unresolved blocking findings/,
+    );
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+    rmSync(poisonCwd, { force: true, recursive: true });
+  }
 });
 
 test("review-gate-input promotes launched dynamic reviewers to required gate passes", () => {

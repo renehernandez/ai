@@ -74,7 +74,7 @@
   current staged implementation diff.
 - [x] 4.2 Preserve explicit `not_applicable` reviewer evidence without counting
   skipped reviewers as required gate passes.
-- [ ] 4.3 Ensure any direct blocked-gate fallback does not become a second
+- [x] 4.3 Ensure any direct blocked-gate fallback does not become a second
   review-gate state implementation outside shared review-gate APIs.
 - [ ] 4.4 Invoke required-gate `ax commit` for every head-changing
   implementation-unit commit owned by `plan-unit-delivery`, including
