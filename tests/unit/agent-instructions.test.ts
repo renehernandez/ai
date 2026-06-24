@@ -320,7 +320,16 @@ for (const file of [
     assert.match(text, /\.agents\/plans/);
     assert.match(text, /support\s+(workflow\s+)?(artifacts|sidecars)/i);
     assert.match(text, /thread/);
-    assert.match(text, /pnpm ax plans artifact|private AX plan artifact/);
+    assert.match(
+      text,
+      /private\s+support\s+(storage|artifacts|copies)|thread evidence|pnpm ax plans artifact|private AX plan artifact/i,
+    );
+    if (file.startsWith("skills/")) {
+      assert.doesNotMatch(
+        text,
+        /pnpm ax plans artifact|private AX plan artifact|~\/\.ax\/plans/i,
+      );
+    }
     assert.match(
       text,
       /Do not commit|must\s+not\s+be\s+committed|must be rejected/,
@@ -368,8 +377,13 @@ for (const file of [
   test(`${file} keeps hosted descriptions free of private plan artifact paths`, () => {
     const text = readFileSync(file, "utf-8");
 
-    assert.match(text, /~\/\.ax\/plans/);
-    assert.match(text, /private support artifacts?|private AX plan artifact/i);
+    assert.match(
+      text,
+      /private support artifacts?|private plan-support paths/i,
+    );
+    if (file.startsWith("skills/")) {
+      assert.doesNotMatch(text, /~\/\.ax\/plans|private AX plan artifact/i);
+    }
     assert.match(text, /MR|PR|hosted|description/i);
     assert.match(text, /summaries/);
     assert.match(text, /hashes/);

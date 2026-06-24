@@ -19,10 +19,10 @@ All work goes through planning review before implementation:
 2. Write or update primary atomic plan markdown under `.agents/plans/`.
    Supporting workflow artifacts are private evidence: keep review requests,
    reviewer selections, handoffs, blueprints, ledgers, reports, validation
-   inputs, and validation outputs in the thread, and record file-backed copies
-   with the AX plan artifact command when recovery or correlation is needed.
-   Use `pnpm ax plans artifact list --plan <plan>` to recover prior private
-   support artifacts. Do not commit `.agents/plans/**` support sidecars.
+   inputs, and validation outputs in the thread by default. If file-backed
+   recovery or correlation is needed, keep those copies in private support
+   storage outside the repository. Do not commit `.agents/plans/**` support
+   sidecars.
 3. Run `plan-ready`.
 4. If `plan-ready` emits `plan_delivery_handoff`, create a
    `plan_review_request` and run `plan-review`.

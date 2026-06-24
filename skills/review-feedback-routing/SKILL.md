@@ -19,7 +19,7 @@ Route PR/MR artifact handling separately from AI review feedback. Machine policy
 Read routing in this order:
 
 1. repo override: `.agents/review-routing.yaml`;
-2. machine policy: `~/.agents/review-routing.yaml`;
+2. machine policy from the current runtime, when configured;
 3. tracked machine-policy source in this repo: `review-routing.yaml`;
 4. examples in this skill as documentation only;
 5. ask one blocking question if routing is still ambiguous.
