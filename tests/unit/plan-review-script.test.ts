@@ -301,6 +301,43 @@ test("validate-planning-diff accepts atomic plan source-plan artifacts", () => {
   assert.match(result.stdout, /planning_diff_valid/);
 });
 
+test("validate-planning-diff rejects atomic plan support sidecars", () => {
+  const result = runPlanReviewArgs(
+    ["validate-planning-diff", "--artifact-type", "plan"],
+    [
+      "A\t.agents/plans/source.review-request.md",
+      "M\t.agents/plans/source.handoff.yaml",
+      "A\t.agents/plans/source.md",
+    ].join("\n"),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /artifact_type plan/);
+  assert.match(
+    result.stderr,
+    /thread evidence or the private AX plan workspace/,
+  );
+  assert.match(result.stderr, /A: \.agents\/plans\/source\.review-request\.md/);
+  assert.match(result.stderr, /M: \.agents\/plans\/source\.handoff\.yaml/);
+  assert.doesNotMatch(result.stderr, /\.agents\/plans\/source\.md/);
+});
+
+test("validate-planning-diff rejects Git-quoted atomic plan support sidecars", () => {
+  const result = runPlanReviewArgs(
+    ["validate-planning-diff", "--artifact-type", "plan"],
+    [
+      'A\t".agents/plans/source.handoff.yaml\\tmeta"',
+      'M\t".agents/plans/source.review-request.md\\nmeta"',
+      'A\t".agents\\\\plans\\\\source.validation-output.json"',
+    ].join("\n"),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /source\.handoff\.yaml/);
+  assert.match(result.stderr, /source\.review-request\.md/);
+  assert.match(result.stderr, /source\.validation-output\.json/);
+});
+
 test("validate-planning-diff accepts OpenSpec diffs without source-plan paths", () => {
   const result = runPlanReviewArgs(
     ["validate-planning-diff", "--artifact-type", "openspec"],
