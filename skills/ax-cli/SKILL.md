@@ -104,8 +104,9 @@ ax plans artifact list --plan .agents/plans/example.md
 ```
 
 `--plan` must be the repo-relative primary markdown plan under
-`.agents/plans/**`. `--file` must resolve inside the invocation target repo.
-`--kind` must be one of `review_request`, `reviewer_selection`, `handoff`,
+`.agents/plans/**`. `--file` can be either a repo-relative path inside the
+invocation target repo or an absolute path to a local temporary/thread support
+artifact. `--kind` must be one of `review_request`, `reviewer_selection`, `handoff`,
 `blueprint`, `ledger`, `report`, `validation_input`, or `validation_output`.
 Keep support artifacts in the thread by default; record them only when
 file-backed recovery or correlation is needed.

@@ -1,5 +1,16 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import {
   classifyAgentsPlanArtifact,
@@ -9,8 +20,45 @@ import {
   isPrimaryMarkdownPlan,
   isSafeAgentsPlanRef,
   normalizeAgentsPlanRef,
+  recordPlanArtifact,
   sha256Hex,
 } from "../../scripts/plan-artifacts.ts";
+
+function withTempDir(callback: (directory: string) => void): void {
+  const directory = mkdtempSync(join(process.cwd(), ".tmp-plan-artifacts-"));
+  try {
+    callback(directory);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+function git(cwd: string, args: string[]): void {
+  const result = spawnSync("git", args, {
+    cwd,
+    encoding: "utf-8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+}
+
+function createPlanArtifactTarget(directory: string): string {
+  const targetRepo = join(directory, "target-repo");
+  mkdirSync(join(targetRepo, ".agents", "plans"), { recursive: true });
+  git(targetRepo, ["init"]);
+  git(targetRepo, [
+    "remote",
+    "add",
+    "origin",
+    "git@git.fullscript.io:team/target-repo.git",
+  ]);
+  writeFileSync(
+    join(targetRepo, ".agents", "plans", "example.md"),
+    "# Example plan\n",
+    "utf-8",
+  );
+  return targetRepo;
+}
 
 test("normalizes safe agents plan references and rejects escapes", () => {
   assert.equal(
@@ -90,7 +138,6 @@ test("derives deterministic private workspace identity for plan artifacts", () =
     first.workspacePath,
     `/home/rene/.ax/plans/repos/sha256-${first.repoHash}/plans/${first.planSlug}`,
   );
-  assert.equal(first.artifactsPath, `${first.workspacePath}/artifacts`);
   assert.equal(first.manifestPath, `${first.workspacePath}/manifest.json`);
   assert.equal(first.indexPath, `${first.workspacePath}/index.jsonl`);
 });
@@ -105,4 +152,122 @@ test("derives default private workspace identity under the current home director
     identity.workspacePath.startsWith(`${homedir()}/.ax/plans/`),
     true,
   );
+});
+
+test("records absolute local support artifact files", () => {
+  withTempDir((directory) => {
+    const targetRepo = createPlanArtifactTarget(directory);
+    const axPlansRoot = join(directory, "ax-plans");
+    const outsideArtifact = join(directory, "reviewer-selection.md");
+    mkdirSync(axPlansRoot, { mode: 0o700 });
+    chmodSync(axPlansRoot, 0o700);
+    writeFileSync(
+      outsideArtifact,
+      "# Reviewer selection\n\n- nitro\n",
+      "utf-8",
+    );
+
+    const result = recordPlanArtifact({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      kind: "reviewer_selection",
+      filePath: outsideArtifact,
+      axPlansRoot,
+    });
+
+    assert.equal(result.status, "recorded");
+    assert.equal(result.artifactKind, "reviewer_selection");
+    assert.match(
+      result.privateWorkspaceRelativePath,
+      /^repos\/sha256-[a-f0-9]+\/plans\/example-[a-f0-9]{12}\/revisions\/plan-[a-f0-9]{16}\/artifacts\/reviewer_selection-[a-f0-9]+\.md$/,
+    );
+    assert.equal(
+      readFileSync(
+        join(axPlansRoot, result.privateWorkspaceRelativePath),
+        "utf-8",
+      ),
+      "# Reviewer selection\n\n- nitro\n",
+    );
+  });
+});
+
+test("records absolute repo-local support artifact files", () => {
+  withTempDir((directory) => {
+    const targetRepo = createPlanArtifactTarget(directory);
+    const axPlansRoot = join(directory, "ax-plans");
+    const repoArtifact = join(targetRepo, "reviewer-selection.md");
+    mkdirSync(axPlansRoot, { mode: 0o700 });
+    chmodSync(axPlansRoot, 0o700);
+    writeFileSync(repoArtifact, "# Reviewer selection\n\n- nitro\n", "utf-8");
+
+    const result = recordPlanArtifact({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      kind: "reviewer_selection",
+      filePath: repoArtifact,
+      axPlansRoot,
+    });
+
+    assert.equal(result.status, "recorded");
+    assert.equal(
+      readFileSync(
+        join(axPlansRoot, result.privateWorkspaceRelativePath),
+        "utf-8",
+      ),
+      "# Reviewer selection\n\n- nitro\n",
+    );
+  });
+});
+
+test("rejects absolute repo-local symlink source escapes", () => {
+  withTempDir((directory) => {
+    const targetRepo = createPlanArtifactTarget(directory);
+    const axPlansRoot = join(directory, "ax-plans");
+    const outsideArtifact = join(directory, "outside.md");
+    const repoSymlink = join(targetRepo, "support.md");
+    mkdirSync(axPlansRoot, { mode: 0o700 });
+    chmodSync(axPlansRoot, 0o700);
+    writeFileSync(outsideArtifact, "# Outside\n", "utf-8");
+    symlinkSync(outsideArtifact, repoSymlink);
+
+    assert.throws(
+      () =>
+        recordPlanArtifact({
+          targetRoot: targetRepo,
+          planPath: ".agents/plans/example.md",
+          kind: "handoff",
+          filePath: repoSymlink,
+          axPlansRoot,
+        }),
+      /--file must resolve inside target repo unless an absolute source path is provided/,
+    );
+  });
+});
+
+test("rejects absolute repo-local symlink escapes through target-root aliases", () => {
+  withTempDir((directory) => {
+    const targetRepo = createPlanArtifactTarget(directory);
+    const targetAlias = join(directory, "target-alias");
+    const axPlansRoot = join(directory, "ax-plans");
+    const outsideArtifact = join(directory, "outside.md");
+    const repoSymlink = join(targetRepo, "support.md");
+    const aliasSymlink = join(targetAlias, "support.md");
+    mkdirSync(axPlansRoot, { mode: 0o700 });
+    chmodSync(axPlansRoot, 0o700);
+    writeFileSync(outsideArtifact, "# Outside\n", "utf-8");
+    symlinkSync(targetRepo, targetAlias);
+    symlinkSync(outsideArtifact, repoSymlink);
+
+    assert.throws(
+      () =>
+        recordPlanArtifact({
+          targetRoot: targetAlias,
+          planPath: ".agents/plans/example.md",
+          kind: "handoff",
+          filePath: aliasSymlink,
+          axPlansRoot,
+        }),
+      /--file must resolve inside target repo unless an absolute source path is provided/,
+    );
+  });
 });
