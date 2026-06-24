@@ -2414,6 +2414,37 @@ test("CLI normalizes skill target roots that point at the canonical skill root",
   );
 });
 
+test("CLI normalizes skill target roots that point at a missing canonical skill root", () => {
+  withFixture(
+    ({ configPath, runtimeDir }) => {
+      const canonicalSkillsDir = join(runtimeDir, "skills");
+      mkdirSync(join(runtimeDir, "codex"), { recursive: true });
+      symlinkSync(canonicalSkillsDir, join(runtimeDir, "codex", "skills"));
+
+      const install = runAgentRuntime([
+        "skills",
+        "install",
+        "--profile",
+        "personal",
+        "--config",
+        configPath,
+      ]);
+      assert.equal(install.status, 0, install.stderr || install.stdout);
+
+      const targetSkillsDir = join(runtimeDir, "codex", "skills");
+      assert.equal(lstatSync(targetSkillsDir).isDirectory(), true);
+      assert.equal(lstatSync(targetSkillsDir).isSymbolicLink(), false);
+      assertManagedSkillSymlink(
+        join(targetSkillsDir, "normalized"),
+        join(canonicalSkillsDir, "normalized"),
+      );
+    },
+    (config, runtimeDir) => {
+      configureSingleLocalSkill(config, runtimeDir, "normalized");
+    },
+  );
+});
+
 test("CLI refuses skill target roots that point somewhere unexpected", () => {
   withFixture(
     ({ configPath, runtimeDir }) => {

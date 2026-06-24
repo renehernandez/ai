@@ -5101,9 +5101,7 @@ function planSkillSymlinkTargetRootNormalization(
   }
 
   if (stats.isSymbolicLink()) {
-    const targetRealPath = realPathIfExists(target);
-    const canonicalRealPath = realPathIfExists(canonicalSkillsDir);
-    if (targetRealPath !== canonicalRealPath) {
+    if (!symlinkPointsAtPath(target, canonicalSkillsDir)) {
       throw new Error(
         `Refusing to replace skill target root symlink with unexpected target: ${target}`,
       );
@@ -5113,6 +5111,14 @@ function planSkillSymlinkTargetRootNormalization(
   }
 
   throw new Error(`Refusing to use non-directory skill target root: ${target}`);
+}
+
+function symlinkPointsAtPath(linkPath: string, expectedPath: string): boolean {
+  const declaredTarget = readlinkSync(linkPath);
+  const absoluteDeclaredTarget = resolve(dirname(linkPath), declaredTarget);
+  return (
+    realPathIfExists(absoluteDeclaredTarget) === realPathIfExists(expectedPath)
+  );
 }
 
 function normalizeSkillSymlinkTargetRoot(
