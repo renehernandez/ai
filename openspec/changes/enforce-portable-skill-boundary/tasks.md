@@ -14,7 +14,7 @@
 
 ## 2. Portable Boundary Gate
 
-- [ ] 2.1 Add `scripts/skill-validate.ts` portable-boundary checks for
+- [x] 2.1 Add `scripts/skill-validate.ts` portable-boundary checks for
       non-`ax-cli` skill text, adapter prompts, skill-root-local command
       examples, and script imports, with regression coverage for blocked AX
       commands, installed runtime paths, machine-specific paths, allowed
