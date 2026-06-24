@@ -123,6 +123,7 @@ function validBlueprint(): string {
       title: Add blueprint validation
       deliverable: Implement complex-plan blueprint schema checks.
       acceptance:
+        - "Proof location: run the plan-ready validate-blueprint CLI entrypoint and observe openspec_blueprint valid output."
         - Valid blueprints pass validation.
       verification:
         - pnpm test:unit
@@ -413,6 +414,214 @@ test("validate-blueprint rejects proof-only deliverables with feature-looking ti
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /needs_spec_redesign/);
   assert.match(result.stderr, /tasks\.1\.1 is proof_only_task/);
+});
+
+test("validate-blueprint rejects missing objective proof", () => {
+  const result = runPlanReady(
+    "validate-blueprint",
+    validBlueprint().replace(
+      '        - "Proof location: run the plan-ready validate-blueprint CLI entrypoint and observe openspec_blueprint valid output."\n',
+      "",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /needs_spec_redesign/);
+  assert.match(result.stderr, /objective proof must be explicit/);
+});
+
+test("validate-blueprint accepts one setup-only task before objective proof", () => {
+  const blueprint = validBlueprint().replace(
+    `  tasks:
+    - id: "1.1"
+      title: Add blueprint validation
+      deliverable: Implement complex-plan blueprint schema checks.
+      acceptance:
+        - "Proof location: run the plan-ready validate-blueprint CLI entrypoint and observe openspec_blueprint valid output."
+        - Valid blueprints pass validation.
+      verification:
+        - pnpm test:unit
+      dependencies: []`,
+    `  tasks:
+    - id: "1.1"
+      title: Add blueprint schema support
+      deliverable: Implement the schema fields needed by blueprint validation.
+      acceptance:
+        - Schema-backed blueprints can represent planned tasks.
+      verification:
+        - run pnpm test:unit
+      dependencies: []
+    - id: "1.2"
+      title: Validate blueprints through the CLI
+      deliverable: Connect the schema to the plan-ready validator.
+      acceptance:
+        - "First real confirmation: run the plan-ready validate-blueprint CLI entrypoint against a valid blueprint and observe openspec_blueprint valid output."
+      verification:
+        - pnpm test:unit
+      dependencies: ["1.1"]`,
+  );
+
+  const result = runPlanReady("validate-blueprint", blueprint);
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /openspec_blueprint valid/);
+});
+
+test("validate-blueprint rejects task 2 proof after a non-setup first task", () => {
+  const blueprint = validBlueprint().replace(
+    `  tasks:
+    - id: "1.1"
+      title: Add blueprint validation
+      deliverable: Implement complex-plan blueprint schema checks.
+      acceptance:
+        - "Proof location: run the plan-ready validate-blueprint CLI entrypoint and observe openspec_blueprint valid output."
+        - Valid blueprints pass validation.
+      verification:
+        - pnpm test:unit
+      dependencies: []`,
+    `  tasks:
+    - id: "1.1"
+      title: Add blueprint validation
+      deliverable: Implement complex-plan blueprint schema checks.
+      acceptance:
+        - Valid blueprints pass validation.
+      verification:
+        - pnpm test:unit
+      dependencies: []
+    - id: "1.2"
+      title: Validate blueprints through the CLI
+      deliverable: Connect the schema to the plan-ready validator.
+      acceptance:
+        - "First real confirmation: run the plan-ready validate-blueprint CLI entrypoint against a valid blueprint and observe openspec_blueprint valid output."
+      verification:
+        - pnpm test:unit
+      dependencies: ["1.1"]`,
+  );
+
+  const result = runPlanReady("validate-blueprint", blueprint);
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /objective proof is allowed only when task 1\.1 is setup-only/,
+  );
+});
+
+test("validate-blueprint rejects objective proof delayed to task 3", () => {
+  const blueprint = validBlueprint()
+    .replace(
+      `  tasks:
+    - id: "1.1"
+      title: Add blueprint validation
+      deliverable: Implement complex-plan blueprint schema checks.
+      acceptance:
+        - "Proof location: run the plan-ready validate-blueprint CLI entrypoint and observe openspec_blueprint valid output."
+        - Valid blueprints pass validation.
+      verification:
+        - pnpm test:unit
+      dependencies: []`,
+      `  tasks:
+    - id: "1.1"
+      title: Register target support
+      deliverable: Add target registry entries and metadata.
+      acceptance:
+        - Target metadata is available to the validator.
+      verification:
+        - pnpm test:unit
+      dependencies: []
+    - id: "1.2"
+      title: Generate target probes
+      deliverable: Add generated probe metadata for the registered target.
+      acceptance:
+        - Probe metadata is generated for the target.
+      verification:
+        - pnpm test:unit
+      dependencies: ["1.1"]
+    - id: "1.3"
+      title: Verify hw-admin target
+      deliverable: Run target verification through the real workflow.
+      acceptance:
+        - "First real confirmation: run the hosted verification workflow entrypoint against hw-admin and observe success or failure evidence in the summary artifact."
+      verification:
+        - pnpm test:unit
+      dependencies: ["1.2"]`,
+    )
+    .replace(
+      '  recommended_first_task: "1.1"',
+      '  recommended_first_task: "1.1"',
+    );
+
+  const result = runPlanReady("validate-blueprint", blueprint);
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /needs_spec_redesign/);
+  assert.match(result.stderr, /objective proof first appears in task 1\.3/);
+});
+
+test("validate-blueprint rejects deferred and setup-only objective proof markers", () => {
+  const deferred = runPlanReady(
+    "validate-blueprint",
+    validBlueprint().replace(
+      "run the plan-ready validate-blueprint CLI entrypoint and observe openspec_blueprint valid output",
+      "defer proof to task 3 after setup is ready",
+    ),
+  );
+  const setupOnly = runPlanReady(
+    "validate-blueprint",
+    validBlueprint().replace(
+      "run the plan-ready validate-blueprint CLI entrypoint and observe openspec_blueprint valid output",
+      "record registry metadata and config readiness",
+    ),
+  );
+
+  assert.notEqual(deferred.status, 0);
+  assert.match(deferred.stderr, /objective proof marker defers proof/);
+  assert.notEqual(setupOnly.status, 0);
+  assert.match(setupOnly.stderr, /readiness rather than real capability proof/);
+});
+
+test("validate-blueprint does not let later verification rescue weak proof markers", () => {
+  const result = runPlanReady(
+    "validate-blueprint",
+    validBlueprint().replace(
+      `"Proof location: run the plan-ready validate-blueprint CLI entrypoint and observe openspec_blueprint valid output."`,
+      `"Proof location: TBD."
+      verification_note: run the plan-ready validate-blueprint CLI entrypoint and observe openspec_blueprint valid output.`,
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /real entrypoint and visible success or failure evidence/,
+  );
+});
+
+test("validate-blueprint ignores later deferral notes after a valid proof marker", () => {
+  const result = runPlanReady(
+    "validate-blueprint",
+    validBlueprint().replace(
+      `        - "Proof location: run the plan-ready validate-blueprint CLI entrypoint and observe openspec_blueprint valid output."`,
+      `        - "Proof location: run the plan-ready validate-blueprint CLI entrypoint and observe openspec_blueprint valid output."
+        - Future task 3 can add broader provider coverage.`,
+    ),
+  );
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /openspec_blueprint valid/);
+});
+
+test("validate-blueprint rejects setup-only proof markers with command output", () => {
+  const result = runPlanReady(
+    "validate-blueprint",
+    validBlueprint().replace(
+      "run the plan-ready validate-blueprint CLI entrypoint and observe openspec_blueprint valid output",
+      "run the registry CLI command and observe metadata output",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /readiness rather than real capability proof/);
 });
 
 test("validate-blueprint accepts docs and validation tooling as feature work", () => {

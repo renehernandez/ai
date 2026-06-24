@@ -388,6 +388,7 @@ test("validate-openspec-tasks accepts deliverable OpenSpec task shapes", () => {
     `## Feature Work
 
 - [ ] 1.1 Add the plan-review OpenSpec task gate
+      - Proof location: run the plan-review validate-openspec-tasks CLI entrypoint and observe pass or failure output.
       - Verify with the plan-review unit tests.
 `,
     (path) => {
@@ -408,6 +409,7 @@ test("validate-openspec-tasks accepts documented artifact-ref input", () => {
     `## Feature Work
 
 - [ ] 1.1 Add the plan-review OpenSpec task gate
+      - Proof location: run the plan-review validate-openspec-tasks CLI entrypoint and observe pass or failure output.
 `,
     (path) => {
       const result = runPlanReviewArgs([

@@ -143,6 +143,23 @@ exercise the real entrypoint, real operation, and visible success/failure result
 for one path. Foundation work belongs in the first slice only when that same
 slice consumes it to prove the outcome.
 
+## Earliest Objective Proof
+
+Every implementation shape must identify where the named new capability is
+proved. The preferred default is proof in slice 1. If slice 1 must be setup-only,
+slice 2 must consume that setup and prove the capability; no plan may have more
+than one setup-only slice before objective proof.
+
+Planning artifacts must use explicit proof wording such as `Proof location:` or
+`First real confirmation:`. The marker must name the real entrypoint being
+exercised and the visible success or failure evidence the user can inspect.
+Setup, config, registry, metadata, schema, helper, or readiness work alone does
+not count as proof.
+
+Block or reshape plans where the first real confirmation appears in slice 3 or
+later, where proof is deferred to a later task, or where the marker only says
+that proof will happen somewhere else.
+
 Do not let a roadmap objective or selected feature stand in for an
 implementation slice. Decompose the feature into PR-sized slices first.
 
@@ -190,6 +207,8 @@ Check that:
 - the discussion queue stayed at 1-3 items unless the user asked for more,
 - accepted defaults were not re-litigated,
 - the first slice proves a real path with visible result,
+- the proof location is explicit in slice 1 or, after one setup-only slice,
+  slice 2,
 - foundation work is directly consumed by the first slice,
 - hardening and future integrations are separated unless required for v1 safety,
 - existing systems are reused before proposing new infrastructure,
@@ -210,6 +229,7 @@ Check that:
 | Recommending a platform while implementing a thin slice | Recommend the thin-slice approach and name the platform as future extraction |
 | Making Slice 1 a package, runtime, schema, or config foundation | Reshape Slice 1 around the smallest real end-to-end outcome |
 | Treating interface readiness as the outcome | Make the outcome a real operation with visible success/failure |
+| Letting a deliverable-shaped plan defer first real confirmation to task 3 | Move proof into task 1, or task 2 after at most one setup-only task |
 | Adding feature flags by habit | Add only eligibility or safety checks tied to concrete risk |
 | Asking about task-audit mechanics | Infer those later in `openspec-tasks`; keep brainstorming focused on outcomes and slices |
 
@@ -218,6 +238,7 @@ Check that:
 - RED: baseline subagent `019eb4d1-5300-7461-b581-937f05a18316` narrowed to GitLab but still defaulted to a dedicated verification environment, signed markers, hard CI gate, and component architecture before challenging whether existing review infrastructure or a softer first proof was good enough.
 - RED: baseline subagent `019eb4d1-6b0a-7272-abde-d98ff92093b4` recommended a vertical slice but still introduced named orchestration, adapter-shaped wrappers, auth providers, telemetry sinks, and contract tests in the first design.
 - RED/GREEN control: baseline subagent `019eb4d1-8531-7901-90da-9f0d4a954986` performed well only when the user explicitly requested avoiding overengineering, showing the skill needed to make that pressure default.
+- RED: thread `019ef233-94a5-7923-985c-590a11507d7a` produced a deliverable-shaped `hw-admin` verification plan where the first real hosted confirmation was deferred to Task 3.1, proving that task-shaped plans still need an earliest objective proof gate.
 - REFACTOR: subagent `019eb4d2-8e0a-7162-9009-90313b8c46d4` claimed a GitLab-first slice but recommended a provider adapter core and still included dedicated infrastructure, signed markers, hard gate behavior, and provider-neutral manifests.
 - REFACTOR: subagent `019eb4d2-a6d0-7c30-b885-a60ffb2730d2` challenged platform-first thinking but recommended a two-provider skeleton without a concrete v1 need for the second provider.
 - REFACTOR: subagent `019eb4d3-95e3-7e51-b814-8dc84f8e6d32` still promoted long-term mentions like dedicated environments, signed markers, and required CI gates into the first slice, so the skill now separates future shape from v1 proof explicitly.
