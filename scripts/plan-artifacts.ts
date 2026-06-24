@@ -113,14 +113,14 @@ export type PlanArtifactIdentity = {
   planContentFingerprint: string;
 };
 
-type PlanArtifactStoredRecord = {
+export type PlanArtifactStoredRecord = {
   recordedAt: string;
   artifactKind: PlanArtifactRecordKind;
   artifactContentFingerprint: string;
   artifactRelativePath: string;
 };
 
-type PlanArtifactRevisionRecord = {
+export type PlanArtifactRevisionRecord = {
   revisionId: string;
   createdAt: string;
   planContentFingerprint: string;
@@ -128,7 +128,7 @@ type PlanArtifactRevisionRecord = {
   artifacts: PlanArtifactStoredRecord[];
 };
 
-type PlanArtifactManifest = {
+export type PlanArtifactManifest = {
   version: 1;
   repoKey: string;
   repoHash: string;
@@ -136,6 +136,24 @@ type PlanArtifactManifest = {
   planPathHash: string;
   planSlug: string;
   revisions: PlanArtifactRevisionRecord[];
+};
+
+export type PlanArtifactListedRecord = PlanArtifactStoredRecord & {
+  revisionId: string;
+  planContentFingerprint: string;
+};
+
+export type PlanArtifactListResult = {
+  status: "found" | "missing";
+  repoKey: string;
+  normalizedPlanPath: string;
+  planPathHash: string;
+  planSlug: string;
+  planContentFingerprint: string;
+  manifestRelativePath: string;
+  indexRelativePath: string;
+  revisions: PlanArtifactRevisionRecord[];
+  artifacts: PlanArtifactListedRecord[];
 };
 
 type PlanArtifactRevisionMetadata = PlanArtifactRevisionRecord & {
@@ -482,6 +500,56 @@ export function recordPlanArtifact(options: {
   };
 }
 
+export function listPlanArtifacts(options: {
+  targetRoot: string;
+  planPath: string;
+  axPlansRoot?: string;
+  artifactRemoteName?: string;
+}): PlanArtifactListResult {
+  const targetRoot = realpathSync(options.targetRoot);
+  const artifactIdentity = derivePlanArtifactIdentity({
+    targetRoot,
+    planPath: options.planPath,
+    artifactRemoteName: options.artifactRemoteName,
+  });
+  const workspaceIdentity = derivePlanArtifactWorkspaceIdentity({
+    repoKey: artifactIdentity.repoKey,
+    planPath: artifactIdentity.normalizedPlanPath,
+    axPlansRoot: options.axPlansRoot,
+  });
+  const manifest = readPlanArtifactManifest(workspaceIdentity.manifestPath);
+  assertManifestMatchesIdentity(manifest, artifactIdentity, workspaceIdentity);
+
+  const revisions = manifest?.revisions ?? [];
+  const artifacts = revisions.flatMap((revision) =>
+    revision.artifacts.map((artifact) => ({
+      revisionId: revision.revisionId,
+      planContentFingerprint: revision.planContentFingerprint,
+      ...artifact,
+    })),
+  );
+  const axPlansRoot = resolve(
+    options.axPlansRoot ?? join(homedir(), ".ax", "plans"),
+  );
+
+  return {
+    status: manifest ? "found" : "missing",
+    repoKey: artifactIdentity.repoKey,
+    normalizedPlanPath: artifactIdentity.normalizedPlanPath,
+    planPathHash: artifactIdentity.planPathHash,
+    planSlug: artifactIdentity.planSlug,
+    planContentFingerprint: artifactIdentity.planContentFingerprint,
+    manifestRelativePath: relative(axPlansRoot, workspaceIdentity.manifestPath)
+      .split(sep)
+      .join("/"),
+    indexRelativePath: relative(axPlansRoot, workspaceIdentity.indexPath)
+      .split(sep)
+      .join("/"),
+    revisions,
+    artifacts,
+  };
+}
+
 export function derivePlanArtifactIdentity(options: {
   targetRoot: string;
   planPath: string;
@@ -770,7 +838,7 @@ function readPlanArtifactManifest(path: string): PlanArtifactManifest | null {
     return parsed as PlanArtifactManifest;
   } catch (error) {
     throw new Error(
-      `Private plan artifact manifest is corrupt and must be repaired before recording: ${path}: ${error instanceof Error ? error.message : String(error)}`,
+      `Private plan artifact manifest is corrupt and must be repaired before reading plan artifacts: ${path}: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }

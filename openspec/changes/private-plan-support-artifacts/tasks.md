@@ -23,7 +23,7 @@
 - [x] 2.3 Implement recoverable writes for immutable artifact blobs,
       `manifest.json`, revision `metadata.json`, and append-only
       `index.jsonl`.
-- [ ] 2.4 Add `pnpm ax plans artifact list --plan <path>` to print manifest and
+- [x] 2.4 Add `pnpm ax plans artifact list --plan <path>` to print manifest and
       revision artifact records for the selected plan.
 - [ ] 2.5 Add tests for duplicate basenames, nested paths, path traversal,
       invalid kinds/extensions, duplicate records, corrupt manifests, truncated

@@ -33,6 +33,7 @@ import {
 } from "../../scripts/ax.ts";
 import {
   derivePlanArtifactIdentity,
+  listPlanArtifacts,
   recordPlanArtifact,
 } from "../../scripts/plan-artifacts.ts";
 
@@ -437,6 +438,65 @@ test("plans artifact record stores support artifacts under target repo identity"
   });
 });
 
+test("plans artifact list prints manifest and revision artifact records", () => {
+  withTempDir((directory) => {
+    const targetRepo = createPlanArtifactTarget(directory);
+    const axPlansRoot = join(directory, "ax-plans");
+    mkdirSync(axPlansRoot, { mode: 0o700 });
+    chmodSync(axPlansRoot, 0o700);
+
+    const missing = listPlanArtifacts({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      axPlansRoot,
+    });
+    assert.equal(missing.status, "missing");
+    assert.equal(missing.repoKey, "git.fullscript.io/team/target-repo");
+    assert.deepEqual(missing.revisions, []);
+    assert.deepEqual(missing.artifacts, []);
+
+    const recorded = recordPlanArtifact({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      kind: "reviewer_selection",
+      filePath: "reviewer-selection.yaml",
+      axPlansRoot,
+    });
+    const listed = listPlanArtifacts({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      axPlansRoot,
+    });
+
+    assert.equal(listed.status, "found");
+    assert.equal(listed.repoKey, recorded.repoKey);
+    assert.equal(listed.normalizedPlanPath, recorded.normalizedPlanPath);
+    assert.equal(listed.planPathHash, recorded.planPathHash);
+    assert.equal(listed.planSlug, recorded.planSlug);
+    assert.equal(
+      listed.planContentFingerprint,
+      recorded.planContentFingerprint,
+    );
+    assert.equal(listed.manifestRelativePath, recorded.manifestRelativePath);
+    assert.equal(listed.indexRelativePath, recorded.indexRelativePath);
+    assert.equal(listed.revisions.length, 1);
+    const manifest = JSON.parse(
+      readFileSync(join(axPlansRoot, listed.manifestRelativePath), "utf-8"),
+    );
+    assert.equal(typeof listed.artifacts[0].recordedAt, "string");
+    assert.deepEqual(listed.artifacts, [
+      {
+        revisionId: recorded.revisionId,
+        planContentFingerprint: recorded.planContentFingerprint,
+        recordedAt: manifest.revisions[0].artifacts[0].recordedAt,
+        artifactKind: "reviewer_selection",
+        artifactContentFingerprint: recorded.artifactContentFingerprint,
+        artifactRelativePath: recorded.artifactRelativePath,
+      },
+    ]);
+  });
+});
+
 test("plans artifact record rejects symlinked index files", () => {
   withTempDir((directory) => {
     const targetRepo = createPlanArtifactTarget(directory);
@@ -478,6 +538,8 @@ test("plans artifact record command uses invocation target repo", () => {
     const originalHome = process.env.HOME;
     const originalLog = console.log;
     let output = "";
+    let recordOutput = "";
+    let listOutput = "";
     try {
       process.chdir(targetRepo);
       process.env.HOME = home;
@@ -505,6 +567,26 @@ test("plans artifact record command uses invocation target repo", () => {
         ],
         { from: "node" },
       );
+      recordOutput = output;
+
+      output = "";
+      const listProgram = createProgram();
+      configureProgramForTest(listProgram);
+      listProgram.parse(
+        [
+          "node",
+          "ax",
+          "plans",
+          "artifact",
+          "list",
+          "--plan",
+          ".agents/plans/example.md",
+          "--config",
+          join(repoRoot, "ax.config.json"),
+        ],
+        { from: "node" },
+      );
+      listOutput = output;
     } finally {
       console.log = originalLog;
       process.chdir(originalCwd);
@@ -515,12 +597,32 @@ test("plans artifact record command uses invocation target repo", () => {
       }
     }
 
-    const result = JSON.parse(output);
-    assert.equal(result.status, "recorded");
-    assert.equal(result.repoKey, "git.fullscript.io/team/target-repo");
+    const recordResult = JSON.parse(recordOutput);
+    assert.equal(recordResult.status, "recorded");
+    assert.equal(recordResult.repoKey, "git.fullscript.io/team/target-repo");
     assert.ok(
       existsSync(
-        join(home, ".ax", "plans", result.privateWorkspaceRelativePath),
+        join(home, ".ax", "plans", recordResult.privateWorkspaceRelativePath),
+      ),
+    );
+
+    const result = JSON.parse(listOutput);
+    assert.equal(result.status, "found");
+    assert.equal(result.repoKey, "git.fullscript.io/team/target-repo");
+    assert.equal(result.artifacts.length, 1);
+    const workspaceRootRelativePath = result.manifestRelativePath.replace(
+      /\/manifest\.json$/,
+      "",
+    );
+    assert.ok(
+      existsSync(
+        join(
+          home,
+          ".ax",
+          "plans",
+          workspaceRootRelativePath,
+          result.artifacts[0].artifactRelativePath,
+        ),
       ),
     );
   });
@@ -555,6 +657,53 @@ test("plans artifact record command reports validation errors without stack trac
           "reviewer_selection",
           "--file",
           "reviewer-selection.yaml",
+          "--config",
+          join(repoRoot, "ax.config.json"),
+        ],
+        { from: "node" },
+      );
+    } finally {
+      console.error = originalError;
+      process.chdir(originalCwd);
+    }
+
+    const actualExitCode = process.exitCode;
+    process.exitCode = originalExitCode;
+
+    assert.equal(actualExitCode, 1);
+    assert.match(
+      errorOutput,
+      /--plan must be a primary markdown file under \.agents\/plans/,
+    );
+    assert.doesNotMatch(errorOutput, /Error:|at\s+/);
+  });
+});
+
+test("plans artifact list command reports validation errors without stack traces", () => {
+  withTempDir((directory) => {
+    const targetRepo = createPlanArtifactTarget(directory);
+    const originalCwd = process.cwd();
+    const originalError = console.error;
+    const originalExitCode = process.exitCode;
+    let errorOutput = "";
+    try {
+      process.chdir(targetRepo);
+      process.exitCode = undefined;
+      console.error = (value?: unknown) => {
+        errorOutput += `${String(value)}\n`;
+      };
+
+      const program = createProgram();
+      configureProgramForTest(program);
+      program.parse(
+        [
+          "node",
+          "ax",
+          "plans",
+          "artifact",
+          "list",
+          "--plan",
+          "../escape.md",
           "--config",
           join(repoRoot, "ax.config.json"),
         ],
