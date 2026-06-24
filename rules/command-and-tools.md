@@ -35,6 +35,7 @@ These rules apply to command execution, network access, and tool installation ac
 - Use `pnpm ax skills status --profile <name>` to inspect installed skill copies and symlinks.
 - Add `--profile <name>` to scope skills work to one machine profile; repeat it to select multiple profiles.
 - Use either `--all-profiles` or one or more `--profile <name>` flags for non-interactive skills commands.
+- Managed skills are canonical under `.agents/skills`; configured harness roots such as `.codex/skills` and `.claude/skills` stay real directories that contain per-skill symlinks back to the canonical skill directories.
 - After changing any managed skill source under `skills/`, run `writing-skills` against the changed skill before committing, then run `pnpm ax skills update --profile <name>` before treating the change as live. Repo source files and installed runtime copies can drift until the update runs.
 - After refreshing a changed skill, verify the active runtime surface with `pnpm ax skills status --profile <name>`. Use `pnpm ax skills validate --profile <name>` or `pnpm ax validate --all-profiles` when the change affects shared workflow contracts, agent prompts, or cross-profile behavior.
 - If a managed skill depends on a shared script outside its own skill directory, declare that file under `runtime.reusableScripts` in `ax.config.json` and refresh the affected profile with `pnpm ax skills update --profile <name>`.

@@ -2,7 +2,7 @@
   "version": 1,
   "runtime": {
     "canonicalSkillsDir": "~/.agents/skills",
-    "skillSymlinkTargets": ["~/.claude/skills"],
+    "skillSymlinkTargets": ["~/.codex/skills", "~/.claude/skills"],
     "reusableScripts": [
       "scripts/nitro-feedback-gate.ts",
       "scripts/plan-artifacts.ts",

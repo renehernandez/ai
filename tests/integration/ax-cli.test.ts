@@ -27,6 +27,7 @@ type Fixture = {
 type FixtureConfig = Record<string, unknown>;
 type BackupManifest = {
   assetKind: string;
+  sourcePath?: string;
   targetName?: string;
   status: string;
   kind: string;
@@ -68,7 +69,10 @@ function withFixture(
   ) as FixtureConfig;
   const runtime = config.runtime as Record<string, unknown>;
   runtime.canonicalSkillsDir = join(runtimeDir, "skills");
-  runtime.skillSymlinkTargets = [join(runtimeDir, "claude", "skills")];
+  runtime.skillSymlinkTargets = [
+    join(runtimeDir, "codex", "skills"),
+    join(runtimeDir, "claude", "skills"),
+  ];
   runtime.backupsDir = join(runtimeDir, "backups");
   runtime.reusableScripts = [
     {
@@ -263,6 +267,11 @@ function readBackupManifest(path: string): BackupManifest {
   return JSON.parse(readFileSync(path, "utf-8")) as BackupManifest;
 }
 
+function assertManagedSkillSymlink(linkPath: string, targetPath: string): void {
+  assert.equal(lstatSync(linkPath).isSymbolicLink(), true);
+  assert.equal(realpathSync(linkPath), realpathSync(targetPath));
+}
+
 function findBackupManifest(
   manifests: string[],
   predicate: (manifest: BackupManifest, path: string) => boolean,
@@ -302,6 +311,29 @@ function configureLocalSkillWithScript(
   config.blocks = {
     local: {
       skills: [{ localPath: localSkillsDir, names: ["needs-script"] }],
+    },
+  };
+  config.profiles = {
+    personal: { include: ["local"], paths: ["AGENTS.md"] },
+  };
+}
+
+function configureSingleLocalSkill(
+  config: FixtureConfig,
+  runtimeDir: string,
+  skillName: string,
+): void {
+  const localSkillsDir = join(runtimeDir, "local-skills");
+  mkdirSync(join(localSkillsDir, skillName), { recursive: true });
+  writeFileSync(
+    join(localSkillsDir, skillName, "SKILL.md"),
+    `---\nname: ${skillName}\n---\n`,
+    "utf-8",
+  );
+
+  config.blocks = {
+    local: {
+      skills: [{ localPath: localSkillsDir, names: [skillName] }],
     },
   };
   config.profiles = {
@@ -2275,11 +2307,13 @@ test("CLI installs overlapping profile skills once", () => {
         lstatSync(join(runtimeDir, "skills", "shared")).isDirectory(),
         true,
       );
-      assert.equal(
-        lstatSync(
-          join(runtimeDir, "claude", "skills", "shared"),
-        ).isSymbolicLink(),
-        true,
+      assertManagedSkillSymlink(
+        join(runtimeDir, "codex", "skills", "shared"),
+        join(runtimeDir, "skills", "shared"),
+      );
+      assertManagedSkillSymlink(
+        join(runtimeDir, "claude", "skills", "shared"),
+        join(runtimeDir, "skills", "shared"),
       );
 
       const lock = JSON.parse(
@@ -2319,6 +2353,200 @@ test("CLI installs overlapping profile skills once", () => {
       };
     },
   );
+});
+
+test("CLI normalizes skill target roots that point at the canonical skill root", () => {
+  withFixture(
+    ({ configPath, runtimeDir }) => {
+      const canonicalSkillsDir = join(runtimeDir, "skills");
+      mkdirSync(canonicalSkillsDir, { recursive: true });
+      writeFileSync(
+        join(canonicalSkillsDir, "preserved.txt"),
+        "keep\n",
+        "utf-8",
+      );
+      mkdirSync(join(runtimeDir, "codex"), { recursive: true });
+      mkdirSync(join(runtimeDir, "claude"), { recursive: true });
+      symlinkSync(canonicalSkillsDir, join(runtimeDir, "codex", "skills"));
+      symlinkSync(canonicalSkillsDir, join(runtimeDir, "claude", "skills"));
+
+      const install = runAgentRuntime([
+        "skills",
+        "install",
+        "--profile",
+        "personal",
+        "--config",
+        configPath,
+      ]);
+      assert.equal(install.status, 0, install.stderr || install.stdout);
+
+      for (const targetRoot of ["codex", "claude"]) {
+        const targetSkillsDir = join(runtimeDir, targetRoot, "skills");
+        assert.equal(lstatSync(targetSkillsDir).isDirectory(), true);
+        assert.equal(lstatSync(targetSkillsDir).isSymbolicLink(), false);
+        assertManagedSkillSymlink(
+          join(targetSkillsDir, "normalized"),
+          join(canonicalSkillsDir, "normalized"),
+        );
+      }
+      assert.equal(existsSync(join(canonicalSkillsDir, "preserved.txt")), true);
+
+      const manifests = collectBackupManifests(join(runtimeDir, "backups"));
+      for (const targetName of ["codex", "claude"]) {
+        const targetSkillsDir = join(runtimeDir, targetName, "skills");
+        const manifestPath = findBackupManifest(
+          manifests,
+          (manifest) =>
+            manifest.assetKind === "skills" &&
+            manifest.sourcePath === targetSkillsDir &&
+            manifest.kind === "symlink" &&
+            manifest.status === "created",
+        );
+        assert.equal(
+          readlinkSync(join(dirname(manifestPath), "target")),
+          canonicalSkillsDir,
+        );
+      }
+    },
+    (config, runtimeDir) => {
+      configureSingleLocalSkill(config, runtimeDir, "normalized");
+    },
+  );
+});
+
+test("CLI normalizes skill target roots that point at a missing canonical skill root", () => {
+  withFixture(
+    ({ configPath, runtimeDir }) => {
+      const canonicalSkillsDir = join(runtimeDir, "skills");
+      mkdirSync(join(runtimeDir, "codex"), { recursive: true });
+      symlinkSync(canonicalSkillsDir, join(runtimeDir, "codex", "skills"));
+
+      const install = runAgentRuntime([
+        "skills",
+        "install",
+        "--profile",
+        "personal",
+        "--config",
+        configPath,
+      ]);
+      assert.equal(install.status, 0, install.stderr || install.stdout);
+
+      const targetSkillsDir = join(runtimeDir, "codex", "skills");
+      assert.equal(lstatSync(targetSkillsDir).isDirectory(), true);
+      assert.equal(lstatSync(targetSkillsDir).isSymbolicLink(), false);
+      assertManagedSkillSymlink(
+        join(targetSkillsDir, "normalized"),
+        join(canonicalSkillsDir, "normalized"),
+      );
+    },
+    (config, runtimeDir) => {
+      configureSingleLocalSkill(config, runtimeDir, "normalized");
+    },
+  );
+});
+
+test("CLI refuses skill target roots that point somewhere unexpected", () => {
+  withFixture(
+    ({ configPath, runtimeDir }) => {
+      const unexpectedTarget = join(runtimeDir, "unexpected-skills");
+      mkdirSync(unexpectedTarget, { recursive: true });
+      mkdirSync(join(runtimeDir, "codex"), { recursive: true });
+      symlinkSync(unexpectedTarget, join(runtimeDir, "codex", "skills"));
+
+      const install = runAgentRuntime([
+        "skills",
+        "install",
+        "--profile",
+        "personal",
+        "--config",
+        configPath,
+      ]);
+
+      assert.notEqual(install.status, 0);
+      assert.match(
+        install.stderr,
+        /Refusing to replace skill target root symlink with unexpected target: .*codex.*skills/,
+      );
+    },
+    (config, runtimeDir) => {
+      configureSingleLocalSkill(config, runtimeDir, "blocked-root");
+    },
+  );
+});
+
+test("CLI validates all skill target roots before normalizing any root", () => {
+  withFixture(
+    ({ configPath, runtimeDir }) => {
+      const canonicalSkillsDir = join(runtimeDir, "skills");
+      const unexpectedTarget = join(runtimeDir, "unexpected-skills");
+      mkdirSync(canonicalSkillsDir, { recursive: true });
+      mkdirSync(unexpectedTarget, { recursive: true });
+      mkdirSync(join(runtimeDir, "codex"), { recursive: true });
+      mkdirSync(join(runtimeDir, "claude"), { recursive: true });
+      symlinkSync(canonicalSkillsDir, join(runtimeDir, "codex", "skills"));
+      symlinkSync(unexpectedTarget, join(runtimeDir, "claude", "skills"));
+
+      const install = runAgentRuntime([
+        "skills",
+        "install",
+        "--profile",
+        "personal",
+        "--config",
+        configPath,
+      ]);
+
+      assert.notEqual(install.status, 0);
+      assert.match(
+        install.stderr,
+        /Refusing to replace skill target root symlink with unexpected target: .*claude.*skills/,
+      );
+      assert.equal(
+        readlinkSync(join(runtimeDir, "codex", "skills")),
+        canonicalSkillsDir,
+      );
+      assert.equal(
+        collectBackupManifests(join(runtimeDir, "backups")).length,
+        0,
+      );
+    },
+    (config, runtimeDir) => {
+      configureSingleLocalSkill(config, runtimeDir, "blocked-root");
+    },
+  );
+});
+
+test("CLI refuses non-symlink managed skill targets in each runtime root", () => {
+  for (const targetName of ["codex", "claude"]) {
+    withFixture(
+      ({ configPath, runtimeDir }) => {
+        const canonicalTarget = join(runtimeDir, "skills", "blocked");
+        const managedTarget = join(runtimeDir, targetName, "skills", "blocked");
+        mkdirSync(dirname(managedTarget), { recursive: true });
+        writeFileSync(managedTarget, "local file\n", "utf-8");
+
+        const install = runAgentRuntime([
+          "skills",
+          "install",
+          "--profile",
+          "personal",
+          "--config",
+          configPath,
+        ]);
+
+        assert.notEqual(install.status, 0, targetName);
+        assert.match(
+          install.stderr,
+          new RegExp(
+            `Refusing to replace non-symlink target: .*${targetName}.*skills.*blocked`,
+          ),
+        );
+        assert.equal(existsSync(canonicalTarget), false);
+      },
+      (config, runtimeDir) => {
+        configureSingleLocalSkill(config, runtimeDir, "blocked");
+      },
+    );
+  }
 });
 
 test("CLI backs up skill, reusable script, and lockfile mutations", () => {
@@ -2435,18 +2663,16 @@ test("CLI installs discovered local skills from wildcard sources", () => {
         lstatSync(join(runtimeDir, "skills", "second-local")).isDirectory(),
         true,
       );
-      assert.equal(
-        lstatSync(
-          join(runtimeDir, "claude", "skills", "first-local"),
-        ).isSymbolicLink(),
-        true,
-      );
-      assert.equal(
-        lstatSync(
-          join(runtimeDir, "claude", "skills", "second-local"),
-        ).isSymbolicLink(),
-        true,
-      );
+      for (const targetRoot of ["codex", "claude"]) {
+        assertManagedSkillSymlink(
+          join(runtimeDir, targetRoot, "skills", "first-local"),
+          join(runtimeDir, "skills", "first-local"),
+        );
+        assertManagedSkillSymlink(
+          join(runtimeDir, targetRoot, "skills", "second-local"),
+          join(runtimeDir, "skills", "second-local"),
+        );
+      }
     },
     (config, runtimeDir) => {
       const localSkillsDir = join(runtimeDir, "local-skills");
@@ -2480,16 +2706,29 @@ test("CLI prunes stale installed retired skill names", () => {
   withFixture(
     ({ configPath, runtimeDir }) => {
       mkdirSync(join(runtimeDir, "claude", "skills"), { recursive: true });
+      mkdirSync(join(runtimeDir, "codex", "skills"), { recursive: true });
       for (const retiredName of ["agent-runtime-cli", "plan-to-review"]) {
         const staleCanonical = join(runtimeDir, "skills", retiredName);
-        const staleSymlink = join(runtimeDir, "claude", "skills", retiredName);
+        const staleClaudeSymlink = join(
+          runtimeDir,
+          "claude",
+          "skills",
+          retiredName,
+        );
+        const staleCodexSymlink = join(
+          runtimeDir,
+          "codex",
+          "skills",
+          retiredName,
+        );
         mkdirSync(staleCanonical, { recursive: true });
         writeFileSync(
           join(staleCanonical, "SKILL.md"),
           `---\nname: ${retiredName}\n---\n`,
           "utf-8",
         );
-        symlinkSync(staleCanonical, staleSymlink);
+        symlinkSync(staleCanonical, staleClaudeSymlink);
+        symlinkSync(staleCanonical, staleCodexSymlink);
       }
       writeFileSync(
         join(runtimeDir, "lock.json"),
@@ -2538,6 +2777,10 @@ test("CLI prunes stale installed retired skill names", () => {
         );
         assert.equal(
           existsSync(join(runtimeDir, "claude", "skills", retiredName)),
+          false,
+        );
+        assert.equal(
+          existsSync(join(runtimeDir, "codex", "skills", retiredName)),
           false,
         );
       }
@@ -2614,8 +2857,15 @@ test("CLI installs reusable scripts beside skill runtime roots", () => {
         "scripts",
         "planning-contracts.ts",
       );
+      const codexTargetScript = join(
+        runtimeDir,
+        "codex",
+        "scripts",
+        "planning-contracts.ts",
+      );
       assert.equal(existsSync(canonicalScript), true);
       assert.equal(lstatSync(targetScript).isSymbolicLink(), true);
+      assert.equal(lstatSync(codexTargetScript).isSymbolicLink(), true);
 
       const installedEntrypoint = join(
         runtimeDir,
