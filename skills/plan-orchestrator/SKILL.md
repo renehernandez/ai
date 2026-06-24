@@ -31,6 +31,12 @@ All work goes through planning review before implementation:
 7. Run `plan-unit-sequencer` for unit selection.
 8. Let `plan-unit-delivery` implement exactly one selected unit at a time.
 
+`plan-orchestrator` validates phase evidence freshness before advancing but
+does not repair it inline. Missing or stale readiness evidence routes back to
+`plan-ready`; missing or stale planning commit evidence routes back to
+`plan-review`; missing or stale delivery evidence routes back to
+`plan-unit-delivery`.
+
 Intermediate outputs such as `plan_delivery_handoff`, `openspec_blueprint`,
 `planning_review`, or one delivered unit are not terminal success for
 `plan-orchestrator`; continue until `stack_ready` or report `delivery_blocked`
@@ -104,6 +110,8 @@ The resume state must account for:
 - stack-tip `tasks.md` fingerprint;
 - concrete stack-tip `tasks.md` content and task-to-artifact evidence for
   checked deliverables;
+- phase evidence freshness for readiness, planning commit, and delivery
+  evidence, with stale or missing evidence routed back to the owning phase;
 - predecessor artifact, task-delta validation, and cumulative task-state
   evidence for every implementation artifact;
 - restack requirements and evidence.
@@ -151,6 +159,9 @@ validate-stack-ready`.
 | No `planning_review` before sequencing | Return `needs_reviewed_planning`. |
 | OpenSpec validation failure | Return `openspec_proposal_blocked`. |
 | Pending planning review | Return `planning_review_blocked`. |
+| Missing or stale readiness evidence | Return or resume as `delivery_blocked` routed to `plan-ready`. |
+| Missing or stale planning commit evidence | Return or resume as `delivery_blocked` routed to `plan-review`. |
+| Missing or stale delivery evidence | Return or resume as `delivery_blocked` routed to `plan-unit-delivery`. |
 | Unsupported review or stack host | Return `delivery_blocked` with routing evidence. |
 
 ## Output Rule
