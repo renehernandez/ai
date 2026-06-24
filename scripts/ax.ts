@@ -3677,9 +3677,10 @@ function runSkills(
   );
 
   mkdirSync(canonicalSkillsDir, { recursive: true });
-  for (const target of symlinkTargets) {
-    mkdirSync(target, { recursive: true });
-  }
+  normalizeSkillSymlinkTargetRoots(canonicalSkillsDir, symlinkTargets, {
+    assetKind: "skills",
+    backupsRoot,
+  });
   mkdirSync(CACHE_DIR, { recursive: true });
 
   installSkillUnion({
@@ -3876,13 +3877,19 @@ function installSkill(input: {
   }
 
   const destination = join(input.canonicalSkillsDir, input.skillName);
+  validateSafeSymlinkTargets(
+    input.symlinkTargets.map((target) => ({
+      linkPath: join(target, input.skillName),
+      target: destination,
+    })),
+  );
   replaceDirectory(sourceSkillDir, destination, {
     assetKind: "skills",
     backupsRoot: input.backupsRoot,
     targetName: runtimeTargetName(input.canonicalSkillsDir),
   });
   for (const target of input.symlinkTargets) {
-    replaceSymlink(destination, join(target, input.skillName), {
+    replaceSafeSymlink(destination, join(target, input.skillName), {
       assetKind: "skills",
       backupsRoot: input.backupsRoot,
       targetName: runtimeTargetName(target),
@@ -3917,13 +3924,19 @@ function installLocalSkill(input: {
   }
 
   const destination = join(input.canonicalSkillsDir, input.skillName);
+  validateSafeSymlinkTargets(
+    input.symlinkTargets.map((target) => ({
+      linkPath: join(target, input.skillName),
+      target: destination,
+    })),
+  );
   replaceDirectory(sourceSkillDir, destination, {
     assetKind: "skills",
     backupsRoot: input.backupsRoot,
     targetName: runtimeTargetName(input.canonicalSkillsDir),
   });
   for (const target of input.symlinkTargets) {
-    replaceSymlink(destination, join(target, input.skillName), {
+    replaceSafeSymlink(destination, join(target, input.skillName), {
       assetKind: "skills",
       backupsRoot: input.backupsRoot,
       targetName: runtimeTargetName(target),
@@ -4933,17 +4946,6 @@ function backupPathSegment(value: string): string {
   return segment;
 }
 
-function replaceSymlink(
-  target: string,
-  linkPath: string,
-  backup?: RuntimeBackupContext,
-): void {
-  backupRuntimeTarget(linkPath, backup);
-  rmSync(linkPath, { force: true, recursive: true });
-  mkdirSync(dirname(linkPath), { recursive: true });
-  symlinkSync(target, linkPath, "dir");
-}
-
 export function replaceSafeSymlink(
   target: string,
   linkPath: string,
@@ -5044,26 +5046,97 @@ function resolveSkillSymlinkTargets(
   canonicalSkillsDir: string,
   targets: string[],
 ): string[] {
-  const canonicalRealPath = realPathIfExists(canonicalSkillsDir);
+  const canonicalPath = resolve(canonicalSkillsDir);
   const usableTargets: string[] = [];
   const seen = new Set<string>();
 
   for (const target of targets) {
-    const targetRealPath = realPathIfExists(target);
-    if (targetRealPath === canonicalRealPath) {
+    const targetPath = resolve(target);
+    if (targetPath === canonicalPath) {
       console.log(
-        `Skipping skill symlink target ${target}; it already resolves to ${canonicalSkillsDir}`,
+        `Skipping skill symlink target ${target}; it is the canonical skill root`,
       );
       continue;
     }
-    if (seen.has(targetRealPath)) {
+    if (seen.has(targetPath)) {
       continue;
     }
-    seen.add(targetRealPath);
+    seen.add(targetPath);
     usableTargets.push(target);
   }
 
   return usableTargets;
+}
+
+function normalizeSkillSymlinkTargetRoots(
+  canonicalSkillsDir: string,
+  targets: string[],
+  backup: RuntimeBackupContext,
+): void {
+  const plans = targets.map((target) =>
+    planSkillSymlinkTargetRootNormalization(canonicalSkillsDir, target),
+  );
+
+  for (const plan of plans) {
+    normalizeSkillSymlinkTargetRoot(plan, backup);
+  }
+}
+
+type SkillSymlinkTargetRootPlan = {
+  action: "create" | "keep" | "replace-canonical-symlink";
+  target: string;
+};
+
+function planSkillSymlinkTargetRootNormalization(
+  canonicalSkillsDir: string,
+  target: string,
+): SkillSymlinkTargetRootPlan {
+  const stats = lstatIfExists(target);
+  if (!stats) {
+    return { action: "create", target };
+  }
+
+  if (stats.isDirectory()) {
+    return { action: "keep", target };
+  }
+
+  if (stats.isSymbolicLink()) {
+    const targetRealPath = realPathIfExists(target);
+    const canonicalRealPath = realPathIfExists(canonicalSkillsDir);
+    if (targetRealPath !== canonicalRealPath) {
+      throw new Error(
+        `Refusing to replace skill target root symlink with unexpected target: ${target}`,
+      );
+    }
+
+    return { action: "replace-canonical-symlink", target };
+  }
+
+  throw new Error(`Refusing to use non-directory skill target root: ${target}`);
+}
+
+function normalizeSkillSymlinkTargetRoot(
+  plan: SkillSymlinkTargetRootPlan,
+  backup: RuntimeBackupContext,
+): void {
+  if (plan.action === "keep") {
+    return;
+  }
+
+  if (plan.action === "create") {
+    mkdirSync(plan.target, { recursive: true });
+    return;
+  }
+
+  if (plan.action === "replace-canonical-symlink") {
+    const target = plan.target;
+    backupRuntimeTarget(target, {
+      ...backup,
+      targetName: runtimeTargetName(target),
+    });
+    rmSync(target, { force: true });
+    mkdirSync(target, { recursive: true });
+  }
 }
 
 function realPathIfExists(path: string): string {
