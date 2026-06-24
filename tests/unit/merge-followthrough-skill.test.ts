@@ -162,7 +162,10 @@ test("merge-followthrough requires default-branch CI graph completion", () => {
     metadata,
     /verify the required default-branch CI graph for the merged commit or resulting default head succeeded/,
   );
-  assert.match(metadata, /child\/downstream\/triggered graph components/);
+  assert.match(
+    metadata,
+    /child\/bridge\/downstream\/triggered graph components/,
+  );
   assert.match(metadata, /poll once per minute up to 10 minutes/);
   assert.match(metadata, /verification gap instead of done/);
 });
