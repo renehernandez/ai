@@ -25,7 +25,7 @@ Use for non-trivial repo tasks, especially continue, resume, next, where are we,
 
 ## Workflow
 
-1. Read applicable entrypoints: project `AGENTS.md`, project `.agents/rules/*.md`, and user rules such as `~/.agents/AGENTS.md` when present.
+1. Read applicable entrypoints: project `AGENTS.md`, project `.agents/rules/*.md`, and user-level rules exposed by the current runtime when present.
 2. Classify the surface: local host, cloud agent/review, or CI automation.
 3. Verify live state before conclusions:
    - `git status --short --branch`;

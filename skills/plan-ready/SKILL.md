@@ -30,16 +30,9 @@ Only primary atomic plan markdown documents belong in `.agents/plans/**`.
 Supporting workflow artifacts are private evidence, not repo artifacts. Keep
 review requests, reviewer selections, handoffs, blueprints, ledgers, reports,
 validation inputs, and validation outputs in the thread by default. When a
-file-backed copy is needed for recovery or correlation, write the file outside
-the repo and record it with:
-
-```bash
-pnpm ax plans artifact record --plan .agents/plans/example.md --kind <kind> --file <path>
-```
-
-Use `pnpm ax plans artifact list --plan .agents/plans/example.md` to recover
-previous support artifacts for that plan. Do not commit `.agents/plans/**`
-support sidecars such as `*.reviewer-selection.yaml`, `*.handoff.json`, or
+file-backed copy is needed for recovery or correlation, keep it in private
+support storage outside the repo. Do not commit `.agents/plans/**` support
+sidecars such as `*.reviewer-selection.yaml`, `*.handoff.json`, or
 `*.validation-output.jsonl`.
 
 ## Workflow

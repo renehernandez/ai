@@ -65,10 +65,10 @@ first so routing and full description policy stay in one place.
    - Preserve the selected template shape and fill placeholders concisely.
    - Include targeted evidence or hosted status only when it helps reviewers understand risk.
    - Omit unnecessary author-workflow references and routine validation already represented by CI or repository hooks.
-   - Do not expose local private support artifact paths such as
-     `~/.ax/plans/...`, raw private support artifacts, or private thread
-     metadata. Use summaries, hashes, thread references, note IDs, discussion
-     IDs, or stable correlation IDs when support-artifact evidence matters.
+   - Do not expose local private support artifact paths, raw private support
+     artifacts, or private thread metadata. Use summaries, hashes, thread
+     references, note IDs, discussion IDs, or stable correlation IDs when
+     support-artifact evidence matters.
    - Link directly to reviewer-needed issues, related PRs, or upstream resources.
 
    Fallback body:
@@ -120,7 +120,7 @@ first so routing and full description policy stay in one place.
 | Opening a ready PR by default | Use `--draft` unless the user asks for ready review |
 | Guessing base branch | Read remote HEAD, branch config, or project docs |
 | Hiding verification gaps | Put exact checks in the PR body or report what was not run |
-| Exposing private AX plan artifact paths | Use summaries, hashes, thread references, note IDs, discussion IDs, or stable correlation IDs |
+| Exposing private plan-support paths | Use summaries, hashes, thread references, note IDs, discussion IDs, or stable correlation IDs |
 | Handling a neutral PR/MR request here | Use `change-request-create` before provider mutation |
 
 ## Validation Scenarios
@@ -130,10 +130,9 @@ first so routing and full description policy stay in one place.
 - User asks for a ready PR: pass only if the agent does not force `--draft` and reports the readiness choice.
 - User asks for a host-neutral change request: pass only if the agent routes through `change-request-create` instead of this provider adapter directly.
 - Process-heavy change with local plans, pressure tests, internal review gates,
-  or private AX plan support artifacts: pass only if the PR body includes
-  self-contained reviewer evidence, omits references to excluded/local
-  artifacts and `~/.ax/plans/...` paths, and links directly to reviewer-needed
-  upstream resources.
+  or private plan support artifacts: pass only if the PR body includes
+  self-contained reviewer evidence, omits references to excluded local
+  artifacts, and links directly to reviewer-needed upstream resources.
 
 ## Test Evidence
 

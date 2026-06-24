@@ -86,8 +86,8 @@ and next action.
    as the reviewed artifact, but support sidecars under `.agents/plans/**` must
    not be committed. Keep review requests, reviewer selections, handoffs,
    blueprints, ledgers, reports, validation inputs, and validation outputs in
-   the thread; if file-backed recovery is needed, record them privately with
-   `pnpm ax plans artifact record --plan <plan> --kind <kind> --file <path>`.
+   the thread; if file-backed recovery is needed, keep private support copies
+   outside the repository.
 5. Run artifact-specific validation:
    - OpenSpec: `openspec validate <change-id> --strict --no-interactive`.
    - Markdown plan: check links or render only when the repo has an established
@@ -123,10 +123,10 @@ and next action.
    - name the plan/OpenSpec artifact;
    - name the requested feedback, such as Nitro and developer review;
    - include exact planning validation performed.
-   Do not expose local `~/.ax/plans/...` paths, raw private support artifacts,
-   or private thread metadata in hosted descriptions. Use summaries, hashes,
-   note IDs, discussion IDs, or stable correlation IDs when support-artifact
-   evidence is relevant.
+   Do not expose local private support paths, raw private support artifacts, or
+   private thread metadata in hosted descriptions. Use summaries, hashes, note
+   IDs, discussion IDs, or stable correlation IDs when support-artifact evidence
+   is relevant.
 9. Run the artifact-host inspection adapter (`gitlab-adapter-review` or
    `github-adapter-review`) only for host metadata, discussions, and CI/review
    state. Do not run implementation code review against a planning-only diff.

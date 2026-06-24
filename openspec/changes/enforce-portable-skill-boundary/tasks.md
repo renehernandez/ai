@@ -6,7 +6,7 @@
       such as `../../../scripts/*` or sibling-skill helpers such as
       `../../openspec-tasks/scripts/*`, and their documented commands run from
       each skill folder. First real confirmation: execute the `pnpm exec tsx scripts/plan-ready.ts detect` CLI command from `skills/plan-ready` and observe successful JSON output.
-- [ ] 1.2 Remove AX command examples, installed runtime paths, private
+- [x] 1.2 Remove AX command examples, installed runtime paths, private
       plan-artifact commands, and profile refresh mechanics from non-`ax-cli`
       shared skill instructions and adapter prompts while preserving portable
       `.agents/plans` repo artifact guidance and existing plan-unit-delivery

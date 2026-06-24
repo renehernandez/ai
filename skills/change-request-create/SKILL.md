@@ -53,11 +53,10 @@ including local skill paths, temporary planning files, subagent gates, internal
 review labels, verification ledgers, automation-routing details, and routine
 local commands already represented by CI or standard repo hooks.
 
-Do not expose local private support artifact paths such as `~/.ax/plans/...`,
-raw private support artifacts, or private thread metadata by default. When
-support-artifact evidence is relevant to reviewers, use summaries, hashes,
-thread references, note IDs, discussion IDs, or stable correlation IDs instead
-of local filesystem paths.
+Do not expose local private support artifact paths, raw private support
+artifacts, or private thread metadata by default. When support-artifact evidence
+is relevant to reviewers, use summaries, hashes, thread references, note IDs,
+discussion IDs, or stable correlation IDs instead of local filesystem paths.
 
 Keep evidence when it helps a reviewer assess risk:
 
@@ -133,7 +132,7 @@ flags.
 | Replacing a whole existing description | Preserve manual content and update only managed sections |
 | Listing routine format/lint/typecheck commands | Mention only targeted evidence or hosted status that changes reviewer confidence |
 | Referring to local plans, skills, or subagents | Convert useful facts into reviewer-facing evidence or omit them |
-| Exposing private AX plan artifact paths | Use summaries, hashes, thread references, note IDs, discussion IDs, or stable correlation IDs |
+| Exposing private plan-support paths | Use summaries, hashes, thread references, note IDs, discussion IDs, or stable correlation IDs |
 | Ignoring project templates | Preserve template shape and fill placeholders |
 
 ## Validation Scenarios
@@ -148,7 +147,7 @@ flags.
   formatter output, targeted regression proof, and a pending hosted check: pass
   only if internal/routine references are omitted while targeted proof and
   hosted status are retained.
-- Description evidence includes private plan support artifacts under
-  `~/.ax/plans/...`: pass only if local paths and raw private artifacts are
-  omitted while reviewer-useful summaries, hashes, thread references, note IDs,
-  discussion IDs, or stable correlation IDs are retained.
+- Description evidence includes private plan support artifacts: pass only if
+  local paths and raw private artifacts are omitted while reviewer-useful
+  summaries, hashes, thread references, note IDs, discussion IDs, or stable
+  correlation IDs are retained.
