@@ -17,7 +17,7 @@
 - [x] 2.1 Add `pnpm ax plans artifact record --plan <path> --kind <kind>
       --file <path>` as a repo-local target command that keys records to the
       invocation target repo.
-- [ ] 2.2 Add deterministic identity derivation from `origin` fetch URL or the
+- [x] 2.2 Add deterministic identity derivation from `origin` fetch URL or the
       selected artifact-host remote, normalized plan path, plan path hash, plan
       slug, and plan content fingerprint.
 - [ ] 2.3 Implement recoverable writes for immutable artifact blobs,

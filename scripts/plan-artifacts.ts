@@ -86,9 +86,21 @@ export type PlanArtifactRecordResult = {
   status: "recorded";
   repoKey: string;
   normalizedPlanPath: string;
+  planPathHash: string;
+  planSlug: string;
+  planContentFingerprint: string;
   artifactKind: PlanArtifactRecordKind;
   artifactContentFingerprint: string;
   privateWorkspaceRelativePath: string;
+};
+
+export type PlanArtifactIdentity = {
+  repoKey: string;
+  repoHash: string;
+  normalizedPlanPath: string;
+  planPathHash: string;
+  planSlug: string;
+  planContentFingerprint: string;
 };
 
 export function normalizeRepoRelativePath(input: string): string | null {
@@ -224,15 +236,9 @@ export function recordPlanArtifact(options: {
   kind: string;
   filePath: string;
   axPlansRoot?: string;
+  artifactRemoteName?: string;
 }): PlanArtifactRecordResult {
   const targetRoot = realpathSync(options.targetRoot);
-  const normalizedPlanPath = normalizeAgentsPlanRef(options.planPath);
-  if (!normalizedPlanPath || !isPrimaryMarkdownPlan(normalizedPlanPath)) {
-    throw new Error(
-      "--plan must be a primary markdown file under .agents/plans",
-    );
-  }
-
   const artifactKind = normalizePlanArtifactRecordKind(options.kind);
   if (!artifactKind) {
     throw new Error(
@@ -240,12 +246,11 @@ export function recordPlanArtifact(options: {
     );
   }
 
-  const planRealPath = realpathSync(join(targetRoot, normalizedPlanPath));
-  assertPathInside(
-    planRealPath,
+  const artifactIdentity = derivePlanArtifactIdentity({
     targetRoot,
-    "--plan must resolve inside target repo",
-  );
+    planPath: options.planPath,
+    artifactRemoteName: options.artifactRemoteName,
+  });
 
   const artifactRealPath = realpathSync(resolve(targetRoot, options.filePath));
   assertPathInside(
@@ -254,10 +259,9 @@ export function recordPlanArtifact(options: {
     "--file must resolve inside target repo for artifact record v1",
   );
 
-  const repoKey = repoKeyForTargetRoot(targetRoot);
   const identity = derivePlanArtifactWorkspaceIdentity({
-    repoKey,
-    planPath: normalizedPlanPath,
+    repoKey: artifactIdentity.repoKey,
+    planPath: artifactIdentity.normalizedPlanPath,
     axPlansRoot: options.axPlansRoot,
   });
   const axPlansRoot = resolve(
@@ -288,8 +292,11 @@ export function recordPlanArtifact(options: {
 
   return {
     status: "recorded",
-    repoKey,
-    normalizedPlanPath,
+    repoKey: artifactIdentity.repoKey,
+    normalizedPlanPath: artifactIdentity.normalizedPlanPath,
+    planPathHash: artifactIdentity.planPathHash,
+    planSlug: artifactIdentity.planSlug,
+    planContentFingerprint: artifactIdentity.planContentFingerprint,
     artifactKind,
     artifactContentFingerprint,
     privateWorkspaceRelativePath: relative(
@@ -301,14 +308,57 @@ export function recordPlanArtifact(options: {
   };
 }
 
-function repoKeyForTargetRoot(targetRoot: string): string {
-  const remoteUrl = gitRemoteUrlForRoot(targetRoot, "origin");
-  if (!remoteUrl) {
+export function derivePlanArtifactIdentity(options: {
+  targetRoot: string;
+  planPath: string;
+  artifactRemoteName?: string;
+}): PlanArtifactIdentity {
+  const targetRoot = realpathSync(options.targetRoot);
+  const normalizedPlanPath = normalizeAgentsPlanRef(options.planPath);
+  if (!normalizedPlanPath || !isPrimaryMarkdownPlan(normalizedPlanPath)) {
     throw new Error(
-      "Target repository has no origin fetch URL; provide a repo identity before recording plan artifacts.",
+      "--plan must be a primary markdown file under .agents/plans",
     );
   }
-  return remoteUrl.trim();
+
+  const planRealPath = realpathSync(join(targetRoot, normalizedPlanPath));
+  assertPathInside(
+    planRealPath,
+    targetRoot,
+    "--plan must resolve inside target repo",
+  );
+
+  const repoKey = repoKeyForTargetRoot(targetRoot, options.artifactRemoteName);
+  const workspaceIdentity = derivePlanArtifactWorkspaceIdentity({
+    repoKey,
+    planPath: normalizedPlanPath,
+  });
+  return {
+    repoKey,
+    repoHash: workspaceIdentity.repoHash,
+    normalizedPlanPath,
+    planPathHash: workspaceIdentity.planPathHash,
+    planSlug: workspaceIdentity.planSlug,
+    planContentFingerprint: sha256Hex(readFileSync(planRealPath)),
+  };
+}
+
+function repoKeyForTargetRoot(
+  targetRoot: string,
+  artifactRemoteName?: string,
+): string {
+  const originUrl = gitRemoteUrlForRoot(targetRoot, "origin");
+  const remoteUrl =
+    originUrl ??
+    (artifactRemoteName
+      ? gitRemoteUrlForRoot(targetRoot, artifactRemoteName)
+      : undefined);
+  if (!remoteUrl) {
+    throw new Error(
+      "Target repository has no origin fetch URL or selected artifact-host remote; provide a repo identity before recording plan artifacts.",
+    );
+  }
+  return canonicalRepoRemoteUrl(remoteUrl);
 }
 
 function gitRemoteUrlForRoot(
@@ -327,6 +377,32 @@ function gitRemoteUrlForRoot(
     return undefined;
   }
   return result.stdout.trim() || undefined;
+}
+
+function canonicalRepoRemoteUrl(remoteUrl: string): string {
+  const trimmed = remoteUrl.trim();
+  const scpLike = /^([^@]+@)?([^:]+):(.+)$/.exec(trimmed);
+  if (scpLike && !trimmed.includes("://")) {
+    return `${scpLike[2].toLowerCase()}/${normalizeRemotePath(scpLike[3])}`;
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    const host = parsed.port
+      ? `${parsed.hostname.toLowerCase()}:${parsed.port}`
+      : parsed.hostname.toLowerCase();
+    return `${host}/${normalizeRemotePath(parsed.pathname)}`;
+  } catch {
+    return trimmed.toLowerCase();
+  }
+}
+
+function normalizeRemotePath(path: string): string {
+  return path
+    .replace(/^\/+/, "")
+    .replace(/\/+/g, "/")
+    .replace(/\/+$/, "")
+    .replace(/\.git$/i, "");
 }
 
 function ensurePrivateDirectory(path: string): void {
