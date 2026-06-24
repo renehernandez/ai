@@ -35,6 +35,7 @@ import {
   derivePlanArtifactIdentity,
   listPlanArtifacts,
   recordPlanArtifact,
+  sha256Hex,
 } from "../../scripts/plan-artifacts.ts";
 
 const repoRoot = process.cwd();
@@ -793,6 +794,510 @@ test("plans artifact record rejects corrupt existing artifact blobs", () => {
           axPlansRoot,
         }),
       /incomplete or corrupt/,
+    );
+  });
+});
+
+test("plans artifact identity separates nested duplicate plan basenames", () => {
+  withTempDir((directory) => {
+    const targetRepo = createPlanArtifactTarget(directory);
+    const axPlansRoot = join(directory, "ax-plans");
+    mkdirSync(join(targetRepo, ".agents", "plans", "team"), {
+      recursive: true,
+    });
+    mkdirSync(axPlansRoot, { mode: 0o700 });
+    chmodSync(axPlansRoot, 0o700);
+    writeFileSync(
+      join(targetRepo, ".agents", "plans", "team", "example.md"),
+      "# Nested example plan\n",
+      "utf-8",
+    );
+
+    const rootPlan = recordPlanArtifact({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      kind: "reviewer_selection",
+      filePath: "reviewer-selection.yaml",
+      axPlansRoot,
+    });
+    const nestedPlan = recordPlanArtifact({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/team/example.md",
+      kind: "reviewer_selection",
+      filePath: "reviewer-selection.yaml",
+      axPlansRoot,
+    });
+
+    assert.notEqual(rootPlan.planPathHash, nestedPlan.planPathHash);
+    assert.notEqual(rootPlan.planSlug, nestedPlan.planSlug);
+    assert.notEqual(
+      rootPlan.manifestRelativePath,
+      nestedPlan.manifestRelativePath,
+    );
+  });
+});
+
+test("plans artifact commands reject path traversal inputs", () => {
+  withTempDir((directory) => {
+    const targetRepo = createPlanArtifactTarget(directory);
+    const axPlansRoot = join(directory, "ax-plans");
+    const outsideArtifact = join(directory, "outside.yaml");
+    mkdirSync(axPlansRoot, { mode: 0o700 });
+    chmodSync(axPlansRoot, 0o700);
+    writeFileSync(outsideArtifact, "outside: true\n", "utf-8");
+
+    assert.throws(
+      () =>
+        listPlanArtifacts({
+          targetRoot: targetRepo,
+          planPath: "../example.md",
+          axPlansRoot,
+        }),
+      /--plan must be a primary markdown file under \.agents\/plans/,
+    );
+    assert.throws(
+      () =>
+        recordPlanArtifact({
+          targetRoot: targetRepo,
+          planPath: ".agents/plans/example.md",
+          kind: "reviewer_selection",
+          filePath: "../outside.yaml",
+          axPlansRoot,
+        }),
+      /--file must resolve inside target repo/,
+    );
+  });
+});
+
+test("plans artifact record rejects invalid kinds and normalizes unsafe extensions", () => {
+  withTempDir((directory) => {
+    const targetRepo = createPlanArtifactTarget(directory);
+    const axPlansRoot = join(directory, "ax-plans");
+    mkdirSync(axPlansRoot, { mode: 0o700 });
+    chmodSync(axPlansRoot, 0o700);
+    writeFileSync(
+      join(targetRepo, "reviewer-selection.bad-ext"),
+      "reviewers:\n  - nitro\n",
+      "utf-8",
+    );
+
+    assert.throws(
+      () =>
+        recordPlanArtifact({
+          targetRoot: targetRepo,
+          planPath: ".agents/plans/example.md",
+          kind: "unknown",
+          filePath: "reviewer-selection.yaml",
+          axPlansRoot,
+        }),
+      /--kind must be one of/,
+    );
+
+    const result = recordPlanArtifact({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      kind: "reviewer_selection",
+      filePath: "reviewer-selection.bad-ext",
+      axPlansRoot,
+    });
+    assert.match(result.privateWorkspaceRelativePath, /\.artifact$/);
+    assert.match(result.artifactRelativePath, /\.artifact$/);
+  });
+});
+
+test("plans artifact commands reject corrupt manifests and truncated index rows", () => {
+  withTempDir((directory) => {
+    const targetRepo = createPlanArtifactTarget(directory);
+    const axPlansRoot = join(directory, "ax-plans");
+    mkdirSync(axPlansRoot, { mode: 0o700 });
+    chmodSync(axPlansRoot, 0o700);
+
+    const result = recordPlanArtifact({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      kind: "reviewer_selection",
+      filePath: "reviewer-selection.yaml",
+      axPlansRoot,
+    });
+    const manifestPath = join(axPlansRoot, result.manifestRelativePath);
+    const indexPath = join(axPlansRoot, result.indexRelativePath);
+
+    writeFileSync(indexPath, `${readFileSync(indexPath, "utf-8")}{"broken"\n`);
+    assert.throws(
+      () =>
+        recordPlanArtifact({
+          targetRoot: targetRepo,
+          planPath: ".agents/plans/example.md",
+          kind: "reviewer_selection",
+          filePath: "reviewer-selection.yaml",
+          axPlansRoot,
+        }),
+      /index is corrupt/,
+    );
+
+    writeFileSync(manifestPath, "{", "utf-8");
+    assert.throws(
+      () =>
+        listPlanArtifacts({
+          targetRoot: targetRepo,
+          planPath: ".agents/plans/example.md",
+          axPlansRoot,
+        }),
+      /manifest is corrupt.*before reading plan artifacts/,
+    );
+  });
+});
+
+test("plans artifact commands reject orphan blobs", () => {
+  withTempDir((directory) => {
+    const targetRepo = createPlanArtifactTarget(directory);
+    const axPlansRoot = join(directory, "ax-plans");
+    mkdirSync(axPlansRoot, { mode: 0o700 });
+    chmodSync(axPlansRoot, 0o700);
+
+    const result = recordPlanArtifact({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      kind: "reviewer_selection",
+      filePath: "reviewer-selection.yaml",
+      axPlansRoot,
+    });
+    const workspaceRootRelativePath = result.manifestRelativePath.replace(
+      /\/manifest\.json$/,
+      "",
+    );
+    writeFileSync(
+      join(
+        axPlansRoot,
+        workspaceRootRelativePath,
+        "revisions",
+        result.revisionId,
+        "artifacts",
+        "orphan.yaml",
+      ),
+      "orphan: true\n",
+      "utf-8",
+    );
+
+    assert.throws(
+      () =>
+        listPlanArtifacts({
+          targetRoot: targetRepo,
+          planPath: ".agents/plans/example.md",
+          axPlansRoot,
+        }),
+      /orphan blob/,
+    );
+    assert.throws(
+      () =>
+        recordPlanArtifact({
+          targetRoot: targetRepo,
+          planPath: ".agents/plans/example.md",
+          kind: "reviewer_selection",
+          filePath: "reviewer-selection.yaml",
+          axPlansRoot,
+        }),
+      /orphan blob/,
+    );
+  });
+});
+
+test("plans artifact record recovers an already copied blob without a manifest", () => {
+  withTempDir((directory) => {
+    const targetRepo = createPlanArtifactTarget(directory);
+    const axPlansRoot = join(directory, "ax-plans");
+    mkdirSync(axPlansRoot, { mode: 0o700 });
+    chmodSync(axPlansRoot, 0o700);
+
+    const result = recordPlanArtifact({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      kind: "reviewer_selection",
+      filePath: "reviewer-selection.yaml",
+      axPlansRoot,
+    });
+    rmSync(join(axPlansRoot, result.manifestRelativePath));
+    rmSync(join(axPlansRoot, result.indexRelativePath));
+    rmSync(join(axPlansRoot, result.metadataRelativePath));
+
+    const recovered = recordPlanArtifact({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      kind: "reviewer_selection",
+      filePath: "reviewer-selection.yaml",
+      axPlansRoot,
+    });
+
+    assert.equal(recovered.artifactRelativePath, result.artifactRelativePath);
+    assert.equal(
+      readFileSync(join(axPlansRoot, recovered.indexRelativePath), "utf-8")
+        .trim()
+        .split("\n").length,
+      1,
+    );
+    const listed = listPlanArtifacts({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      axPlansRoot,
+    });
+    assert.equal(listed.status, "found");
+    assert.equal(listed.artifacts.length, 1);
+  });
+});
+
+test("plans artifact record recovers prior copied blobs when recording another artifact", () => {
+  withTempDir((directory) => {
+    const targetRepo = createPlanArtifactTarget(directory);
+    const axPlansRoot = join(directory, "ax-plans");
+    mkdirSync(axPlansRoot, { mode: 0o700 });
+    chmodSync(axPlansRoot, 0o700);
+    writeFileSync(
+      join(targetRepo, "review-request.yaml"),
+      "review:\n  request: nitro\n",
+      "utf-8",
+    );
+
+    const interrupted = recordPlanArtifact({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      kind: "reviewer_selection",
+      filePath: "reviewer-selection.yaml",
+      axPlansRoot,
+    });
+    rmSync(join(axPlansRoot, interrupted.manifestRelativePath));
+    rmSync(join(axPlansRoot, interrupted.indexRelativePath));
+    rmSync(join(axPlansRoot, interrupted.metadataRelativePath));
+
+    const recovered = recordPlanArtifact({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      kind: "review_request",
+      filePath: "review-request.yaml",
+      axPlansRoot,
+    });
+
+    assert.equal(
+      readFileSync(join(axPlansRoot, recovered.indexRelativePath), "utf-8")
+        .trim()
+        .split("\n").length,
+      2,
+    );
+    const listed = listPlanArtifacts({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      axPlansRoot,
+    });
+    assert.equal(listed.status, "found");
+    assert.deepEqual(
+      listed.artifacts.map((artifact) => artifact.artifactKind).sort(),
+      ["review_request", "reviewer_selection"],
+    );
+  });
+});
+
+test("plans artifact record recovers copied blobs from prior revision metadata", () => {
+  withTempDir((directory) => {
+    const targetRepo = createPlanArtifactTarget(directory);
+    const axPlansRoot = join(directory, "ax-plans");
+    mkdirSync(axPlansRoot, { mode: 0o700 });
+    chmodSync(axPlansRoot, 0o700);
+    writeFileSync(
+      join(targetRepo, "review-request.yaml"),
+      "review:\n  request: nitro\n",
+      "utf-8",
+    );
+
+    const interrupted = recordPlanArtifact({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      kind: "reviewer_selection",
+      filePath: "reviewer-selection.yaml",
+      axPlansRoot,
+    });
+    rmSync(join(axPlansRoot, interrupted.manifestRelativePath));
+    rmSync(join(axPlansRoot, interrupted.indexRelativePath));
+    writeFileSync(
+      join(targetRepo, ".agents", "plans", "example.md"),
+      "# Example plan\n\nUpdated scope.\n",
+      "utf-8",
+    );
+
+    const recovered = recordPlanArtifact({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      kind: "review_request",
+      filePath: "review-request.yaml",
+      axPlansRoot,
+    });
+
+    assert.notEqual(recovered.revisionId, interrupted.revisionId);
+    assert.equal(
+      readFileSync(join(axPlansRoot, recovered.indexRelativePath), "utf-8")
+        .trim()
+        .split("\n").length,
+      2,
+    );
+    const listed = listPlanArtifacts({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      axPlansRoot,
+    });
+    assert.equal(listed.status, "found");
+    assert.equal(listed.revisions.length, 2);
+    assert.deepEqual(
+      listed.artifacts.map((artifact) => artifact.artifactKind).sort(),
+      ["review_request", "reviewer_selection"],
+    );
+  });
+});
+
+test("plans artifact record rejects prior revision blobs missing from metadata", () => {
+  withTempDir((directory) => {
+    const targetRepo = createPlanArtifactTarget(directory);
+    const axPlansRoot = join(directory, "ax-plans");
+    mkdirSync(axPlansRoot, { mode: 0o700 });
+    chmodSync(axPlansRoot, 0o700);
+    writeFileSync(
+      join(targetRepo, "review-request.yaml"),
+      "review:\n  request: nitro\n",
+      "utf-8",
+    );
+
+    const interrupted = recordPlanArtifact({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      kind: "reviewer_selection",
+      filePath: "reviewer-selection.yaml",
+      axPlansRoot,
+    });
+    const workspaceRootRelativePath = interrupted.manifestRelativePath.replace(
+      /\/manifest\.json$/,
+      "",
+    );
+    const extraBlobContent = "extra: true\n";
+    const extraBlobFingerprint = sha256Hex(extraBlobContent);
+    writeFileSync(
+      join(
+        axPlansRoot,
+        workspaceRootRelativePath,
+        "revisions",
+        interrupted.revisionId,
+        "artifacts",
+        `review_request-${extraBlobFingerprint}.yaml`,
+      ),
+      extraBlobContent,
+      "utf-8",
+    );
+    rmSync(join(axPlansRoot, interrupted.manifestRelativePath));
+    rmSync(join(axPlansRoot, interrupted.indexRelativePath));
+    writeFileSync(
+      join(targetRepo, ".agents", "plans", "example.md"),
+      "# Example plan\n\nUpdated scope.\n",
+      "utf-8",
+    );
+
+    assert.throws(
+      () =>
+        recordPlanArtifact({
+          targetRoot: targetRepo,
+          planPath: ".agents/plans/example.md",
+          kind: "review_request",
+          filePath: "review-request.yaml",
+          axPlansRoot,
+        }),
+      /orphan blob/,
+    );
+  });
+});
+
+test("plans artifact record keeps same-kind recovered blobs on their revision", () => {
+  withTempDir((directory) => {
+    const targetRepo = createPlanArtifactTarget(directory);
+    const axPlansRoot = join(directory, "ax-plans");
+    mkdirSync(axPlansRoot, { mode: 0o700 });
+    chmodSync(axPlansRoot, 0o700);
+
+    const interrupted = recordPlanArtifact({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      kind: "reviewer_selection",
+      filePath: "reviewer-selection.yaml",
+      axPlansRoot,
+    });
+    rmSync(join(axPlansRoot, interrupted.manifestRelativePath));
+    rmSync(join(axPlansRoot, interrupted.indexRelativePath));
+    writeFileSync(
+      join(targetRepo, ".agents", "plans", "example.md"),
+      "# Example plan\n\nUpdated scope.\n",
+      "utf-8",
+    );
+
+    const recovered = recordPlanArtifact({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      kind: "reviewer_selection",
+      filePath: "reviewer-selection.yaml",
+      axPlansRoot,
+    });
+
+    assert.notEqual(recovered.revisionId, interrupted.revisionId);
+    assert.notEqual(
+      recovered.artifactRelativePath,
+      interrupted.artifactRelativePath,
+    );
+    const listed = listPlanArtifacts({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      axPlansRoot,
+    });
+    assert.equal(listed.status, "found");
+    assert.equal(listed.revisions.length, 2);
+    assert.equal(listed.artifacts.length, 2);
+    recordPlanArtifact({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      kind: "reviewer_selection",
+      filePath: "reviewer-selection.yaml",
+      axPlansRoot,
+    });
+  });
+});
+
+test("plans artifact list rejects corrupt revisions paths", () => {
+  withTempDir((directory) => {
+    const targetRepo = createPlanArtifactTarget(directory);
+    const axPlansRoot = join(directory, "ax-plans");
+    mkdirSync(axPlansRoot, { mode: 0o700 });
+    chmodSync(axPlansRoot, 0o700);
+
+    const result = recordPlanArtifact({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      kind: "reviewer_selection",
+      filePath: "reviewer-selection.yaml",
+      axPlansRoot,
+    });
+    const workspaceRootRelativePath = result.manifestRelativePath.replace(
+      /\/manifest\.json$/,
+      "",
+    );
+    rmSync(join(axPlansRoot, workspaceRootRelativePath, "revisions"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(axPlansRoot, workspaceRootRelativePath, "revisions"),
+      "not a directory\n",
+      "utf-8",
+    );
+
+    assert.throws(
+      () =>
+        listPlanArtifacts({
+          targetRoot: targetRepo,
+          planPath: ".agents/plans/example.md",
+          axPlansRoot,
+        }),
+      /revisions path is corrupt/,
     );
   });
 });

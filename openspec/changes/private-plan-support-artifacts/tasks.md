@@ -25,7 +25,7 @@
       `index.jsonl`.
 - [x] 2.4 Add `pnpm ax plans artifact list --plan <path>` to print manifest and
       revision artifact records for the selected plan.
-- [ ] 2.5 Add tests for duplicate basenames, nested paths, path traversal,
+- [x] 2.5 Add tests for duplicate basenames, nested paths, path traversal,
       invalid kinds/extensions, duplicate records, corrupt manifests, truncated
       index rows, and orphan blobs.
 
