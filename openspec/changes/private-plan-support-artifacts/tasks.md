@@ -6,7 +6,7 @@
 - [x] 1.2 Update `plan-review` validation so `artifact_type: plan` accepts
       primary markdown plan docs and rejects support sidecars under
       `.agents/plans/**`.
-- [ ] 1.3 Preserve `artifact_type: openspec` validation so every
+- [x] 1.3 Preserve `artifact_type: openspec` validation so every
       `.agents/plans/**` path remains invalid in OpenSpec planning diffs.
 - [ ] 1.4 Add validator coverage for added, modified, deleted, renamed, copied,
       and type-changed support sidecars, including historical sidecars that are

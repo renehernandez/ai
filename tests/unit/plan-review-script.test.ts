@@ -281,6 +281,23 @@ test("validate-planning-diff rejects OpenSpec diffs with source-plan paths", () 
   assert.match(result.stderr, /T: \.agents\/plans\/type-changed\.md/);
 });
 
+test("validate-planning-diff rejects Git-quoted OpenSpec source-plan paths", () => {
+  const result = runPlanReviewArgs(
+    ["validate-planning-diff", "--artifact-type", "openspec"],
+    [
+      'A\t".agents/plans/source.md\\tmeta"',
+      'M\t".agents/plans/source.review-request.md\\nmeta"',
+      'A\t".agents\\\\plans\\\\source.handoff.yaml"',
+    ].join("\n"),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /artifact_type openspec/);
+  assert.match(result.stderr, /source\.md/);
+  assert.match(result.stderr, /source\.review-request\.md/);
+  assert.match(result.stderr, /source\.handoff\.yaml/);
+});
+
 test("validate-planning-diff rejects deletion-only OpenSpec source-plan diffs", () => {
   const result = runPlanReviewArgs(
     ["validate-planning-diff", "--artifact-type", "openspec"],
