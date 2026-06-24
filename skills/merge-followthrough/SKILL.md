@@ -102,9 +102,10 @@ for it.
 6. Merge or queue only in finish mode after green/acceptable checks.
 7. Verify merge with provider state, not command silence.
 8. Verify the required default-branch CI graph for the merged commit or
-   resulting default-branch head, including child/downstream graph components
-   when exposed. If graph creation is delayed, poll once per minute for up to 10
-   minutes. Treat a missing graph after that as a verification gap, not done.
+   resulting default-branch head, including child/bridge/downstream/triggered
+   graph components when exposed. If graph creation is delayed, poll once per
+   minute for up to 10 minutes. Treat a missing graph after that as a
+   verification gap, not done.
 9. For stacks, stop subsequent merges when default-branch CI is failed, blocked,
    or missing until the default branch is healthy and the user asks to continue.
 10. Before syncing local base, verify the target checkout is clean or use a separate clean worktree. Never overwrite dirty user work.
@@ -122,7 +123,7 @@ for it.
 | Treating every failure as branch-caused | Classify with evidence |
 | Deleting branches across active worktrees | Check worktrees first |
 | Stopping after remote merge only | Sync local base when requested/expected |
-| Calling finish done before default-branch CI completes | Verify the required default-branch graph, including child/downstream checks, or report the gap |
+| Calling finish done before default-branch CI completes | Verify the required default-branch graph, including child/bridge/downstream/triggered checks, or report the gap |
 | Continuing a stack after default-branch CI is failed, blocked, or missing | Stop before the next merge and wait for healthy default-branch CI plus a user continue request |
 | Treating metadata plus `$merge-followthrough` as check-only | Finish the metadata, then continue the merge workflow |
 | Requiring deployment proof without an explicit deployment requirement | Report only the merge, CI, sync, and cleanup proof that applies |
