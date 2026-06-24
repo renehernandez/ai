@@ -184,14 +184,104 @@ test("merge-followthrough stops stack continuation on default-branch CI gaps", (
   );
   assert.match(
     skill,
-    /Resume stack\nmerges only after the default branch is healthy and the user asks to continue/,
+    /Resume stack\nmerges only after the default branch is healthy, any required fix-forward\nartifact has landed cleanly, and the user asks to continue/,
   );
   assert.match(
     metadata,
-    /stop before subsequent merges when default-branch CI is failed, blocked, or missing/,
+    /stop before subsequent merges when default-branch CI is failed, blocked, missing, or a fix-forward is required/,
   );
   assert.match(
     metadata,
-    /resume only after the default branch is healthy and the user asks to continue/,
+    /resume only after any fix-forward artifact has landed, the default branch is healthy, and the user asks to continue/,
   );
+});
+
+test("merge-followthrough bounds automatic fix-forward creation", () => {
+  const skill = read("skills/merge-followthrough/SKILL.md");
+  const metadata = read("skills/merge-followthrough/agents/openai.yaml");
+
+  assert.match(skill, /Post-merge fix-forward is bounded/);
+  assert.match(skill, /branch-caused before merge: fix and continue/);
+  assert.match(
+    skill,
+    /branch-caused after merge on the default branch: use the fix-forward\n\s+boundaries below/,
+  );
+  assert.match(skill, /automatically investigate only with live evidence/);
+  assert.match(
+    skill,
+    /Create a\nfix-forward PR or MR automatically only when evidence shows the merged branch\ncaused the failure/,
+  );
+  assert.match(skill, /confidence is strictly greater than 0\.90/);
+  assert.match(
+    skill,
+    /failing default-branch job\/check, why\nthe failure is branch-caused rather than infrastructure or unrelated work/,
+  );
+  assert.match(skill, /minimal fix, and the local or hosted verification/);
+  assert.match(
+    metadata,
+    /create a fix-forward PR\/MR automatically only when live evidence shows the merged branch caused the failure/,
+  );
+  assert.match(metadata, /confidence is strictly greater than 0\.90/);
+  assert.match(metadata, /failing job\/check/);
+  assert.match(
+    metadata,
+    /branch-cause rationale versus infrastructure\/unrelated work/,
+  );
+  assert.match(metadata, /minimal fix, and local or hosted verification/);
+});
+
+test("merge-followthrough never auto-merges fix-forward artifacts", () => {
+  const skill = read("skills/merge-followthrough/SKILL.md");
+  const metadata = read("skills/merge-followthrough/agents/openai.yaml");
+
+  assert.match(
+    skill,
+    /Route fix-forward work through the normal hosted-review path/,
+  );
+  assert.match(skill, /request that reviewer on the\nfix-forward artifact/);
+  assert.match(skill, /Never auto-merge a fix-forward PR or MR/);
+  assert.match(skill, /acceptable\nto watch fix-forward CI and review state/);
+  assert.match(
+    metadata,
+    /Route fix-forward artifacts through normal hosted review/,
+  );
+  assert.match(
+    metadata,
+    /request Nitro or other required reviewers where applicable/,
+  );
+  assert.match(metadata, /never auto-merge the fix-forward artifact/);
+});
+
+test("merge-followthrough reports low-confidence fix-forward instead of creating it", () => {
+  const skill = read("skills/merge-followthrough/SKILL.md");
+  const metadata = read("skills/merge-followthrough/agents/openai.yaml");
+
+  assert.match(skill, /fix-forward confidence is 0\.90 or lower/);
+  assert.match(skill, /do not\ncreate the fix-forward artifact automatically/);
+  assert.match(
+    skill,
+    /Report the diagnosis, likely fix,\nconfidence score, and confidence rationale/,
+  );
+  assert.match(
+    skill,
+    /stop\nsubsequent merges while a branch-caused default-branch CI failure or required\nfix-forward exists/,
+  );
+  assert.match(
+    skill,
+    /Resume only after the fix-forward artifact has landed, the\ndefault branch is healthy, and the user asks to continue/,
+  );
+  assert.match(
+    metadata,
+    /stop before subsequent merges when default-branch CI is failed, blocked, missing, or a fix-forward is required/,
+  );
+  assert.match(
+    metadata,
+    /resume only after any fix-forward artifact has landed, the default branch is healthy, and the user asks to continue/,
+  );
+  assert.match(metadata, /confidence is 0\.90 or lower/);
+  assert.match(
+    metadata,
+    /report diagnosis, likely fix, confidence score, and rationale/,
+  );
+  assert.match(metadata, /without creating a fix-forward artifact/);
 });
