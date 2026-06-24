@@ -29,7 +29,11 @@ toward merge or queue after required gates are acceptable.
 
 Use check-only mode when the user asks to watch, inspect, report status, update
 status only, update without merging, see where this is, or says not to merge
-yet. In check-only mode, do not merge or queue.
+yet. Check-only wording overrides metadata work if both are present. In
+check-only mode, do not merge or queue.
+
+Stack scope must be explicit. Ask for clarification before merging or queuing
+multiple PRs or MRs unless the user has clearly asked to merge the stack.
 
 Deployment verification is explicit. Do not require deployment verification as
 a default finish gate unless the user, repo policy, or existing workflow asks
@@ -45,6 +49,7 @@ for it.
 | Merge queue enabled | Queue/merge without incompatible delete-branch flags |
 | Merge complete | Verify remote state, sync local main, then clean up |
 | Check-only wording | Watch or report status without merge/queue |
+| Multiple PRs or MRs | Ask for explicit stack scope before merge/queue |
 
 ## Workflow
 
