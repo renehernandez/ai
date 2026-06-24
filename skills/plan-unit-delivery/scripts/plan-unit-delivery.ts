@@ -166,6 +166,7 @@ type ParsedHandoff = {
 };
 
 type ParsedReviewerLaunch = {
+  stagedDiffHash?: string;
   launchedReviewers: string[];
   skippedReviewerNames: Set<string>;
 };
@@ -361,6 +362,7 @@ function printReviewerTemplate(): void {
 \`\`\`yaml
 reviewer_launch:
   status: launched
+  staged_diff_hash: <staged diff hash given to the reviewer passes>
   launched_reviewers:
     - implementation-review
     - implementation-scrutiny
@@ -406,6 +408,7 @@ review_execution_rules:
   - Omit model overrides unless the user explicitly asks for one.
   - Print and validate reviewer_launch before waiting for review outcomes.
   - Validate reviewer_report before PR/MR creation or final delivery.
+  - Set reviewer_launch.staged_diff_hash to the staged diff hash given to the reviewer passes.
   - Set reviewer_report.reviewed_diff_hash to the staged diff hash reviewed by the reviewer passes.
 \`\`\`
 `);
@@ -809,8 +812,9 @@ function buildPlanUnitDeliveryReviewGateInput(
   const handoff = validatedHandoff(input);
   const launch = validatedLaunchReport(input);
   const report = validatedReviewReport(input);
-  assertReviewerLaunchReportConsistent(launch, report);
+  assertReviewerLaunchFresh(launch, options.diffHash);
   assertReviewerReportFresh(report, options.diffHash);
+  assertReviewerLaunchReportConsistent(launch, report);
 
   const requiredReviewPasses = unique(report.launchedReviewers);
   const { results, blockingFindings } = reviewerReportGateResults(
@@ -847,6 +851,17 @@ function assertReviewerReportFresh(
   if (report.reviewedDiffHash !== diffHash) {
     throw new Error(
       `reviewer_report.reviewed_diff_hash is stale for current staged diff: expected ${diffHash}, got ${report.reviewedDiffHash ?? "<missing>"}`,
+    );
+  }
+}
+
+function assertReviewerLaunchFresh(
+  launch: ParsedReviewerLaunch,
+  diffHash: string,
+): void {
+  if (launch.stagedDiffHash !== diffHash) {
+    throw new Error(
+      `reviewer_launch.staged_diff_hash is stale for current staged diff: expected ${diffHash}, got ${launch.stagedDiffHash ?? "<missing>"}`,
     );
   }
 }
@@ -1401,6 +1416,7 @@ function validatedLaunchReport(input: string): ParsedReviewerLaunch {
   const section = extractSection(body, "reviewer_launch");
   const errors: string[] = [];
   const status = scalar(section, "status");
+  const stagedDiffHash = scalar(section, "staged_diff_hash");
   const launchedReviewers = list(section, "launched_reviewers");
   const skippedReviewers = list(section, "skipped_reviewers");
   const reviewPassIds = list(section, "review_pass_ids");
@@ -1415,6 +1431,12 @@ function validatedLaunchReport(input: string): ParsedReviewerLaunch {
 
   if (status !== "launched") {
     errors.push("reviewer_launch.status must be launched");
+  }
+
+  if (!stagedDiffHash) {
+    errors.push("reviewer_launch.staged_diff_hash is required");
+  } else if (!REVIEWED_DIFF_HASH_PATTERN.test(stagedDiffHash)) {
+    errors.push("reviewer_launch.staged_diff_hash must be a sha256 diff hash");
   }
 
   requireRequiredReviewers(launchedReviewers, errors);
@@ -1469,6 +1491,7 @@ function validatedLaunchReport(input: string): ParsedReviewerLaunch {
   }
 
   return {
+    stagedDiffHash,
     launchedReviewers,
     skippedReviewerNames,
   };
