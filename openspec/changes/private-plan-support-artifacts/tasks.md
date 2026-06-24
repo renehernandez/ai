@@ -48,7 +48,7 @@
 
 - [x] 4.1 Run focused unit tests for plan-review validation and AX CLI plan
       artifact commands.
-- [ ] 4.2 Run `pnpm test:unit`.
+- [x] 4.2 Run `pnpm test:unit`.
 - [ ] 4.3 Refresh and validate managed skill surfaces for personal and work
       profiles.
 - [ ] 4.4 Refresh and validate managed instruction/rule surfaces for personal
