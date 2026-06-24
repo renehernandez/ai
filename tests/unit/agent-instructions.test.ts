@@ -268,3 +268,19 @@ test("repo implementation rules distinguish primary atomic plan markdown from su
     /do not commit `.agents\/plans\/\*\*` support\s+sidecars/i,
   );
 });
+
+test("ax-cli skill documents private plan artifact record and list commands", () => {
+  const text = readFileSync("skills/ax-cli/SKILL.md", "utf-8");
+
+  assert.match(text, /Private Plan Support Artifacts/);
+  assert.match(text, /ax plans artifact record/);
+  assert.match(text, /ax plans artifact list/);
+  assert.match(text, /\.agents\/plans\/example\.md/);
+  assert.match(text, /review_request/);
+  assert.match(text, /reviewer_selection/);
+  assert.match(text, /validation_input/);
+  assert.match(text, /validation_output/);
+  assert.match(text, /invocation target repo/i);
+  assert.match(text, /do not commit/i);
+  assert.match(text, /do not expose local private workspace paths/i);
+});
