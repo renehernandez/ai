@@ -7,7 +7,8 @@ description: Use when a user asks to merge, merge when green, add to merge queue
 
 ## Overview
 
-Finish the remote workflow, not just the local patch. Verify CI, merge state, deployment state, and local sync before reporting done.
+Finish the remote workflow, not just the local patch. Verify CI, merge state,
+local sync, and explicitly requested deployment proof before reporting done.
 
 ## When To Use
 
@@ -53,6 +54,19 @@ unpushed commits, and is not referenced by any open PR or MR as source or
 target/base. If any guard fails, defer cleanup and report the branch and exact
 reason. Never force-delete as follow-through cleanup.
 
+Default-branch CI completion is required after merge. Before reporting finish
+mode complete, verify that the required CI graph for the merged commit or
+resulting default-branch head succeeded on the default branch. Include child,
+bridge, downstream, or triggered pipelines/checks when the host exposes them as
+part of the required graph. If the host does not expose the default-branch graph
+immediately, poll for graph creation once per minute for up to 10 minutes. If no
+default-branch pipeline or check graph appears after 10 minutes, report a
+verification gap and do not claim the workflow is fully done.
+
+For stack follow-through, stop before merging or queuing the next item when the
+post-merge default-branch CI graph is failed, blocked, or missing. Resume stack
+merges only after the default branch is healthy and the user asks to continue.
+
 Deployment verification is explicit. Do not require deployment verification as
 a default finish gate unless the user, repo policy, or existing workflow asks
 for it.
@@ -69,6 +83,8 @@ for it.
 | Check-only wording | Watch or report status without merge/queue |
 | Multiple PRs or MRs | Ask for explicit stack scope before merge/queue |
 | Stack-ready evidence | Revalidate IDs, SHAs, branches, reviews, CI, dependencies, and order |
+| Default-branch CI missing | Poll up to 10 minutes, then report a verification gap |
+| Default-branch CI failed/blocked | Stop stack follow-through before subsequent merges |
 | Branch cleanup blocked | Report the guard failure and do not force-delete |
 
 ## Workflow
@@ -85,11 +101,18 @@ for it.
    merging.
 6. Merge or queue only in finish mode after green/acceptable checks.
 7. Verify merge with provider state, not command silence.
-8. Before syncing local base, verify the target checkout is clean or use a separate clean worktree. Never overwrite dirty user work.
-9. Before deleting branches, check protected/default status, worktrees, remote
+8. Verify the required default-branch CI graph for the merged commit or
+   resulting default-branch head, including child/bridge/downstream/triggered
+   graph components when exposed. If graph creation is delayed, poll once per
+   minute for up to 10 minutes. Treat a missing graph after that as a
+   verification gap, not done.
+9. For stacks, stop subsequent merges when default-branch CI is failed, blocked,
+   or missing until the default branch is healthy and the user asks to continue.
+10. Before syncing local base, verify the target checkout is clean or use a separate clean worktree. Never overwrite dirty user work.
+11. Before deleting branches, check protected/default status, worktrees, remote
    PR/MR source and target/base references, and unmerged/unpushed commits.
-10. If deployment verification is expected but unavailable, report the exact gap instead of saying done.
-11. Report commit/PR/check/deploy evidence and residual risk.
+12. If deployment verification is expected but unavailable, report the exact gap instead of saying done.
+13. Report commit/PR/check/deploy evidence and residual risk.
 
 ## Mistakes
 
@@ -100,6 +123,8 @@ for it.
 | Treating every failure as branch-caused | Classify with evidence |
 | Deleting branches across active worktrees | Check worktrees first |
 | Stopping after remote merge only | Sync local base when requested/expected |
+| Calling finish done before default-branch CI completes | Verify the required default-branch graph, including child/bridge/downstream/triggered checks, or report the gap |
+| Continuing a stack after default-branch CI is failed, blocked, or missing | Stop before the next merge and wait for healthy default-branch CI plus a user continue request |
 | Treating metadata plus `$merge-followthrough` as check-only | Finish the metadata, then continue the merge workflow |
 | Requiring deployment proof without an explicit deployment requirement | Report only the merge, CI, sync, and cleanup proof that applies |
 | Widening a single MR/PR request to a stack | Ask for explicit stack scope or require fresh stack-ready evidence |
@@ -116,6 +141,14 @@ for it.
 - Branch cleanup: pass only if merged state, protected/default status,
   worktrees, unmerged/unpushed commits, and open source/target artifact
   references are checked before deletion.
+- Default-branch CI completion: pass only if the merged commit or resulting
+  default-branch head has a successful required CI graph, including child,
+  bridge, downstream, or triggered graph components when required by the host.
+- No post-merge pipeline: pass only if graph creation is polled once per minute
+  for up to 10 minutes and a missing graph is reported as a verification gap.
+- Stack continuation after merge: pass only if subsequent merges stop when
+  default-branch CI is failed, blocked, or missing, and resume only after the
+  default branch is healthy and the user asks to continue.
 - Metadata update plus `$merge-followthrough`: pass only if the workflow still
   proceeds in finish mode after metadata is updated.
 - Check-only wording: pass only if the workflow reports status without merge or
