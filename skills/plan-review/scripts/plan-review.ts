@@ -20,9 +20,11 @@ import {
   includes,
   legacyPlanContractErrors,
   list,
+  parseDescriptionPolicySection,
   readInput,
   requireValue,
   scalar,
+  validateDescriptionPolicy,
   validatePlanningReviewContract,
 } from "./lib/planning-contracts.ts";
 
@@ -43,6 +45,7 @@ const LEDGER_GATES = [
   "artifact_validation",
   "openspec_task_shape",
   "review_feedback_routing",
+  "description_policy",
   "artifact_creation_update",
   "artifact_host_inspection",
   "planning_feedback_disposition",
@@ -90,7 +93,7 @@ function main(): void {
 
   if (!isCommand(command)) {
     fail(
-      "Usage: plan-review.ts <detect|request-template|validate-request|validate-planning-diff|validate-openspec-tasks|gate-template|validate-ledger> [--file path]",
+      "Usage: plan-review.ts <detect|request-template|validate-request|validate-planning-diff|validate-openspec-tasks|planning-review-template|validate-planning-review|gate-template|validate-ledger> [--file path] [--expected-head-sha sha] [--expected-artifact url]",
     );
   }
 
@@ -131,7 +134,7 @@ function main(): void {
   }
 
   if (command === "validate-planning-review") {
-    validatePlanningReview(input);
+    validatePlanningReview(input, args);
     return;
   }
 
@@ -196,11 +199,31 @@ function printGateTemplate(): void {
 
 \`\`\`yaml
 plan_review_gate_ledger:
-${LEDGER_GATES.map(
-  (gate) => `  ${gate}:
+${LEDGER_GATES.map((gate) => {
+  const base = `  ${gate}:
     status: passed
-    evidence: <evidence>`,
-).join("\n")}
+    evidence: <evidence>`;
+  if (gate !== "description_policy") {
+    return base;
+  }
+
+  return `${base}
+    owner: change-request-create | glab-mr-create | github-pr-create | equivalent_provider_adapter
+    artifact: <hosted planning PR or MR URL>
+    head_sha: <current planning artifact head sha>
+    update_mode: created | updated | reused_current
+    materiality_decision: material_update | metadata_only_reuse
+    reuse_rationale: <required when update_mode is reused_current>
+    readback_head_sha: <current planning artifact head sha>
+    read_before_update: true | not_applicable_for_created
+    pre_update_body_evidence: <summary, hash, artifact note, recovery evidence, or not_applicable_for_created>
+    readback_after_update: true
+    readback_outcome: clean | restored | blocked
+    preserved_manual_sections: true | not_applicable_for_created
+    rollback_or_restore_evidence: none | not_applicable_for_created | <restore evidence>
+    omitted_process_history: true
+    omitted_private_artifacts: true`;
+}).join("\n")}
 \`\`\`
 `);
 }
@@ -248,6 +271,25 @@ planning_review:
   target_base_sha: <target branch sha reviewed by planning artifact>
   planning_branch: <planning branch name>
   reviewed_head: <planning artifact head sha>
+  description_policy:
+    status: passed
+    owner: change-request-create | glab-mr-create | github-pr-create | equivalent_provider_adapter
+    artifact: <planning PR or MR URL>
+    head_sha: <planning artifact head sha>
+    update_mode: created | updated | reused_current
+    materiality_decision: material_update | metadata_only_reuse
+    reuse_rationale: <required when update_mode is reused_current>
+    readback_head_sha: <planning artifact head sha>
+    read_before_update: true | not_applicable_for_created
+    pre_update_body_evidence: <summary, hash, artifact note, recovery evidence, or not_applicable_for_created>
+    readback_after_update: true
+    readback_outcome: clean | restored | blocked
+    preserved_manual_sections: true | not_applicable_for_created
+    rollback_or_restore_evidence: none | not_applicable_for_created | <restore evidence>
+    evidence:
+      - <description create/update/readback evidence>
+    omitted_process_history: true
+    omitted_private_artifacts: true
   stack_base_ref: <planning PR or MR branch/ref>
   stack_base_evidence: <latest-head review evidence proving this head is the stack base>
   stack_identity:
@@ -529,6 +571,14 @@ function validateLedger(input: string): void {
     if (!evidence || evidence.startsWith("<")) {
       errors.push(`${gate}.evidence is required`);
     }
+
+    if (gate === "description_policy") {
+      validateDescriptionPolicy(
+        parseDescriptionPolicySection(gateSection),
+        "description_policy",
+        errors,
+      );
+    }
   }
 
   if (errors.length > 0) {
@@ -592,9 +642,12 @@ function parseRequest(input: string): ParsedRequest {
   };
 }
 
-function validatePlanningReview(input: string): void {
+function validatePlanningReview(input: string, args: string[] = []): void {
   const errors = legacyPlanContractErrors(input);
-  validatePlanningReviewContract(input, errors);
+  validatePlanningReviewContract(input, errors, {
+    expectedReviewArtifact: optionalArg(args, "--expected-artifact"),
+    expectedReviewedHead: optionalArg(args, "--expected-head-sha"),
+  });
   errors.push(
     ...nitroFeedbackGateErrors(input).map((error) =>
       error.startsWith("nitro_feedback_gate.")
@@ -767,7 +820,16 @@ function readDiffFile(path: string): string {
 
 function optionalArg(args: string[], name: string): string | undefined {
   const index = args.indexOf(name);
-  return index === -1 ? undefined : args[index + 1];
+  if (index === -1) {
+    return undefined;
+  }
+
+  const value = args[index + 1];
+  if (!value || value.startsWith("--")) {
+    fail(`${name} requires a value`);
+  }
+
+  return value;
 }
 
 function requiredArg(args: string[], name: string): string {

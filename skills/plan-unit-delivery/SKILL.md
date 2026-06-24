@@ -79,18 +79,37 @@ path.
 12. Prove the implementation artifact is separate from the planning-review
     PR/MR. If the same hosted artifact would be reused, block and split the
     implementation to a separate PR/MR.
-13. Run artifact-host review.
-14. Monitor artifact-host pipelines for the latest head until they pass, fail,
+13. Run the hosted-description gate through the selected description policy
+    owner (`change-request-create`, `glab-mr-create`, `github-pr-create`, or an
+    equivalent provider adapter in harnesses where the named skill is
+    unavailable). For existing PRs/MRs, read the current hosted body before
+    updating and retain enough pre-update evidence to restore manual sections,
+    links, checklist state, reviewer-authored notes, and template content if
+    readback shows damage. The implementation body must describe the approved
+    unit, current behavior, review focus, targeted evidence, hosted status, and
+    stack relationship that changes reviewer confidence. It must omit routine
+    local validation, private workflow artifacts, raw ledgers, local paths,
+    subagent gates, and author-only plan iteration. Read the hosted body back
+    for the current implementation head before artifact-host review, Nitro
+    request, pipeline monitoring, or final delivery reporting. If readback
+    finds lost manual content, wrong-section updates, stale prior-head content,
+    or a less accurate body, restore through the selected policy owner or block
+    with recovery evidence. Metadata-only reuse is allowed only when the
+    existing body remains accurate for the current head and the ledger records a
+    metadata-only materiality decision plus reuse rationale.
+14. Run artifact-host review.
+15. Monitor artifact-host pipelines for the latest head until they pass, fail,
     block, or are unavailable with evidence. Include child or downstream
     pipeline state when the host exposes it.
-15. Request Nitro feedback after MR creation and after every material
+16. Request Nitro feedback after MR creation and after every material
     head-changing push, including feedback fixes, restacks, conflict fixes,
     pipeline fixes, user edits, rebases, and plan or documentation feedback
-    fixes.
-16. Wait for the shared latest-head `nitro_feedback_gate` to pass. A requested,
+    fixes. Refresh the hosted-description gate before the request whenever the
+    change affects reviewer understanding.
+17. Wait for the shared latest-head `nitro_feedback_gate` to pass. A requested,
     pending, stale, unavailable, or findings gate is blocking.
-17. Finish only when the unit implementation MR is stack-ready with a passed
-    Nitro gate, or blocked with evidence.
+18. Finish only when the unit implementation MR is stack-ready with passed
+    description-policy and Nitro gates, or blocked with evidence.
 
 Block with `implementation_scope_escape` when the selected unit requires
 unrelated task edits, new OpenSpec tasks, or broadening the approved scope.
@@ -112,16 +131,25 @@ Use:
 
 ```bash
 scripts/plan-unit-delivery.ts gate-template
-scripts/plan-unit-delivery.ts validate-ledger --file <ledger>
+scripts/plan-unit-delivery.ts validate-ledger --file <ledger> --expected-artifact <hosted-url> --expected-head-sha <current-hosted-head>
 ```
+
+The expected artifact and head values must come from the latest host inspection
+or live branch/head inspection, not from the ledger being validated.
 
 The final ledger must include a passed `nitro_feedback_gate`. `validate-ledger`
 rejects missing, pending, stale, unavailable, findings, or unresolved Nitro
-feedback gates. It also rejects ledgers that omit one-unit delivery evidence:
+feedback gates. It also rejects missing, blocked, stale, unavailable, or
+prior-head `description_policy` evidence. The ledger rejects omissions of
+one-unit delivery evidence:
 selected task identity, selected task base SHA, predecessor artifact,
-implementation artifact, implementation head SHA, `validate-task-delta` command,
-validator output containing `unit_task_delta_valid`, pipeline evidence, Nitro
-evidence, and restack state.
+implementation artifact, implementation head SHA, pipeline evidence, Nitro
+evidence, description readback evidence, and restack state. For OpenSpec task
+units, it also requires the `validate-task-delta` command and validator output
+containing `unit_task_delta_valid`. For atomic plan units, record
+`stack_identity.selected_task_id: atomic` and
+`unit_task_delta.status: not_applicable` with evidence that no OpenSpec checkbox
+delta exists.
 
 ## Mistakes
 
@@ -134,10 +162,14 @@ evidence, and restack state.
 | Reusing the planning-review PR/MR for implementation | Create a separate implementation artifact and record separation evidence |
 | Implementing multiple OpenSpec tasks at once | Return to OpenSpec or `plan-unit-sequencer` |
 | Finishing without proving the task delta | Run `validate-task-delta` against base and unit `tasks.md` |
+| Fabricating task-delta proof for an atomic plan | Mark `unit_task_delta` not applicable with `selected_task_id: atomic` |
 | Recording task-delta proof only in chat prose | Put the command and `unit_task_delta_valid` output in `delivery_gate_ledger.unit_task_delta` |
 | Treating delivery gate evidence as durable state | Keep sequence state in OpenSpec |
 | Treating an open PR/MR as done before pipelines settle | Keep monitoring latest-head pipelines |
 | Assuming Nitro feedback is absent immediately after push | Request Nitro for the latest head, wait up to 10 minutes for review start, then wait for completion |
+| Requesting Nitro or reporting stack readiness before current-head description readback | Run the description policy gate first and record it in `delivery_gate_ledger.description_policy` |
+| Reusing a prior implementation description after a material push | Refresh the hosted description, or record current-head metadata-only reuse with rationale |
+| Exposing raw ledgers, local paths, subagent gates, or author-only plan iteration in the MR body | Rewrite through the description policy owner so the body describes the approved unit and reviewer-facing evidence |
 | Moving on after restacking descendants | Rerun the full Nitro gate for every changed descendant head |
 | Returning gate YAML without a readable thread summary | Add `## Readable Summary` before the YAML |
 
@@ -147,3 +179,5 @@ evidence, and restack state.
   `plan_followthrough_slice_handoff`.
 - GREEN: the validator now accepts only `plan_delivery_handoff` and rejects
   legacy shapes.
+- GREEN: `delivery_gate_ledger` validation requires passed, current-head
+  `description_policy` evidence before stack-ready delivery.

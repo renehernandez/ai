@@ -81,6 +81,32 @@ function runPlanUnitDelivery(
   };
 }
 
+function runPlanUnitDeliveryArgs(
+  args: string[],
+  content: string,
+): { status: number | null; stderr: string; stdout: string } {
+  const result = spawnSync(
+    "pnpm",
+    [
+      "exec",
+      "tsx",
+      "skills/plan-unit-delivery/scripts/plan-unit-delivery.ts",
+      ...args,
+    ],
+    {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      input: content,
+    },
+  );
+
+  return {
+    status: result.status,
+    stderr: result.stderr,
+    stdout: result.stdout,
+  };
+}
+
 function runTaskDelta(
   base: string,
   head: string,
@@ -268,6 +294,23 @@ delivery_gate_ledger:
   implementation_artifact_separation:
     status: passed
     evidence: implementation PR is separate from planning review PR
+  description_policy:
+    status: passed
+    evidence: MR body updated and read back at current implementation head
+    owner: glab-mr-create
+    artifact: https://git.fullscript.io/group/project/-/merge_requests/2
+    head_sha: abc789
+    update_mode: updated
+    materiality_decision: material_update
+    readback_head_sha: abc789
+    read_before_update: true
+    pre_update_body_evidence: prior body hash retained for manual-section recovery
+    readback_after_update: true
+    readback_outcome: clean
+    preserved_manual_sections: true
+    rollback_or_restore_evidence: none
+    omitted_process_history: true
+    omitted_private_artifacts: true
   artifact_creation_update:
     status: passed
     evidence: PR URL
@@ -496,6 +539,43 @@ test("validate-ledger accepts delivery gate evidence", () => {
   assert.equal(result.status, 0);
 });
 
+test("validate-ledger accepts atomic plan delivery without task-delta proof", () => {
+  const atomicLedger = deliveryLedger
+    .replace(
+      / {2}unit_task_delta:[\s\S]*? {2}local_verification:/,
+      `  unit_task_delta:
+    status: not_applicable
+    evidence: atomic plan unit has no OpenSpec checkbox delta
+  local_verification:`,
+    )
+    .replace('    selected_task_id: "1.1"', "    selected_task_id: atomic");
+
+  const result = runPlanUnitDelivery("validate-ledger", atomicLedger);
+
+  assert.equal(result.status, 0);
+});
+
+test("validate-ledger rejects atomic plan task-delta command leftovers", () => {
+  const atomicLedger = deliveryLedger.replace(
+    '    selected_task_id: "1.1"',
+    "    selected_task_id: atomic",
+  );
+
+  const result = runPlanUnitDelivery(
+    "validate-ledger",
+    atomicLedger.replace(
+      "    status: passed\n    evidence: exactly task 1.1 changed from unchecked to checked",
+      "    status: not_applicable\n    evidence: atomic plan unit has no OpenSpec checkbox delta",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /unit_task_delta\.command and output must be omitted for atomic plan delivery/,
+  );
+});
+
 test("validate-ledger requires a passed Nitro feedback gate", () => {
   const result = runPlanUnitDelivery(
     "validate-ledger",
@@ -507,6 +587,158 @@ test("validate-ledger requires a passed Nitro feedback gate", () => {
 
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /nitro_feedback_gate.artifact/);
+});
+
+test("validate-ledger requires description policy evidence", () => {
+  const result = runPlanUnitDelivery(
+    "validate-ledger",
+    deliveryLedger.replace(
+      / {2}description_policy:[\s\S]*? {2}artifact_creation_update:/,
+      "  artifact_creation_update:",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /description_policy is required/);
+});
+
+test("validate-ledger rejects description policy for prior head", () => {
+  const result = runPlanUnitDelivery(
+    "validate-ledger",
+    deliveryLedger.replace("    head_sha: abc789", "    head_sha: old123"),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /description_policy\.head_sha must match current artifact head/,
+  );
+});
+
+test("validate-ledger rejects self-consistent stale head when expected head differs", () => {
+  const result = runPlanUnitDeliveryArgs(
+    [
+      "validate-ledger",
+      "--expected-artifact",
+      "https://git.fullscript.io/group/project/-/merge_requests/2",
+      "--expected-head-sha",
+      "new789",
+    ],
+    deliveryLedger,
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /stack_identity\.implementation_head_sha must match expected current artifact head/,
+  );
+  assert.match(
+    result.stderr,
+    /description_policy\.head_sha must match current artifact head/,
+  );
+});
+
+test("validate-ledger rejects description policy missing evidence despite sibling evidence", () => {
+  const result = runPlanUnitDelivery(
+    "validate-ledger",
+    deliveryLedger.replace(
+      "    evidence: MR body updated and read back at current implementation head\n",
+      "",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /description_policy\.evidence is required/);
+});
+
+test("validate-ledger rejects scalar placeholder description policy evidence", () => {
+  const result = runPlanUnitDelivery(
+    "validate-ledger",
+    deliveryLedger.replace(
+      "    evidence: MR body updated and read back at current implementation head",
+      "    evidence: <description create/update/readback evidence>",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /description_policy\.evidence must not contain placeholder values/,
+  );
+});
+
+test("validate-ledger accepts created description policy with explicit not applicable update fields", () => {
+  const result = runPlanUnitDelivery(
+    "validate-ledger",
+    deliveryLedger
+      .replace("    update_mode: updated", "    update_mode: created")
+      .replace(
+        "    read_before_update: true",
+        "    read_before_update: not_applicable_for_created",
+      )
+      .replace(
+        "    pre_update_body_evidence: prior body hash retained for manual-section recovery",
+        "    pre_update_body_evidence: not_applicable_for_created",
+      )
+      .replace(
+        "    preserved_manual_sections: true",
+        "    preserved_manual_sections: not_applicable_for_created",
+      )
+      .replace(
+        "    rollback_or_restore_evidence: none",
+        "    rollback_or_restore_evidence: not_applicable_for_created",
+      ),
+  );
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /delivery_gate_ledger valid/);
+});
+
+test("validate-ledger rejects reused description evidence without rationale", () => {
+  const result = runPlanUnitDelivery(
+    "validate-ledger",
+    deliveryLedger
+      .replace("    update_mode: updated", "    update_mode: reused_current")
+      .replace(
+        "    materiality_decision: material_update",
+        "    materiality_decision: metadata_only_reuse",
+      ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /description_policy\.reuse_rationale/);
+});
+
+test("validate-ledger rejects restored readback without restore evidence", () => {
+  const result = runPlanUnitDelivery(
+    "validate-ledger",
+    deliveryLedger.replace(
+      "    readback_outcome: clean",
+      "    readback_outcome: restored",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /description_policy\.rollback_or_restore_evidence is required when readback_outcome is restored/,
+  );
+});
+
+test("validate-ledger rejects metadata-only materiality for updated descriptions", () => {
+  const result = runPlanUnitDelivery(
+    "validate-ledger",
+    deliveryLedger.replace(
+      "    materiality_decision: material_update",
+      "    materiality_decision: metadata_only_reuse",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /description_policy\.materiality_decision metadata_only_reuse requires update_mode reused_current/,
+  );
 });
 
 test("validate-ledger requires refactoring execution evidence", () => {
