@@ -10,7 +10,11 @@ Portable user-level instructions that are installed into runtime profiles live i
 - Follow higher-priority system, developer, and direct user instructions first.
 - Then apply this file and the linked files under [rules/](rules/).
 - If a rule names a tool that is unavailable in the current harness, use the closest safe equivalent and say what changed.
-- Do not commit, push, install dependencies, or run destructive commands unless the user explicitly asks.
+- For accepted implementation work, finish on a feature branch by committing,
+  pushing to the selected hosted-review remote, and creating or updating a
+  PR/MR when the project has a hosted-review workflow.
+- Do not install dependencies or run destructive commands unless the user
+  explicitly asks.
 - For implementation work that needs planning, review-first delivery, stacked PRs/MRs, or multi-step coordination, route through `plan-orchestrator` and the related plan workflow skills.
 - For small direct implementation work, use the current session and the project's local verification/review rules unless the user explicitly asks for a plan workflow.
 
@@ -41,6 +45,9 @@ Portable user-level instructions that are installed into runtime profiles live i
 - Review-first plan workflows use the same GitLab MR/Nitro route with stacked delivery. When `plan-orchestrator`, `plan-review`, or the approved plan workflow requires Nitro-reviewed stacked delivery, create the planning MR first, wait for the required Nitro-clean planning-review gate, and only then continue to stacked implementation sequencing. A `plan-orchestrator` run may finish only with `stack_ready` for the full reviewed stack or `delivery_blocked` with evidence; one delivered OpenSpec task, `plan-ready` output, or `planning_review` handoff is not terminal success.
 - When asked to merge stacked MRs, follow [rules/git-and-review.md](rules/git-and-review.md): land the stack bottom-to-top, expect each next MR to retarget to `main`, and resolve any newly surfaced conflicts before merging the next MR.
 - Treat GitLab `origin` as the primary hosted-review and publishing remote for this repo. The `github` remote remains a mirror path; do not use it as the default delivery route unless the user explicitly asks or GitLab is unavailable.
+- If a remote has multiple push URLs, push implementation branches only to the
+  selected hosted-review provider URL or a provider-specific remote. Do not use
+  a broad push that also updates mirror remotes.
 - Do not use "smoke test" or "smoke tests" wording. Describe the exact verification performed instead, such as browser route checks, console checks, or manual browser verification.
 - Avoid slop-like contrast phrasing and generic AI filler. Do not lean on formulas like "X, not just Y", "more than just", "isn't just", or "the future of"; state the concrete claim directly.
 - Describe the exact verification performed instead of using vague shortcut
