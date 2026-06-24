@@ -34,6 +34,7 @@ import {
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Command } from "commander";
 import ts from "typescript";
+import { recordPlanArtifact } from "./plan-artifacts.ts";
 import {
   formatReviewGateStatus,
   hasStagedDiff,
@@ -474,6 +475,7 @@ export function createProgram(
   addHooksCommands(program, execute);
   addReviewGateCommands(program);
   addCommitCommand(program);
+  addPlansCommands(program);
   addShimCommands(program, execute);
 
   return program;
@@ -740,6 +742,52 @@ function addCommitCommand(program: Command): void {
     });
 }
 
+function addPlansCommands(program: Command): void {
+  const plans = program
+    .command("plans")
+    .description("Manage private plan workflow support artifacts");
+  const artifact = plans
+    .command("artifact")
+    .description("Record private plan support artifacts");
+
+  artifact
+    .command("record")
+    .description("Record one file-backed support artifact for a plan")
+    .requiredOption(
+      "--plan <path>",
+      "Repo-relative .agents/plans markdown plan",
+    )
+    .requiredOption("--kind <kind>", "Support artifact kind")
+    .requiredOption("--file <path>", "File-backed support artifact to record")
+    .option("--config <path>", "Path to Agents Experience config", CONFIG_FILE)
+    .action((first: CommandOptions | Command, second?: Command) => {
+      try {
+        const { options, commandObject } = actionContext(first, second);
+        const runtimeContext = createRuntimeInvocationContext(
+          configPathFor(commandObject, options),
+        );
+        const result = recordPlanArtifact({
+          targetRoot: runtimeContext.targetRoot,
+          planPath: requireStringOption(options.plan, "--plan"),
+          kind: requireStringOption(options.kind, "--kind"),
+          filePath: requireStringOption(options.file, "--file"),
+        });
+        console.log(JSON.stringify(result, null, 2));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(message);
+        process.exitCode = 1;
+      }
+    });
+}
+
+function requireStringOption(value: unknown, name: string): string {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new Error(`${name} is required`);
+  }
+  return value;
+}
+
 function parseAxCommitArgs(args: string[]): {
   gitArgs: string[];
   errors: string[];
@@ -831,6 +879,9 @@ type CommandOptions = {
   profile?: string[];
   allProfiles?: boolean;
   contextFile?: string;
+  plan?: string;
+  kind?: string;
+  file?: string;
   reviewConfig?: boolean;
   acceptConfigChanges?: boolean;
 };

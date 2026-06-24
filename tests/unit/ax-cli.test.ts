@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -30,6 +31,7 @@ import {
   registerCodexStartupHook,
   renderOpenSpecConfigYaml,
 } from "../../scripts/ax.ts";
+import { recordPlanArtifact } from "../../scripts/plan-artifacts.ts";
 
 const repoRoot = process.cwd();
 
@@ -95,6 +97,38 @@ function withTempCwd(callback: (directory: string) => void): void {
       process.chdir(originalCwd);
     }
   });
+}
+
+function git(cwd: string, args: string[]): void {
+  const result = spawnSync("git", args, {
+    cwd,
+    encoding: "utf-8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+}
+
+function createPlanArtifactTarget(directory: string): string {
+  const targetRepo = join(directory, "target-repo");
+  mkdirSync(join(targetRepo, ".agents", "plans"), { recursive: true });
+  git(targetRepo, ["init"]);
+  git(targetRepo, [
+    "remote",
+    "add",
+    "origin",
+    "git@git.fullscript.io:team/target-repo.git",
+  ]);
+  writeFileSync(
+    join(targetRepo, ".agents", "plans", "example.md"),
+    "# Example plan\n",
+    "utf-8",
+  );
+  writeFileSync(
+    join(targetRepo, "reviewer-selection.yaml"),
+    "reviewers:\n  - nitro\n",
+    "utf-8",
+  );
+  return targetRepo;
 }
 
 function testOpenSpecConfig() {
@@ -240,6 +274,195 @@ test("runtime config manages helper scripts imported by installed planning skill
   ]) {
     assert.ok(reusableScripts.has(helper), `${helper} must be reusable`);
   }
+});
+
+test("plans artifact record stores support artifacts under target repo identity", () => {
+  withTempDir((directory) => {
+    const targetRepo = createPlanArtifactTarget(directory);
+    const axPlansRoot = join(directory, "ax-plans");
+    mkdirSync(axPlansRoot, { mode: 0o700 });
+    chmodSync(axPlansRoot, 0o700);
+
+    const result = recordPlanArtifact({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      kind: "reviewer_selection",
+      filePath: "reviewer-selection.yaml",
+      axPlansRoot,
+    });
+
+    assert.equal(result.status, "recorded");
+    assert.equal(result.repoKey, "git@git.fullscript.io:team/target-repo.git");
+    assert.equal(result.normalizedPlanPath, ".agents/plans/example.md");
+    assert.match(
+      result.privateWorkspaceRelativePath,
+      /^repos\/sha256-[a-f0-9]+\/plans\/example-[a-f0-9]{12}\/artifacts\/reviewer_selection-[a-f0-9]+\.yaml$/,
+    );
+    assert.ok(
+      existsSync(join(axPlansRoot, result.privateWorkspaceRelativePath)),
+    );
+  });
+});
+
+test("plans artifact record command uses invocation target repo", () => {
+  withTempDir((directory) => {
+    const targetRepo = createPlanArtifactTarget(directory);
+    const home = join(directory, "home");
+    mkdirSync(home, { recursive: true });
+    const originalCwd = process.cwd();
+    const originalHome = process.env.HOME;
+    const originalLog = console.log;
+    let output = "";
+    try {
+      process.chdir(targetRepo);
+      process.env.HOME = home;
+      console.log = (value?: unknown) => {
+        output += `${String(value)}\n`;
+      };
+
+      const program = createProgram();
+      configureProgramForTest(program);
+      program.parse(
+        [
+          "node",
+          "ax",
+          "plans",
+          "artifact",
+          "record",
+          "--plan",
+          ".agents/plans/example.md",
+          "--kind",
+          "reviewer_selection",
+          "--file",
+          "reviewer-selection.yaml",
+          "--config",
+          join(repoRoot, "ax.config.json"),
+        ],
+        { from: "node" },
+      );
+    } finally {
+      console.log = originalLog;
+      process.chdir(originalCwd);
+      if (originalHome === undefined) {
+        delete process.env.HOME;
+      } else {
+        process.env.HOME = originalHome;
+      }
+    }
+
+    const result = JSON.parse(output);
+    assert.equal(result.status, "recorded");
+    assert.equal(result.repoKey, "git@git.fullscript.io:team/target-repo.git");
+    assert.ok(
+      existsSync(
+        join(home, ".ax", "plans", result.privateWorkspaceRelativePath),
+      ),
+    );
+  });
+});
+
+test("plans artifact record command reports validation errors without stack traces", () => {
+  withTempDir((directory) => {
+    const targetRepo = createPlanArtifactTarget(directory);
+    const originalCwd = process.cwd();
+    const originalError = console.error;
+    const originalExitCode = process.exitCode;
+    let errorOutput = "";
+    try {
+      process.chdir(targetRepo);
+      process.exitCode = undefined;
+      console.error = (value?: unknown) => {
+        errorOutput += `${String(value)}\n`;
+      };
+
+      const program = createProgram();
+      configureProgramForTest(program);
+      program.parse(
+        [
+          "node",
+          "ax",
+          "plans",
+          "artifact",
+          "record",
+          "--plan",
+          "../escape.md",
+          "--kind",
+          "reviewer_selection",
+          "--file",
+          "reviewer-selection.yaml",
+          "--config",
+          join(repoRoot, "ax.config.json"),
+        ],
+        { from: "node" },
+      );
+    } finally {
+      console.error = originalError;
+      process.chdir(originalCwd);
+    }
+
+    const actualExitCode = process.exitCode;
+    process.exitCode = originalExitCode;
+
+    assert.equal(actualExitCode, 1);
+    assert.match(
+      errorOutput,
+      /--plan must be a primary markdown file under \.agents\/plans/,
+    );
+    assert.doesNotMatch(errorOutput, /Error:|at\s+/);
+  });
+});
+
+test("plans artifact record rejects private workspace symlink escapes", () => {
+  withTempDir((directory) => {
+    const targetRepo = createPlanArtifactTarget(directory);
+    const axPlansRoot = join(directory, "ax-plans");
+    const outside = join(directory, "outside");
+    mkdirSync(outside, { mode: 0o700 });
+    mkdirSync(axPlansRoot, { mode: 0o700 });
+    chmodSync(axPlansRoot, 0o700);
+    symlinkSync(outside, join(axPlansRoot, "repos"));
+
+    assert.throws(
+      () =>
+        recordPlanArtifact({
+          targetRoot: targetRepo,
+          planPath: ".agents/plans/example.md",
+          kind: "reviewer_selection",
+          filePath: "reviewer-selection.yaml",
+          axPlansRoot,
+        }),
+      /must not be a symlink/,
+    );
+  });
+});
+
+test("plans artifact record rejects target repos without origin identity", () => {
+  withTempDir((directory) => {
+    const targetRepo = join(directory, "target-repo");
+    const axPlansRoot = join(directory, "ax-plans");
+    mkdirSync(join(targetRepo, ".agents", "plans"), { recursive: true });
+    mkdirSync(axPlansRoot, { mode: 0o700 });
+    chmodSync(axPlansRoot, 0o700);
+    git(targetRepo, ["init"]);
+    writeFileSync(
+      join(targetRepo, ".agents", "plans", "example.md"),
+      "# Example plan\n",
+      "utf-8",
+    );
+    writeFileSync(join(targetRepo, "handoff.yaml"), "status: ready\n", "utf-8");
+
+    assert.throws(
+      () =>
+        recordPlanArtifact({
+          targetRoot: targetRepo,
+          planPath: ".agents/plans/example.md",
+          kind: "handoff",
+          filePath: "handoff.yaml",
+          axPlansRoot,
+        }),
+      /no origin fetch URL/,
+    );
+  });
 });
 
 test("OpenSpec install setup infers project defaults", () => {
