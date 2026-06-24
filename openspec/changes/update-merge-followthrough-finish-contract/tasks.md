@@ -4,7 +4,7 @@
       `skills/merge-followthrough/SKILL.md`, update the skill frontmatter and
       adapter prompt for MR/PR finish mode and explicit stacks, and add focused
       behavioral coverage for prompt-to-mode examples.
-- [ ] 1.2 Add explicit stack permission, stack order, and branch cleanup safety
+- [x] 1.2 Add explicit stack permission, stack order, and branch cleanup safety
       rules to the skill contract, including freshly validated stack-ready
       evidence and hosted source/target dependency checks, with focused
       behavioral coverage.
