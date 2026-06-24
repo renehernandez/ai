@@ -386,7 +386,11 @@ export function recordPlanArtifact(options: {
     const createdAt = new Date().toISOString();
     const manifest = readPlanArtifactManifest(manifestPath);
     assertManifestMatchesIdentity(manifest, artifactIdentity, identity);
-    assertNoOrphanArtifactBlobs(workspaceRealPath, manifest);
+    assertNoOrphanArtifactBlobs(
+      workspaceRealPath,
+      manifest,
+      new Set([artifactRelativePath]),
+    );
     copyImmutableFile(
       artifactRealPath,
       artifactPath,
@@ -832,6 +836,7 @@ function atomicWriteJson(path: string, value: unknown): void {
 function assertNoOrphanArtifactBlobs(
   workspaceRoot: string,
   manifest: PlanArtifactManifest | null,
+  allowedUnreferencedArtifactPaths = new Set<string>(),
 ): void {
   const revisionsPath = join(workspaceRoot, "revisions");
   if (!existsSync(revisionsPath)) {
@@ -879,7 +884,8 @@ function assertNoOrphanArtifactBlobs(
       if (
         artifactStats.isSymbolicLink() ||
         !artifactStats.isFile() ||
-        !referencedArtifactPaths.has(artifactRelativePath)
+        (!referencedArtifactPaths.has(artifactRelativePath) &&
+          !allowedUnreferencedArtifactPaths.has(artifactRelativePath))
       ) {
         throw new Error(
           `Private plan artifact workspace contains an orphan blob and must be repaired before reading plan artifacts: ${artifactPath}`,

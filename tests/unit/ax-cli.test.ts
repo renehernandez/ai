@@ -988,6 +988,49 @@ test("plans artifact commands reject orphan blobs", () => {
   });
 });
 
+test("plans artifact record recovers an already copied blob without a manifest", () => {
+  withTempDir((directory) => {
+    const targetRepo = createPlanArtifactTarget(directory);
+    const axPlansRoot = join(directory, "ax-plans");
+    mkdirSync(axPlansRoot, { mode: 0o700 });
+    chmodSync(axPlansRoot, 0o700);
+
+    const result = recordPlanArtifact({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      kind: "reviewer_selection",
+      filePath: "reviewer-selection.yaml",
+      axPlansRoot,
+    });
+    rmSync(join(axPlansRoot, result.manifestRelativePath));
+    rmSync(join(axPlansRoot, result.indexRelativePath));
+    rmSync(join(axPlansRoot, result.metadataRelativePath));
+
+    const recovered = recordPlanArtifact({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      kind: "reviewer_selection",
+      filePath: "reviewer-selection.yaml",
+      axPlansRoot,
+    });
+
+    assert.equal(recovered.artifactRelativePath, result.artifactRelativePath);
+    assert.equal(
+      readFileSync(join(axPlansRoot, recovered.indexRelativePath), "utf-8")
+        .trim()
+        .split("\n").length,
+      1,
+    );
+    const listed = listPlanArtifacts({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      axPlansRoot,
+    });
+    assert.equal(listed.status, "found");
+    assert.equal(listed.artifacts.length, 1);
+  });
+});
+
 test("plans artifact list rejects corrupt revisions paths", () => {
   withTempDir((directory) => {
     const targetRepo = createPlanArtifactTarget(directory);
