@@ -358,6 +358,45 @@ test("plan-review-request-template emits a readable summary before YAML", () => 
   assert.match(result.stdout, /cleanup_evidence:/);
 });
 
+test("plan-review-request-template copies reviewer evidence without embedding reviewer policy", () => {
+  const result = runPlanOrchestratorCommand("plan-review-request-template");
+  const source = readFileSync(planOrchestratorScript, "utf8");
+  const ownerReviewerPolicyNames = [
+    "implementation-readiness",
+    "edge-cases-and-risks",
+    "simplification-and-scope-control",
+    "refactoring-opportunities",
+    "security-and-auth",
+    "data-migration-and-backfill",
+    "ci-and-release-impact",
+    "frontend-ux-accessibility",
+    "infra-and-cloud",
+    "docs-and-agent-alignment",
+    "performance-and-scale",
+    "ax-and-skill-compatibility",
+    "implementation-review",
+    "implementation-scrutiny",
+    "code-quality-review",
+    "code-simplifier",
+    "deslop",
+    "ai-readiness-upkeep",
+    "docs-alignment-review",
+    "security-review",
+  ];
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /copy each plan-ready baseline reviewer/);
+  assert.match(result.stdout, /copy each selected plan-ready dynamic reviewer/);
+  assert.match(result.stdout, /copy every plan-ready per-reviewer status/);
+  assert.doesNotMatch(
+    source,
+    /const (BASELINE_REVIEWERS|OPTIONAL_REVIEWERS|REVIEW_PASSES)/,
+  );
+  for (const reviewer of ownerReviewerPolicyNames) {
+    assert.equal(source.includes(reviewer), false, reviewer);
+  }
+});
+
 test("resume-template emits a readable summary before YAML", () => {
   const result = runPlanOrchestratorCommand("resume-template");
 
