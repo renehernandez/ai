@@ -284,3 +284,24 @@ test("ax-cli skill documents private plan artifact record and list commands", ()
   assert.match(text, /do not commit/i);
   assert.match(text, /do not expose local private workspace paths/i);
 });
+
+for (const file of [
+  "skills/change-request-create/SKILL.md",
+  "skills/glab-mr-create/SKILL.md",
+  "skills/github-pr-create/SKILL.md",
+  "rules/git-and-review.md",
+] as const) {
+  test(`${file} keeps hosted descriptions free of private plan artifact paths`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /~\/\.ax\/plans/);
+    assert.match(text, /private support artifacts?|private AX plan artifact/i);
+    assert.match(text, /MR|PR|hosted|description/i);
+    assert.match(text, /summaries/);
+    assert.match(text, /hashes/);
+    assert.match(text, /thread references/);
+    assert.match(text, /note IDs/);
+    assert.match(text, /discussion IDs/);
+    assert.match(text, /stable\s+correlation IDs/);
+  });
+}
