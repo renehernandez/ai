@@ -9,7 +9,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
@@ -25,7 +25,7 @@ import {
 } from "../../scripts/plan-artifacts.ts";
 
 function withTempDir(callback: (directory: string) => void): void {
-  const directory = mkdtempSync(join(process.cwd(), ".tmp-plan-artifacts-"));
+  const directory = mkdtempSync(join(tmpdir(), "plan-artifacts-unit-"));
   try {
     callback(directory);
   } finally {
@@ -33,10 +33,23 @@ function withTempDir(callback: (directory: string) => void): void {
   }
 }
 
+function withoutGitRepositoryEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  delete env.GIT_ALTERNATE_OBJECT_DIRECTORIES;
+  delete env.GIT_DIR;
+  delete env.GIT_INDEX_FILE;
+  delete env.GIT_OBJECT_DIRECTORY;
+  delete env.GIT_PREFIX;
+  delete env.GIT_QUARANTINE_PATH;
+  delete env.GIT_WORK_TREE;
+  return env;
+}
+
 function git(cwd: string, args: string[]): void {
   const result = spawnSync("git", args, {
     cwd,
     encoding: "utf-8",
+    env: withoutGitRepositoryEnv(),
     stdio: ["ignore", "pipe", "pipe"],
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
