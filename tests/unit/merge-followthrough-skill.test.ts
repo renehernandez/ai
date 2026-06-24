@@ -139,3 +139,52 @@ test("merge-followthrough guards branch cleanup after merge", () => {
   assert.match(skill, /any open PR or MR as source or\ntarget\/base/);
   assert.match(skill, /Never force-delete as follow-through cleanup/);
 });
+
+test("merge-followthrough requires default-branch CI graph completion", () => {
+  const skill = read("skills/merge-followthrough/SKILL.md");
+  const metadata = read("skills/merge-followthrough/agents/openai.yaml");
+
+  assert.match(skill, /Default-branch CI completion is required after merge/);
+  assert.match(
+    skill,
+    /required CI graph for the merged commit or\nresulting default-branch head succeeded/,
+  );
+  assert.match(skill, /Include child,\nbridge, downstream, or triggered/);
+  assert.match(
+    skill,
+    /poll for graph creation once per minute for up to 10 minutes/,
+  );
+  assert.match(
+    skill,
+    /report a\nverification gap and do not claim the workflow is fully done/,
+  );
+  assert.match(
+    metadata,
+    /verify the required default-branch CI graph for the merged commit or resulting default head succeeded/,
+  );
+  assert.match(metadata, /child\/downstream\/triggered graph components/);
+  assert.match(metadata, /poll once per minute up to 10 minutes/);
+  assert.match(metadata, /verification gap instead of done/);
+});
+
+test("merge-followthrough stops stack continuation on default-branch CI gaps", () => {
+  const skill = read("skills/merge-followthrough/SKILL.md");
+  const metadata = read("skills/merge-followthrough/agents/openai.yaml");
+
+  assert.match(
+    skill,
+    /stop before merging or queuing the next item when the\npost-merge default-branch CI graph is failed, blocked, or missing/,
+  );
+  assert.match(
+    skill,
+    /Resume stack\nmerges only after the default branch is healthy and the user asks to continue/,
+  );
+  assert.match(
+    metadata,
+    /stop before subsequent merges when default-branch CI is failed, blocked, or missing/,
+  );
+  assert.match(
+    metadata,
+    /resume only after the default branch is healthy and the user asks to continue/,
+  );
+});
