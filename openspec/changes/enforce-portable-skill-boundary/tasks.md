@@ -23,7 +23,7 @@
 
 ## 3. Authoring Boundary Alignment
 
-- [ ] 3.1 Update `AGENTS.md`, `instructions/AGENTS.md`,
+- [x] 3.1 Update `AGENTS.md`, `instructions/AGENTS.md`,
       `rules/command-and-tools.md`, `rules/investigation-and-implementation.md`,
       `skills/ax-cli/SKILL.md`, and `ax.config.json` so portable skills are
       self-contained, only `ax-cli` teaches AX/runtime mechanics, and

@@ -278,21 +278,12 @@ test("Runtime invocation context uses AX executable path env var", () => {
   }
 });
 
-test("runtime config manages helper scripts imported by installed planning skills", () => {
+test("runtime config does not use reusable scripts for skill portability", () => {
   const config = JSON.parse(
     readFileSync(join(repoRoot, "ax.config.json"), "utf-8"),
   ) as { runtime?: { reusableScripts?: string[] } };
-  const reusableScripts = new Set(config.runtime?.reusableScripts ?? []);
 
-  for (const helper of [
-    "scripts/nitro-feedback-gate.ts",
-    "scripts/objective-proof.ts",
-    "scripts/plan-artifacts.ts",
-    "scripts/planning-contracts.ts",
-    "scripts/stack-state.ts",
-  ]) {
-    assert.ok(reusableScripts.has(helper), `${helper} must be reusable`);
-  }
+  assert.equal(config.runtime?.reusableScripts, undefined);
 });
 
 test("plans artifact record stores support artifacts under target repo identity", () => {

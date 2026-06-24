@@ -56,9 +56,8 @@ These rules govern when to diagnose, when to edit, and how to route implementati
   sidecars such as review requests, reviewer selections, handoffs, blueprints,
   ledgers, reports, validation inputs, and validation outputs must not be
   committed and must stay in thread evidence by default. When file-backed
-  recovery or correlation is needed, record them with
-  `pnpm ax plans artifact record` and recover them with
-  `pnpm ax plans artifact list`; do not commit `.agents/plans/**` support
+  recovery or correlation is needed, use the private plan-artifact workflow
+  owned by the `ax-cli` steering skill. Do not commit `.agents/plans/**` support
   sidecars.
 - Do not stage or commit local workflow artifacts into work-project
   repositories. Reviewer scratch, readiness reports, reviewer reports, delivery
@@ -68,6 +67,10 @@ These rules govern when to diagnose, when to edit, and how to route implementati
   agent rules, skills, validators, runtime scripts, and regression fixtures may
   be committed only in the AI project that owns them and only when that
   machinery is the feature being changed.
+- Portable shared skills must not depend on repo-root workflow scripts, private
+  runtime paths, or `runtime.reusableScripts`. Package helper logic inside the
+  owning skill folder, or use a real package dependency, so the skill remains
+  reusable on its own.
 
 ## Local Code Review
 

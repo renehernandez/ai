@@ -38,7 +38,8 @@ These rules apply to command execution, network access, and tool installation ac
 - Managed skills are canonical under `.agents/skills`; configured harness roots such as `.codex/skills` and `.claude/skills` stay real directories that contain per-skill symlinks back to the canonical skill directories.
 - After changing any managed skill source under `skills/`, run `writing-skills` against the changed skill before committing, then run `pnpm ax skills update --profile <name>` before treating the change as live. Repo source files and installed runtime copies can drift until the update runs.
 - After refreshing a changed skill, verify the active runtime surface with `pnpm ax skills status --profile <name>`. Use `pnpm ax skills validate --profile <name>` or `pnpm ax validate --all-profiles` when the change affects shared workflow contracts, agent prompts, or cross-profile behavior.
-- If a managed skill depends on a shared script outside its own skill directory, declare that file under `runtime.reusableScripts` in `ax.config.json` and refresh the affected profile with `pnpm ax skills update --profile <name>`.
+- Portable shared skills must keep runnable helper logic inside the owning skill folder or a real package dependency. Do not teach non-`ax-cli` skills to call repo-root workflow scripts, installed runtime paths, profile refresh commands, private plan-artifact commands, or `runtime.reusableScripts`.
+- `runtime.reusableScripts` is not an accepted mechanism for making shared skills portable. If a skill needs helper code, package that code under the skill directory before publishing or installing the skill.
 - Do not manually create skill symlinks or hand-copy managed skills into runtime folders.
 - Do not use `npx skills`; this repo manages skills through the internal `pnpm ax` CLI.
 

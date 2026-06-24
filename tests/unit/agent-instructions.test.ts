@@ -28,6 +28,18 @@ for (const file of ["AGENTS.md", "instructions/AGENTS.md"] as const) {
 }
 
 for (const file of ["AGENTS.md", "instructions/AGENTS.md"] as const) {
+  test(`${file} defines the portable shared skill boundary`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /Portable shared skills/);
+    assert.match(text, /owning skill folder/);
+    assert.match(text, /real package dependency/);
+    assert.match(text, /runtime\.reusableScripts/);
+    assert.match(text, /ax-cli/);
+  });
+}
+
+for (const file of ["AGENTS.md", "instructions/AGENTS.md"] as const) {
   test(`${file} routes agent commits through ax commit`, () => {
     const text = readFileSync(file, "utf-8");
 

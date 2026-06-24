@@ -543,7 +543,7 @@ test("global status reports runtime roots and target OpenSpec readiness", () => 
       assert.match(result.stdout, /\[ok\] Executable link:/);
       assert.match(result.stdout, /Shim/);
       assert.match(result.stdout, /\[missing\] Managed shim/);
-      assert.match(result.stdout, /Reusable script/);
+      assert.doesNotMatch(result.stdout, /Reusable script/);
       assert.match(result.stdout, /OpenSpec/);
       assert.match(result.stdout, /Health/);
       assert.match(result.stdout, /\[warning\] Managed shim is not installed/);
@@ -2838,7 +2838,7 @@ test("CLI prunes stale installed retired skill names", () => {
   );
 });
 
-test("CLI installs reusable scripts beside skill runtime roots", () => {
+test("CLI installs configured runtime scripts beside skill runtime roots", () => {
   withFixture(
     ({ configPath, runtimeDir }) => {
       const install = runAgentRuntime([
@@ -2871,44 +2871,16 @@ test("CLI installs reusable scripts beside skill runtime roots", () => {
       assert.equal(existsSync(canonicalScript), true);
       assert.equal(lstatSync(targetScript).isSymbolicLink(), true);
       assert.equal(lstatSync(codexTargetScript).isSymbolicLink(), true);
-
-      const installedEntrypoint = join(
-        runtimeDir,
-        "skills",
-        "needs-script",
-        "scripts",
-        "entry.ts",
-      );
-      const result = spawnSync(
-        process.execPath,
-        ["--import", tsxLoader, installedEntrypoint],
-        {
-          cwd: runtimeDir,
-          encoding: "utf-8",
-          env: withoutGitRepositoryEnv(),
-        },
-      );
-      assert.equal(result.status, 0, result.stderr || result.stdout);
-      assert.equal(result.stdout, "runtime-script-ok");
     },
     (config, runtimeDir) => {
       const localSkillsDir = join(runtimeDir, "local-skills");
       const sourceScriptsDir = join(runtimeDir, "source-scripts");
-      mkdirSync(join(localSkillsDir, "needs-script", "scripts"), {
-        recursive: true,
-      });
+      mkdirSync(join(localSkillsDir, "needs-script"), { recursive: true });
       mkdirSync(sourceScriptsDir, { recursive: true });
 
       writeFileSync(
         join(localSkillsDir, "needs-script", "SKILL.md"),
         "---\nname: needs-script\n---\n",
-        "utf-8",
-      );
-      writeFileSync(
-        join(localSkillsDir, "needs-script", "scripts", "entry.ts"),
-        `import { marker } from "../../../scripts/planning-contracts.ts";
-process.stdout.write(marker);
-`,
         "utf-8",
       );
       writeFileSync(
@@ -2937,7 +2909,7 @@ process.stdout.write(marker);
   );
 });
 
-test("CLI validates local skill reusable script imports", () => {
+test("CLI rejects local skill repo-root script imports", () => {
   withFixture(
     ({ configPath }) => {
       const result = runAgentRuntime([
@@ -2952,7 +2924,7 @@ test("CLI validates local skill reusable script imports", () => {
       assert.notEqual(result.status, 0);
       assert.match(
         result.stderr,
-        /Skill needs-script imports reusable runtime script scripts\/nitro-feedback-gate\.ts, but it is not listed in runtime\.reusableScripts/,
+        /Skill needs-script imports repo-root script scripts\/nitro-feedback-gate\.ts; package helper logic inside the skill folder or use a real package dependency/,
       );
     },
     (config, runtimeDir) => {
@@ -2974,7 +2946,7 @@ test("CLI validates local skill reusable script imports", () => {
   );
 });
 
-test("CLI validates multi-line local skill reusable script imports", () => {
+test("CLI rejects multi-line local skill repo-root script imports", () => {
   withFixture(
     ({ configPath }) => {
       const result = runAgentRuntime([
@@ -2989,7 +2961,7 @@ test("CLI validates multi-line local skill reusable script imports", () => {
       assert.notEqual(result.status, 0);
       assert.match(
         result.stderr,
-        /Skill needs-script imports reusable runtime script scripts\/nitro-feedback-gate\.ts, but it is not listed in runtime\.reusableScripts/,
+        /Skill needs-script imports repo-root script scripts\/nitro-feedback-gate\.ts; package helper logic inside the skill folder or use a real package dependency/,
       );
     },
     (config, runtimeDir) => {
@@ -3008,7 +2980,7 @@ test("CLI validates multi-line local skill reusable script imports", () => {
   );
 });
 
-test("CLI validates local skill reusable script re-exports", () => {
+test("CLI rejects local skill repo-root script re-exports", () => {
   withFixture(
     ({ configPath }) => {
       const result = runAgentRuntime([
@@ -3023,7 +2995,7 @@ test("CLI validates local skill reusable script re-exports", () => {
       assert.notEqual(result.status, 0);
       assert.match(
         result.stderr,
-        /Skill needs-script imports reusable runtime script scripts\/nitro-feedback-gate\.ts, but it is not listed in runtime\.reusableScripts/,
+        /Skill needs-script imports repo-root script scripts\/nitro-feedback-gate\.ts; package helper logic inside the skill folder or use a real package dependency/,
       );
     },
     (config, runtimeDir) => {
@@ -3040,7 +3012,7 @@ test("CLI validates local skill reusable script re-exports", () => {
   );
 });
 
-test("CLI accepts declared local skill reusable script imports", () => {
+test("CLI rejects declared local skill repo-root script imports", () => {
   withFixture(
     ({ configPath }) => {
       const result = runAgentRuntime([
@@ -3052,7 +3024,11 @@ test("CLI accepts declared local skill reusable script imports", () => {
         configPath,
       ]);
 
-      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.notEqual(result.status, 0);
+      assert.match(
+        result.stderr,
+        /Skill needs-script imports repo-root script scripts\/nitro-feedback-gate\.ts; package helper logic inside the skill folder or use a real package dependency/,
+      );
     },
     (config, runtimeDir) => {
       configureLocalSkillWithScript(
@@ -3073,7 +3049,7 @@ test("CLI accepts declared local skill reusable script imports", () => {
   );
 });
 
-test("CLI accepts normalized local skill reusable script imports", () => {
+test("CLI rejects normalized local skill repo-root script imports", () => {
   withFixture(
     ({ configPath }) => {
       const result = runAgentRuntime([
@@ -3085,7 +3061,11 @@ test("CLI accepts normalized local skill reusable script imports", () => {
         configPath,
       ]);
 
-      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.notEqual(result.status, 0);
+      assert.match(
+        result.stderr,
+        /Skill needs-script imports repo-root script scripts\/nitro-feedback-gate\.ts; package helper logic inside the skill folder or use a real package dependency/,
+      );
     },
     (config, runtimeDir) => {
       configureLocalSkillWithScript(
@@ -3106,7 +3086,7 @@ test("CLI accepts normalized local skill reusable script imports", () => {
   );
 });
 
-test("CLI rejects local skill reusable script imports that escape scripts", () => {
+test("CLI rejects local skill repo-root script imports that escape scripts", () => {
   withFixture(
     ({ configPath }) => {
       const result = runAgentRuntime([
@@ -3121,7 +3101,7 @@ test("CLI rejects local skill reusable script imports that escape scripts", () =
       assert.notEqual(result.status, 0);
       assert.match(
         result.stderr,
-        /Skill needs-script imports reusable runtime script escaped\.ts, but it is not listed in runtime\.reusableScripts/,
+        /Skill needs-script imports repo-root script escaped\.ts; package helper logic inside the skill folder or use a real package dependency/,
       );
     },
     (config, runtimeDir) => {
@@ -3191,7 +3171,7 @@ test("CLI install rejects undeclared local skill reusable script imports", () =>
       assert.notEqual(result.status, 0);
       assert.match(
         result.stderr,
-        /Skill needs-script imports reusable runtime script scripts\/nitro-feedback-gate\.ts, but it is not listed in runtime\.reusableScripts/,
+        /Skill needs-script imports repo-root script scripts\/nitro-feedback-gate\.ts; package helper logic inside the skill folder or use a real package dependency/,
       );
       assert.equal(
         existsSync(join(runtimeDir, "skills", "needs-script")),
@@ -3227,7 +3207,7 @@ test("CLI update rejects undeclared local skill reusable script imports", () => 
       assert.notEqual(result.status, 0);
       assert.match(
         result.stderr,
-        /Skill needs-script imports reusable runtime script scripts\/nitro-feedback-gate\.ts, but it is not listed in runtime\.reusableScripts/,
+        /Skill needs-script imports repo-root script scripts\/nitro-feedback-gate\.ts; package helper logic inside the skill folder or use a real package dependency/,
       );
       assert.equal(
         existsSync(join(runtimeDir, "skills", "needs-script")),

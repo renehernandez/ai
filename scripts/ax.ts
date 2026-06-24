@@ -4152,11 +4152,6 @@ function validateLocalSkillReusableScriptImports(
   config: Config,
   profileNames: string[],
 ): void {
-  const reusableScriptTargets = new Set(
-    (config.runtime.reusableScripts ?? []).map((runtimeFile) =>
-      normalizeRuntimeTargetPath(runtimeFileTargetPath(runtimeFile)),
-    ),
-  );
   const missingImports = new Map<string, Set<string>>();
 
   for (const profileName of profileNames) {
@@ -4171,9 +4166,6 @@ function validateLocalSkillReusableScriptImports(
         for (const importedScript of localSkillReusableScriptImports(
           skillDir,
         )) {
-          if (reusableScriptTargets.has(importedScript)) {
-            continue;
-          }
           const skillImports =
             missingImports.get(skillName) ?? new Set<string>();
           skillImports.add(importedScript);
@@ -4188,7 +4180,7 @@ function validateLocalSkillReusableScriptImports(
       .sort()
       .map(
         (importedScript) =>
-          `Skill ${skillName} imports reusable runtime script ${importedScript}, but it is not listed in runtime.reusableScripts`,
+          `Skill ${skillName} imports repo-root script ${importedScript}; package helper logic inside the skill folder or use a real package dependency`,
       ),
   );
   if (errors.length > 0) {

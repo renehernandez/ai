@@ -159,7 +159,7 @@ validate as current. To review inferred config context/rule changes, opt in with
 proposed merged config should be written.
 
 `openspec validate` checks repo config quality, generated asset targets,
-reusable runtime scripts, and symlink normalization. Run it after install,
+portable skill boundaries, and symlink normalization. Run it after install,
 update, or accepted config review.
 
 ## After Shared Asset Changes
@@ -175,11 +175,26 @@ Refresh every affected installed surface before treating source edits as live:
 - generated OpenSpec skills or commands: use `pnpm ax openspec
   update`, then `pnpm ax openspec validate`.
 
-Skills and top-level runtime validation also check local managed skill imports
-of reusable runtime scripts. When a managed skill imports
-`../../../scripts/<file>.ts`, declare that file in `runtime.reusableScripts`;
-otherwise `pnpm ax skills validate ...` and
-`pnpm ax validate ...` fail before install or update.
+## Portable Skill Boundary
+
+The `ax-cli` skill is the only shared skill that should teach AX commands,
+runtime profile mechanics, installed runtime paths, private plan-artifact
+commands, or managed symlink behavior. Other shared skills must be reusable from
+their own directories.
+
+For portable skills:
+
+- keep runnable helper logic inside the skill folder, usually under
+  `scripts/`;
+- call helpers relative to the skill directory in examples and instructions;
+- use a real package dependency when helper code must be shared across skills;
+- do not import repo-root workflow scripts from skill scripts;
+- do not tell agents to repair portability with `runtime.reusableScripts`.
+
+`runtime.reusableScripts` is not the supported portability mechanism for shared
+skills. If validation finds a skill reaching outside its directory, package the
+needed helper in that skill instead of wiring a top-level runtime script into
+the profile.
 
 If an update changes installed files, rerun the matching `status` or `validate`
 command before finishing.
@@ -197,6 +212,8 @@ command before finishing.
 | Editing installed runtime copies directly | Edit source in this repo, then run the matching `ax ... update`. |
 | Calling work complete after source edits only | Refresh installed copies and run profile validation. |
 | Guessing flags from memory | Run `pnpm ax <scope> <command> --help`. |
+| Making a portable skill depend on repo-root scripts | Package helper logic under that skill or use a real package dependency. |
+| Using `runtime.reusableScripts` as a portability fix | Move the helper into the owning skill; keep this field out of shared-skill portability guidance. |
 | Committing plan workflow support sidecars under `.agents/plans/**` | Keep them in thread evidence or record them with `ax plans artifact record`. |
 | Treating private artifact paths as hosted evidence | Use summaries, hashes, note IDs, discussion IDs, or stable correlation IDs instead. |
 | Running `plans artifact record` against the wrong repo | Invoke `ax` from the target repo so records key to the correct target identity. |

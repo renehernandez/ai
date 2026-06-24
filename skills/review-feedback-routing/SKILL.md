@@ -45,9 +45,8 @@ Do not put review routing in CLI runtime config JSON. That config is for CLI mec
 4. Use `review_feedback.primary` to request or wait for hosted feedback.
 5. Treat `review_feedback.experimental` as opt-in only.
 6. Normalize reviewer output before feeding it into `diff-review`.
-7. When Nitro is required, validate the route and final feedback with
-   `scripts/nitro-feedback-gate.ts` before allowing a planning or delivery gate
-   to pass.
+7. When Nitro is required, use `nitro-review-feedback` to validate the route
+   and final feedback before allowing a planning or delivery gate to pass.
 
 If `origin`, `upstream`, or a supplied PR/MR URL point to different artifact hosts, prefer the host for the artifact being created or reviewed. If that is still ambiguous, ask one blocking question. Never fail open to the first route.
 
@@ -99,7 +98,7 @@ actionable findings remain. Use `blocked` for missing feedback, timeout, stale
 feedback, unavailable adapters, unresolved findings, or unknown head SHA.
 
 When the selected reviewer is Nitro, return the shared gate shape validated by
-`scripts/nitro-feedback-gate.ts validate`:
+`nitro-review-feedback`:
 
 ```yaml
 nitro_feedback_gate:

@@ -32,7 +32,8 @@ Collect Nitro feedback from Fullscript GitLab MRs and normalize it for `diff-rev
 6. Normalize actionable findings to the shared contract.
 7. Convert Nitro status into `nitro_feedback_gate` with
    `scripts/nitro-feedback-gate.ts normalize-feedback`, then validate it with
-   `scripts/nitro-feedback-gate.ts validate`.
+   `scripts/nitro-feedback-gate.ts validate`. Run those commands from this
+   skill directory.
 
 Request Nitro only when routing says `request_mode: explicit` with `capabilities.request_review: true`, or when the user explicitly asks. For Fullscript GitLab, the configured route requires posting `glab mr note <MR_IID> -m "/request_review @nitro"` after MR creation and after material follow-up pushes unless a latest-head Nitro review is already in flight.
 
