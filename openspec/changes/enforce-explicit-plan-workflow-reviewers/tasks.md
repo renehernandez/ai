@@ -80,7 +80,7 @@
   implementation-unit commit owned by `plan-unit-delivery`, including
   implementation edits, tests, task-state updates, review-feedback fixes,
   pipeline fixes, conflict fixes, and restack fixes.
-- [ ] 4.5 Add `plan-unit-delivery` tests for required reviewer extraction,
+- [x] 4.5 Add `plan-unit-delivery` tests for required reviewer extraction,
   skipped reviewers, blocking outcomes, missing outcomes, stale evidence,
   missing subagents, linked worktrees, required-gate invocation, and multiple
   implementation-unit commits requiring fresh gates.
