@@ -92,4 +92,50 @@ test("merge-followthrough OpenAI prompt names finish mode and explicit stack sco
     metadata,
     /Ask for explicit stack scope before merging multiple PRs\/MRs/,
   );
+  assert.match(
+    metadata,
+    /single-artifact finish request does not widen to related PRs\/MRs/,
+  );
+  assert.match(metadata, /fresh current stack-ready evidence/);
+  assert.match(metadata, /hosted IDs, head SHAs, source\/target branches/);
+  assert.match(metadata, /open\/non-draft state/);
+  assert.match(metadata, /refresh downstream items/);
+  assert.match(metadata, /target\/base retargeting/);
+  assert.match(metadata, /ask for intended order/);
+  assert.match(metadata, /not default\/protected/);
+  assert.match(metadata, /not checked out in any worktree/);
+  assert.match(metadata, /no unmerged\/unpushed commits/);
+  assert.match(metadata, /source or target\/base/);
+  assert.match(metadata, /Report exact cleanup blockers/);
+  assert.match(metadata, /never force-delete/);
+});
+
+test("merge-followthrough validates stack evidence before stack merges", () => {
+  const skill = read("skills/merge-followthrough/SKILL.md");
+
+  assert.match(skill, /fresh current stack-ready workflow evidence/);
+  assert.match(
+    skill,
+    /Single-artifact finish mode does not widen to related PRs or MRs/,
+  );
+  assert.match(skill, /PR or MR ID, head SHA, source branch, target or base/);
+  assert.match(skill, /hosted\nsource\/target dependency links/);
+  assert.match(skill, /Merge or queue validated\nstacks bottom-to-top/);
+  assert.match(
+    skill,
+    /After each predecessor lands, refresh every downstream\nitem/,
+  );
+  assert.match(skill, /stop and ask for the intended order/);
+});
+
+test("merge-followthrough guards branch cleanup after merge", () => {
+  const skill = read("skills/merge-followthrough/SKILL.md");
+
+  assert.match(skill, /Branch cleanup is separate from merge/);
+  assert.match(skill, /remote artifact is confirmed merged/);
+  assert.match(skill, /source branch is\nnot default or protected/);
+  assert.match(skill, /not checked out in any worktree/);
+  assert.match(skill, /no unmerged or\nunpushed commits/);
+  assert.match(skill, /any open PR or MR as source or\ntarget\/base/);
+  assert.match(skill, /Never force-delete as follow-through cleanup/);
 });
