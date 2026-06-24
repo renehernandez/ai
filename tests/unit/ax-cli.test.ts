@@ -302,10 +302,169 @@ test("plans artifact record stores support artifacts under target repo identity"
     assert.match(result.planContentFingerprint, /^[a-f0-9]{64}$/);
     assert.match(
       result.privateWorkspaceRelativePath,
-      /^repos\/sha256-[a-f0-9]+\/plans\/example-[a-f0-9]{12}\/artifacts\/reviewer_selection-[a-f0-9]+\.yaml$/,
+      /^repos\/sha256-[a-f0-9]+\/plans\/example-[a-f0-9]{12}\/revisions\/plan-[a-f0-9]{16}\/artifacts\/reviewer_selection-[a-f0-9]+\.yaml$/,
+    );
+    assert.match(
+      result.metadataRelativePath,
+      /^repos\/sha256-[a-f0-9]+\/plans\/example-[a-f0-9]{12}\/revisions\/plan-[a-f0-9]{16}\/metadata\.json$/,
+    );
+    assert.match(
+      result.manifestRelativePath,
+      /^repos\/sha256-[a-f0-9]+\/plans\/example-[a-f0-9]{12}\/manifest\.json$/,
+    );
+    assert.match(
+      result.indexRelativePath,
+      /^repos\/sha256-[a-f0-9]+\/plans\/example-[a-f0-9]{12}\/index\.jsonl$/,
     );
     assert.ok(
       existsSync(join(axPlansRoot, result.privateWorkspaceRelativePath)),
+    );
+    const manifest = JSON.parse(
+      readFileSync(join(axPlansRoot, result.manifestRelativePath), "utf-8"),
+    );
+    assert.equal(manifest.version, 1);
+    assert.equal(manifest.repoKey, "git.fullscript.io/team/target-repo");
+    assert.equal(manifest.normalizedPlanPath, ".agents/plans/example.md");
+    assert.equal(manifest.planPathHash, result.planPathHash);
+    const workspaceRootRelativePath = result.manifestRelativePath.replace(
+      /\/manifest\.json$/,
+      "",
+    );
+    const metadataWorkspaceRelativePath = result.metadataRelativePath.slice(
+      workspaceRootRelativePath.length + 1,
+    );
+    assert.deepEqual(manifest.revisions, [
+      {
+        revisionId: result.revisionId,
+        createdAt: manifest.revisions[0].createdAt,
+        metadataRelativePath: result.metadataRelativePath.slice(
+          workspaceRootRelativePath.length + 1,
+        ),
+        planContentFingerprint: result.planContentFingerprint,
+        artifacts: [
+          {
+            recordedAt: manifest.revisions[0].artifacts[0].recordedAt,
+            artifactKind: "reviewer_selection",
+            artifactContentFingerprint: result.artifactContentFingerprint,
+            artifactRelativePath: result.artifactRelativePath,
+          },
+        ],
+      },
+    ]);
+    const metadata = JSON.parse(
+      readFileSync(join(axPlansRoot, result.metadataRelativePath), "utf-8"),
+    );
+    assert.equal(metadata.revisionId, result.revisionId);
+    assert.equal(
+      metadata.planContentFingerprint,
+      result.planContentFingerprint,
+    );
+    assert.equal(metadata.metadataRelativePath, metadataWorkspaceRelativePath);
+    assert.deepEqual(metadata.artifacts, manifest.revisions[0].artifacts);
+    const indexRows = readFileSync(
+      join(axPlansRoot, result.indexRelativePath),
+      "utf-8",
+    )
+      .trim()
+      .split("\n");
+    assert.equal(indexRows.length, 1);
+    assert.equal(JSON.parse(indexRows[0]).revisionId, result.revisionId);
+
+    const duplicate = recordPlanArtifact({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      kind: "reviewer_selection",
+      filePath: "reviewer-selection.yaml",
+      axPlansRoot,
+    });
+    assert.equal(duplicate.revisionId, result.revisionId);
+    assert.equal(
+      readFileSync(join(axPlansRoot, result.indexRelativePath), "utf-8")
+        .trim()
+        .split("\n").length,
+      1,
+    );
+
+    rmSync(join(axPlansRoot, result.indexRelativePath));
+    const repairedIndex = recordPlanArtifact({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      kind: "reviewer_selection",
+      filePath: "reviewer-selection.yaml",
+      axPlansRoot,
+    });
+    assert.equal(repairedIndex.revisionId, result.revisionId);
+    assert.equal(
+      readFileSync(join(axPlansRoot, result.indexRelativePath), "utf-8")
+        .trim()
+        .split("\n").length,
+      1,
+    );
+
+    writeFileSync(
+      join(targetRepo, ".agents", "plans", "example.md"),
+      "# Example plan\n\nUpdated\n",
+      "utf-8",
+    );
+    const secondRevision = recordPlanArtifact({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      kind: "reviewer_selection",
+      filePath: "reviewer-selection.yaml",
+      axPlansRoot,
+    });
+    assert.notEqual(secondRevision.revisionId, result.revisionId);
+    assert.notEqual(
+      secondRevision.planContentFingerprint,
+      result.planContentFingerprint,
+    );
+    const updatedManifest = JSON.parse(
+      readFileSync(join(axPlansRoot, result.manifestRelativePath), "utf-8"),
+    );
+    assert.equal(updatedManifest.revisions.length, 2);
+    assert.deepEqual(
+      updatedManifest.revisions.map(
+        (revision: { revisionId: string }) => revision.revisionId,
+      ),
+      [result.revisionId, secondRevision.revisionId],
+    );
+    assert.equal(
+      readFileSync(join(axPlansRoot, result.indexRelativePath), "utf-8")
+        .trim()
+        .split("\n").length,
+      2,
+    );
+  });
+});
+
+test("plans artifact record rejects symlinked index files", () => {
+  withTempDir((directory) => {
+    const targetRepo = createPlanArtifactTarget(directory);
+    const axPlansRoot = join(directory, "ax-plans");
+    const outside = join(directory, "outside-index.jsonl");
+    mkdirSync(axPlansRoot, { mode: 0o700 });
+    chmodSync(axPlansRoot, 0o700);
+
+    const result = recordPlanArtifact({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      kind: "reviewer_selection",
+      filePath: "reviewer-selection.yaml",
+      axPlansRoot,
+    });
+    rmSync(join(axPlansRoot, result.indexRelativePath));
+    symlinkSync(outside, join(axPlansRoot, result.indexRelativePath));
+
+    assert.throws(
+      () =>
+        recordPlanArtifact({
+          targetRoot: targetRepo,
+          planPath: ".agents/plans/example.md",
+          kind: "reviewer_selection",
+          filePath: "reviewer-selection.yaml",
+          axPlansRoot,
+        }),
+      /index must be a regular file/,
     );
   });
 });
@@ -438,6 +597,40 @@ test("plans artifact record rejects private workspace symlink escapes", () => {
           axPlansRoot,
         }),
       /must not be a symlink/,
+    );
+  });
+});
+
+test("plans artifact record rejects corrupt existing artifact blobs", () => {
+  withTempDir((directory) => {
+    const targetRepo = createPlanArtifactTarget(directory);
+    const axPlansRoot = join(directory, "ax-plans");
+    mkdirSync(axPlansRoot, { mode: 0o700 });
+    chmodSync(axPlansRoot, 0o700);
+
+    const result = recordPlanArtifact({
+      targetRoot: targetRepo,
+      planPath: ".agents/plans/example.md",
+      kind: "reviewer_selection",
+      filePath: "reviewer-selection.yaml",
+      axPlansRoot,
+    });
+    writeFileSync(
+      join(axPlansRoot, result.privateWorkspaceRelativePath),
+      "truncated\n",
+      "utf-8",
+    );
+
+    assert.throws(
+      () =>
+        recordPlanArtifact({
+          targetRoot: targetRepo,
+          planPath: ".agents/plans/example.md",
+          kind: "reviewer_selection",
+          filePath: "reviewer-selection.yaml",
+          axPlansRoot,
+        }),
+      /incomplete or corrupt/,
     );
   });
 });
