@@ -13,6 +13,25 @@ orchestrator_resume:
 
       - [x] 1.1 First deliverable
       - [ ] 1.2 Future deliverable
+  phase_evidence:
+    readiness:
+      owner: plan-ready
+      status: fresh
+      artifact_fingerprint: feedface
+      expected_artifact_fingerprint: feedface
+      route_to:
+    planning_commit:
+      owner: plan-review
+      status: fresh
+      reviewed_head: def456
+      expected_head_sha: def456
+      route_to:
+    delivery:
+      owner: plan-unit-delivery
+      status: fresh
+      task_state_fingerprint: feedface
+      expected_task_state_fingerprint: feedface
+      route_to:
   task_artifacts:
     - task_id: "1.1"
       artifact: https://git.fullscript.io/group/project/-/merge_requests/2
