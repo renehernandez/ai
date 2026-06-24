@@ -761,17 +761,23 @@ function addPlansCommands(program: Command): void {
     .requiredOption("--file <path>", "File-backed support artifact to record")
     .option("--config <path>", "Path to Agents Experience config", CONFIG_FILE)
     .action((first: CommandOptions | Command, second?: Command) => {
-      const { options, commandObject } = actionContext(first, second);
-      const runtimeContext = createRuntimeInvocationContext(
-        configPathFor(commandObject, options),
-      );
-      const result = recordPlanArtifact({
-        targetRoot: runtimeContext.targetRoot,
-        planPath: requireStringOption(options.plan, "--plan"),
-        kind: requireStringOption(options.kind, "--kind"),
-        filePath: requireStringOption(options.file, "--file"),
-      });
-      console.log(JSON.stringify(result, null, 2));
+      try {
+        const { options, commandObject } = actionContext(first, second);
+        const runtimeContext = createRuntimeInvocationContext(
+          configPathFor(commandObject, options),
+        );
+        const result = recordPlanArtifact({
+          targetRoot: runtimeContext.targetRoot,
+          planPath: requireStringOption(options.plan, "--plan"),
+          kind: requireStringOption(options.kind, "--kind"),
+          filePath: requireStringOption(options.file, "--file"),
+        });
+        console.log(JSON.stringify(result, null, 2));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(message);
+        process.exitCode = 1;
+      }
     });
 }
 
