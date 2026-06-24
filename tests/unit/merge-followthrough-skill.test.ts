@@ -98,6 +98,7 @@ test("merge-followthrough OpenAI prompt names finish mode and explicit stack sco
   );
   assert.match(metadata, /fresh current stack-ready evidence/);
   assert.match(metadata, /hosted IDs, head SHAs, source\/target branches/);
+  assert.match(metadata, /open\/non-draft state/);
   assert.match(metadata, /refresh downstream items/);
   assert.match(metadata, /target\/base retargeting/);
   assert.match(metadata, /ask for intended order/);
