@@ -194,6 +194,32 @@ function createGitFixture(prefix: string): string {
   return directory;
 }
 
+function createCleanGitFixture(prefix: string): string {
+  const directory = mkdtempSync(join(tmpdir(), prefix));
+  runGit(directory, ["init"]);
+  runGit(directory, ["config", "user.email", "test@example.com"]);
+  runGit(directory, ["config", "user.name", "Test User"]);
+  writeFileSync(join(directory, "file.txt"), "base\n", "utf8");
+  runGit(directory, ["add", "file.txt"]);
+  runGit(directory, ["commit", "-m", "initial"]);
+  return directory;
+}
+
+function installFakePnpmAx(cwd: string, argsPath: string): void {
+  const fakeAxPath = join(cwd, "fake-ax");
+  writeFileSync(
+    join(cwd, "package.json"),
+    JSON.stringify({ scripts: { ax: "./fake-ax" } }),
+    "utf8",
+  );
+  writeFileSync(
+    fakeAxPath,
+    `#!/bin/sh\nprintf '{subprocess-noise}\\n'\nprintf '%s\\n' "$@" > "${argsPath}"\n`,
+    "utf8",
+  );
+  chmodSync(fakeAxPath, 0o755);
+}
+
 function runGit(cwd: string, args: string[]): void {
   const result = spawnSync("git", args, {
     cwd,
@@ -663,6 +689,66 @@ test("review-gate-input rejects mismatched launch and report evidence", () => {
   assert.equal(result.stdout, "");
 });
 
+test("validate-launch-report rejects missing required reviewer launch and subagent id", () => {
+  const missingRequiredReviewer = runPlanUnitDelivery(
+    "validate-launch-report",
+    launchedReport
+      .replace("    - implementation-review\n", "")
+      .replace("    - implementation-review: inline-a\n", ""),
+  );
+
+  assert.notEqual(missingRequiredReviewer.status, 0);
+  assert.match(
+    missingRequiredReviewer.stderr,
+    /launched_reviewers must include required reviewer: implementation-review/,
+  );
+
+  const missingSubagentId = runPlanUnitDelivery(
+    "validate-launch-report",
+    launchedReport.replace("    - code-quality-review: inline-c\n", ""),
+  );
+
+  assert.notEqual(missingSubagentId.status, 0);
+  assert.match(
+    missingSubagentId.stderr,
+    /missing review pass id for launched reviewer: code-quality-review/,
+  );
+});
+
+test("validate-review-report rejects missing and blocking reviewer outcomes", () => {
+  const missingOutcome = runPlanUnitDelivery(
+    "validate-review-report",
+    reviewerReport.replace(
+      "    - implementation-scrutiny: passed - scrutiny verdict ship\n",
+      "",
+    ),
+  );
+
+  assert.notEqual(missingOutcome.status, 0);
+  assert.match(
+    missingOutcome.stderr,
+    /missing outcome for launched reviewer: implementation-scrutiny/,
+  );
+
+  const blockingOutcome = runPlanUnitDelivery(
+    "validate-review-report",
+    reviewerReport.replace(
+      "    - implementation-review: passed - implementation review found no blocking issues\n",
+      "    - implementation-review: blocked - implementation review found a blocking issue\n",
+    ),
+  );
+
+  assert.notEqual(blockingOutcome.status, 0);
+  assert.match(
+    blockingOutcome.stderr,
+    /implementation-review outcome must be reconciled before final report: blocked/,
+  );
+  assert.match(
+    blockingOutcome.stderr,
+    /implementation-review outcome must be passed/,
+  );
+});
+
 test("review-gate-input rejects stale reviewer launch evidence", () => {
   const staleDiffHash =
     "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
@@ -749,18 +835,7 @@ test("commit-implementation activates review gate and invokes required-gate ax c
   try {
     const diffHash = stagedDiffHash(cwd);
     const argsPath = join(cwd, "pnpm-args.txt");
-    const fakeAxPath = join(cwd, "fake-ax");
-    writeFileSync(
-      join(cwd, "package.json"),
-      JSON.stringify({ scripts: { ax: "./fake-ax" } }),
-      "utf8",
-    );
-    writeFileSync(
-      fakeAxPath,
-      `#!/bin/sh\nprintf '{subprocess-noise}\\n'\nprintf '%s\\n' "$@" > "${argsPath}"\n`,
-      "utf8",
-    );
-    chmodSync(fakeAxPath, 0o755);
+    installFakePnpmAx(cwd, argsPath);
 
     const result = runPlanUnitDeliveryInCwd(
       "commit-implementation",
@@ -785,6 +860,82 @@ test("commit-implementation activates review gate and invokes required-gate ax c
     assert.equal(output.state_path, reviewGateStatePath(cwd));
     assert.equal(output.staged_diff_hash, diffHash);
     assert.ok(output.required_review_passes.includes("implementation-review"));
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("commit-implementation writes linked worktree gate state under worktree metadata", () => {
+  const repo = createCleanGitFixture("plan-unit-delivery-linked-repo-");
+  const worktree = mkdtempSync(join(tmpdir(), "plan-unit-delivery-linked-"));
+  try {
+    rmSync(worktree, { force: true, recursive: true });
+    runGit(repo, ["worktree", "add", "-b", "linked-delivery", worktree]);
+    writeFileSync(join(worktree, "file.txt"), "linked change\n", "utf8");
+    runGit(worktree, ["add", "file.txt"]);
+
+    const diffHash = stagedDiffHash(worktree);
+    const argsPath = join(worktree, "pnpm-args.txt");
+    installFakePnpmAx(worktree, argsPath);
+
+    const result = runPlanUnitDeliveryInCwd(
+      "commit-implementation",
+      worktree,
+      `${validHandoff}\n${launchedReport.replace(
+        reviewGateDiffHash,
+        diffHash,
+      )}\n${reviewerReport.replace(reviewGateDiffHash, diffHash)}`,
+      ["--message", "Commit linked worktree implementation"],
+    );
+    const output = JSON.parse(result.stdout.slice(result.stdout.indexOf("{")));
+
+    assert.equal(result.status, 0);
+    assert.equal(output.state_path, reviewGateStatePath(worktree));
+    assert.match(output.state_path, /worktrees/);
+    assert.notEqual(output.state_path, reviewGateStatePath(repo));
+  } finally {
+    rmSync(worktree, { force: true, recursive: true });
+    rmSync(repo, { force: true, recursive: true });
+  }
+});
+
+test("commit-implementation rejects reused reviewer evidence after staged diff changes", () => {
+  const cwd = createGitFixture("plan-unit-delivery-fresh-gates-");
+  try {
+    const firstDiffHash = stagedDiffHash(cwd);
+    installFakePnpmAx(cwd, join(cwd, "pnpm-args.txt"));
+    const firstEvidence = `${validHandoff}\n${launchedReport.replace(
+      reviewGateDiffHash,
+      firstDiffHash,
+    )}\n${reviewerReport.replace(reviewGateDiffHash, firstDiffHash)}`;
+    const first = runPlanUnitDeliveryInCwd(
+      "commit-implementation",
+      cwd,
+      firstEvidence,
+      ["--message", "First implementation commit"],
+    );
+
+    assert.equal(first.status, 0);
+
+    writeFileSync(join(cwd, "second.txt"), "second change\n", "utf8");
+    runGit(cwd, ["add", "second.txt"]);
+    const secondDiffHash = stagedDiffHash(cwd);
+    const second = runPlanUnitDeliveryInCwd(
+      "commit-implementation",
+      cwd,
+      firstEvidence,
+      ["--message", "Second implementation commit"],
+    );
+    const output = JSON.parse(second.stdout);
+
+    assert.notEqual(second.status, 0);
+    assert.notEqual(secondDiffHash, firstDiffHash);
+    assert.equal(output.status, "blocked");
+    assert.equal(output.staged_diff_hash, secondDiffHash);
+    assert.match(
+      output.blockers.join("\n"),
+      /reviewer_launch\.staged_diff_hash is stale for current staged diff/,
+    );
   } finally {
     rmSync(cwd, { force: true, recursive: true });
   }
