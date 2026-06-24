@@ -8,7 +8,7 @@
       rules to the skill contract, including freshly validated stack-ready
       evidence and hosted source/target dependency checks, with focused
       behavioral coverage.
-- [ ] 1.3 Add required default-branch CI graph completion rules to the skill
+- [x] 1.3 Add required default-branch CI graph completion rules to the skill
       contract, including no-pipeline verification gaps and child/downstream CI
       graph proof when required, 10-minute creation polling, and focused
       behavioral coverage.
