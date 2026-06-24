@@ -789,15 +789,21 @@ function addPlansCommands(program: Command): void {
     )
     .option("--config <path>", "Path to Agents Experience config", CONFIG_FILE)
     .action((first: CommandOptions | Command, second?: Command) => {
-      const { options, commandObject } = actionContext(first, second);
-      const runtimeContext = createRuntimeInvocationContext(
-        configPathFor(commandObject, options),
-      );
-      const result = listPlanArtifacts({
-        targetRoot: runtimeContext.targetRoot,
-        planPath: requireStringOption(options.plan, "--plan"),
-      });
-      console.log(JSON.stringify(result, null, 2));
+      try {
+        const { options, commandObject } = actionContext(first, second);
+        const runtimeContext = createRuntimeInvocationContext(
+          configPathFor(commandObject, options),
+        );
+        const result = listPlanArtifacts({
+          targetRoot: runtimeContext.targetRoot,
+          planPath: requireStringOption(options.plan, "--plan"),
+        });
+        console.log(JSON.stringify(result, null, 2));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(message);
+        process.exitCode = 1;
+      }
     });
 }
 

@@ -679,6 +679,53 @@ test("plans artifact record command reports validation errors without stack trac
   });
 });
 
+test("plans artifact list command reports validation errors without stack traces", () => {
+  withTempDir((directory) => {
+    const targetRepo = createPlanArtifactTarget(directory);
+    const originalCwd = process.cwd();
+    const originalError = console.error;
+    const originalExitCode = process.exitCode;
+    let errorOutput = "";
+    try {
+      process.chdir(targetRepo);
+      process.exitCode = undefined;
+      console.error = (value?: unknown) => {
+        errorOutput += `${String(value)}\n`;
+      };
+
+      const program = createProgram();
+      configureProgramForTest(program);
+      program.parse(
+        [
+          "node",
+          "ax",
+          "plans",
+          "artifact",
+          "list",
+          "--plan",
+          "../escape.md",
+          "--config",
+          join(repoRoot, "ax.config.json"),
+        ],
+        { from: "node" },
+      );
+    } finally {
+      console.error = originalError;
+      process.chdir(originalCwd);
+    }
+
+    const actualExitCode = process.exitCode;
+    process.exitCode = originalExitCode;
+
+    assert.equal(actualExitCode, 1);
+    assert.match(
+      errorOutput,
+      /--plan must be a primary markdown file under \.agents\/plans/,
+    );
+    assert.doesNotMatch(errorOutput, /Error:|at\s+/);
+  });
+});
+
 test("plans artifact record rejects private workspace symlink escapes", () => {
   withTempDir((directory) => {
     const targetRepo = createPlanArtifactTarget(directory);
