@@ -28,8 +28,8 @@ invokes `$merge-followthrough`, complete the metadata work, then continue
 toward merge or queue after required gates are acceptable.
 
 Use check-only mode when the user asks to watch, inspect, report status, update
-only, see where this is, or says not to merge yet. In check-only mode, do not
-merge or queue.
+status only, update without merging, see where this is, or says not to merge
+yet. In check-only mode, do not merge or queue.
 
 Deployment verification is explicit. Do not require deployment verification as
 a default finish gate unless the user, repo policy, or existing workflow asks

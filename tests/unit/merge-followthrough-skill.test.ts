@@ -57,9 +57,10 @@ test("merge-followthrough preserves check-only and deployment boundaries", () =>
   assert.match(skill, /Use check-only mode when the user asks to watch/);
   assert.match(
     skill,
-    /update\nonly, see where this is, or says not to merge yet/,
+    /update\nstatus only, update without merging, see where this is/,
   );
-  assert.match(skill, /In check-only mode, do not\nmerge or queue/);
+  assert.doesNotMatch(skill, /update\nonly, see where this is/);
+  assert.match(skill, /In check-only mode, do not merge or queue/);
   assert.match(skill, /Deployment verification is explicit/);
   assert.match(
     skill,
