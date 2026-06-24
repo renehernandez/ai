@@ -6,6 +6,7 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  realpathSync,
   renameSync,
   unlinkSync,
   writeFileSync,
@@ -32,6 +33,17 @@ export type ReviewGateSourceProvenance = {
   evidence?: string[];
 };
 
+export type ReviewGateIdentity = {
+  gitCommonDir: string;
+  gitDir: string;
+  worktreeRoot: string;
+  branchRef: string | null;
+  headSha: string | null;
+  stagedDiffHash: string;
+  workflow: string;
+  unitId: string | null;
+};
+
 export type ReviewGateState = {
   version: 1;
   active: boolean;
@@ -42,6 +54,7 @@ export type ReviewGateState = {
     title?: string;
   };
   sourceProvenance?: ReviewGateSourceProvenance;
+  identity?: ReviewGateIdentity;
   stagedDiffHash?: string;
   requiredReviewPasses?: string[];
   results?: Record<string, ReviewGateResult>;
@@ -54,7 +67,10 @@ export type ReviewGateState = {
 export type ReviewGateValidation = {
   ok: boolean;
   statePath: string;
+  stateStatus: ReviewGateStatus | "missing" | "invalid";
   active: boolean;
+  workflow?: string;
+  activeReviewGateFingerprint?: string;
   stagedDiffHash: string;
   requiredReviewPasses: string[];
   completedReviewPasses: string[];
@@ -62,6 +78,7 @@ export type ReviewGateValidation = {
   staleReviewPasses: string[];
   blockingFindings: unknown[];
   errors: string[];
+  identityMismatches: string[];
   note?: string;
 };
 
@@ -91,9 +108,20 @@ export type ReviewGateConsumeResult = {
   note?: string;
 };
 
+export type ReviewGateCompareAndConsumeInput = {
+  expectedStagedDiffHash: string;
+  expectedRequiredReviewPasses: string[];
+  expectedActiveReviewGateFingerprint: string;
+};
+
 export type ReviewGateInvalidationWriteResult = {
   statePath: string;
   invalidationPath: string;
+};
+
+export type ReviewGateForceUnlockResult = {
+  lockPath: string;
+  removed: boolean;
 };
 
 type ReviewGateReadResult =
@@ -125,6 +153,20 @@ export function stagedDiffHash(cwd = process.cwd()): string {
   return `sha256:${createHash("sha256").update(diff).digest("hex")}`;
 }
 
+export function committedDiffHash(
+  commitSha: string,
+  cwd = process.cwd(),
+): string {
+  const parentLine = gitOutput(
+    ["rev-list", "--parents", "-n", "1", commitSha],
+    cwd,
+  );
+  const [, parentSha] = parentLine.split(/\s+/);
+  const baseSha = parentSha ?? "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+  const diff = gitOutputBuffer(["diff", "--binary", baseSha, commitSha], cwd);
+  return `sha256:${createHash("sha256").update(diff).digest("hex")}`;
+}
+
 export function hasStagedDiff(cwd = process.cwd()): boolean {
   const result = spawnSync("git", ["diff", "--cached", "--quiet"], {
     cwd,
@@ -140,12 +182,76 @@ export function hasStagedDiff(cwd = process.cwd()): boolean {
   throw new Error((result.stderr || result.stdout || "git diff failed").trim());
 }
 
+export function currentReviewGateIdentity(input: {
+  cwd?: string;
+  stagedDiffHash: string;
+  workflow: string;
+  unit?: ReviewGateState["unit"];
+}): ReviewGateIdentity {
+  const cwd = input.cwd ?? process.cwd();
+  const gitDir = absoluteGitPath(
+    gitOutput(["rev-parse", "--git-dir"], cwd),
+    cwd,
+  );
+  const gitCommonDir = absoluteGitPath(
+    gitOutput(["rev-parse", "--git-common-dir"], cwd),
+    cwd,
+  );
+  const worktreeRoot = absoluteGitPath(
+    gitOutput(["rev-parse", "--show-toplevel"], cwd),
+    cwd,
+  );
+  return {
+    gitCommonDir,
+    gitDir,
+    worktreeRoot,
+    branchRef: gitOutputOptional(["symbolic-ref", "--quiet", "HEAD"], cwd),
+    headSha: gitOutputOptional(["rev-parse", "--verify", "HEAD"], cwd),
+    stagedDiffHash: input.stagedDiffHash,
+    workflow: input.workflow,
+    unitId: input.unit?.id ?? null,
+  };
+}
+
+function reviewGateIdentityMismatches(
+  state: ReviewGateState,
+  currentDiffHash: string,
+  cwd: string,
+): string[] {
+  if (!state.identity || !state.workflow) {
+    return [];
+  }
+  const currentIdentity = currentReviewGateIdentity({
+    cwd,
+    stagedDiffHash: currentDiffHash,
+    workflow: state.workflow,
+    unit: state.unit,
+  });
+  const mismatches: string[] = [];
+  for (const field of [
+    "gitCommonDir",
+    "gitDir",
+    "worktreeRoot",
+    "branchRef",
+    "headSha",
+    "stagedDiffHash",
+    "workflow",
+    "unitId",
+  ] as const) {
+    if (state.identity[field] !== currentIdentity[field]) {
+      mismatches.push(field);
+    }
+  }
+  return mismatches;
+}
+
 export function writeActiveReviewGate(
   input: ActiveReviewGateInput,
   cwd = process.cwd(),
 ): ReviewGateWriteResult {
   return withReviewGateLock(cwd, () => {
     const statePath = reviewGateStatePath(cwd);
+    const invalidationPath = reviewGateInvalidationPath(cwd);
     const diffHash = stagedDiffHash(cwd);
     const now = new Date().toISOString();
     const state: ReviewGateState = {
@@ -155,6 +261,12 @@ export function writeActiveReviewGate(
       workflow: input.workflow,
       unit: input.unit,
       sourceProvenance: input.sourceProvenance,
+      identity: currentReviewGateIdentity({
+        cwd,
+        stagedDiffHash: diffHash,
+        workflow: input.workflow,
+        unit: input.unit,
+      }),
       stagedDiffHash: diffHash,
       requiredReviewPasses: input.requiredReviewPasses,
       results: normalizeResultInput(input.results, diffHash),
@@ -163,7 +275,7 @@ export function writeActiveReviewGate(
     };
 
     writeValidatedState(statePath, state);
-    clearReviewGateInvalidation(reviewGateInvalidationPath(cwd));
+    clearReviewGateInvalidation(invalidationPath);
     return { statePath, state };
   });
 }
@@ -196,52 +308,7 @@ export function consumeReviewGate(
 ): ReviewGateConsumeResult {
   return withReviewGateLock(
     cwd,
-    () => {
-      const statePath = reviewGateStatePath(cwd);
-      const readResult = readReviewGateState(statePath);
-      if (!readResult.exists) {
-        return {
-          statePath,
-          consumed: false,
-          note: "No review gate state found; nothing to consume.",
-        };
-      }
-      if (!readResult.ok) {
-        throw new Error(
-          `Cannot consume invalid review gate state: Review gate state is not valid JSON: ${readResult.error}`,
-        );
-      }
-      const state = readResult.state;
-      const schemaErrors = validateStateShape(state);
-      if (schemaErrors.length > 0) {
-        throw new Error(
-          `Cannot consume invalid review gate state: ${schemaErrors.join("; ")}`,
-        );
-      }
-      if (!isPlainRecord(state)) {
-        throw new Error("Cannot consume invalid review gate state.");
-      }
-      const reviewGateState = state as ReviewGateState;
-      if (!reviewGateState.active) {
-        return {
-          statePath,
-          consumed: false,
-          state: reviewGateState,
-          note: "Review gate is already inactive; nothing to consume.",
-        };
-      }
-
-      const now = new Date().toISOString();
-      const consumedState: ReviewGateState = {
-        ...reviewGateState,
-        active: false,
-        status: "consumed",
-        updatedAt: now,
-        consumedAt: now,
-      };
-      writeValidatedState(statePath, consumedState);
-      return { statePath, consumed: true, state: consumedState };
-    },
+    () => consumeReviewGateUnlocked(cwd),
     (statePath) => ({
       statePath,
       consumed: false,
@@ -250,9 +317,291 @@ export function consumeReviewGate(
   );
 }
 
+export function consumeReviewGateForDiff(
+  input: ReviewGateCompareAndConsumeInput,
+  cwd = process.cwd(),
+): ReviewGateConsumeResult {
+  if (!isDiffHash(input.expectedStagedDiffHash)) {
+    throw new Error("Expected staged diff hash must be a sha256 diff hash.");
+  }
+  if (!isDiffHash(input.expectedActiveReviewGateFingerprint)) {
+    throw new Error(
+      "Expected active review gate fingerprint must be a sha256 fingerprint.",
+    );
+  }
+  if (
+    input.expectedRequiredReviewPasses.length === 0 ||
+    input.expectedRequiredReviewPasses.some(
+      (reviewPass) =>
+        typeof reviewPass !== "string" || reviewPass.trim().length === 0,
+    )
+  ) {
+    throw new Error(
+      "Expected required review passes must be a non-empty list of non-empty strings.",
+    );
+  }
+  return withReviewGateLock(
+    cwd,
+    () =>
+      consumeReviewGateUnlocked(
+        cwd,
+        input.expectedStagedDiffHash,
+        input.expectedRequiredReviewPasses,
+        input.expectedActiveReviewGateFingerprint,
+      ),
+    (statePath) => ({
+      statePath,
+      consumed: false,
+      note: "Review gate is locked by another operation; nothing consumed.",
+    }),
+  );
+}
+
+function consumeReviewGateUnlocked(
+  cwd: string,
+  expectedStagedDiffHash?: string,
+  expectedRequiredReviewPasses?: string[],
+  expectedActiveReviewGateFingerprint?: string,
+): ReviewGateConsumeResult {
+  const statePath = reviewGateStatePath(cwd);
+  const readResult = readReviewGateState(statePath);
+  if (!readResult.exists) {
+    return {
+      statePath,
+      consumed: false,
+      note: "No review gate state found; nothing to consume.",
+    };
+  }
+  if (!readResult.ok) {
+    throw new Error(
+      `Cannot consume invalid review gate state: Review gate state is not valid JSON: ${readResult.error}`,
+    );
+  }
+  const state = readResult.state;
+  const schemaErrors = validateStateShape(state);
+  if (schemaErrors.length > 0) {
+    throw new Error(
+      `Cannot consume invalid review gate state: ${schemaErrors.join("; ")}`,
+    );
+  }
+  if (!isPlainRecord(state)) {
+    throw new Error("Cannot consume invalid review gate state.");
+  }
+  const reviewGateState = state as ReviewGateState;
+  if (!reviewGateState.active) {
+    return {
+      statePath,
+      consumed: false,
+      state: reviewGateState,
+      note: "Review gate is already inactive; nothing to consume.",
+    };
+  }
+  if (expectedStagedDiffHash !== undefined) {
+    if (reviewGateState.stagedDiffHash !== expectedStagedDiffHash) {
+      return {
+        statePath,
+        consumed: false,
+        state: reviewGateState,
+        note: `Review gate staged diff hash changed; expected ${expectedStagedDiffHash}, found ${reviewGateState.stagedDiffHash ?? "(missing)"}.`,
+      };
+    }
+    if (
+      expectedRequiredReviewPasses !== undefined &&
+      !stringListsEqual(
+        reviewGateState.requiredReviewPasses ?? [],
+        expectedRequiredReviewPasses,
+      )
+    ) {
+      return {
+        statePath,
+        consumed: false,
+        state: reviewGateState,
+        note: `Review gate required review passes changed; expected ${expectedRequiredReviewPasses.join(", ")}, found ${(reviewGateState.requiredReviewPasses ?? []).join(", ")}.`,
+      };
+    }
+    if (
+      expectedActiveReviewGateFingerprint !== undefined &&
+      activeReviewGateFingerprint(reviewGateState) !==
+        expectedActiveReviewGateFingerprint
+    ) {
+      return {
+        statePath,
+        consumed: false,
+        state: reviewGateState,
+        note: "Review gate identity or evidence changed after validation.",
+      };
+    }
+    const staleOrMissingPass = reviewGateState.requiredReviewPasses?.find(
+      (reviewPass) => {
+        const result = reviewGateState.results?.[reviewPass];
+        return (
+          result?.status !== "passed" ||
+          result.diffHash !== expectedStagedDiffHash
+        );
+      },
+    );
+    if (staleOrMissingPass) {
+      return {
+        statePath,
+        consumed: false,
+        state: reviewGateState,
+        note: `Review gate required pass is not fresh for expected staged diff: ${staleOrMissingPass}.`,
+      };
+    }
+    if ((reviewGateState.blockingFindings?.length ?? 0) > 0) {
+      return {
+        statePath,
+        consumed: false,
+        state: reviewGateState,
+        note: "Review gate has unresolved blocking findings.",
+      };
+    }
+  }
+
+  const now = new Date().toISOString();
+  const consumedState: ReviewGateState = {
+    ...reviewGateState,
+    active: false,
+    status: "consumed",
+    updatedAt: now,
+    consumedAt: now,
+  };
+  writeValidatedState(statePath, consumedState);
+  return { statePath, consumed: true, state: consumedState };
+}
+
+function stringListsEqual(left: string[], right: string[]): boolean {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
+}
+
+function readCurrentReviewGateInvalidation(
+  cwd: string,
+  currentDiffHash: string,
+):
+  | { blocked: false }
+  | {
+      blocked: true;
+      invalidationPath: string;
+      blockers: unknown[];
+      errors: string[];
+    } {
+  const invalidationPath = reviewGateInvalidationPath(cwd);
+  if (!existsSync(invalidationPath)) {
+    return { blocked: false };
+  }
+  let invalidation: unknown;
+  try {
+    invalidation = JSON.parse(readFileSync(invalidationPath, "utf-8"));
+  } catch (error) {
+    return {
+      blocked: true,
+      invalidationPath,
+      blockers: [],
+      errors: [
+        `Review gate invalidation marker is not valid JSON: ${errorMessage(error)}`,
+      ],
+    };
+  }
+  if (!isPlainRecord(invalidation)) {
+    return {
+      blocked: true,
+      invalidationPath,
+      blockers: [],
+      errors: ["Review gate invalidation marker must be an object."],
+    };
+  }
+  const stagedDiffHashValue = invalidation.stagedDiffHash;
+  if (
+    typeof stagedDiffHashValue === "string" &&
+    isDiffHash(stagedDiffHashValue) &&
+    stagedDiffHashValue !== currentDiffHash
+  ) {
+    return { blocked: false };
+  }
+  const blockers = Array.isArray(invalidation.blockers)
+    ? invalidation.blockers
+    : [];
+  return {
+    blocked: true,
+    invalidationPath,
+    blockers,
+    errors: [
+      "Review gate was invalidated by a failed blocked activation for this staged diff.",
+      ...blockers.map(
+        (blocker) => `Blocked activation finding: ${String(blocker)}`,
+      ),
+    ],
+  };
+}
+
+function invalidatedReviewGateValidation(
+  base: Omit<ReviewGateValidation, "ok" | "errors">,
+  invalidation: {
+    invalidationPath: string;
+    blockers: unknown[];
+    errors: string[];
+  },
+): ReviewGateValidation {
+  return {
+    ...base,
+    ok: false,
+    stateStatus: "invalid",
+    active: true,
+    blockingFindings: invalidation.blockers,
+    errors: invalidation.errors,
+    note: `Review gate invalidation marker found: ${invalidation.invalidationPath}`,
+  };
+}
+
+function clearReviewGateInvalidation(invalidationPath: string): void {
+  try {
+    unlinkSync(invalidationPath);
+  } catch (error) {
+    if (!isFileNotFoundError(error)) {
+      throw error;
+    }
+  }
+}
+
+function activeReviewGateFingerprint(state: ReviewGateState): string {
+  const comparableState = {
+    workflow: state.workflow ?? null,
+    unit: state.unit ?? null,
+    sourceProvenance: state.sourceProvenance ?? null,
+    identity: state.identity ?? null,
+    stagedDiffHash: state.stagedDiffHash ?? null,
+    requiredReviewPasses: state.requiredReviewPasses ?? [],
+    results: state.results ?? {},
+    blockingFindings: state.blockingFindings ?? [],
+  };
+  return `sha256:${createHash("sha256").update(canonicalJson(comparableState)).digest("hex")}`;
+}
+
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(canonicalValue(value));
+}
+
+function canonicalValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalValue);
+  }
+  if (!isPlainRecord(value)) {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => [key, canonicalValue(entry)]),
+  );
+}
+
 export function clearReviewGate(cwd = process.cwd()): ReviewGateWriteResult {
   return withReviewGateLock(cwd, () => {
     const statePath = reviewGateStatePath(cwd);
+    const invalidationPath = reviewGateInvalidationPath(cwd);
     const now = new Date().toISOString();
     const state: ReviewGateState = {
       version: 1,
@@ -265,9 +614,25 @@ export function clearReviewGate(cwd = process.cwd()): ReviewGateWriteResult {
       clearedAt: now,
     };
     writeValidatedState(statePath, state);
-    clearReviewGateInvalidation(reviewGateInvalidationPath(cwd));
+    clearReviewGateInvalidation(invalidationPath);
     return { statePath, state };
   });
+}
+
+export function forceUnlockReviewGate(
+  cwd = process.cwd(),
+): ReviewGateForceUnlockResult {
+  const statePath = ensureReviewGateStateDirectory(cwd);
+  const lockPath = resolve(dirname(statePath), "review-gate.lock");
+  try {
+    unlinkSync(lockPath);
+    return { lockPath, removed: true };
+  } catch (error) {
+    if (isFileNotFoundError(error)) {
+      return { lockPath, removed: false };
+    }
+    throw error;
+  }
 }
 
 export function validateReviewGateForCommit(
@@ -277,16 +642,27 @@ export function validateReviewGateForCommit(
   const currentDiffHash = stagedDiffHash(cwd);
   const base: Omit<ReviewGateValidation, "ok" | "errors"> = {
     statePath,
+    stateStatus: "missing",
     active: false,
+    workflow: undefined,
+    activeReviewGateFingerprint: undefined,
     stagedDiffHash: currentDiffHash,
     requiredReviewPasses: [],
     completedReviewPasses: [],
     missingReviewPasses: [],
     staleReviewPasses: [],
     blockingFindings: [],
+    identityMismatches: [],
   };
 
   if (!existsSync(statePath)) {
+    const invalidation = readCurrentReviewGateInvalidation(
+      cwd,
+      currentDiffHash,
+    );
+    if (invalidation.blocked) {
+      return invalidatedReviewGateValidation(base, invalidation);
+    }
     return {
       ...base,
       ok: true,
@@ -295,12 +671,18 @@ export function validateReviewGateForCommit(
     };
   }
 
+  const invalidation = readCurrentReviewGateInvalidation(cwd, currentDiffHash);
+  if (invalidation.blocked) {
+    return invalidatedReviewGateValidation(base, invalidation);
+  }
+
   let state: unknown;
   try {
     state = JSON.parse(readFileSync(statePath, "utf-8"));
   } catch (error) {
     return {
       ...base,
+      stateStatus: "invalid",
       ok: false,
       errors: [`Review gate state is not valid JSON: ${errorMessage(error)}`],
     };
@@ -311,6 +693,9 @@ export function validateReviewGateForCommit(
   const requiredReviewPasses = normalized.requiredReviewPasses;
   const results = normalized.results;
   const active = normalized.active;
+  const stateStatus: ReviewGateValidation["stateStatus"] =
+    schemaErrors.length > 0 ? "invalid" : normalized.status;
+  const workflow = normalized.workflow;
   const stateDiffHash = normalized.stagedDiffHash;
   const completedReviewPasses = requiredReviewPasses.filter((reviewPass) => {
     const result = results[reviewPass];
@@ -329,17 +714,18 @@ export function validateReviewGateForCommit(
     return {
       ...base,
       ok: schemaErrors.length === 0,
+      stateStatus,
       active: false,
+      workflow,
       requiredReviewPasses,
       completedReviewPasses,
       missingReviewPasses,
       staleReviewPasses,
       blockingFindings,
+      identityMismatches: [],
       errors: schemaErrors,
       note:
-        schemaErrors.length === 0
-          ? "Review gate is inactive; allowing commit."
-          : undefined,
+        schemaErrors.length === 0 ? inactiveGateNote(stateStatus) : undefined,
     };
   }
 
@@ -368,31 +754,54 @@ export function validateReviewGateForCommit(
   if (stateDiffHash && stateDiffHash !== currentDiffHash) {
     errors.push("Review gate staged diff hash is stale.");
   }
+  const identityMismatches =
+    schemaErrors.length === 0 && isPlainRecord(state)
+      ? reviewGateIdentityMismatches(
+          state as ReviewGateState,
+          currentDiffHash,
+          cwd,
+        )
+      : [];
+  errors.push(
+    ...identityMismatches.map(
+      (field) => `Review gate identity mismatch: ${field}`,
+    ),
+  );
 
   return {
     ...base,
     ok: errors.length === 0,
+    stateStatus,
     active: true,
+    workflow,
+    activeReviewGateFingerprint:
+      schemaErrors.length === 0 && isPlainRecord(state)
+        ? activeReviewGateFingerprint(state as ReviewGateState)
+        : undefined,
     requiredReviewPasses,
     completedReviewPasses,
     missingReviewPasses,
     staleReviewPasses,
     blockingFindings,
+    identityMismatches,
     errors,
   };
 }
 
 export function formatReviewGateStatus(
   validation: ReviewGateValidation,
+  options: { next?: string } = {},
 ): string {
   const lines = [
     `state_path: ${validation.statePath}`,
+    `state_status: ${validation.stateStatus}`,
     `active: ${validation.active}`,
     `staged_diff_hash: ${validation.stagedDiffHash}`,
     `required_review_passes: ${formatList(validation.requiredReviewPasses)}`,
     `completed_review_passes: ${formatList(validation.completedReviewPasses)}`,
     `missing_review_passes: ${formatList(validation.missingReviewPasses)}`,
     `stale_review_passes: ${formatList(validation.staleReviewPasses)}`,
+    `identity_mismatches: ${formatList(validation.identityMismatches)}`,
     `blocking_findings: ${validation.blockingFindings.length}`,
   ];
 
@@ -403,10 +812,11 @@ export function formatReviewGateStatus(
     lines.push("errors:");
     lines.push(...validation.errors.map((error) => `- ${error}`));
     lines.push(
-      "next: complete or rerun required local reviews, then retry ax commit",
+      options.next ??
+        "next: complete or rerun required local reviews, then retry ax commit",
     );
   } else {
-    lines.push("next: ax commit");
+    lines.push(options.next ?? "next: ax commit");
   }
 
   return `${lines.join("\n")}\n`;
@@ -422,6 +832,7 @@ function validateStateShape(state: unknown): string[] {
   const workflow = state.workflow;
   const unit = state.unit;
   const sourceProvenance = state.sourceProvenance;
+  const identity = state.identity;
   const stagedDiffHashValue = state.stagedDiffHash;
   const requiredReviewPassesValue = state.requiredReviewPasses;
   const resultsValue = state.results;
@@ -476,12 +887,18 @@ function validateStateShape(state: unknown): string[] {
   if (hasOwn(state, "sourceProvenance")) {
     validateSourceProvenance(sourceProvenance, errors);
   }
+  if (hasOwn(state, "identity")) {
+    validateIdentity(identity, errors);
+  }
   if (active === true) {
     if (!workflow) {
       errors.push("Active review gate requires workflow.");
     }
     if (!sourceProvenance) {
       errors.push("Active review gate requires sourceProvenance.");
+    }
+    if (!identity) {
+      errors.push("Active review gate requires identity.");
     }
     if (!stagedDiffHashValue) {
       errors.push("Active review gate requires stagedDiffHash.");
@@ -634,6 +1051,45 @@ function validateSourceProvenance(value: unknown, errors: string[]): void {
   }
 }
 
+function validateIdentity(value: unknown, errors: string[]): void {
+  if (!isPlainRecord(value)) {
+    errors.push("identity must be an object.");
+    return;
+  }
+  for (const field of ["gitCommonDir", "gitDir", "worktreeRoot", "workflow"]) {
+    if (typeof value[field] !== "string" || value[field].length === 0) {
+      errors.push(`identity.${field} must be a non-empty string.`);
+    }
+  }
+  if (
+    typeof value.stagedDiffHash !== "string" ||
+    !isDiffHash(value.stagedDiffHash)
+  ) {
+    errors.push("identity.stagedDiffHash must be a sha256 diff hash.");
+  }
+  if (
+    hasOwn(value, "branchRef") &&
+    value.branchRef !== null &&
+    (typeof value.branchRef !== "string" || value.branchRef.length === 0)
+  ) {
+    errors.push("identity.branchRef must be a non-empty string or null.");
+  }
+  if (
+    hasOwn(value, "headSha") &&
+    value.headSha !== null &&
+    (typeof value.headSha !== "string" || value.headSha.length === 0)
+  ) {
+    errors.push("identity.headSha must be a non-empty string or null.");
+  }
+  if (
+    hasOwn(value, "unitId") &&
+    value.unitId !== null &&
+    (typeof value.unitId !== "string" || value.unitId.length === 0)
+  ) {
+    errors.push("identity.unitId must be a non-empty string or null.");
+  }
+}
+
 function readReviewGateState(statePath: string): ReviewGateReadResult {
   if (!existsSync(statePath)) {
     return { exists: false };
@@ -715,19 +1171,11 @@ function atomicWriteJson(statePath: string, state: unknown): void {
   renameSync(temporaryPath, statePath);
 }
 
-function clearReviewGateInvalidation(invalidationPath: string): void {
-  try {
-    unlinkSync(invalidationPath);
-  } catch (error) {
-    if (!isFileNotFoundError(error)) {
-      throw error;
-    }
-  }
-}
-
 function normalizeState(state: unknown): {
   errors: string[];
+  status: ReviewGateStatus;
   active: boolean;
+  workflow?: string;
   stagedDiffHash?: string;
   requiredReviewPasses: string[];
   results: Record<string, ReviewGateResult>;
@@ -737,7 +1185,9 @@ function normalizeState(state: unknown): {
   if (!isPlainRecord(state)) {
     return {
       errors,
+      status: "cleared",
       active: false,
+      workflow: undefined,
       stagedDiffHash: undefined,
       requiredReviewPasses: [],
       results: {},
@@ -746,7 +1196,13 @@ function normalizeState(state: unknown): {
   }
   return {
     errors,
+    status: GATE_STATUSES.has(state.status as string)
+      ? (state.status as ReviewGateStatus)
+      : state.active === true
+        ? "active"
+        : "cleared",
     active: state.active === true,
+    workflow: typeof state.workflow === "string" ? state.workflow : undefined,
     stagedDiffHash:
       typeof state.stagedDiffHash === "string"
         ? state.stagedDiffHash
@@ -763,8 +1219,35 @@ function normalizeState(state: unknown): {
   };
 }
 
+function inactiveGateNote(status: ReviewGateStatus): string {
+  if (status === "consumed") {
+    return "Review gate is consumed; allowing commit.";
+  }
+  if (status === "cleared") {
+    return "Review gate is cleared; allowing commit.";
+  }
+  return "Review gate is inactive; allowing commit.";
+}
+
 function gitOutput(args: string[], cwd: string): string {
   return gitOutputRaw(args, cwd).trimEnd();
+}
+
+function gitOutputOptional(args: string[], cwd: string): string | null {
+  const result = spawnSync("git", args, {
+    cwd,
+    encoding: "utf-8",
+    env: withoutGitRepositoryEnv(),
+  });
+  if (result.status !== 0) {
+    return null;
+  }
+  return result.stdout.trimEnd();
+}
+
+function absoluteGitPath(path: string, cwd: string): string {
+  const absolutePath = isAbsolute(path) ? path : resolve(cwd, path);
+  return existsSync(absolutePath) ? realpathSync(absolutePath) : absolutePath;
 }
 
 function gitOutputRaw(args: string[], cwd: string): string {
@@ -820,24 +1303,26 @@ function isDiffHash(value: string): boolean {
   return HASH_PATTERN.test(value);
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function isFileExistsError(error: unknown): boolean {
   return (
-    error instanceof Error &&
+    typeof error === "object" &&
+    error !== null &&
     "code" in error &&
-    (error as NodeJS.ErrnoException).code === "EEXIST"
+    error.code === "EEXIST"
   );
 }
 
 function isFileNotFoundError(error: unknown): boolean {
   return (
-    error instanceof Error &&
+    typeof error === "object" &&
+    error !== null &&
     "code" in error &&
-    (error as NodeJS.ErrnoException).code === "ENOENT"
+    error.code === "ENOENT"
   );
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function formatList(values: string[]): string {
