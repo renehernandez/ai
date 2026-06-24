@@ -134,7 +134,10 @@ disclosing the limitation in the PR/MR description or final handoff.
 ### 2. Implementation Completion Contract
 
 - [ ] 2.1 Update `rules/investigation-and-implementation.md` to define accepted
-  implementation work and the default completion contract.
+  implementation work and the default completion contract by replacing or
+  reworking the existing "non-feature implementation work" commit/push boundary
+  so the file has one coherent publication rule instead of two overlapping
+  concepts.
 - [ ] 2.2 Keep brainstorming, planning, troubleshooting, and review-only modes
   excluded from automatic commit and push.
 - [ ] 2.3 Name the pause conditions for unsafe publish contents or unresolved
@@ -145,10 +148,11 @@ disclosing the limitation in the PR/MR description or final handoff.
 
 ### 3. Git, Hosted Review, and Nitro Routing
 
-- [ ] 3.1 Update `rules/git-and-review.md` so feature work completion includes
-  verification, intended-file staging, `ax commit`, branch push, PR/MR
-  create/update when applicable, CI/no-pipeline inspection, and branch-caused
-  failure followthrough.
+- [ ] 3.1 Preserve the existing `rules/git-and-review.md` feature-work
+  completion behavior, which already covers verification, commit, branch push,
+  PR/MR create/update, CI monitoring, and branch-caused failure followthrough;
+  only tighten it where needed for hosted-review provider selection or
+  interaction with the AGENTS entrypoint precedence fix.
 - [ ] 3.2 Keep default-branch pushes and force pushes protected by explicit
   permission.
 - [ ] 3.3 Update hosted-review provider guidance so project instructions,
