@@ -65,7 +65,30 @@ verification gap and do not claim the workflow is fully done.
 
 For stack follow-through, stop before merging or queuing the next item when the
 post-merge default-branch CI graph is failed, blocked, or missing. Resume stack
-merges only after the default branch is healthy and the user asks to continue.
+merges only after the default branch is healthy, any required fix-forward
+artifact has landed cleanly, and the user asks to continue.
+
+Post-merge fix-forward is bounded. When default-branch CI fails after a merge,
+automatically investigate only with live evidence from the failed
+default-branch job/check, the merged commit, and related logs. Create a
+fix-forward PR or MR automatically only when evidence shows the merged branch
+caused the failure and diagnosis/fix confidence is strictly greater than 0.90.
+The confidence report must identify the failing default-branch job/check, why
+the failure is branch-caused rather than infrastructure or unrelated work, the
+minimal fix, and the local or hosted verification performed.
+
+Route fix-forward work through the normal hosted-review path for that repo. If
+the repo uses Nitro or another required reviewer, request that reviewer on the
+fix-forward artifact. Never auto-merge a fix-forward PR or MR. It is acceptable
+to watch fix-forward CI and review state, but the artifact must wait for human
+merge action.
+
+When fix-forward confidence is 0.90 or lower, or evidence is incomplete, do not
+create the fix-forward artifact automatically. Report the diagnosis, likely fix,
+confidence score, and confidence rationale. In stack follow-through, stop
+subsequent merges while a branch-caused default-branch CI failure or required
+fix-forward exists. Resume only after the fix-forward artifact has landed, the
+default branch is healthy, and the user asks to continue.
 
 Deployment verification is explicit. Do not require deployment verification as
 a default finish gate unless the user, repo policy, or existing workflow asks
@@ -85,6 +108,8 @@ for it.
 | Stack-ready evidence | Revalidate IDs, SHAs, branches, reviews, CI, dependencies, and order |
 | Default-branch CI missing | Poll up to 10 minutes, then report a verification gap |
 | Default-branch CI failed/blocked | Stop stack follow-through before subsequent merges |
+| High-confidence fix-forward | Create reviewed PR/MR only above 0.90 confidence; never auto-merge it |
+| Low-confidence fix-forward | Report diagnosis, likely fix, confidence, and rationale |
 | Branch cleanup blocked | Report the guard failure and do not force-delete |
 
 ## Workflow
@@ -92,7 +117,9 @@ for it.
 1. Verify current branch, dirty state, PR number, base branch, and merge policy.
 2. Check live CI/review state with provider tools.
 3. If checks fail, classify:
-   - branch-caused: fix and continue;
+   - branch-caused before merge: fix and continue;
+   - branch-caused after merge on the default branch: use the fix-forward
+     boundaries below;
    - external/flake/permission/service: rerun or report with evidence;
    - product decision: stop and ask.
 4. Select finish mode or check-only mode from the prompt and current artifact.
@@ -107,12 +134,20 @@ for it.
    minute for up to 10 minutes. Treat a missing graph after that as a
    verification gap, not done.
 9. For stacks, stop subsequent merges when default-branch CI is failed, blocked,
-   or missing until the default branch is healthy and the user asks to continue.
-10. Before syncing local base, verify the target checkout is clean or use a separate clean worktree. Never overwrite dirty user work.
-11. Before deleting branches, check protected/default status, worktrees, remote
+   or missing until the default branch is healthy, any required fix-forward
+   artifact has landed cleanly, and the user asks to continue.
+10. If default-branch CI fails after merge, investigate with live job/check
+    evidence and create a fix-forward artifact only when branch-caused
+    diagnosis/fix confidence is strictly greater than 0.90.
+11. Route fix-forward artifacts through hosted review, request required
+    reviewers such as Nitro, and never auto-merge them.
+12. If fix-forward confidence is 0.90 or lower, report diagnosis, likely fix,
+    confidence score, and rationale without creating the artifact.
+13. Before syncing local base, verify the target checkout is clean or use a separate clean worktree. Never overwrite dirty user work.
+14. Before deleting branches, check protected/default status, worktrees, remote
    PR/MR source and target/base references, and unmerged/unpushed commits.
-12. If deployment verification is expected but unavailable, report the exact gap instead of saying done.
-13. Report commit/PR/check/deploy evidence and residual risk.
+15. If deployment verification is expected but unavailable, report the exact gap instead of saying done.
+16. Report commit/PR/check/deploy evidence and residual risk.
 
 ## Mistakes
 
@@ -125,6 +160,8 @@ for it.
 | Stopping after remote merge only | Sync local base when requested/expected |
 | Calling finish done before default-branch CI completes | Verify the required default-branch graph, including child/bridge/downstream/triggered checks, or report the gap |
 | Continuing a stack after default-branch CI is failed, blocked, or missing | Stop before the next merge and wait for healthy default-branch CI plus a user continue request |
+| Opening fix-forward work on hunches | Require branch-caused evidence and diagnosis/fix confidence strictly greater than 0.90 |
+| Auto-merging a fix-forward artifact | Request normal hosted review and leave merge to a human |
 | Treating metadata plus `$merge-followthrough` as check-only | Finish the metadata, then continue the merge workflow |
 | Requiring deployment proof without an explicit deployment requirement | Report only the merge, CI, sync, and cleanup proof that applies |
 | Widening a single MR/PR request to a stack | Ask for explicit stack scope or require fresh stack-ready evidence |
@@ -148,7 +185,21 @@ for it.
   for up to 10 minutes and a missing graph is reported as a verification gap.
 - Stack continuation after merge: pass only if subsequent merges stop when
   default-branch CI is failed, blocked, or missing, and resume only after the
-  default branch is healthy and the user asks to continue.
+  default branch is healthy, any required fix-forward artifact has landed
+  cleanly, and the user asks to continue.
+- Fix-forward creation: pass only if a branch-caused post-merge
+  default-branch CI failure has evidence-backed diagnosis/fix confidence
+  strictly greater than 0.90 and the resulting PR/MR follows the normal hosted
+  review route.
+- Fix-forward confidence report: pass only if it names the failing
+  default-branch job/check, why it is branch-caused rather than infrastructure
+  or unrelated work, the minimal fix, and local or hosted verification.
+- Fix-forward merge boundary: pass only if the fix-forward artifact is never
+  auto-merged and required reviewers such as Nitro are requested where
+  applicable.
+- Low-confidence fix-forward: pass only if confidence of 0.90 or lower reports
+  the diagnosis, likely fix, confidence score, and rationale without creating
+  the artifact automatically.
 - Metadata update plus `$merge-followthrough`: pass only if the workflow still
   proceeds in finish mode after metadata is updated.
 - Check-only wording: pass only if the workflow reports status without merge or
