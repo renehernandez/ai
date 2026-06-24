@@ -3,14 +3,6 @@
   "runtime": {
     "canonicalSkillsDir": "~/.agents/skills",
     "skillSymlinkTargets": ["~/.codex/skills", "~/.claude/skills"],
-    "reusableScripts": [
-      "scripts/nitro-feedback-gate.ts",
-      "scripts/objective-proof.ts",
-      "scripts/plan-artifacts.ts",
-      "scripts/planning-contracts.ts",
-      "scripts/review-gate.ts",
-      "scripts/stack-state.ts"
-    ],
     "instructionSymlinkTargets": {
       "agents": "~/.agents",
       "claude": "~/.claude",

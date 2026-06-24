@@ -70,13 +70,13 @@ ax openspec validate
 ```
 
 Validation checks repo config quality, known schema and artifact rules, bounded
-context size, reusable runtime script sources, generated asset targets, and
-managed symlink normalization.
+context size, portable skill boundaries, generated asset targets, and managed
+symlink normalization.
 
-For shared skills, `ax skills validate` and the top-level
-`ax validate` also check local managed skill imports of reusable
-runtime scripts. If a local managed skill imports `../../../scripts/<file>.ts`,
-that script must be declared under `runtime.reusableScripts`.
+For shared skills, `ax skills validate` and the top-level `ax validate` reject
+local managed skill imports of repo-root workflow scripts. Package helper logic
+inside the owning skill folder, or use a real package dependency; do not use
+`runtime.reusableScripts` to make shared skills portable.
 
 ## Refreshing Shared Runtime Surfaces
 

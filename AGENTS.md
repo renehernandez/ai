@@ -28,7 +28,7 @@ Portable user-level instructions that are installed into runtime profiles live i
 - In brainstorming or planning threads, treat agreement as design confirmation only. Do not edit files, generate migrations, or start implementation from scope agreement alone; wait for an explicit implementation trigger such as "implement this", "make the changes", "start the PR", "go ahead and code it", or "apply the plan".
 - When the user says they dislike a proposed name, structure, or design shape, provide alternatives and tradeoffs before changing files, even if they did not explicitly ask for alternatives.
 - For JavaScript and TypeScript projects, invoke package-managed commands through the package manager, such as `pnpm exec`, `pnpm dlx`, or `pnpm run`; never call binaries inside `node_modules` directly.
-- After changing shared skill, agent, instruction, or rule sources in this repo, run `writing-skills` against the changed agent behavior before committing. For shared skill changes, refresh the installed runtime copies before treating the change as live with `pnpm ax skills update --profile <name>`, and confirm the active runtime surface with `pnpm ax skills status --profile <name>` or `pnpm ax validate --profile <name>`.
+- After changing shared skill, agent, instruction, or rule sources in this repo, run `writing-skills` against the changed agent behavior before committing. Portable shared skills must keep runnable helper logic inside the owning skill folder or a real package dependency; do not use repo-root workflow scripts or `runtime.reusableScripts` to make a skill portable. For live runtime refreshes, use the `ax-cli` steering skill and verify the affected installed surface before treating source edits as live.
 - Do not stage or commit local workflow artifacts into work-project repositories. Keep reviewer scratch, readiness reports, reviewer reports, delivery ledgers, screenshots, command proofs, validation evidence, rejected generated shapes, and private plan-support pointers in the thread or private plan-support storage. Reusable AI repo workflow machinery, managed rules, skills, validators, runtime scripts, and regression fixtures may be committed only when that machinery is the feature being changed in this AI repo.
 - Write agent and Codex hooks in TypeScript unless there is a specific runtime requirement that makes another language a better fit.
 - After changing hook sources or hook registration behavior, run `pnpm ax hooks update` for the affected machine when live runtime refresh is intended, then use `pnpm ax hooks validate` or `pnpm ax hooks status` to confirm symlinks, startup registration, Codex trust state, and selected remote reporting.
@@ -85,8 +85,8 @@ Portable user-level instructions that are installed into runtime profiles live i
   current. Use `--review-config` to review inferred context/rule changes, and
   use `--accept-config-changes` only when applying those changes headlessly.
 - Run `ax openspec validate` after install, update, or config review;
-  validation checks repo config quality, generated asset targets, reusable
-  runtime scripts, and symlink normalization.
+  validation checks repo config quality, generated asset targets, portable
+  skill boundaries, and symlink normalization.
 - OpenSpec-generated skills are canonical under `.agents/skills/openspec-*` for
   this repo, with `.codex/skills/openspec-*` and
   `.claude/skills/openspec-*` pointing back by relative symlink.

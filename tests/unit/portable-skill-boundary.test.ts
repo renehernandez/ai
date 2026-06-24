@@ -14,6 +14,7 @@ const packagedSkillScriptDirs = [
   "skills/plan-orchestrator/scripts",
   "skills/plan-unit-sequencer/scripts",
   "skills/plan-unit-delivery/scripts",
+  "skills/nitro-review-feedback/scripts",
 ];
 
 function collectTypeScriptFiles(dir: string): string[] {
@@ -81,4 +82,29 @@ test("plan-review validates OpenSpec tasks from its skill folder", () => {
     );
     assert.match(result.stdout, /"status": "pass"/);
   }
+});
+
+test("nitro-review-feedback validates Nitro gates from its skill folder", () => {
+  const result = spawnSync(
+    "pnpm",
+    ["exec", "tsx", "scripts/nitro-feedback-gate.ts", "template"],
+    {
+      cwd: "skills/nitro-review-feedback",
+      encoding: "utf8",
+    },
+  );
+
+  assert.equal(
+    result.status,
+    0,
+    [result.stdout, result.stderr].filter(Boolean).join("\n"),
+  );
+  assert.match(result.stdout, /nitro_feedback_gate:/);
+});
+
+test("review-feedback-routing does not teach repo-root Nitro gate commands", () => {
+  const text = readFileSync("skills/review-feedback-routing/SKILL.md", "utf8");
+
+  assert.doesNotMatch(text, /scripts\/nitro-feedback-gate\.ts/);
+  assert.match(text, /nitro-review-feedback/);
 });
