@@ -3,8 +3,9 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { analyzeObjectiveProof } from "../../../scripts/objective-proof.ts";
-import { isSafeAgentsPlanRef } from "../../../scripts/plan-artifacts.ts";
+import { analyzeObjectiveProof } from "./lib/objective-proof.ts";
+import { classifyTaskShape } from "./lib/openspec-tasks.ts";
+import { isSafeAgentsPlanRef } from "./lib/plan-artifacts.ts";
 import {
   cleanScalar,
   escapeRegExp,
@@ -20,8 +21,7 @@ import {
   readInput,
   requireValue,
   scalar,
-} from "../../../scripts/planning-contracts.ts";
-import { classifyTaskShape } from "../../openspec-tasks/scripts/openspec-tasks.ts";
+} from "./lib/planning-contracts.ts";
 
 const BASELINE_REVIEWERS = [
   "implementation-readiness",

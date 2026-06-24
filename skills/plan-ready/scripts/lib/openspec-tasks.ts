@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { analyzeObjectiveProof } from "./lib/objective-proof.ts";
+import { analyzeObjectiveProof } from "./objective-proof.ts";
 
 const MANUAL_PATTERNS = [
   /\bmanual\b/i,

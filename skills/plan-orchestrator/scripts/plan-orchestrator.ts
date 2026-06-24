@@ -2,7 +2,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, realpathSync, unlinkSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { isAgentsPlanPath } from "../../../scripts/plan-artifacts.ts";
+import { isAgentsPlanPath } from "./lib/plan-artifacts.ts";
 import {
   extractSection,
   extractYaml,
@@ -13,14 +13,14 @@ import {
   requireValue,
   scalar,
   validatePlanningReviewContract,
-} from "../../../scripts/planning-contracts.ts";
+} from "./lib/planning-contracts.ts";
 import {
   artifactHostHintFromRemoteText,
   fullscriptGitLabMergeRequestErrors,
   isFullscriptGitLabMergeRequest,
   type TaskArtifactEvidence,
   validateStackTipTaskState,
-} from "../../../scripts/stack-state.ts";
+} from "./lib/stack-state.ts";
 
 type Command =
   | "detect"

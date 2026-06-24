@@ -3,6 +3,11 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  firstUncheckedDeliverable,
+  parseTasks,
+  validateTasks,
+} from "./lib/openspec-tasks.ts";
+import {
   extractSection,
   extractYaml,
   fail,
@@ -13,13 +18,8 @@ import {
   requireValue,
   scalar,
   validatePlanningReviewContract,
-} from "../../../scripts/planning-contracts.ts";
-import { artifactHostHintFromRemoteText } from "../../../scripts/stack-state.ts";
-import {
-  firstUncheckedDeliverable,
-  parseTasks,
-  validateTasks,
-} from "../../openspec-tasks/scripts/openspec-tasks.ts";
+} from "./lib/planning-contracts.ts";
+import { artifactHostHintFromRemoteText } from "./lib/stack-state.ts";
 
 const ROUTES = ["atomic_plan", "openspec_task"] as const;
 const ARTIFACT_TYPES = ["plan", "openspec", "linear"] as const;
