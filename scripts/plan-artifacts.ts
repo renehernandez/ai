@@ -55,6 +55,18 @@ const STRUCTURED_SUPPORT_EXTENSIONS = new Set([
 ]);
 const WRITE_LOCK_STALE_MS = 5 * 60 * 1000;
 
+function withoutGitRepositoryEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  delete env.GIT_ALTERNATE_OBJECT_DIRECTORIES;
+  delete env.GIT_DIR;
+  delete env.GIT_INDEX_FILE;
+  delete env.GIT_OBJECT_DIRECTORY;
+  delete env.GIT_PREFIX;
+  delete env.GIT_QUARANTINE_PATH;
+  delete env.GIT_WORK_TREE;
+  return env;
+}
+
 export type PlanSupportArtifactKind =
   (typeof PLAN_SUPPORT_ARTIFACT_KINDS)[number];
 
@@ -612,6 +624,7 @@ function gitRemoteUrlForRoot(
     ["-C", targetRoot, "remote", "get-url", remoteName],
     {
       encoding: "utf-8",
+      env: withoutGitRepositoryEnv(),
       stdio: ["ignore", "pipe", "pipe"],
     },
   );
