@@ -1,12 +1,17 @@
 #!/usr/bin/env tsx
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { nitroFeedbackGateErrors } from "../../../scripts/nitro-feedback-gate.ts";
+import { dirname, isAbsolute, join } from "node:path";
+import { nitroFeedbackGateErrors } from "./lib/nitro-feedback-gate.ts";
+import {
+  firstUncheckedDeliverable,
+  parseTasks,
+  validateTasks,
+} from "./lib/openspec-tasks.ts";
 import {
   isAgentsPlanPath,
   isPlanSupportSidecar,
-} from "../../../scripts/plan-artifacts.ts";
+} from "./lib/plan-artifacts.ts";
 import {
   extractSection,
   extractYaml,
@@ -19,7 +24,7 @@ import {
   requireValue,
   scalar,
   validatePlanningReviewContract,
-} from "../../../scripts/planning-contracts.ts";
+} from "./lib/planning-contracts.ts";
 
 const ARTIFACT_TYPES = ["plan", "openspec", "linear"] as const;
 const REQUEST_STATUSES = ["ready_for_review"] as const;
@@ -408,35 +413,64 @@ function validatePlanningDiff(args: string[], stdinInput: string): void {
 }
 
 function validateOpenSpecTasks(args: string[]): void {
-  const tasksPath = optionalArg(args, "--tasks") ?? taskPathFromArtifact(args);
+  const explicitTasksPath = optionalArg(args, "--tasks");
+  const artifactTasksPath = taskPathFromArtifact(args);
+  const tasksPath = explicitTasksPath ?? artifactTasksPath;
   if (!tasksPath) {
     fail(
       "validate-openspec-tasks requires --tasks <path> or --artifact-ref <openspec/changes/id>",
     );
   }
 
-  if (!existsSync(tasksPath)) {
+  const resolvedTasksPath = resolveTasksPath(tasksPath, {
+    artifactRef: artifactTasksPath !== undefined,
+  });
+  if (!existsSync(resolvedTasksPath)) {
     fail(`openspec_tasks_missing: ${tasksPath}`);
   }
 
-  const result = spawnSync(
-    "pnpm",
-    [
-      "exec",
-      "tsx",
-      "skills/openspec-tasks/scripts/openspec-tasks.ts",
-      "audit",
-      tasksPath,
-    ],
-    { encoding: "utf8" },
-  );
+  const tasks = parseTasks(readFileSync(resolvedTasksPath, "utf8"));
+  const errors = validateTasks(tasks, { requireObjectiveProof: true });
+  const nextTask = firstUncheckedDeliverable(tasks);
 
-  process.stdout.write(result.stdout);
-  process.stderr.write(result.stderr);
+  if (errors.length > 0) {
+    const invalidTasks = tasks
+      .filter((task) => task.kind === "needs_spec_redesign")
+      .map((task) => ({
+        id: task.id,
+        title: task.title,
+        line: task.line,
+        heading: task.heading,
+        reason: task.shape_reason ?? "not a deliverable implementation unit",
+      }));
+    const hasRedesignError = errors.some((error) =>
+      error.startsWith("needs_spec_redesign"),
+    );
+    const status =
+      invalidTasks.length > 0 || hasRedesignError
+        ? "needs_spec_redesign"
+        : "invalid";
 
-  if (result.status !== 0) {
-    const auditStatus = parseAuditStatus(result.stdout);
-    if (auditStatus === "needs_spec_redesign") {
+    console.log(
+      JSON.stringify(
+        {
+          status,
+          errors,
+          invalid_tasks: invalidTasks,
+          next_action:
+            status === "needs_spec_redesign"
+              ? "ask_user_for_redesign_direction"
+              : "fix_tasks",
+        },
+        null,
+        2,
+      ),
+    );
+    console.error(
+      `Invalid openspec_tasks:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+    );
+
+    if (status === "needs_spec_redesign") {
       console.error(
         [
           "Invalid plan-review OpenSpec task shape:",
@@ -446,8 +480,22 @@ function validateOpenSpecTasks(args: string[]): void {
         ].join("\n"),
       );
     }
-    process.exit(result.status ?? 1);
+    process.exit(1);
   }
+
+  console.log(
+    JSON.stringify(
+      {
+        status: "pass",
+        next_deliverable: nextTask ?? null,
+        manual_pending: tasks.filter(
+          (task) => !task.checked && task.kind === "manual",
+        ),
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 function validateLedger(input: string): void {
@@ -584,20 +632,59 @@ function taskPathFromArtifact(args: string[]): string | undefined {
   return artifactRef ? join(artifactRef, "tasks.md") : undefined;
 }
 
-function parseAuditStatus(stdout: string): string | undefined {
-  try {
-    return JSON.parse(stdout).status;
-  } catch {
-    return undefined;
+function resolveTasksPath(
+  tasksPath: string,
+  options: { artifactRef: boolean },
+): string {
+  if (isAbsolute(tasksPath)) {
+    return tasksPath;
+  }
+
+  if (!options.artifactRef && existsSync(tasksPath)) {
+    return tasksPath;
+  }
+
+  const repoRoot = git(["rev-parse", "--show-toplevel"]) ?? findRepoRoot();
+  return repoRoot ? join(repoRoot, tasksPath) : tasksPath;
+}
+
+function findRepoRoot(): string | null {
+  let current = process.cwd();
+
+  while (true) {
+    if (
+      existsSync(join(current, "package.json")) &&
+      existsSync(join(current, "skills"))
+    ) {
+      return current;
+    }
+
+    const parent = dirname(current);
+    if (parent === current) {
+      return null;
+    }
+    current = parent;
   }
 }
 
 function git(args: string[]): string | null {
-  const result = spawnSync("git", args, { encoding: "utf8" });
+  const result = spawnSync("git", args, {
+    encoding: "utf8",
+    env: withoutGitRepositoryEnv(),
+  });
   if (result.status !== 0) {
     return null;
   }
   return result.stdout.trim();
+}
+
+function withoutGitRepositoryEnv(): NodeJS.ProcessEnv {
+  const next = { ...process.env };
+  delete next.GIT_DIR;
+  delete next.GIT_WORK_TREE;
+  delete next.GIT_COMMON_DIR;
+  delete next.GIT_INDEX_FILE;
+  return next;
 }
 
 type NameStatusEntry = {

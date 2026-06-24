@@ -98,19 +98,20 @@ and next action.
    updating any planning PR/MR:
 
    ```bash
-   pnpm exec tsx skills/plan-review/scripts/plan-review.ts validate-openspec-tasks --artifact-ref openspec/changes/<change-id>
+   pnpm exec tsx scripts/plan-review.ts validate-openspec-tasks --artifact-ref openspec/changes/<change-id>
    ```
 
-   The helper delegates to `openspec-tasks audit`; its structured output is the
-   gate evidence. If it returns `needs_spec_redesign`, block planning review
-   publication and ask the user whether to redo the spec, brainstorm, narrow the
-   scope, or choose another planning route. Do not rewrite the spec inside
+   Run that command from the `skills/plan-review` folder. The helper uses
+   packaged local OpenSpec task audit logic; its structured output is the gate
+   evidence. If it returns `needs_spec_redesign`, block planning review
+   publication and ask the user whether to redo the spec, brainstorm, narrow
+   the scope, or choose another planning route. Do not rewrite the spec inside
    `plan-review`. A lifecycle-only documentation, testing, linting, review,
-   validation, or verification group anywhere in the file blocks planning review
-   unless that area is the feature being changed. Deliverable proof subchecks
-   are valid only as acceptance or verification bullets inside the related
-   deliverable task, not as OpenSpec task checkboxes or independent delivery
-   units.
+   validation, or verification group anywhere in the file blocks planning
+   review unless that area is the feature being changed. Deliverable proof subchecks
+   are valid only as acceptance or verification bullets inside the
+   related deliverable task, not as OpenSpec task checkboxes or independent
+   delivery units.
 6. Run `review-feedback-routing` before PR/MR creation. Detect artifact host
    from remotes and route reviewer feedback separately from artifact creation.
 7. Commit and push the planning-only branch when the hosted-review creation path

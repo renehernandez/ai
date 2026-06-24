@@ -1,6 +1,6 @@
 ## 1. Planning Workflow Skill Packaging
 
-- [ ] 1.1 Package required helper logic inside `openspec-tasks`, `plan-ready`,
+- [x] 1.1 Package required helper logic inside `openspec-tasks`, `plan-ready`,
       `plan-review`, `plan-orchestrator`, `plan-unit-sequencer`, and
       `plan-unit-delivery` so those skills no longer import repo-level helpers
       such as `../../../scripts/*` or sibling-skill helpers such as

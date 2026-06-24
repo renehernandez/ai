@@ -2,7 +2,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { nitroFeedbackGateErrors } from "../../../scripts/nitro-feedback-gate.ts";
+import { nitroFeedbackGateErrors } from "./lib/nitro-feedback-gate.ts";
 import {
   extractSection,
   extractYaml,
@@ -14,11 +14,11 @@ import {
   readInput,
   requireValue,
   scalar,
-} from "../../../scripts/planning-contracts.ts";
+} from "./lib/planning-contracts.ts";
 import {
   artifactHostHintFromRemoteText,
   validateUnitTaskDelta,
-} from "../../../scripts/stack-state.ts";
+} from "./lib/stack-state.ts";
 
 const BASELINE_REVIEWERS = [
   "implementation-readiness",
