@@ -864,7 +864,7 @@ test("plans artifact commands reject path traversal inputs", () => {
           filePath: "../outside.yaml",
           axPlansRoot,
         }),
-      /--file must resolve inside target repo/,
+      /--file must resolve inside target repo unless an absolute source path is provided/,
     );
   });
 });

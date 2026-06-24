@@ -95,7 +95,6 @@ export type PlanArtifactWorkspaceIdentity = {
   planPathHash: string;
   planSlug: string;
   workspacePath: string;
-  artifactsPath: string;
   manifestPath: string;
   indexPath: string;
 };
@@ -315,7 +314,6 @@ export function derivePlanArtifactWorkspaceIdentity(options: {
     planPathHash,
     planSlug,
     workspacePath,
-    artifactsPath: join(workspacePath, "artifacts"),
     manifestPath: join(workspacePath, "manifest.json"),
     indexPath: join(workspacePath, "index.jsonl"),
   };
@@ -329,6 +327,7 @@ export function recordPlanArtifact(options: {
   axPlansRoot?: string;
   artifactRemoteName?: string;
 }): PlanArtifactRecordResult {
+  const suppliedTargetRoot = resolve(options.targetRoot);
   const targetRoot = realpathSync(options.targetRoot);
   const artifactKind = normalizePlanArtifactRecordKind(options.kind);
   if (!artifactKind) {
@@ -343,11 +342,10 @@ export function recordPlanArtifact(options: {
     artifactRemoteName: options.artifactRemoteName,
   });
 
-  const artifactRealPath = realpathSync(resolve(targetRoot, options.filePath));
-  assertPathInside(
-    artifactRealPath,
+  const artifactRealPath = resolvePlanArtifactSourcePath(
     targetRoot,
-    "--file must resolve inside target repo for artifact record v1",
+    suppliedTargetRoot,
+    options.filePath,
   );
 
   const identity = derivePlanArtifactWorkspaceIdentity({
@@ -629,6 +627,37 @@ export function listPlanArtifacts(options: {
     revisions,
     artifacts,
   };
+}
+
+function resolvePlanArtifactSourcePath(
+  targetRoot: string,
+  suppliedTargetRoot: string,
+  filePath: string,
+): string {
+  const artifactPath = isAbsolute(filePath)
+    ? resolve(filePath)
+    : resolve(targetRoot, filePath);
+  const artifactRealPath = realpathSync(artifactPath);
+  if (
+    !isAbsolute(filePath) ||
+    isPathInsideOrEqual(artifactPath, targetRoot) ||
+    isPathInsideOrEqual(artifactPath, suppliedTargetRoot)
+  ) {
+    assertPathInside(
+      artifactRealPath,
+      targetRoot,
+      "--file must resolve inside target repo unless an absolute source path is provided",
+    );
+  }
+  return artifactRealPath;
+}
+
+function isPathInsideOrEqual(path: string, root: string): boolean {
+  const relativePath = relative(root, path);
+  return (
+    relativePath === "" ||
+    (!relativePath.startsWith("..") && !isAbsolute(relativePath))
+  );
 }
 
 export function derivePlanArtifactIdentity(options: {
