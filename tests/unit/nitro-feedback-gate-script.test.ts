@@ -105,6 +105,61 @@ test("validate accepts a clean latest-head gate", () => {
   assert.match(result.stdout, /nitro_feedback_gate valid/);
 });
 
+test("validate requires explicit Nitro request even when local gates passed", () => {
+  const result = runNitroGate(
+    "validate",
+    cleanGate.replace(
+      "    required: true",
+      "    required: false\n    local_commit_gate: passed",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /request\.required must be true/);
+});
+
+test("validate rejects generic request evidence without Nitro slash command", () => {
+  const result = runNitroGate(
+    "validate",
+    cleanGate.replace(
+      '      - glab mr note 1 -m "/request_review @nitro"',
+      "      - Nitro review requested for latest head",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /request\.evidence must include \/request_review @nitro/,
+  );
+});
+
+test("validate requires Nitro request after latest material push", () => {
+  const result = runNitroGate(
+    "validate",
+    cleanGate.replace(
+      "    requested_after_latest_push: true",
+      "    requested_after_latest_push: false",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /request\.requested_after_latest_push must be true/,
+  );
+});
+
+test("validate rejects stale Nitro completion as passed latest-head gate", () => {
+  const result = runNitroGate(
+    "validate",
+    cleanGate.replace("    status: clean", "    status: stale"),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /gate_outcome passed requires/);
+});
+
 test("validate rejects local reviewer evidence as Nitro feedback gate", () => {
   const result = runNitroGate(
     "validate",
