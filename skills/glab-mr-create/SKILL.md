@@ -68,6 +68,7 @@ first so routing and full description policy stay in one place.
    - Preserve project template sections and required checklist semantics.
    - Include targeted evidence or hosted status only when it helps reviewers understand risk.
    - Omit unnecessary author-workflow references and routine validation already represented by CI or repository hooks.
+   - Treat Verification sections as targeted reviewer evidence, verification gaps, and hosted state; do not list routine checks merely because they ran.
    - Do not expose local private support artifact paths, raw private support
      artifacts, or private thread metadata. Use summaries, hashes, thread
      references, note IDs, discussion IDs, or stable correlation IDs when
@@ -86,7 +87,7 @@ first so routing and full description policy stay in one place.
    [Files, flows, or decisions worth close attention]
 
    ## Verification
-   [Exact verification performed, gaps, and hosted state if relevant]
+   [Targeted reviewer evidence, verification gaps, and hosted state if relevant]
    ```
 
 7. Create a draft MR:
