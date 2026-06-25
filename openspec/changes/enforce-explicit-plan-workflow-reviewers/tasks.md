@@ -21,7 +21,7 @@
 - [x] 2.2 Make required-gate mode fail when no active fresh gate exists while
   ordinary `ax commit -m "..."` keeps the no-gate allow path for non-workflow
   commits only when no active workflow-required gate exists.
-- [ ] 2.3 Make ordinary `ax commit` fail with a required-gate diagnostic when an
+- [x] 2.3 Make ordinary `ax commit` fail with a required-gate diagnostic when an
   active workflow-required gate exists.
 - [ ] 2.4 Reuse existing active-gate consume/clear semantics for required-gate
   commits, preserve active gates when Git fails before creating a commit, and
