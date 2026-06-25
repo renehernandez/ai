@@ -140,6 +140,16 @@ function writeReviewerResultsFile(
   return path;
 }
 
+function reviewerResultRecords(cwd: string, reviewers: string[]) {
+  const diffHash = stagedDiffHashFor(cwd);
+  return reviewers.map((reviewer) => ({
+    reviewer,
+    status: "passed",
+    diff_hash: diffHash,
+    summary: `${reviewer} passed.`,
+  }));
+}
+
 function runPlanReady(
   command: string,
   content: string,
@@ -1037,6 +1047,10 @@ test("activate-review-gate writes a validated active handoff gate", () => {
       assert.equal(output.gate_outcome, "passed");
       assert.equal(state.active, true);
       assert.equal(state.workflow, "plan-ready");
+      assert.equal(state.unit.id, "atomic");
+      assert.equal(state.unit.title, "Example atomic unit");
+      assert.equal(state.sourceProvenance.kind, "plan_delivery_handoff");
+      assert.equal(state.sourceProvenance.ref, artifactRef);
       assert.equal(state.sourceProvenance.phase, "plan-ready");
       assert.equal(state.stagedDiffHash, output.staged_diff_hash);
       assert.deepEqual(state.requiredReviewPasses, [
@@ -1045,7 +1059,95 @@ test("activate-review-gate writes a validated active handoff gate", () => {
         "simplification-and-scope-control",
         "refactoring-opportunities",
       ]);
+      assert.equal(
+        state.results["implementation-readiness"].diffHash,
+        output.staged_diff_hash,
+      );
+      assert.equal(state.results["implementation-readiness"].status, "passed");
     });
+  });
+});
+
+test("activate-review-gate writes a validated active blueprint gate", () => {
+  withGitFixture((cwd) => {
+    writeFileSync(join(cwd, "file.txt"), "blueprint\n", "utf8");
+    git(cwd, ["add", "file.txt"]);
+
+    let result: ReturnType<typeof runPlanReadyInRepo> | undefined;
+    withReviewerResultsFile(cwd, BASELINE_REVIEWERS, (resultsPath) => {
+      result = runPlanReadyInRepo(
+        "activate-review-gate",
+        validBlueprint(),
+        cwd,
+        ["--review-results-file", resultsPath],
+      );
+    });
+    assert.ok(result);
+    const output = JSON.parse(result.stdout);
+    const state = JSON.parse(
+      readFileSync(join(cwd, ".git", "ax", "review-gate.json"), "utf8"),
+    );
+
+    assert.equal(result.status, 0);
+    assert.equal(output.status, "ready");
+    assert.equal(state.active, true);
+    assert.equal(state.workflow, "plan-ready");
+    assert.equal(state.unit.id, "add-plan-blueprints");
+    assert.equal(state.unit.title, "Add PlanReady OpenSpec blueprints");
+    assert.equal(state.sourceProvenance.kind, "openspec_blueprint");
+    assert.equal(state.sourceProvenance.ref, ".agents/plans/example.md");
+    assert.equal(state.sourceProvenance.phase, "plan-ready");
+    assert.equal(state.stagedDiffHash, output.staged_diff_hash);
+    assert.deepEqual(state.blockingFindings, []);
+  });
+});
+
+test("activate-review-gate promotes selected optional reviewers in written gate", () => {
+  withGitFixture((cwd) => {
+    writeFileSync(join(cwd, "file.txt"), "optional\n", "utf8");
+    git(cwd, ["add", "file.txt"]);
+    const blueprint = validBlueprint()
+      .replace(
+        "    optional_reviewers: []\n    reviewers_used:",
+        "    optional_reviewers:\n      - docs-and-agent-alignment\n    reviewers_used:",
+      )
+      .replace(
+        "      - refactoring-opportunities\n    findings:",
+        "      - refactoring-opportunities\n      - docs-and-agent-alignment\n      - ax-and-skill-compatibility\n    findings:",
+      );
+    const resultsPath = writeReviewerResultsFile(
+      cwd,
+      reviewerResultRecords(cwd, [
+        ...BASELINE_REVIEWERS,
+        "docs-and-agent-alignment",
+        "ax-and-skill-compatibility",
+      ]),
+    );
+
+    const result = runPlanReadyInRepo("activate-review-gate", blueprint, cwd, [
+      "--review-results-file",
+      resultsPath,
+    ]);
+    const output = JSON.parse(result.stdout);
+    const state = JSON.parse(
+      readFileSync(join(cwd, ".git", "ax", "review-gate.json"), "utf8"),
+    );
+
+    assert.equal(result.status, 0);
+    assert.equal(output.status, "ready");
+    assert.deepEqual(state.requiredReviewPasses, [
+      "implementation-readiness",
+      "edge-cases-and-risks",
+      "simplification-and-scope-control",
+      "refactoring-opportunities",
+      "docs-and-agent-alignment",
+    ]);
+    assert.equal(state.results["docs-and-agent-alignment"].status, "passed");
+    assert.equal(state.results["ax-and-skill-compatibility"].status, "passed");
+    assert.equal(
+      state.requiredReviewPasses.includes("ax-and-skill-compatibility"),
+      false,
+    );
   });
 });
 
@@ -1099,6 +1201,9 @@ test("activate-review-gate fails closed when blockers remain", () => {
         readFileSync(join(cwd, ".git", "ax", "review-gate.json"), "utf8"),
       );
       assert.equal(state.active, true);
+      assert.equal(state.workflow, "plan-ready");
+      assert.equal(state.unit.id, "blocked_readiness");
+      assert.equal(state.sourceProvenance.kind, "blocked_readiness");
       assert.deepEqual(state.blockingFindings, output.blockers);
     });
   });
@@ -1145,7 +1250,37 @@ test("activate-review-gate fails closed when reviewer evidence is missing", () =
       assert.equal(output.status, "blocked");
       assert.match(output.blockers.join("\n"), /missing reviewer evidence/);
       assert.equal(state.active, true);
+      assert.equal(state.unit.id, "blocked_readiness");
       assert.deepEqual(state.requiredReviewPasses, ["plan-ready-readiness"]);
+      assert.equal(state.results["plan-ready-readiness"].status, "blocked");
+    });
+  });
+});
+
+test("activate-review-gate rejects malformed reviewer evidence", () => {
+  withTempPlan(({ artifactRef, fingerprint }) => {
+    withGitFixture((cwd) => {
+      writeFileSync(join(cwd, "file.txt"), "malformed\n", "utf8");
+      git(cwd, ["add", "file.txt"]);
+      const resultsPath = join(cwd, "reviewer-results.json");
+      writeFileSync(resultsPath, "{not-json", "utf8");
+
+      const result = runPlanReadyInRepo(
+        "activate-review-gate",
+        validHandoff(artifactRef, fingerprint),
+        cwd,
+        ["--review-results-file", resultsPath],
+      );
+      const output = JSON.parse(result.stdout);
+      const state = JSON.parse(
+        readFileSync(join(cwd, ".git", "ax", "review-gate.json"), "utf8"),
+      );
+
+      assert.notEqual(result.status, 0);
+      assert.equal(output.status, "blocked");
+      assert.match(output.blockers.join("\n"), /not valid JSON/);
+      assert.equal(state.active, true);
+      assert.equal(state.unit.id, "blocked_readiness");
       assert.equal(state.results["plan-ready-readiness"].status, "blocked");
     });
   });
@@ -1249,6 +1384,12 @@ test("activate-review-gate rejects stale reviewer evidence", () => {
       assert.notEqual(result.status, 0);
       assert.equal(output.status, "blocked");
       assert.match(output.blockers.join("\n"), /diff_hash is stale/);
+      const state = JSON.parse(
+        readFileSync(join(cwd, ".git", "ax", "review-gate.json"), "utf8"),
+      );
+      assert.equal(state.active, true);
+      assert.equal(state.unit.id, "blocked_readiness");
+      assert.equal(state.results["plan-ready-readiness"].status, "blocked");
     });
   });
 });
