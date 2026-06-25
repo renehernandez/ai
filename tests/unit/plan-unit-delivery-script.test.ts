@@ -110,7 +110,8 @@ function runPlanUnitDeliveryArgs(
 function runTaskDelta(
   base: string,
   head: string,
-  taskId: string,
+  id: string,
+  mode: "--task" | "--unit" = "--task",
 ): { status: number | null; stderr: string; stdout: string } {
   let result: ReturnType<typeof spawnSync> | undefined;
   withTempFiles({ "base.md": base, "head.md": head }, (paths) => {
@@ -125,8 +126,8 @@ function runTaskDelta(
         paths["base.md"],
         "--head",
         paths["head.md"],
-        "--task",
-        taskId,
+        mode,
+        id,
       ],
       {
         cwd: process.cwd(),
@@ -151,9 +152,9 @@ const validHandoff = `plan_delivery_handoff:
     ref: openspec/changes/example-change
     fingerprint: abc123
   approved_unit:
-    id: "1.1"
+    id: "1"
     title: Add plan delivery
-    scope: Implement one OpenSpec checkbox task.
+    scope: Implement one OpenSpec delivery unit.
     acceptance:
       - Plan Orchestrator validates the handoff.
     verification:
@@ -168,10 +169,10 @@ const validHandoff = `plan_delivery_handoff:
       expected_base_ref: plan/example
       expected_base_sha: def456
       predecessor_artifact: https://example.test/review/1
-      selected_task_base_sha: def456
+      selected_unit_base_sha: def456
       restack_required: false
     completion_updates:
-      - Mark OpenSpec task checkbox complete in the same PR/MR.
+      - Mark OpenSpec delivery-unit work item checkboxes complete in the same MR.
   review:
     required_reviewers:
       - implementation-readiness
@@ -241,19 +242,30 @@ delivery_gate_ledger:
     evidence: approved unit implemented
   unit_artifact_boundary:
     status: passed
-    evidence: selected task delivered in one separate PR
-  unit_task_delta:
+    evidence: selected delivery unit delivered in one separate MR
+  delivery_unit_delta:
     status: passed
-    evidence: exactly task 1.1 changed from unchecked to checked
-    command: pnpm exec tsx skills/plan-unit-delivery/scripts/plan-unit-delivery.ts validate-task-delta --base base.md --head head.md --task 1.1
+    evidence: exactly delivery unit 1 changed from unchecked to checked
+    command: pnpm exec tsx skills/plan-unit-delivery/scripts/plan-unit-delivery.ts validate-task-delta --base base.md --head head.md --unit 1
     output: |
       {
-        "status": "unit_task_delta_valid",
-        "added_task": {
-          "id": "1.1",
-          "title": "Tighten orchestrator contract",
-          "checked": true
-        }
+        "status": "delivery_unit_delta_valid",
+        "added_unit": {
+          "id": "1",
+          "title": "Delivery"
+        },
+        "added_work_items": [
+          {
+            "id": "1.1",
+            "title": "Tighten orchestrator contract",
+            "checked": true
+          },
+          {
+            "id": "1.2",
+            "title": "Update delivery ledger",
+            "checked": true
+          }
+        ]
       }
   local_verification:
     status: passed
@@ -317,8 +329,9 @@ delivery_gate_ledger:
   stack_identity:
     status: passed
     evidence: implementation artifact and latest head recorded
-    selected_task_id: "1.1"
-    selected_task_base_sha: def456
+    selected_unit_id: "1"
+    completed_work_item_ids: "1.1, 1.2"
+    selected_unit_base_sha: def456
     predecessor_artifact: https://example.test/review/1
     implementation_artifact: https://git.fullscript.io/group/project/-/merge_requests/2
     implementation_head_sha: abc789
@@ -360,7 +373,7 @@ test("validate-handoff requires completion updates for OpenSpec tasks", () => {
   const result = runPlanUnitDelivery(
     "validate-handoff",
     validHandoff.replace(
-      "    completion_updates:\n      - Mark OpenSpec task checkbox complete in the same PR/MR.\n",
+      "    completion_updates:\n      - Mark OpenSpec delivery-unit work item checkboxes complete in the same MR.\n",
       "",
     ),
   );
@@ -418,7 +431,7 @@ test("refactoring-template emits a readable summary before YAML", () => {
   assert.match(result.stdout, /refactoring_execution:/);
 });
 
-test("validate-task-delta accepts exactly one expected checked deliverable", () => {
+test("validate-task-delta accepts exactly one completed delivery unit", () => {
   const result = runTaskDelta(
     `# Tasks
 
@@ -427,6 +440,11 @@ test("validate-task-delta accepts exactly one expected checked deliverable", () 
 - [x] 1.1 Complete base task
 - [ ] 1.2 Add stacked task
 - [ ] 1.3 Add later task
+
+## 2. Follow-up
+
+- [ ] 2.1 Add unrelated task
+- [ ] 2.2 Add unrelated fixture
 `,
     `# Tasks
 
@@ -434,7 +452,43 @@ test("validate-task-delta accepts exactly one expected checked deliverable", () 
 
 - [x] 1.1 Complete base task
 - [x] 1.2 Add stacked task
-- [ ] 1.3 Add later task
+- [x] 1.3 Add later task
+
+## 2. Follow-up
+
+- [ ] 2.1 Add unrelated task
+- [ ] 2.2 Add unrelated fixture
+`,
+    "1",
+    "--unit",
+  );
+
+  assert.equal(result.status, 0);
+  const parsed = JSON.parse(result.stdout);
+
+  assert.equal(parsed.status, "delivery_unit_delta_valid");
+  assert.equal(parsed.added_unit.id, "1");
+  assert.deepEqual(
+    parsed.added_work_items.map((item: { id: string }) => item.id),
+    ["1.2", "1.3"],
+  );
+});
+
+test("validate-task-delta preserves legacy single-task mode", () => {
+  const result = runTaskDelta(
+    `# Tasks
+
+## 1. Delivery
+
+- [x] 1.1 Complete base task
+- [ ] 1.2 Add stacked task
+`,
+    `# Tasks
+
+## 1. Delivery
+
+- [x] 1.1 Complete base task
+- [x] 1.2 Add stacked task
 `,
     "1.2",
   );
@@ -446,28 +500,7 @@ test("validate-task-delta accepts exactly one expected checked deliverable", () 
   assert.equal(parsed.added_task.id, "1.2");
 });
 
-test("validate-task-delta rejects missing selected task checkbox", () => {
-  const result = runTaskDelta(
-    `# Tasks
-
-## 1. Delivery
-
-- [ ] 1.1 Add first task
-`,
-    `# Tasks
-
-## 1. Delivery
-
-- [ ] 1.1 Add first task
-`,
-    "1.1",
-  );
-
-  assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /unit_task_delta_missing/);
-});
-
-test("validate-task-delta rejects multiple newly checked deliverables", () => {
+test("validate-task-delta rejects incomplete selected delivery unit", () => {
   const result = runTaskDelta(
     `# Tasks
 
@@ -481,22 +514,87 @@ test("validate-task-delta rejects multiple newly checked deliverables", () => {
 ## 1. Delivery
 
 - [x] 1.1 Add first task
-- [x] 1.2 Add second task
+- [ ] 1.2 Add second task
 `,
-    "1.1",
+    "1",
+    "--unit",
   );
 
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /unit_task_delta_multiple/);
+  assert.match(result.stderr, /delivery_unit_delta_missing/);
 });
 
-test("validate-task-delta rejects an unexpected checked task", () => {
+test("validate-task-delta rejects future nested items checked early", () => {
   const result = runTaskDelta(
     `# Tasks
 
 ## 1. Delivery
 
 - [ ] 1.1 Add first task
+
+## 2. Later Delivery
+
+- [ ] 2.1 Add later task
+`,
+    `# Tasks
+
+## 1. Delivery
+
+- [x] 1.1 Add first task
+
+## 2. Later Delivery
+
+- [x] 2.1 Add later task
+`,
+    "1",
+    "--unit",
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /delivery_unit_delta_unexpected/);
+});
+
+test("validate-task-delta rejects two delivery units checked in one MR", () => {
+  const result = runTaskDelta(
+    `# Tasks
+
+## 1. Delivery
+
+- [ ] 1.1 Add first task
+- [ ] 1.2 Add second task
+
+## 2. Later Delivery
+
+- [ ] 2.1 Add later task
+- [ ] 2.2 Add later fixture
+`,
+    `# Tasks
+
+## 1. Delivery
+
+- [x] 1.1 Add first task
+- [x] 1.2 Add second task
+
+## 2. Later Delivery
+
+- [x] 2.1 Add later task
+- [x] 2.2 Add later fixture
+`,
+    "1",
+    "--unit",
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /delivery_unit_delta_unexpected/);
+});
+
+test("validate-task-delta rejects rollback or downgrade status", () => {
+  const result = runTaskDelta(
+    `# Tasks
+
+## 1. Delivery
+
+- [x] 1.1 Add first task
 - [ ] 1.2 Add second task
 `,
     `# Tasks
@@ -506,11 +604,12 @@ test("validate-task-delta rejects an unexpected checked task", () => {
 - [ ] 1.1 Add first task
 - [x] 1.2 Add second task
 `,
-    "1.1",
+    "1",
+    "--unit",
   );
 
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /unit_task_delta_unexpected/);
+  assert.match(result.stderr, /delivery_unit_delta_invalid_tasks/);
 });
 
 test("validate-launch-report requires AI readiness accounting", () => {
@@ -542,13 +641,13 @@ test("validate-ledger accepts delivery gate evidence", () => {
 test("validate-ledger accepts atomic plan delivery without task-delta proof", () => {
   const atomicLedger = deliveryLedger
     .replace(
-      / {2}unit_task_delta:[\s\S]*? {2}local_verification:/,
-      `  unit_task_delta:
+      / {2}delivery_unit_delta:[\s\S]*? {2}local_verification:/,
+      `  delivery_unit_delta:
     status: not_applicable
     evidence: atomic plan unit has no OpenSpec checkbox delta
   local_verification:`,
     )
-    .replace('    selected_task_id: "1.1"', "    selected_task_id: atomic");
+    .replace('    selected_unit_id: "1"', "    selected_unit_id: atomic");
 
   const result = runPlanUnitDelivery("validate-ledger", atomicLedger);
 
@@ -557,14 +656,14 @@ test("validate-ledger accepts atomic plan delivery without task-delta proof", ()
 
 test("validate-ledger rejects atomic plan task-delta command leftovers", () => {
   const atomicLedger = deliveryLedger.replace(
-    '    selected_task_id: "1.1"',
-    "    selected_task_id: atomic",
+    '    selected_unit_id: "1"',
+    "    selected_unit_id: atomic",
   );
 
   const result = runPlanUnitDelivery(
     "validate-ledger",
     atomicLedger.replace(
-      "    status: passed\n    evidence: exactly task 1.1 changed from unchecked to checked",
+      "    status: passed\n    evidence: exactly delivery unit 1 changed from unchecked to checked",
       "    status: not_applicable\n    evidence: atomic plan unit has no OpenSpec checkbox delta",
     ),
   );
@@ -572,7 +671,7 @@ test("validate-ledger rejects atomic plan task-delta command leftovers", () => {
   assert.notEqual(result.status, 0);
   assert.match(
     result.stderr,
-    /unit_task_delta\.command and output must be omitted for atomic plan delivery/,
+    /delivery_unit_delta\.command and output must be omitted for atomic plan delivery/,
   );
 });
 
@@ -786,12 +885,12 @@ test("validate-ledger requires implementation artifact separation evidence", () 
   );
 });
 
-test("validate-ledger requires one PR or MR per task evidence", () => {
+test("validate-ledger requires one MR per delivery unit evidence", () => {
   const result = runPlanUnitDelivery(
     "validate-ledger",
     deliveryLedger.replace(
-      "selected task delivered in one separate PR",
-      "selected task included with another task",
+      "selected delivery unit delivered in one separate MR",
+      "selected delivery unit split across multiple MRs",
     ),
   );
 
@@ -799,14 +898,14 @@ test("validate-ledger requires one PR or MR per task evidence", () => {
   assert.match(result.stderr, /unit_artifact_boundary.evidence must prove/);
 });
 
-test("validate-ledger requires selected task identity evidence", () => {
+test("validate-ledger requires selected unit identity evidence", () => {
   const result = runPlanUnitDelivery(
     "validate-ledger",
-    deliveryLedger.replace('    selected_task_id: "1.1"\n', ""),
+    deliveryLedger.replace('    selected_unit_id: "1"\n', ""),
   );
 
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /stack_identity\.selected_task_id/);
+  assert.match(result.stderr, /stack_identity\.selected_unit_id/);
 });
 
 test("validate-ledger requires predecessor artifact evidence", () => {
@@ -826,7 +925,7 @@ test("validate-ledger requires validate-task-delta command evidence", () => {
   const result = runPlanUnitDelivery(
     "validate-ledger",
     deliveryLedger.replace(
-      "    command: pnpm exec tsx skills/plan-unit-delivery/scripts/plan-unit-delivery.ts validate-task-delta --base base.md --head head.md --task 1.1\n",
+      "    command: pnpm exec tsx skills/plan-unit-delivery/scripts/plan-unit-delivery.ts validate-task-delta --base base.md --head head.md --unit 1\n",
       "    command: pnpm test\n",
     ),
   );
@@ -834,7 +933,7 @@ test("validate-ledger requires validate-task-delta command evidence", () => {
   assert.notEqual(result.status, 0);
   assert.match(
     result.stderr,
-    /unit_task_delta\.command must run validate-task-delta/,
+    /delivery_unit_delta\.command must run validate-task-delta/,
   );
 });
 
@@ -844,12 +943,23 @@ test("validate-ledger requires task-delta validator output evidence", () => {
     deliveryLedger.replace(
       `    output: |
       {
-        "status": "unit_task_delta_valid",
-        "added_task": {
-          "id": "1.1",
-          "title": "Tighten orchestrator contract",
-          "checked": true
-        }
+        "status": "delivery_unit_delta_valid",
+        "added_unit": {
+          "id": "1",
+          "title": "Delivery"
+        },
+        "added_work_items": [
+          {
+            "id": "1.1",
+            "title": "Tighten orchestrator contract",
+            "checked": true
+          },
+          {
+            "id": "1.2",
+            "title": "Update delivery ledger",
+            "checked": true
+          }
+        ]
       }
 `,
       "    output: task checked manually\n",
@@ -859,33 +969,33 @@ test("validate-ledger requires task-delta validator output evidence", () => {
   assert.notEqual(result.status, 0);
   assert.match(
     result.stderr,
-    /unit_task_delta\.output must include unit_task_delta_valid/,
+    /delivery_unit_delta\.output must include delivery_unit_delta_valid/,
   );
 });
 
-test("validate-ledger requires task-delta command to match selected task", () => {
+test("validate-ledger requires task-delta command to match selected unit", () => {
   const result = runPlanUnitDelivery(
     "validate-ledger",
-    deliveryLedger.replace("--task 1.1", "--task 1.2"),
+    deliveryLedger.replace("--unit 1", "--unit 2"),
   );
 
   assert.notEqual(result.status, 0);
   assert.match(
     result.stderr,
-    /unit_task_delta\.command --task must match stack_identity\.selected_task_id/,
+    /delivery_unit_delta\.command --unit must match stack_identity\.selected_unit_id/,
   );
 });
 
-test("validate-ledger requires task-delta output to match selected task", () => {
+test("validate-ledger requires task-delta output to match selected unit", () => {
   const result = runPlanUnitDelivery(
     "validate-ledger",
-    deliveryLedger.replace('"id": "1.1"', '"id": "1.2"'),
+    deliveryLedger.replace('"id": "1"', '"id": "2"'),
   );
 
   assert.notEqual(result.status, 0);
   assert.match(
     result.stderr,
-    /unit_task_delta\.output added_task\.id must match stack_identity\.selected_task_id/,
+    /delivery_unit_delta\.output added_unit\.id must match stack_identity\.selected_unit_id/,
   );
 });
 

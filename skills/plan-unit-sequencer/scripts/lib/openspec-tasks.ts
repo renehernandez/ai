@@ -86,8 +86,34 @@ export type OpenSpecTask = {
   checked: boolean;
   line: number;
   heading: string;
+  unit_id?: string;
+  unit_title?: string;
   kind: "deliverable" | "manual" | "needs_spec_redesign";
   shape_reason?: string;
+};
+
+export type OpenSpecWorkItem = OpenSpecTask & {
+  unit_id: string;
+  unit_title: string;
+};
+
+export type OpenSpecDeliveryUnit = {
+  id: string;
+  title: string;
+  heading: string;
+  line: number;
+  checked: boolean;
+  kind: OpenSpecTask["kind"];
+  shape_reason?: string;
+  justification?: string;
+  sizing: {
+    work_item_count: number;
+    status: "target" | "split_smell" | "blocked";
+  };
+  merge_smell: {
+    status: "ok" | "needs_justification";
+  };
+  work_items: OpenSpecWorkItem[];
 };
 
 function main(): void {
@@ -102,24 +128,35 @@ function main(): void {
     fail(`${command} requires tasks.md path`);
   }
 
-  const tasks = parseTasks(readFileSync(path, "utf8"));
+  const markdown = readFileSync(path, "utf8");
+  const deliveryUnits = parseDeliveryUnits(markdown);
+  const tasks = flattenDeliveryUnits(deliveryUnits);
   if (command === "parse") {
-    console.log(JSON.stringify({ tasks }, null, 2));
+    console.log(
+      JSON.stringify({ delivery_units: deliveryUnits, tasks }, null, 2),
+    );
     return;
   }
 
-  auditTasks(tasks);
+  auditTasks(deliveryUnits);
 }
 
 export function parseTasks(markdown: string): OpenSpecTask[] {
-  const tasks: OpenSpecTask[] = [];
+  return flattenDeliveryUnits(parseDeliveryUnits(markdown));
+}
+
+export function parseDeliveryUnits(markdown: string): OpenSpecDeliveryUnit[] {
+  const units: OpenSpecDeliveryUnit[] = [];
   let heading = "";
-  let currentTask: OpenSpecTask | undefined;
+  let currentUnit: OpenSpecDeliveryUnit | undefined;
+  let currentTask: OpenSpecWorkItem | undefined;
 
   markdown.split(/\r?\n/).forEach((line, index) => {
     const headingMatch = line.match(/^##\s+(.+)$/);
     if (headingMatch) {
       heading = headingMatch[1].trim();
+      currentUnit = deliveryUnitFromHeading(heading, index + 1);
+      units.push(currentUnit);
       currentTask = undefined;
       return;
     }
@@ -136,6 +173,10 @@ export function parseTasks(markdown: string): OpenSpecTask[] {
 
     const title = taskMatch[3].trim();
     const shape = classifyTaskShape(heading, title);
+    currentUnit ??= syntheticDeliveryUnit(taskMatch[2], heading, index + 1);
+    if (!units.includes(currentUnit)) {
+      units.push(currentUnit);
+    }
     currentTask = {
       id: taskMatch[2],
       title,
@@ -143,13 +184,15 @@ export function parseTasks(markdown: string): OpenSpecTask[] {
       checked: taskMatch[1].toLowerCase() === "x",
       line: index + 1,
       heading,
+      unit_id: currentUnit.id,
+      unit_title: currentUnit.title,
       kind: shape.kind,
       shape_reason: shape.reason,
     };
-    tasks.push(currentTask);
+    currentUnit.work_items.push(currentTask);
   });
 
-  return tasks;
+  return units.map(finalizeDeliveryUnit);
 }
 
 export function classifyTaskShape(
@@ -185,12 +228,61 @@ export function validateTasks(
   tasks: OpenSpecTask[],
   options: { requireObjectiveProof?: boolean } = {},
 ): string[] {
+  return validateDeliveryUnits(groupTasksAsDeliveryUnits(tasks), options);
+}
+
+export function validateDeliveryUnits(
+  units: OpenSpecDeliveryUnit[],
+  options: { requireObjectiveProof?: boolean } = {},
+): string[] {
   const errors: string[] = [];
+  const tasks = flattenDeliveryUnits(units);
+  const seenUnitIds = new Set<string>();
   const seenIds = new Set<string>();
 
   if (tasks.length === 0) {
     errors.push("tasks.md must include OpenSpec checkbox tasks");
     return errors;
+  }
+
+  for (const unit of units) {
+    if (seenUnitIds.has(unit.id)) {
+      errors.push(`duplicate delivery unit id: ${unit.id}`);
+    }
+    seenUnitIds.add(unit.id);
+
+    if (!unit.heading) {
+      errors.push(`delivery unit ${unit.id} must have a numbered heading`);
+    }
+
+    if (unit.work_items.length === 0) {
+      errors.push(`delivery unit ${unit.id} must include work items`);
+    }
+
+    if (unit.kind === "deliverable" && unit.sizing.status === "blocked") {
+      errors.push(
+        `delivery_unit_size_blocked: delivery unit ${unit.id} has ${unit.sizing.work_item_count} deliverable work items; more than 8 is a readiness blocker`,
+      );
+    }
+
+    if (
+      unit.kind === "deliverable" &&
+      unit.sizing.status === "split_smell" &&
+      !unit.justification
+    ) {
+      errors.push(
+        `delivery_unit_split_smell: delivery unit ${unit.id} has ${unit.sizing.work_item_count} deliverable work items; more than 6 and at most 8 requires a Justification: note`,
+      );
+    }
+
+    if (
+      unit.kind === "deliverable" &&
+      unit.merge_smell.status === "needs_justification"
+    ) {
+      errors.push(
+        `delivery_unit_merge_smell: delivery unit ${unit.id} has one deliverable work item; one-item units require a Justification: note naming risk, deployment, or reviewability`,
+      );
+    }
   }
 
   for (const task of tasks) {
@@ -236,9 +328,21 @@ export function firstUncheckedDeliverable(
   return tasks.find((task) => !task.checked && task.kind === "deliverable");
 }
 
-function auditTasks(tasks: OpenSpecTask[]): void {
-  const errors = validateTasks(tasks, { requireObjectiveProof: true });
+export function firstUncheckedDeliveryUnit(
+  units: OpenSpecDeliveryUnit[],
+): OpenSpecDeliveryUnit | undefined {
+  return units.find((unit) =>
+    unit.work_items.some(
+      (workItem) => !workItem.checked && workItem.kind === "deliverable",
+    ),
+  );
+}
+
+function auditTasks(units: OpenSpecDeliveryUnit[]): void {
+  const tasks = flattenDeliveryUnits(units);
+  const errors = validateDeliveryUnits(units, { requireObjectiveProof: true });
   const nextTask = firstUncheckedDeliverable(tasks);
+  const nextUnit = firstUncheckedDeliveryUnit(units);
 
   if (errors.length > 0) {
     const invalidTasks = tasks
@@ -262,6 +366,7 @@ function auditTasks(tasks: OpenSpecTask[]): void {
         {
           status,
           errors,
+          delivery_units: units,
           invalid_tasks: invalidTasks,
           next_action:
             status === "needs_spec_redesign"
@@ -282,6 +387,8 @@ function auditTasks(tasks: OpenSpecTask[]): void {
     JSON.stringify(
       {
         status: "pass",
+        delivery_units: units,
+        next_delivery_unit: nextUnit ?? null,
         next_deliverable: nextTask ?? null,
         manual_pending: tasks.filter(
           (task) => !task.checked && task.kind === "manual",
@@ -291,6 +398,208 @@ function auditTasks(tasks: OpenSpecTask[]): void {
       2,
     ),
   );
+}
+
+function deliveryUnitFromHeading(
+  heading: string,
+  line: number,
+): OpenSpecDeliveryUnit {
+  const match = heading.match(/^([0-9]+(?:\.[0-9]+)*)\.?\s*(.*)$/);
+  const id = match?.[1] ?? heading.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  const title = (match?.[2] ?? heading).trim() || heading;
+  return {
+    id,
+    title,
+    heading,
+    line,
+    checked: false,
+    kind: "deliverable",
+    work_items: [],
+    sizing: {
+      work_item_count: 0,
+      status: "target",
+    },
+    merge_smell: {
+      status: "ok",
+    },
+  };
+}
+
+function syntheticDeliveryUnit(
+  taskId: string,
+  heading: string,
+  line: number,
+): OpenSpecDeliveryUnit {
+  const [unitId] = taskId.split(".");
+  return {
+    id: unitId,
+    title: heading || `Legacy unit ${unitId}`,
+    heading,
+    line,
+    checked: false,
+    kind: "deliverable",
+    work_items: [],
+    sizing: {
+      work_item_count: 0,
+      status: "target",
+    },
+    merge_smell: {
+      status: "ok",
+    },
+  };
+}
+
+function finalizeDeliveryUnit(
+  unit: OpenSpecDeliveryUnit,
+): OpenSpecDeliveryUnit {
+  const invalidWorkItem = unit.work_items.find(
+    (workItem) => workItem.kind === "needs_spec_redesign",
+  );
+  const deliverableItems = unit.work_items.filter(
+    (workItem) => workItem.kind === "deliverable",
+  );
+  const manualItems = unit.work_items.filter(
+    (workItem) => workItem.kind === "manual",
+  );
+  const justification = extractJustification(unit);
+  const sizing = deliveryUnitSizing(unit.work_items);
+  const mergeSmell = deliveryUnitMergeSmell(unit.work_items, justification);
+
+  if (invalidWorkItem) {
+    return {
+      ...unit,
+      checked: false,
+      kind: "needs_spec_redesign",
+      shape_reason: invalidWorkItem.shape_reason,
+      justification,
+      sizing,
+      merge_smell: mergeSmell,
+    };
+  }
+
+  if (deliverableItems.length === 0 && manualItems.length > 0) {
+    return {
+      ...unit,
+      checked: manualItems.every((workItem) => workItem.checked),
+      kind: "manual",
+      justification,
+      sizing,
+      merge_smell: mergeSmell,
+    };
+  }
+
+  return {
+    ...unit,
+    checked:
+      deliverableItems.length > 0 &&
+      deliverableItems.every((workItem) => workItem.checked),
+    kind: "deliverable",
+    justification,
+    sizing,
+    merge_smell: mergeSmell,
+  };
+}
+
+function flattenDeliveryUnits(
+  units: OpenSpecDeliveryUnit[],
+): OpenSpecWorkItem[] {
+  return units.flatMap((unit) => unit.work_items);
+}
+
+function groupTasksAsDeliveryUnits(
+  tasks: OpenSpecTask[],
+): OpenSpecDeliveryUnit[] {
+  const units = new Map<string, OpenSpecDeliveryUnit>();
+  for (const task of tasks) {
+    const unitId = task.unit_id ?? task.id.split(".")[0];
+    const unit = units.get(unitId) ?? {
+      id: unitId,
+      title: task.unit_title ?? task.heading,
+      heading: task.heading,
+      line: task.line,
+      checked: false,
+      kind: "deliverable" as const,
+      sizing: {
+        work_item_count: 0,
+        status: "target" as const,
+      },
+      merge_smell: {
+        status: "ok" as const,
+      },
+      work_items: [],
+    };
+    unit.work_items.push({
+      ...task,
+      unit_id: unitId,
+      unit_title: task.unit_title ?? task.heading,
+    });
+    units.set(unitId, unit);
+  }
+
+  return Array.from(units.values()).map(finalizeDeliveryUnit);
+}
+
+function deliveryUnitSizing(workItems: OpenSpecWorkItem[]): {
+  work_item_count: number;
+  status: "target" | "split_smell" | "blocked";
+} {
+  const workItemCount = workItems.filter(
+    (workItem) => workItem.kind === "deliverable",
+  ).length;
+  if (workItemCount > 8) {
+    return { work_item_count: workItemCount, status: "blocked" };
+  }
+  if (workItemCount > 6) {
+    return { work_item_count: workItemCount, status: "split_smell" };
+  }
+  return { work_item_count: workItemCount, status: "target" };
+}
+
+function extractJustification(unit: OpenSpecDeliveryUnit): string | undefined {
+  const lines = [
+    unit.heading,
+    ...unit.work_items.flatMap((workItem) => workItem.text.split("\n")),
+  ];
+  const startIndex = lines.findIndex((line) =>
+    /\bJustification:\s*(.*)$/i.test(line),
+  );
+  if (startIndex === -1) {
+    return undefined;
+  }
+
+  const firstLine =
+    lines[startIndex].match(/\bJustification:\s*(.*)$/i)?.[1].trim() ?? "";
+  const continuationLines: string[] = [];
+  for (const line of lines.slice(startIndex + 1)) {
+    if (line.length === 0) {
+      continue;
+    }
+    if (/^-?\s*[A-Z][A-Za-z ]+:\s*/.test(line)) {
+      break;
+    }
+    continuationLines.push(line);
+  }
+  const text = [firstLine, ...continuationLines].join(" ").trim();
+  return text || undefined;
+}
+
+function deliveryUnitMergeSmell(
+  workItems: OpenSpecWorkItem[],
+  justification: string | undefined,
+): { status: "ok" | "needs_justification" } {
+  const deliverableCount = workItems.filter(
+    (workItem) => workItem.kind === "deliverable",
+  ).length;
+  if (deliverableCount !== 1) {
+    return { status: "ok" };
+  }
+  if (
+    justification &&
+    /\b(risk|deploy(?:ment)?|reviewab(?:le|ility))\b/i.test(justification)
+  ) {
+    return { status: "ok" };
+  }
+  return { status: "needs_justification" };
 }
 
 function isManualTask(text: string): boolean {

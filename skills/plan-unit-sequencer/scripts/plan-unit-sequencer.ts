@@ -3,6 +3,12 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  firstUncheckedDeliverable,
+  firstUncheckedDeliveryUnit,
+  parseDeliveryUnits,
+  validateDeliveryUnits,
+} from "./lib/openspec-tasks.ts";
+import {
   extractSection,
   extractYaml,
   fail,
@@ -15,12 +21,6 @@ import {
   validatePlanningReviewContract,
 } from "./lib/planning-contracts.ts";
 import { artifactHostHintFromRemoteText } from "./lib/stack-state.ts";
-import {
-  firstUncheckedDeliverable,
-  firstUncheckedDeliveryUnit,
-  parseDeliveryUnits,
-  validateDeliveryUnits,
-} from "../../openspec-tasks/scripts/openspec-tasks.ts";
 
 const ROUTES = ["atomic_plan", "openspec_task"] as const;
 const ARTIFACT_TYPES = ["plan", "openspec", "linear"] as const;
@@ -111,11 +111,11 @@ function detect(): void {
 function printHandoffTemplate(): void {
   console.log(`## Readable Summary
 
-- Status: ready for one selected OpenSpec task.
-- Route: OpenSpec task.
+- Status: ready for one selected OpenSpec delivery unit.
+- Route: OpenSpec delivery unit.
 - Artifact: openspec/changes/example-change.
-- Selected task: 1.1.
-- Delivery: mark only that task complete in one separate implementation PR/MR.
+- Selected unit: 1.
+- Delivery: mark only nested work items from that unit complete in one separate implementation PR/MR.
 
 \`\`\`yaml
 plan_delivery_handoff:
@@ -126,8 +126,8 @@ plan_delivery_handoff:
     ref: openspec/changes/example-change
     fingerprint: <target commit sha>
   approved_unit:
-    id: "1.1"
-    title: <OpenSpec task title>
+    id: "1"
+    title: <OpenSpec delivery-unit title>
     scope: <one paragraph>
     acceptance:
       - <observable result>
@@ -144,10 +144,10 @@ plan_delivery_handoff:
       expected_base_ref: <planning PR or MR branch/ref>
       expected_base_sha: <planning artifact head sha>
       predecessor_artifact: <planning PR or MR URL>
-      selected_task_base_sha: <stack tip sha used to select this unit>
+      selected_unit_base_sha: <stack tip sha used to select this unit>
       restack_required: false
     completion_updates:
-      - Mark OpenSpec task checkbox complete in one separate implementation PR/MR.
+      - Mark nested work-item checkboxes for the selected delivery unit complete in one separate implementation PR/MR.
   review:
     required_reviewers:
 ${BASELINE_REVIEWERS.map((reviewer) => `      - ${reviewer}`).join("\n")}
@@ -240,7 +240,7 @@ function validateHandoff(input: string): void {
   );
   requireValue(
     handoff.selectedTaskBaseSha,
-    "delivery.stack_identity.selected_task_base_sha",
+    "delivery.stack_identity.selected_unit_base_sha",
     errors,
   );
   requireValue(
@@ -332,7 +332,7 @@ function selectNextTask(args: string[]): void {
   const effectiveGoal =
     options.caller === "plan_orchestrator" ? "complete_change" : options.goal;
   const completionTarget =
-    effectiveGoal === "next_task" ? "one_task" : "all_deliverable_tasks";
+    effectiveGoal === "next_task" ? "one_delivery_unit" : "all_delivery_units";
 
   if (!task) {
     console.log(
@@ -416,7 +416,9 @@ function parseHandoff(input: string): {
     expectedBaseRef: scalar(stackIdentity, "expected_base_ref"),
     expectedBaseSha: scalar(stackIdentity, "expected_base_sha"),
     predecessorArtifact: scalar(stackIdentity, "predecessor_artifact"),
-    selectedTaskBaseSha: scalar(stackIdentity, "selected_task_base_sha"),
+    selectedTaskBaseSha:
+      scalar(stackIdentity, "selected_unit_base_sha") ??
+      scalar(stackIdentity, "selected_task_base_sha"),
     restackRequired: scalar(stackIdentity, "restack_required"),
     completionUpdates: list(delivery, "completion_updates"),
     requiredReviewers: list(review, "required_reviewers"),

@@ -123,9 +123,9 @@ const validHandoff = `plan_delivery_handoff:
     ref: openspec/changes/example-change
     fingerprint: abc123
   approved_unit:
-    id: "1.1"
+    id: "1"
     title: Add plan delivery
-    scope: Implement one OpenSpec checkbox task.
+    scope: Implement one OpenSpec delivery unit.
     acceptance:
       - Plan Unit Sequencer validates the handoff.
     verification:
@@ -140,10 +140,10 @@ const validHandoff = `plan_delivery_handoff:
       expected_base_ref: plan/example
       expected_base_sha: def456
       predecessor_artifact: https://example.test/review/1
-      selected_task_base_sha: def456
+      selected_unit_base_sha: def456
       restack_required: false
     completion_updates:
-      - Mark OpenSpec task checkbox complete in one separate implementation PR/MR.
+      - Mark nested work-item checkboxes for the selected delivery unit complete in one separate implementation PR/MR.
   review:
     required_reviewers:
       - implementation-readiness
@@ -211,7 +211,7 @@ const planningReview = `planning_review:
   blockers: []
 `;
 
-test("validate-handoff accepts a ready OpenSpec task handoff", () => {
+test("validate-handoff accepts a ready OpenSpec delivery-unit handoff", () => {
   const result = runPlanUnitSequencer("validate-handoff", validHandoff);
 
   assert.equal(result.status, 0);
@@ -308,7 +308,7 @@ test("select-next-task returns the first unchecked deliverable", () => {
   assert.equal(parsed.status, "ready");
   assert.equal(parsed.caller, "direct");
   assert.equal(parsed.delivery_goal, "next_task");
-  assert.equal(parsed.completion_target, "one_task");
+  assert.equal(parsed.completion_target, "one_delivery_unit");
   assert.equal(parsed.next_delivery_unit.id, "1");
   assert.equal(parsed.next_task.id, "1.2");
 });
@@ -322,7 +322,7 @@ test("fixture preserves direct sequencer next-task behavior outside orchestrator
   assert.equal(parsed.status, "ready");
   assert.equal(parsed.caller, "direct");
   assert.equal(parsed.delivery_goal, "next_task");
-  assert.equal(parsed.completion_target, "one_task");
+  assert.equal(parsed.completion_target, "one_delivery_unit");
   assert.equal(parsed.next_task.id, "1.2");
 });
 
@@ -395,7 +395,7 @@ test("select-next-task coerces plan-orchestrator calls to full-change delivery",
   assert.equal(parsed.status, "ready");
   assert.equal(parsed.caller, "plan_orchestrator");
   assert.equal(parsed.delivery_goal, "complete_change");
-  assert.equal(parsed.completion_target, "all_deliverable_tasks");
+  assert.equal(parsed.completion_target, "all_delivery_units");
   assert.equal(parsed.next_delivery_unit.id, "1");
   assert.equal(parsed.next_task.id, "1.2");
 });
@@ -419,7 +419,7 @@ test("select-next-task reports OpenSpec completion for plan-orchestrator only af
   assert.equal(parsed.status, "openspec_complete");
   assert.equal(parsed.caller, "plan_orchestrator");
   assert.equal(parsed.delivery_goal, "complete_change");
-  assert.equal(parsed.completion_target, "all_deliverable_tasks");
+  assert.equal(parsed.completion_target, "all_delivery_units");
   assert.equal(parsed.next_delivery_unit, null);
   assert.equal(parsed.next_task, null);
 });
