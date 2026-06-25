@@ -1880,11 +1880,24 @@ function statusShim(
   }
   if (managed) {
     const sourceRoot = managedShimSourceRoot(shimPath);
+    const sourceRootMatchesRuntime = sourceRoot === context.sourceRoot;
+    const acceptsDurableSourceForDisposableRuntime =
+      acceptsDurableManagedShimSourceForDisposableRuntime(
+        context.sourceRoot,
+        sourceRoot,
+      );
     console.log(
-      `${sourceRoot === context.sourceRoot ? "[ok]" : "[stale]"} Source root: ${sourceRoot}`,
+      `${sourceRootMatchesRuntime || acceptsDurableSourceForDisposableRuntime ? "[ok]" : "[stale]"} Source root: ${sourceRoot}`,
     );
-    console.log(`Expected source root: ${context.sourceRoot}`);
-    if (sourceRoot !== context.sourceRoot) {
+    if (acceptsDurableSourceForDisposableRuntime) {
+      console.log(`Disposable runtime source root: ${context.sourceRoot}`);
+    } else {
+      console.log(`Expected source root: ${context.sourceRoot}`);
+    }
+    if (
+      !sourceRootMatchesRuntime &&
+      !acceptsDurableSourceForDisposableRuntime
+    ) {
       recordRuntimeFailure(
         health,
         `Managed shim source root does not match this runtime: ${sourceRoot}`,
@@ -1935,6 +1948,49 @@ function statusShim(
     console.log(`[warning] ${firstAx} shadows the managed AX shim.`);
     recordRuntimeWarning(health, `${firstAx} shadows ${shimPath}`);
   }
+}
+
+export function acceptsDurableManagedShimSourceForDisposableRuntime(
+  runtimeSourceRoot: string,
+  shimSourceRoot: string,
+): boolean {
+  if (
+    !isDisposableWorktreePath(runtimeSourceRoot) ||
+    shimSourceRoot === "(unknown)" ||
+    isDisposableWorktreePath(shimSourceRoot) ||
+    !existsSync(shimSourceRoot)
+  ) {
+    return false;
+  }
+
+  const runtimeGitCommonDir = gitCommonDir(runtimeSourceRoot);
+  const shimGitCommonDir = gitCommonDir(shimSourceRoot);
+  return (
+    runtimeGitCommonDir !== undefined &&
+    runtimeGitCommonDir === shimGitCommonDir
+  );
+}
+
+function gitCommonDir(sourceRoot: string): string | undefined {
+  const result = spawnSync(
+    "git",
+    [
+      "-C",
+      sourceRoot,
+      "rev-parse",
+      "--path-format=absolute",
+      "--git-common-dir",
+    ],
+    {
+      encoding: "utf-8",
+      env: withoutGitRepositoryEnv(),
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  if (result.status !== 0) {
+    return undefined;
+  }
+  return result.stdout.trim();
 }
 
 function managedShimPath(): string {

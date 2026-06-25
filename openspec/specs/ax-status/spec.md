@@ -15,7 +15,12 @@ readiness.
 #### Scenario: Status reports shim health
 - **WHEN** `ax status` runs from the managed shim or package script
 - **THEN** it reports whether `~/.local/bin/ax` exists
-- **AND** reports whether the shim is AX-managed, executable, and points at the current source root
+- **AND** reports whether the shim is AX-managed and executable
+- **AND** reports whether the shim points at the current source root or, when
+  status runs from a disposable same-repository worktree, an existing
+  non-disposable durable source root
+- **AND** reports the disposable runtime source root when the durable source
+  root exception is accepted
 - **AND** reports whether PATH resolves `ax` to the managed shim or another executable
 
 #### Scenario: Status aggregates managed runtime surfaces

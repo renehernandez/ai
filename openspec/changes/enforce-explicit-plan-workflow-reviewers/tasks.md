@@ -136,7 +136,7 @@
   `pnpm test`.
 - [x] 8.4 Discover configured runtime profiles from `ax.config.json`, then run
   `pnpm ax update --all-profiles`.
-- [ ] 8.5 Validate installed runtime surfaces with
+- [x] 8.5 Validate installed runtime surfaces with
   `pnpm ax validate --all-profiles` and `pnpm ax status --all-profiles`.
 - [ ] 8.6 Run `pnpm ax hooks validate` only if hook source or hook registration
   behavior changes in the implementation stack.

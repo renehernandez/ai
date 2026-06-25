@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -18,6 +19,7 @@ import test from "node:test";
 import type { Command } from "commander";
 
 import {
+  acceptsDurableManagedShimSourceForDisposableRuntime,
   claudeStartupHookStatus,
   codexStartupHookStatus,
   collectOpenSpecProjectSignals,
@@ -95,6 +97,27 @@ function withTempCwd(callback: (directory: string) => void): void {
       process.chdir(originalCwd);
     }
   });
+}
+
+function runGit(args: string[], cwd: string): void {
+  const result = spawnSync("git", args, {
+    cwd,
+    encoding: "utf-8",
+    env: withoutGitRepositoryEnv(),
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+}
+
+function withoutGitRepositoryEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  delete env.GIT_ALTERNATE_OBJECT_DIRECTORIES;
+  delete env.GIT_DIR;
+  delete env.GIT_INDEX_FILE;
+  delete env.GIT_OBJECT_DIRECTORY;
+  delete env.GIT_PREFIX;
+  delete env.GIT_QUARANTINE_PATH;
+  delete env.GIT_WORK_TREE;
+  return env;
 }
 
 function testOpenSpecConfig() {
@@ -224,6 +247,61 @@ test("Runtime invocation context uses AX executable path env var", () => {
         originalAgentRuntimeExecutablePath;
     }
   }
+});
+
+test("disposable runtime status accepts durable managed shim source from the same repository", () => {
+  withTempDir((directory) => {
+    const durableShimSource = join(directory, "durable", "ai");
+    mkdirSync(durableShimSource, { recursive: true });
+    runGit(["init"], durableShimSource);
+    runGit(["config", "user.email", "agent@example.com"], durableShimSource);
+    runGit(["config", "user.name", "Agent Runtime"], durableShimSource);
+    writeFileSync(join(durableShimSource, "README.md"), "test\n", "utf-8");
+    runGit(["add", "README.md"], durableShimSource);
+    runGit(["commit", "-m", "Initial commit"], durableShimSource);
+
+    const disposableRuntimeSource = join(
+      directory,
+      ".codex",
+      "worktrees",
+      "delivery",
+      "ai",
+    );
+    runGit(["worktree", "add", disposableRuntimeSource], durableShimSource);
+
+    const unrelatedDurableSource = join(directory, "other", "ai");
+    mkdirSync(unrelatedDurableSource, { recursive: true });
+    runGit(["init"], unrelatedDurableSource);
+
+    assert.equal(
+      acceptsDurableManagedShimSourceForDisposableRuntime(
+        disposableRuntimeSource,
+        durableShimSource,
+      ),
+      true,
+    );
+    assert.equal(
+      acceptsDurableManagedShimSourceForDisposableRuntime(
+        disposableRuntimeSource,
+        disposableRuntimeSource,
+      ),
+      false,
+    );
+    assert.equal(
+      acceptsDurableManagedShimSourceForDisposableRuntime(
+        disposableRuntimeSource,
+        unrelatedDurableSource,
+      ),
+      false,
+    );
+    assert.equal(
+      acceptsDurableManagedShimSourceForDisposableRuntime(
+        durableShimSource,
+        disposableRuntimeSource,
+      ),
+      false,
+    );
+  });
 });
 
 test("runtime config manages helper scripts imported by installed planning skills", () => {
