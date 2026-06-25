@@ -25,10 +25,14 @@ All work goes through planning review before implementation:
    sidecars.
 3. Run `plan-ready`.
 4. If `plan-ready` emits `plan_delivery_handoff`, create a
-   `plan_review_request` and run `plan-review`.
+   `plan_review_request` that carries the explicit
+   `readiness_reviewer_evidence` from the validated `plan-ready` output, then
+   run `plan-review`.
 5. If `plan-ready` emits `openspec_blueprint`, create the OpenSpec proposal with
    the configured OpenSpec propose entrypoint, apply the source-plan cleanup
-   rule below, create a `plan_review_request`, and run `plan-review`.
+   rule below, create a `plan_review_request` that carries both explicit
+   `readiness_reviewer_evidence` and `blueprint_provenance`, and run
+   `plan-review`.
 6. Consume only a validated `planning_review` handoff before implementation.
 7. Run `plan-unit-sequencer` for delivery-unit selection.
 8. Let `plan-unit-delivery` implement exactly one selected delivery unit at a
