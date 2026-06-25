@@ -124,6 +124,26 @@ const planReviewRequest = `plan_review_request:
   requested_reviewers:
     - nitro
     - developers
+  readiness_reviewer_evidence:
+    artifact_fingerprint: source-plan-fingerprint
+    completed_at: 2026-06-23T18:00:00.000Z
+    gate_outcome: passed
+    baseline_reviewers:
+      - implementation-readiness
+      - edge-cases-and-risks
+      - simplification-and-scope-control
+      - refactoring-opportunities
+    selected_dynamic_reviewers:
+      - docs-and-agent-alignment
+    per_reviewer_status:
+      implementation-readiness: passed
+      edge-cases-and-risks: passed
+      simplification-and-scope-control: passed
+      refactoring-opportunities: passed
+      docs-and-agent-alignment: passed
+    skipped_reviewers: []
+    skipped_rationale: []
+    blocking_findings: []
   unresolved_blockers: []
 `;
 
@@ -240,6 +260,48 @@ test("validate-request accepts plan review requests", () => {
   assert.match(result.stdout, /plan_review_request valid/);
 });
 
+test("validate-request requires readiness reviewer evidence", () => {
+  const result = runPlanReview(
+    "validate-request",
+    planReviewRequest.replace(
+      / {2}readiness_reviewer_evidence:[\s\S]*? {2}unresolved_blockers: \[\]/,
+      "  unresolved_blockers: []",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /readiness_reviewer_evidence is required/);
+});
+
+test("validate-request requires selected dynamic reviewer status", () => {
+  const result = runPlanReview(
+    "validate-request",
+    planReviewRequest.replace("      docs-and-agent-alignment: passed\n", ""),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /readiness_reviewer_evidence\.per_reviewer_status must include docs-and-agent-alignment/,
+  );
+});
+
+test("validate-request rejects blocking readiness findings", () => {
+  const result = runPlanReview(
+    "validate-request",
+    planReviewRequest.replace(
+      "    blocking_findings: []",
+      "    blocking_findings:\n      - readiness reviewer found a blocker",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /readiness_reviewer_evidence\.blocking_findings must be empty/,
+  );
+});
+
 test("request-template emits a readable summary before YAML", () => {
   const result = runPlanReviewCommand("request-template");
 
@@ -250,6 +312,8 @@ test("request-template emits a readable summary before YAML", () => {
       result.stdout.indexOf("plan_review_request:"),
   );
   assert.match(result.stdout, /plan_review_request:/);
+  assert.match(result.stdout, /readiness_reviewer_evidence:/);
+  assert.match(result.stdout, /copy every plan-ready per-reviewer status/);
 });
 
 test("gate-template emits a readable summary before YAML", () => {

@@ -13,10 +13,13 @@ import {
   isPlanSupportSidecar,
 } from "./lib/plan-artifacts.ts";
 import {
+  cleanScalar,
+  escapeRegExp,
   extractSection,
   extractYaml,
   fail,
   findSection,
+  hasKey,
   includes,
   legacyPlanContractErrors,
   list,
@@ -59,6 +62,13 @@ const LEDGER_NOT_APPLICABLE_GATES = [
   "developer_review",
 ] as const;
 const LEDGER_STATUSES = ["passed", "blocked", "not_applicable"] as const;
+const READINESS_GATE_OUTCOMES = ["passed"] as const;
+const READINESS_REVIEWER_STATUSES = [
+  "passed",
+  "failed",
+  "blocked",
+  "skipped",
+] as const;
 
 type Command =
   | "detect"
@@ -82,8 +92,23 @@ type ParsedRequest = {
   artifact_ref?: string;
   review_goal?: string;
   requested_reviewers: string[];
+  readiness_reviewer_evidence?: ReadinessReviewerEvidence;
   unresolved_blockers: string[];
   blockers: string[];
+};
+
+type ReadinessReviewerEvidence = {
+  present: boolean;
+  artifact_fingerprint?: string;
+  completed_at?: string;
+  gate_outcome?: string;
+  baseline_reviewers: string[];
+  selected_dynamic_reviewers_present: boolean;
+  selected_dynamic_reviewers: string[];
+  per_reviewer_status: Record<string, string>;
+  skipped_reviewers: string[];
+  skipped_rationale: string[];
+  blocking_findings: string[];
 };
 
 main();
@@ -174,7 +199,8 @@ function printRequestTemplate(): void {
 - Status: ready for hosted plan review.
 - Artifact: openspec/changes/example-change.
 - Review goal: validate the plan before implementation.
-- Requested reviewers: Nitro and developers.
+- Requested reviewers: copied from the hosted-review route.
+- Readiness evidence: copied from the validated plan-ready output.
 
 \`\`\`yaml
 plan_review_request:
@@ -183,8 +209,22 @@ plan_review_request:
   artifact_ref: openspec/changes/example-change
   review_goal: "Validate the plan before implementation."
   requested_reviewers:
-    - nitro
-    - developers
+    - <copy each hosted-review reviewer required by the selected route>
+  readiness_reviewer_evidence:
+    artifact_fingerprint: <copy plan-ready review.reviewer_evidence.artifact_fingerprint>
+    completed_at: <copy plan-ready review.reviewer_evidence.completed_at>
+    gate_outcome: passed
+    baseline_reviewers:
+      - <copy each plan-ready baseline reviewer>
+    selected_dynamic_reviewers:
+      - <copy each selected plan-ready dynamic reviewer, or [] when plan-ready emitted []>
+    per_reviewer_status:
+      <copy every plan-ready per-reviewer status, including selected dynamic reviewers>
+    skipped_reviewers:
+      - <copy each plan-ready skipped reviewer, or [] when plan-ready emitted []>
+    skipped_rationale:
+      - <copy each plan-ready skipped rationale, or [] when plan-ready emitted []>
+    blocking_findings: []
   unresolved_blockers: []
 \`\`\`
 `);
@@ -358,6 +398,10 @@ function validateRequest(input: string): void {
         errors.push(`unknown requested reviewer: ${reviewer}`);
       }
     }
+
+    errors.push(
+      ...readinessReviewerEvidenceErrors(request.readiness_reviewer_evidence),
+    );
   } else {
     if (request.status && request.status !== "ready") {
       errors.push("plan_delivery_handoff status must be ready");
@@ -623,6 +667,8 @@ function parseRequest(input: string): ParsedRequest {
       artifact_ref: scalar(reviewSection, "artifact_ref"),
       review_goal: scalar(reviewSection, "review_goal"),
       requested_reviewers: list(reviewSection, "requested_reviewers"),
+      readiness_reviewer_evidence:
+        parseReadinessReviewerEvidence(reviewSection),
       unresolved_blockers: list(reviewSection, "unresolved_blockers"),
       blockers: [],
     };
@@ -640,6 +686,168 @@ function parseRequest(input: string): ParsedRequest {
     unresolved_blockers: list(handoffBody, "unresolved_blockers"),
     blockers: list(handoffBody, "blockers"),
   };
+}
+
+function parseReadinessReviewerEvidence(
+  requestSection: string,
+): ReadinessReviewerEvidence {
+  const section = findSection(requestSection, "readiness_reviewer_evidence");
+  const body = section ?? "";
+
+  return {
+    present: Boolean(section),
+    artifact_fingerprint: scalar(body, "artifact_fingerprint"),
+    completed_at: scalar(body, "completed_at"),
+    gate_outcome: scalar(body, "gate_outcome"),
+    baseline_reviewers: list(body, "baseline_reviewers"),
+    selected_dynamic_reviewers_present: hasKey(
+      body,
+      "selected_dynamic_reviewers",
+    ),
+    selected_dynamic_reviewers: list(body, "selected_dynamic_reviewers"),
+    per_reviewer_status: map(body, "per_reviewer_status"),
+    skipped_reviewers: list(body, "skipped_reviewers"),
+    skipped_rationale: list(body, "skipped_rationale"),
+    blocking_findings: list(body, "blocking_findings"),
+  };
+}
+
+function readinessReviewerEvidenceErrors(
+  evidence: ReadinessReviewerEvidence | undefined,
+): string[] {
+  const errors: string[] = [];
+  const label = "readiness_reviewer_evidence";
+
+  if (!evidence?.present) {
+    return [`${label} is required`];
+  }
+
+  requireValue(
+    evidence.artifact_fingerprint,
+    `${label}.artifact_fingerprint`,
+    errors,
+  );
+  requireValue(evidence.completed_at, `${label}.completed_at`, errors);
+  requireValue(evidence.gate_outcome, `${label}.gate_outcome`, errors);
+
+  if (
+    evidence.gate_outcome &&
+    !includes(READINESS_GATE_OUTCOMES, evidence.gate_outcome)
+  ) {
+    errors.push(
+      `${label}.gate_outcome must be one of: ${READINESS_GATE_OUTCOMES.join(", ")}`,
+    );
+  }
+
+  if (
+    evidence.completed_at &&
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(
+      evidence.completed_at,
+    )
+  ) {
+    errors.push(`${label}.completed_at must be an ISO-8601 UTC timestamp`);
+  }
+
+  if (evidence.baseline_reviewers.length === 0) {
+    errors.push(`${label}.baseline_reviewers is required`);
+  }
+
+  if (!evidence.selected_dynamic_reviewers_present) {
+    errors.push(`${label}.selected_dynamic_reviewers is required`);
+  }
+
+  const requiredReviewers = [
+    ...evidence.baseline_reviewers,
+    ...evidence.selected_dynamic_reviewers,
+  ];
+
+  for (const reviewer of requiredReviewers) {
+    const status = evidence.per_reviewer_status[reviewer];
+    if (!status) {
+      errors.push(`${label}.per_reviewer_status must include ${reviewer}`);
+    } else if (status !== "passed") {
+      errors.push(`${label}.per_reviewer_status.${reviewer} must be passed`);
+    }
+  }
+
+  for (const [reviewer, status] of Object.entries(
+    evidence.per_reviewer_status,
+  )) {
+    if (!includes(READINESS_REVIEWER_STATUSES, status)) {
+      errors.push(
+        `${label}.per_reviewer_status.${reviewer} must be passed, failed, blocked, or skipped`,
+      );
+    }
+
+    if (
+      !requiredReviewers.includes(reviewer) &&
+      !evidence.skipped_reviewers.includes(reviewer)
+    ) {
+      errors.push(
+        `${label}.per_reviewer_status contains unlisted reviewer: ${reviewer}`,
+      );
+    }
+
+    if (
+      status === "skipped" &&
+      !evidence.skipped_reviewers.includes(reviewer)
+    ) {
+      errors.push(
+        `${label}.per_reviewer_status.${reviewer} is skipped but ${reviewer} is not listed in skipped_reviewers`,
+      );
+    }
+  }
+
+  for (const reviewer of evidence.skipped_reviewers) {
+    if (requiredReviewers.includes(reviewer)) {
+      errors.push(`${label}.skipped_reviewers cannot include ${reviewer}`);
+    }
+  }
+
+  if (
+    evidence.skipped_reviewers.length > 0 &&
+    evidence.skipped_rationale.length < evidence.skipped_reviewers.length
+  ) {
+    errors.push(
+      `${label}.skipped_rationale must explain each skipped reviewer`,
+    );
+  }
+
+  if (evidence.blocking_findings.length > 0) {
+    errors.push(`${label}.blocking_findings must be empty`);
+  }
+
+  return errors;
+}
+
+function map(input: string, key: string): Record<string, string> {
+  const lines = input.split(/\r?\n/);
+  const keyIndex = lines.findIndex((line) =>
+    line.match(new RegExp(`^\\s*${escapeRegExp(key)}:\\s*$`)),
+  );
+  if (keyIndex === -1) {
+    return {};
+  }
+
+  const keyIndent = lines[keyIndex].match(/^(\s*)/)?.[1].length ?? 0;
+  const values: Record<string, string> = {};
+  for (const line of lines.slice(keyIndex + 1)) {
+    if (line.trim() === "") {
+      continue;
+    }
+
+    const indent = line.match(/^(\s*)/)?.[1].length ?? 0;
+    if (indent <= keyIndent) {
+      break;
+    }
+
+    const match = line.trim().match(/^([A-Za-z0-9_-]+):\s*(.+)$/);
+    if (match) {
+      values[match[1]] = cleanScalar(match[2]);
+    }
+  }
+
+  return values;
 }
 
 function validatePlanningReview(input: string, args: string[] = []): void {
