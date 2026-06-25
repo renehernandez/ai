@@ -27,6 +27,8 @@ const NITRO_STATUSES = [
   "unavailable",
   "stale",
 ] as const;
+const LOCAL_REVIEW_EVIDENCE_PATTERN =
+  /\b(local[_ -]review(?:er)?(?:[_ -]?gate)?|reviewer[_-]passes|reviewer[_ -]?report|review[_ -]?gate|implementation[_-]review|implementation[_-]scrutiny|code[_-]quality[_-]review|code[_-]simplifier|deslop|docs[_-]alignment(?:[_-]review)?|ai[_-]readiness[_-]upkeep|security[_-]review)\b/i;
 
 type Command =
   | "template"
@@ -161,6 +163,13 @@ export function nitroFeedbackGateErrors(input: string): string[] {
       "completion.evidence is required unless completion.status is pending",
     );
   }
+  rejectLocalReviewEvidence(gate.requestEvidence, "request.evidence", errors);
+  rejectLocalReviewEvidence(gate.startEvidence, "start.evidence", errors);
+  rejectLocalReviewEvidence(
+    gate.completionEvidence,
+    "completion.evidence",
+    errors,
+  );
 
   validateGateOutcome(gate, errors);
 
@@ -178,6 +187,20 @@ function validateGate(input: string): void {
   }
 
   console.log("nitro_feedback_gate valid");
+}
+
+function rejectLocalReviewEvidence(
+  evidence: string[],
+  label: string,
+  errors: string[],
+): void {
+  for (const item of evidence) {
+    if (LOCAL_REVIEW_EVIDENCE_PATTERN.test(item)) {
+      errors.push(
+        `${label} must cite Nitro hosted review evidence; local review gate evidence cannot satisfy nitro_feedback_gate`,
+      );
+    }
+  }
 }
 
 function normalizeFeedback(input: string): void {

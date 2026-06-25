@@ -2376,6 +2376,22 @@ test("validate-planning-review rejects missing Nitro gate", () => {
   assert.match(result.stderr, /nitro_feedback_gate.artifact/);
 });
 
+test("validate-planning-review rejects local reviewer evidence as hosted gate", () => {
+  const result = runPlanReview(
+    "validate-planning-review",
+    planningReview.replace(
+      "      - planning MR latest-head Nitro feedback completed cleanly",
+      "      - local_review_gate passed locally for planning PR",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /planning_review\.review\.evidence must cite hosted planning review evidence/,
+  );
+});
+
 test("validate-planning-review rejects missing planning feedback disposition", () => {
   const result = runPlanReview(
     "validate-planning-review",

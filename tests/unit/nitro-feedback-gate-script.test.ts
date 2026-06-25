@@ -105,6 +105,22 @@ test("validate accepts a clean latest-head gate", () => {
   assert.match(result.stdout, /nitro_feedback_gate valid/);
 });
 
+test("validate rejects local reviewer evidence as Nitro feedback gate", () => {
+  const result = runNitroGate(
+    "validate",
+    cleanGate.replace(
+      "      - Nitro completed latest-head review with no issues",
+      "      - local-reviewer gate passed locally for MR !1",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /completion\.evidence must cite Nitro hosted review evidence/,
+  );
+});
+
 test("validate rejects passed gates with unresolved findings", () => {
   const result = runNitroGate(
     "validate",
