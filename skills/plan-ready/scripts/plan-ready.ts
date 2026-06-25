@@ -22,6 +22,17 @@ import {
   requireValue,
   scalar,
 } from "./lib/planning-contracts.ts";
+import type {
+  ReviewGateResultInput,
+  ReviewGateValidation,
+  ReviewGateWriteResult,
+} from "./lib/review-gate.ts";
+import {
+  hasStagedDiff,
+  stagedDiffHash,
+  validateReviewGateForCommit,
+  writeActiveReviewGate,
+} from "./lib/review-gate.ts";
 
 const BASELINE_REVIEWERS = [
   "implementation-readiness",
@@ -64,7 +75,8 @@ type Command =
   | "validate-handoff"
   | "blueprint-template"
   | "validate-blueprint"
-  | "review-gate-input";
+  | "review-gate-input"
+  | "activate-review-gate";
 
 type ParsedHandoff = {
   status?: string;
@@ -135,6 +147,7 @@ type ActiveReviewGateInput = {
   sourceProvenance: {
     kind: string;
     ref: string;
+    phase?: string;
     evidence?: string[];
   };
   requiredReviewPasses: string[];
@@ -147,7 +160,7 @@ function main(): void {
 
   if (!isCommand(command)) {
     fail(
-      "Usage: plan-ready.ts <detect|reviewer-template|validate-selection|handoff-template|validate-handoff|blueprint-template|validate-blueprint> [artifact-ref] [--file path]",
+      "Usage: plan-ready.ts <detect|reviewer-template|validate-selection|handoff-template|validate-handoff|blueprint-template|validate-blueprint|review-gate-input|activate-review-gate> [artifact-ref] [--file path]",
     );
   }
 
@@ -178,6 +191,11 @@ function main(): void {
 
   if (command === "review-gate-input") {
     printReviewGateInput(args);
+    return;
+  }
+
+  if (command === "activate-review-gate") {
+    activateReviewGate(args);
     return;
   }
 
@@ -490,6 +508,12 @@ type ReviewGateInputOptions = {
   diffHash: string;
   evidenceRef?: string;
   fallbackRef?: string;
+  results?: Record<string, ReviewGateResultInput>;
+};
+
+type ReviewerEvidence = {
+  results: Record<string, ReviewGateResultInput>;
+  blockingFindings: string[];
 };
 
 function buildPlanReadyReviewGateInput(
@@ -531,6 +555,225 @@ function printReviewGateInput(args: string[]): void {
   console.log(JSON.stringify(reviewGateInput, null, 2));
 }
 
+function activateReviewGate(args: string[]): void {
+  const cwd = optionValue(args, "--cwd") ?? process.cwd();
+  const input = readInput(args);
+  let reviewGateInput: ActiveReviewGateInput;
+  let diffHash = "";
+
+  try {
+    if (!hasStagedDiff(cwd)) {
+      emitBlockedReviewGate(["plan-ready review gate requires a staged diff"]);
+    }
+    diffHash = stagedDiffHash(cwd);
+
+    const evidenceRef =
+      optionValue(args, "--source-ref") ?? optionValue(args, "--file");
+    const reviewerEvidence = readReviewerEvidence(args, diffHash);
+    reviewGateInput = buildPlanReadyReviewGateInput(input, {
+      diffHash,
+      evidenceRef,
+      fallbackRef: evidenceRef,
+      results: reviewerEvidence.results,
+    });
+    reviewGateInput.blockingFindings = [
+      ...(reviewGateInput.blockingFindings ?? []),
+      ...reviewerEvidence.blockingFindings,
+    ];
+    assertReviewerEvidenceComplete(reviewGateInput, reviewerEvidence);
+  } catch (error) {
+    emitBlockedReviewGate([errorMessage(error)], undefined, cwd, diffHash);
+  }
+
+  try {
+    const writeResult = writeActiveReviewGate(reviewGateInput, cwd);
+    const validation = validateReviewGateForCommit(cwd);
+    if (!validation.ok) {
+      emitBlockedReviewGate(validation.errors, validation, cwd, diffHash);
+    }
+
+    console.log(
+      JSON.stringify(
+        {
+          status: "ready",
+          gate_outcome: "passed",
+          state_path: writeResult.statePath,
+          staged_diff_hash: validation.stagedDiffHash,
+          required_review_passes: validation.requiredReviewPasses,
+        },
+        null,
+        2,
+      ),
+    );
+  } catch (error) {
+    emitBlockedReviewGate([errorMessage(error)], undefined, cwd, diffHash);
+  }
+}
+
+function emitBlockedReviewGate(
+  blockers: string[],
+  validation?: ReviewGateValidation,
+  cwd?: string,
+  diffHash?: string,
+): never {
+  let blockedGate: ReviewGateWriteResult | undefined;
+  if (cwd && diffHash) {
+    try {
+      blockedGate = writeBlockedReviewGate(cwd, diffHash, blockers);
+    } catch (error) {
+      blockers.push(
+        `failed to write blocked review gate; stale prior gate may remain: ${errorMessage(error)}`,
+      );
+    }
+  }
+  console.log(
+    JSON.stringify(
+      {
+        status: "blocked",
+        gate_outcome: "blocked",
+        blockers,
+        state_path: validation?.statePath ?? blockedGate?.statePath,
+        staged_diff_hash: validation?.stagedDiffHash ?? diffHash,
+      },
+      null,
+      2,
+    ),
+  );
+  process.exit(1);
+}
+
+function writeBlockedReviewGate(
+  cwd: string,
+  diffHash: string,
+  blockers: string[],
+): ReviewGateWriteResult {
+  return writeActiveReviewGate(
+    {
+      workflow: "plan-ready",
+      unit: {
+        id: "blocked_readiness",
+        title: "Blocked PlanReady readiness gate",
+      },
+      sourceProvenance: {
+        kind: "blocked_readiness",
+        ref: "plan-ready",
+        phase: PLAN_READY_REVIEW_PHASE,
+      },
+      requiredReviewPasses: ["plan-ready-readiness"],
+      results: {
+        "plan-ready-readiness": {
+          status: "blocked",
+          diffHash,
+          summary: blockers.join("; "),
+        },
+      },
+      blockingFindings: blockers,
+    },
+    cwd,
+  );
+}
+
+function readReviewerEvidence(
+  args: string[],
+  diffHash: string,
+): ReviewerEvidence {
+  const path = optionValue(args, "--review-results-file");
+  if (!path) {
+    throw new Error("activate-review-gate requires --review-results-file");
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(path, "utf8"));
+  } catch (error) {
+    throw new Error(
+      `reviewer evidence is not valid JSON: ${errorMessage(error)}`,
+    );
+  }
+
+  if (!isRecord(parsed)) {
+    throw new Error("reviewer evidence must be an object");
+  }
+
+  const rawResults = parsed.reviewer_results;
+  if (!Array.isArray(rawResults)) {
+    throw new Error("reviewer evidence requires reviewer_results array");
+  }
+
+  const results: Record<string, ReviewGateResultInput> = {};
+  const blockingFindings: string[] = stringArray(parsed.blocking_findings);
+  for (const item of rawResults) {
+    if (!isRecord(item)) {
+      throw new Error("reviewer_results entries must be objects");
+    }
+    const reviewer = stringField(item, "reviewer");
+    const status = stringField(item, "status");
+    const itemDiffHash = stringField(item, "diff_hash");
+    const summary = stringField(item, "summary");
+
+    if (!reviewer || !isKnownReviewer(reviewer)) {
+      throw new Error(
+        `reviewer_results entry has unknown reviewer: ${reviewer || "<missing>"}`,
+      );
+    }
+    if (!status || !["passed", "failed", "blocked"].includes(status)) {
+      throw new Error(
+        `reviewer_results.${reviewer}.status must be passed, failed, or blocked`,
+      );
+    }
+    if (!itemDiffHash) {
+      throw new Error(`reviewer_results.${reviewer}.diff_hash is required`);
+    }
+    if (itemDiffHash !== diffHash) {
+      throw new Error(
+        `reviewer_results.${reviewer}.diff_hash is stale for current staged diff`,
+      );
+    }
+    if (results[reviewer]) {
+      throw new Error(
+        `reviewer_results contains duplicate reviewer: ${reviewer}`,
+      );
+    }
+    results[reviewer] = {
+      status: status as "passed" | "failed" | "blocked",
+      diffHash: itemDiffHash,
+      summary: summary || `PlanReady reviewer evidence satisfied ${reviewer}.`,
+    };
+    if (status !== "passed") {
+      blockingFindings.push(`Reviewer ${reviewer} did not pass: ${status}`);
+    }
+  }
+
+  return { results, blockingFindings };
+}
+
+function assertReviewerEvidenceComplete(
+  input: ActiveReviewGateInput,
+  evidence: ReviewerEvidence,
+): void {
+  const missing = input.requiredReviewPasses.filter(
+    (reviewer) => !evidence.results[reviewer],
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      `missing reviewer evidence for required reviewers: ${missing.join(", ")}`,
+    );
+  }
+
+  const notPassed = input.requiredReviewPasses.filter(
+    (reviewer) => evidence.results[reviewer]?.status !== "passed",
+  );
+  if (notPassed.length > 0) {
+    throw new Error(
+      `reviewer evidence is not passing for required reviewers: ${notPassed.join(", ")}`,
+    );
+  }
+
+  if ((input.blockingFindings ?? []).length > 0) {
+    throw new Error("blocking reviewer findings remain");
+  }
+}
+
 function handoffReviewGateInput(
   handoff: ParsedHandoff,
   options: ReviewGateInputOptions,
@@ -553,7 +796,9 @@ function handoffReviewGateInput(
       evidence: sourceEvidence(options),
     },
     requiredReviewPasses,
-    results: reviewerResults(requiredReviewPasses, options.diffHash),
+    results:
+      options.results ??
+      synthesizedReviewerResults(requiredReviewPasses, options.diffHash),
     blockingFindings: handoff.blockers,
   };
 }
@@ -580,7 +825,9 @@ function blueprintReviewGateInput(
       evidence: sourceEvidence(options),
     },
     requiredReviewPasses,
-    results: reviewerResults(requiredReviewPasses, options.diffHash),
+    results:
+      options.results ??
+      synthesizedReviewerResults(requiredReviewPasses, options.diffHash),
     blockingFindings: blueprint.blockers,
   };
 }
@@ -607,7 +854,25 @@ function unique(values: string[]): string[] {
   return [...new Set(values)];
 }
 
-function reviewerResults(
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringField(
+  value: Record<string, unknown>,
+  field: string,
+): string | undefined {
+  const raw = value[field];
+  return typeof raw === "string" ? raw : undefined;
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function synthesizedReviewerResults(
   reviewers: string[],
   diffHash: string,
 ): ActiveReviewGateInput["results"] {
@@ -1128,6 +1393,7 @@ function isCommand(command: string | undefined): command is Command {
     "blueprint-template",
     "validate-blueprint",
     "review-gate-input",
+    "activate-review-gate",
   ].includes(command ?? "");
 }
 
