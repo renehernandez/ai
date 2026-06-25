@@ -309,6 +309,7 @@ test("select-next-task returns the first unchecked deliverable", () => {
   assert.equal(parsed.caller, "direct");
   assert.equal(parsed.delivery_goal, "next_task");
   assert.equal(parsed.completion_target, "one_task");
+  assert.equal(parsed.next_delivery_unit.id, "1");
   assert.equal(parsed.next_task.id, "1.2");
 });
 
@@ -331,6 +332,7 @@ test("select-next-task reports complete when only manual tasks remain", () => {
 ## 1. Delivery
 
 - [x] 1.1 Complete the first task
+  - Justification: deployment risk is lower when the implementation is paired with manual production verification.
 - [ ] 1.2 Manual production verification
 `);
 
@@ -340,6 +342,7 @@ test("select-next-task reports complete when only manual tasks remain", () => {
   assert.equal(parsed.status, "complete");
   assert.equal(parsed.caller, "direct");
   assert.equal(parsed.delivery_goal, "next_task");
+  assert.equal(parsed.next_delivery_unit, null);
   assert.equal(parsed.next_task, null);
 });
 
@@ -393,6 +396,7 @@ test("select-next-task coerces plan-orchestrator calls to full-change delivery",
   assert.equal(parsed.caller, "plan_orchestrator");
   assert.equal(parsed.delivery_goal, "complete_change");
   assert.equal(parsed.completion_target, "all_deliverable_tasks");
+  assert.equal(parsed.next_delivery_unit.id, "1");
   assert.equal(parsed.next_task.id, "1.2");
 });
 
@@ -403,6 +407,7 @@ test("select-next-task reports OpenSpec completion for plan-orchestrator only af
 ## 1. Delivery
 
 - [x] 1.1 Complete the first task
+  - Justification: deployment risk is lower when the implementation is paired with manual production verification.
 - [ ] 1.2 Manual production verification
 `,
     ["--caller", "plan_orchestrator"],
@@ -415,5 +420,6 @@ test("select-next-task reports OpenSpec completion for plan-orchestrator only af
   assert.equal(parsed.caller, "plan_orchestrator");
   assert.equal(parsed.delivery_goal, "complete_change");
   assert.equal(parsed.completion_target, "all_deliverable_tasks");
+  assert.equal(parsed.next_delivery_unit, null);
   assert.equal(parsed.next_task, null);
 });

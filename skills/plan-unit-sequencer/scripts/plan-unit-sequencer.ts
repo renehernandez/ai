@@ -3,11 +3,6 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  firstUncheckedDeliverable,
-  parseTasks,
-  validateTasks,
-} from "./lib/openspec-tasks.ts";
-import {
   extractSection,
   extractYaml,
   fail,
@@ -20,6 +15,12 @@ import {
   validatePlanningReviewContract,
 } from "./lib/planning-contracts.ts";
 import { artifactHostHintFromRemoteText } from "./lib/stack-state.ts";
+import {
+  firstUncheckedDeliverable,
+  firstUncheckedDeliveryUnit,
+  parseDeliveryUnits,
+  validateDeliveryUnits,
+} from "../../openspec-tasks/scripts/openspec-tasks.ts";
 
 const ROUTES = ["atomic_plan", "openspec_task"] as const;
 const ARTIFACT_TYPES = ["plan", "openspec", "linear"] as const;
@@ -316,8 +317,9 @@ function selectNextTask(args: string[]): void {
     fail("select-next-task requires tasks.md path");
   }
 
-  const tasks = parseTasks(readFileSync(path, "utf8"));
-  const errors = validateTasks(tasks);
+  const deliveryUnits = parseDeliveryUnits(readFileSync(path, "utf8"));
+  const tasks = deliveryUnits.flatMap((unit) => unit.work_items);
+  const errors = validateDeliveryUnits(deliveryUnits);
   if (errors.length > 0) {
     console.error(
       `Invalid openspec_tasks:\n${errors.map((error) => `- ${error}`).join("\n")}`,
@@ -326,6 +328,7 @@ function selectNextTask(args: string[]): void {
   }
 
   const task = firstUncheckedDeliverable(tasks);
+  const deliveryUnit = firstUncheckedDeliveryUnit(deliveryUnits);
   const effectiveGoal =
     options.caller === "plan_orchestrator" ? "complete_change" : options.goal;
   const completionTarget =
@@ -340,6 +343,7 @@ function selectNextTask(args: string[]): void {
           caller: options.caller,
           delivery_goal: effectiveGoal,
           completion_target: completionTarget,
+          next_delivery_unit: null,
           next_task: null,
         },
         null,
@@ -356,6 +360,7 @@ function selectNextTask(args: string[]): void {
         caller: options.caller,
         delivery_goal: effectiveGoal,
         completion_target: completionTarget,
+        next_delivery_unit: deliveryUnit,
         next_task: task,
       },
       null,

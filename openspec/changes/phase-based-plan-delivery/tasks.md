@@ -23,21 +23,21 @@
 
 ## 2. Readiness Gates
 
-- [ ] 2.1 Extend `skills/openspec-tasks/scripts/openspec-tasks.ts` with a
+- [x] 2.1 Extend `skills/openspec-tasks/scripts/openspec-tasks.ts` with a
       shared delivery-unit model, nested work-item parsing, completion
       semantics, sizing checks, justification parsing, merge-smell checks, and
       legacy-flat normalization.
-- [ ] 2.2 Add sizing checks for the 2-6 target, more-than-6 split smell, and
+- [x] 2.2 Add sizing checks for the 2-6 target, more-than-6 split smell, and
       more-than-8 readiness blocker.
-- [ ] 2.3 Add merge-smell checks for one-item units without risk, deployment,
+- [x] 2.3 Add merge-smell checks for one-item units without risk, deployment,
       or reviewability justification.
-- [ ] 2.4 Wire `plan-ready`, `plan-review`, `plan-unit-sequencer`,
+- [x] 2.4 Wire `plan-ready`, `plan-review`, `plan-unit-sequencer`,
       `plan-unit-delivery`, and stack-state helpers to the shared
       `openspec-tasks` delivery-unit API.
-- [ ] 2.5 Add shape fixtures for valid breakdowns, oversized units, unjustified
+- [x] 2.5 Add shape fixtures for valid breakdowns, oversized units, unjustified
       tiny units, phase justification parsing, lifecycle-only groups, and valid
       workflow-machinery exceptions.
-- [ ] 2.6 Add a legacy migration matrix covering valid flat tasks, invalid flat
+- [x] 2.6 Add a legacy migration matrix covering valid flat tasks, invalid flat
       tasks that hide multiple outcomes, mixed flat/unit task files, and stale
       legacy plan-ready artifacts.
 

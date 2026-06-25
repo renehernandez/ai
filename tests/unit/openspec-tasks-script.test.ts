@@ -58,6 +58,7 @@ const validTasks = `# Tasks
 ## 2. Follow-up
 
 - [ ] 2.1 Update the adapter prompt
+  - Justification: reviewability improves because the prompt update can be reviewed independently from the core delivery code.
 `;
 
 test("parse extracts OpenSpec checkbox tasks in document order", () => {
@@ -83,6 +84,390 @@ test("audit reports the first unchecked deliverable task", () => {
   assert.equal(parsed.status, "pass");
   assert.equal(parsed.next_deliverable.id, "1.2");
   assert.equal(parsed.manual_pending.length, 1);
+});
+
+test("audit reports the first unchecked delivery unit with nested work items", () => {
+  const result = runOpenSpecTasks(
+    "audit",
+    `# Tasks
+
+## 1. Contract Shape
+
+- [x] 1.1 Define delivery-unit headings
+  - Proof location: run the task-shape validator CLI entrypoint and observe pass or failure output.
+- [x] 1.2 Update plan-ready guidance
+
+## 2. Readiness Gates
+
+- [ ] 2.1 Add nested work-item parsing
+- [ ] 2.2 Add sizing checks
+`,
+  );
+
+  assert.equal(result.status, 0);
+  const parsed = JSON.parse(result.stdout);
+
+  assert.equal(parsed.delivery_units.length, 2);
+  assert.equal(parsed.delivery_units[0].checked, true);
+  assert.equal(parsed.delivery_units[1].checked, false);
+  assert.equal(parsed.next_delivery_unit.id, "2");
+  assert.deepEqual(
+    parsed.next_delivery_unit.work_items.map((item: { id: string }) => item.id),
+    ["2.1", "2.2"],
+  );
+  assert.equal(parsed.next_deliverable.id, "2.1");
+});
+
+test("audit accepts justified delivery units with seven or eight work items", () => {
+  const result = runOpenSpecTasks(
+    "audit",
+    `# Tasks
+
+## 1. Readiness Gates
+
+- [ ] 1.1 Add parser model
+  - Proof location: run the task-shape validator CLI entrypoint and observe pass or failure output.
+- [ ] 1.2 Add nested parsing
+- [ ] 1.3 Add completion semantics
+- [ ] 1.4 Add sizing metadata
+- [ ] 1.5 Add split-smell validation
+- [ ] 1.6 Add blocker validation
+- [ ] 1.7 Add compatibility output
+  - Justification: these changes update one shared parser contract and splitting them would create temporary incompatible output shapes.
+`,
+  );
+
+  assert.equal(result.status, 0);
+  const parsed = JSON.parse(result.stdout);
+
+  assert.equal(parsed.delivery_units[0].sizing.work_item_count, 7);
+  assert.equal(parsed.delivery_units[0].sizing.status, "split_smell");
+  assert.match(
+    parsed.delivery_units[0].justification,
+    /one shared parser contract/,
+  );
+});
+
+test("audit reports delivery-unit sizing boundary statuses", () => {
+  const sixItemResult = runOpenSpecTasks(
+    "audit",
+    `# Tasks
+
+## 1. Target Boundary
+
+- [ ] 1.1 Add parser model
+  - Proof location: run the task-shape validator CLI entrypoint and observe pass or failure output.
+- [ ] 1.2 Add nested parsing
+- [ ] 1.3 Add completion semantics
+- [ ] 1.4 Add sizing metadata
+- [ ] 1.5 Add split-smell validation
+- [ ] 1.6 Add blocker validation
+`,
+  );
+  const eightItemResult = runOpenSpecTasks(
+    "audit",
+    `# Tasks
+
+## 1. Split Boundary
+
+- [ ] 1.1 Add parser model
+  - Proof location: run the task-shape validator CLI entrypoint and observe pass or failure output.
+- [ ] 1.2 Add nested parsing
+- [ ] 1.3 Add completion semantics
+- [ ] 1.4 Add sizing metadata
+- [ ] 1.5 Add split-smell validation
+- [ ] 1.6 Add blocker validation
+- [ ] 1.7 Add compatibility output
+- [ ] 1.8 Add migration fixtures
+  - Justification: these changes update one shared parser contract and splitting them would create temporary incompatible output shapes.
+`,
+  );
+
+  assert.equal(sixItemResult.status, 0);
+  assert.equal(eightItemResult.status, 0);
+  const sixItemParsed = JSON.parse(sixItemResult.stdout);
+  const eightItemParsed = JSON.parse(eightItemResult.stdout);
+
+  assert.equal(sixItemParsed.delivery_units[0].sizing.work_item_count, 6);
+  assert.equal(sixItemParsed.delivery_units[0].sizing.status, "target");
+  assert.equal(eightItemParsed.delivery_units[0].sizing.work_item_count, 8);
+  assert.equal(eightItemParsed.delivery_units[0].sizing.status, "split_smell");
+});
+
+test("audit rejects split-smell delivery units without justification", () => {
+  const result = runOpenSpecTasks(
+    "audit",
+    `# Tasks
+
+## 1. Readiness Gates
+
+- [ ] 1.1 Add parser model
+  - Proof location: run the task-shape validator CLI entrypoint and observe pass or failure output.
+- [ ] 1.2 Add nested parsing
+- [ ] 1.3 Add completion semantics
+- [ ] 1.4 Add sizing metadata
+- [ ] 1.5 Add split-smell validation
+- [ ] 1.6 Add blocker validation
+- [ ] 1.7 Add compatibility output
+`,
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /delivery_unit_split_smell/);
+  assert.match(result.stderr, /requires a Justification:/);
+});
+
+test("audit blocks delivery units with more than eight work items", () => {
+  const result = runOpenSpecTasks(
+    "audit",
+    `# Tasks
+
+## 1. Readiness Gates
+
+- [ ] 1.1 Add parser model
+  - Proof location: run the task-shape validator CLI entrypoint and observe pass or failure output.
+- [ ] 1.2 Add nested parsing
+- [ ] 1.3 Add completion semantics
+- [ ] 1.4 Add sizing metadata
+- [ ] 1.5 Add split-smell validation
+- [ ] 1.6 Add blocker validation
+- [ ] 1.7 Add compatibility output
+- [ ] 1.8 Add downstream adapters
+- [ ] 1.9 Add migration fixtures
+  - Justification: this is still too broad.
+`,
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /delivery_unit_size_blocked/);
+  assert.match(result.stderr, /more than 8 is a readiness blocker/);
+});
+
+test("audit accepts one-item units with reviewability justification", () => {
+  const result = runOpenSpecTasks(
+    "audit",
+    `# Tasks
+
+## 1. Focused Migration
+
+- [ ] 1.1 Add migration shim
+  - Proof location: run the migration validator CLI entrypoint and observe pass or failure output.
+  - Justification: reviewability improves because this compatibility shim has a narrow owner boundary.
+`,
+  );
+
+  assert.equal(result.status, 0);
+  const parsed = JSON.parse(result.stdout);
+
+  assert.equal(parsed.delivery_units[0].merge_smell.status, "ok");
+});
+
+test("audit accepts wrapped justification continuations", () => {
+  const result = runOpenSpecTasks(
+    "audit",
+    `# Tasks
+
+## 1. Focused Migration
+
+- [ ] 1.1 Add migration shim
+  - Justification: this compatibility shim stays separate because
+    reviewability improves when the narrow owner boundary is isolated.
+  - Proof location: run the migration validator CLI entrypoint and observe pass or failure output.
+`,
+  );
+
+  assert.equal(result.status, 0);
+  const parsed = JSON.parse(result.stdout);
+
+  assert.equal(parsed.delivery_units[0].merge_smell.status, "ok");
+  assert.match(
+    parsed.delivery_units[0].justification,
+    /reviewability improves/,
+  );
+});
+
+test("audit rejects one-item units without risk deployment or reviewability justification", () => {
+  const result = runOpenSpecTasks(
+    "audit",
+    `# Tasks
+
+## 1. Focused Migration
+
+- [ ] 1.1 Add migration shim
+  - Proof location: run the migration validator CLI entrypoint and observe pass or failure output.
+  - Justification: this is convenient to split out.
+`,
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /delivery_unit_merge_smell/);
+  assert.match(result.stderr, /risk, deployment, or reviewability/);
+});
+
+test("audit covers the delivery-unit shape fixture matrix", () => {
+  const cases = [
+    {
+      name: "valid breakdown",
+      shouldPass: true,
+      markdown: `# Tasks
+
+## 1. Parser Contract
+
+- [ ] 1.1 Add unit parser
+  - Proof location: run the parser contract CLI entrypoint and observe pass or failure output.
+- [ ] 1.2 Add unit serializer
+`,
+    },
+    {
+      name: "oversized unit",
+      shouldPass: false,
+      stderr: /delivery_unit_size_blocked/,
+      markdown: `# Tasks
+
+## 1. Parser Contract
+
+- [ ] 1.1 Add parser model
+  - Proof location: run the parser contract CLI entrypoint and observe pass or failure output.
+- [ ] 1.2 Add nested parsing
+- [ ] 1.3 Add completion semantics
+- [ ] 1.4 Add sizing metadata
+- [ ] 1.5 Add split-smell validation
+- [ ] 1.6 Add blocker validation
+- [ ] 1.7 Add compatibility output
+- [ ] 1.8 Add downstream adapters
+- [ ] 1.9 Add migration fixtures
+`,
+    },
+    {
+      name: "unjustified tiny unit",
+      shouldPass: false,
+      stderr: /delivery_unit_merge_smell/,
+      markdown: `# Tasks
+
+## 1. Parser Contract
+
+- [ ] 1.1 Add parser model
+  - Proof location: run the parser contract CLI entrypoint and observe pass or failure output.
+`,
+    },
+    {
+      name: "phase justification parsing",
+      shouldPass: true,
+      markdown: `# Tasks
+
+## 1. Parser Contract
+
+- [ ] 1.1 Add parser model
+  - Proof location: run the parser contract CLI entrypoint and observe pass or failure output.
+- [ ] 1.2 Add nested parsing
+- [ ] 1.3 Add completion semantics
+- [ ] 1.4 Add sizing metadata
+- [ ] 1.5 Add split-smell validation
+- [ ] 1.6 Add blocker validation
+- [ ] 1.7 Add compatibility output
+  - Justification: reviewability stays acceptable because this updates one shared parser contract.
+`,
+    },
+    {
+      name: "lifecycle-only group",
+      shouldPass: false,
+      stderr: /lifecycle_phase_group/,
+      markdown: `# Tasks
+
+## 1. Documentation
+
+- [ ] 1.1 Update docs
+  - Proof location: run the docs validator CLI entrypoint and observe pass or failure output.
+`,
+    },
+    {
+      name: "workflow machinery exception",
+      shouldPass: true,
+      markdown: `# Tasks
+
+## 1. Workflow Machinery
+
+- [ ] 1.1 Implement reusable AI workflow machinery fixtures
+  - Proof location: run the workflow fixture CLI entrypoint and observe pass or failure output.
+  - Justification: reviewability improves because workflow fixture behavior is isolated.
+`,
+    },
+  ];
+
+  for (const testCase of cases) {
+    const result = runOpenSpecTasks("audit", testCase.markdown);
+    if (testCase.shouldPass) {
+      assert.equal(result.status, 0, testCase.name);
+    } else {
+      assert.notEqual(result.status, 0, testCase.name);
+      assert.match(result.stderr, testCase.stderr ?? /Invalid openspec_tasks/);
+    }
+  }
+});
+
+test("audit covers the legacy flat-task migration matrix", () => {
+  const validFlatTasks = runOpenSpecTasks(
+    "audit",
+    `# Tasks
+
+## 1. Legacy Delivery
+
+- [ ] 1.1 Add parser support
+  - Proof location: run the parser contract CLI entrypoint and observe pass or failure output.
+- [ ] 1.2 Add serializer support
+`,
+  );
+  assert.equal(validFlatTasks.status, 0);
+
+  const validFlatParsed = JSON.parse(validFlatTasks.stdout);
+  assert.equal(validFlatParsed.next_delivery_unit.id, "1");
+  assert.equal(validFlatParsed.next_deliverable.id, "1.1");
+
+  const hiddenOutcomes = runOpenSpecTasks(
+    "audit",
+    `# Tasks
+
+## 1. Legacy Delivery
+
+- [ ] 1.1 Implement parser and delivery and PR workflow
+  - Proof location: run the parser contract CLI entrypoint and observe pass or failure output.
+`,
+  );
+  assert.notEqual(hiddenOutcomes.status, 0);
+  assert.match(hiddenOutcomes.stderr, /appears too broad/);
+
+  const mixedFlatAndUnit = runOpenSpecTasks(
+    "audit",
+    `# Tasks
+
+## 1. Legacy Delivery
+
+- [x] 1.1 Add parser support
+  - Proof location: run the parser contract CLI entrypoint and observe pass or failure output.
+- [x] 1.2 Add serializer support
+
+## 2. Focused Migration
+
+- [ ] 2.1 Add migration shim
+  - Justification: reviewability improves because the shim is isolated.
+`,
+  );
+  assert.equal(mixedFlatAndUnit.status, 0);
+
+  const mixedParsed = JSON.parse(mixedFlatAndUnit.stdout);
+  assert.equal(mixedParsed.next_delivery_unit.id, "2");
+  assert.equal(mixedParsed.next_deliverable.id, "2.1");
+
+  const staleLegacyArtifact = runOpenSpecTasks(
+    "audit",
+    `# Tasks
+
+- [ ] 1.1 Add parser support
+  - Proof location: run the parser contract CLI entrypoint and observe pass or failure output.
+`,
+  );
+  assert.notEqual(staleLegacyArtifact.status, 0);
+  assert.match(staleLegacyArtifact.stderr, /must be under a numbered heading/);
 });
 
 test("audit rejects broad deliverable tasks", () => {
@@ -182,30 +567,37 @@ test("audit accepts feature exceptions for workflow machinery", () => {
 
 - [ ] 1.1 Build documentation generator
   - Proof location: run the documentation generator CLI entrypoint and observe generated output.
+  - Justification: reviewability improves because the generator has a narrow user-facing contract.
 
 ## 2. Testing Tooling
 
 - [ ] 2.1 Implement testing harness fixtures
+  - Justification: reviewability improves because the harness fixture API is isolated.
 
 ## 3. Validation Tooling
 
 - [ ] 3.1 Implement validation command fixtures
+  - Justification: reviewability improves because the command fixture behavior is isolated.
 
 ## 4. CI Tooling
 
 - [ ] 4.1 Add CI workflow status parser
+  - Justification: deployment risk is lower when CI parser changes are reviewed separately.
 
 ## 5. Reviewer Tooling
 
 - [ ] 5.1 Add reviewer-tooling prompt selector
+  - Justification: reviewability improves because reviewer routing can be inspected in one focused diff.
 
 ## 6. Runtime Validation Tooling
 
 - [ ] 6.1 Add runtime-validation-tooling command
+  - Justification: deployment risk is lower when runtime validation behavior is reviewed separately.
 
 ## 7. Workflow Machinery
 
 - [ ] 7.1 Implement reusable AI workflow machinery fixtures
+  - Justification: reviewability improves because workflow fixture behavior is isolated.
 `,
   );
 
@@ -314,6 +706,7 @@ test("audit keeps production verification as manual work", () => {
 
 - [x] 1.1 Implement the parser
   - Proof location: run the parser CLI entrypoint and observe pass or failure output.
+  - Justification: deployment risk is lower when parser behavior is paired with manual production verification.
 - [ ] 1.2 Manual production verification
 `,
   );

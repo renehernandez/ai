@@ -407,6 +407,7 @@ test("validate-openspec-tasks accepts deliverable OpenSpec task shapes", () => {
 
 - [ ] 1.1 Add the plan-review OpenSpec task gate
       - Proof location: run the plan-review validate-openspec-tasks CLI entrypoint and observe pass or failure output.
+      - Justification: reviewability improves because the task gate is a narrow planning-validation surface.
       - Verify with the plan-review unit tests.
 `,
     (path) => {
@@ -428,6 +429,7 @@ test("validate-openspec-tasks accepts documented artifact-ref input", () => {
 
 - [ ] 1.1 Add the plan-review OpenSpec task gate
       - Proof location: run the plan-review validate-openspec-tasks CLI entrypoint and observe pass or failure output.
+      - Justification: reviewability improves because the task gate is a narrow planning-validation surface.
 `,
     (path) => {
       const result = runPlanReviewArgs([
