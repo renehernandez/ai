@@ -88,6 +88,21 @@ delegating to Git. When no active review gate exists, validation allows the
 commit with a note. When a gate is active, required review-pass evidence must
 match the staged diff.
 
+Workflow-owned commits with a required local review gate must use:
+
+```bash
+ax commit --require-review-gate -m "Commit message"
+```
+
+In required-gate mode, `ax commit` snapshots the reviewed staged diff, required
+review passes, and active gate evidence before delegating to Git. After Git
+creates the commit, it verifies the created commit diff and atomically
+compare-and-consumes the same active gate. If the command reports `committed
+successfully but review gate was not consumed` or `failed to consume review
+gate`, treat the created head as not locally reviewed for automation purposes:
+inspect the commit, rerun the required local reviewers for the current gate
+state, activate a fresh gate, and retry the workflow step.
+
 V1 supports normal staged commits with `-m` or `--message`. It rejects
 commit-shape-mutating or bypass modes such as `--amend`, `-a`, `--all`,
 `--include`, `--only`, pathspec commits, and `--no-verify`.
@@ -241,8 +256,9 @@ command before finishing.
 - RED: baseline commit pressure treated `git commit -m` as the obvious agent
   path and did not inspect local review-gate state before committing.
 - GREEN: with this skill loaded, commit pressure used `ax review-gate status`
-  or `ax review-gate validate-commit` for diagnostics and `ax commit -m` for
-  the actual commit path, while rejecting bypass or shape-changing flags.
+  or `ax review-gate validate-commit` for diagnostics, used
+  `ax commit --require-review-gate -m` for workflow-owned commits, and rejected
+  bypass or shape-changing flags.
 - GREEN: with this skill loaded, plan workflow support artifacts use
   `ax plans artifact record|list` for private file-backed recovery while
   avoiding committed `.agents/plans/**` sidecars and hosted local-path leaks.

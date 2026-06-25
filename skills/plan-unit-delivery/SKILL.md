@@ -88,7 +88,15 @@ path.
 
     If activation is blocked, gate writing fails, validation fails, reviewer
     evidence is missing or stale, or blocking findings remain, do not run
-    `ax commit`; resolve the blocker and rerun reviewers or activation.
+    the commit helper; resolve the blocker and rerun reviewers or activation.
+
+    Workflow-owned implementation commits must use the required-gate commit
+    helper exposed by the local AX runtime. If Git creates the commit but the
+    helper reports that the review gate was not consumed or failed to consume,
+    treat the created head as not locally reviewed for this workflow. Inspect
+    the commit, rerun required local reviewers for the current gate state,
+    activate a fresh gate, and retry the workflow step before pushing or
+    requesting hosted review.
 12. Run review-feedback routing.
 13. Open or update one routed implementation PR/MR stacked on the expected
     stack tip from the handoff.
@@ -180,7 +188,7 @@ checkbox delta exists.
 | Finishing without proving the delivery-unit delta | Run `validate-task-delta --unit` against base and unit `tasks.md` |
 | Fabricating delivery-unit delta proof for an atomic plan | Mark `delivery_unit_delta` not applicable with `selected_unit_id: atomic` |
 | Recording delta proof only in chat prose | Put the command and `delivery_unit_delta_valid` output in `delivery_gate_ledger.delivery_unit_delta` |
-| Committing before activating the local review gate | Run `activate-review-gate` for the staged diff before `ax commit` |
+| Committing before activating the local review gate | Run `activate-review-gate` for the staged diff before the required-gate commit helper |
 | Reusing reviewer reports after staging new changes | Rerun reviewers and update `reviewer_report.reviewed_diff_hash` |
 | Treating delivery gate evidence as durable state | Keep sequence state in OpenSpec |
 | Treating an open PR/MR as done before pipelines settle | Keep monitoring latest-head pipelines |

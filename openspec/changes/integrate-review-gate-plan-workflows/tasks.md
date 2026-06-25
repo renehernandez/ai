@@ -57,12 +57,13 @@
 - [ ] 4.1 Update `ax commit` to consume or clear the active gate after a
   successful gated commit and to preserve the active gate when Git fails before
   creating a commit.
-- [ ] 4.2 Print a warning without failing retroactively when consumed-state
-  cleanup fails after Git creates a commit.
+- [ ] 4.2 Fail closed with recovery guidance when consumed-state cleanup fails
+  or compare-and-consume rejects the current gate state after Git creates a
+  commit.
 - [ ] 4.3 Update `ax review-gate status` and `validate-commit` so consumed gates
   are reported clearly and ignored by commit validation.
 - [ ] 4.4 Add AX integration tests for successful gate consumption, failed commit
-  preservation, cleanup warning behavior, consumed gate no-op validation,
+  preservation, consume failure recovery, consumed gate no-op validation,
   no-gate ordinary commits, active-gate blocking, and public help excluding
   activation.
 
@@ -86,8 +87,8 @@
   remains status/validation oriented and activation is skill-owned.
 - [ ] 6.2 Update root `AGENTS.md` and `instructions/AGENTS.md` so material
   plan-workflow commits require the owning phase to arm and validate the local
-  review gate before `ax commit`, while preserving Rene's raw `git commit`
-  escape hatch.
+  review gate before `ax commit --require-review-gate`, while preserving
+  Rene's raw `git commit` escape hatch.
 - [ ] 6.3 Update instruction tests for workflow gate guidance.
 - [ ] 6.4 Update `skills/plan-ready/agents/openai.yaml`,
   `skills/plan-unit-delivery/agents/openai.yaml`, and
