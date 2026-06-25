@@ -130,6 +130,12 @@ function validBlueprint(): string {
       dependencies: []
   recommended_first_task: "1.1"
   review:
+    required_reviewers:
+      - implementation-readiness
+      - edge-cases-and-risks
+      - simplification-and-scope-control
+      - refactoring-opportunities
+    optional_reviewers: []
     reviewers_used:
       - implementation-readiness
       - edge-cases-and-risks
@@ -312,6 +318,10 @@ test("blueprint-template emits the OpenSpec blueprint contract", () => {
   assert.match(result.stdout, /status: ready_for_openspec/);
   assert.match(result.stdout, /deliverable: <PR\/MR-sized outcome>/);
   assert.match(result.stdout, /deliverable-scoped docs or proof work/);
+  assert.match(result.stdout, /required_reviewers:/);
+  assert.match(result.stdout, /optional_reviewers: \[\]/);
+  assert.match(result.stdout, /reviewers_used:/);
+  assert.match(result.stdout, /findings:/);
   assert.match(result.stdout, /next_action: create_openspec_change/);
   assert.doesNotMatch(result.stdout, /needs_openspec/);
 });
