@@ -103,7 +103,7 @@
 - [x] 6.2 Keep `/request_review @nitro`, latest-head Nitro feedback, and
   actionable-feedback resolution as separate hosted-review requirements after
   local commit gates pass.
-- [ ] 6.3 Document that local review gates block commits and hosted Nitro gates
+- [x] 6.3 Document that local review gates block commits and hosted Nitro gates
   block stack advancement or delivery completion.
 
 ## 7. Instructions, Prompts, And Runtime Alignment

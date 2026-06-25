@@ -96,6 +96,11 @@ path.
     workflow. Inspect the commit, rerun required local reviewers for the
     current gate state, activate a fresh gate, and retry the workflow step
     before pushing or requesting hosted review.
+    The local review gate blocks the commit boundary only. After it passes,
+    hosted gates remain required: artifact creation, artifact-host inspection,
+    CI or no-pipeline inspection, explicit `/request_review @nitro`, latest-head
+    Nitro feedback, and actionable-feedback resolution still block stack
+    advancement and delivery completion.
 12. Run review-feedback routing.
 13. Open or update one routed implementation PR/MR stacked on the expected
     stack tip from the handoff.
@@ -160,6 +165,7 @@ evidence, and restack state.
 | Recording task-delta proof only in chat prose | Put the command and `unit_task_delta_valid` output in `delivery_gate_ledger.unit_task_delta` |
 | Committing without the implementation helper | Run `commit-implementation` so gate activation and `ax commit --require-review-gate` stay in one workflow step |
 | Reusing reviewer evidence after staging new changes | Rerun reviewers and update both `reviewer_launch.staged_diff_hash` and `reviewer_report.reviewed_diff_hash` |
+| Treating a passed local review gate as hosted approval | Continue through artifact-host inspection, CI or no-pipeline evidence, explicit Nitro request, latest-head Nitro feedback, and actionable-feedback resolution |
 | Treating delivery gate evidence as durable state | Keep sequence state in OpenSpec |
 | Treating an open PR/MR as done before pipelines settle | Keep monitoring latest-head pipelines |
 | Assuming Nitro feedback is absent immediately after push | Request Nitro for the latest head, wait up to 10 minutes for review start, then wait for completion |

@@ -157,6 +157,9 @@ and next action.
    runs `openspec validate <change-id> --strict --no-interactive`, and blocks
    before writing gate state when proof fails; do not use ordinary commit mode
    for plan-review-owned planning commits.
+   This local review gate blocks the planning commit only. It does not satisfy
+   hosted planning review, Nitro feedback, MR approval, CI or no-pipeline
+   inspection, or the `planning_review` handoff required before sequencing.
 10. Push the planning-only branch when the hosted-review creation path requires a
    clean pushed branch. Do not include implementation changes in the commit.
 11. Create or update the routed draft PR/MR with a title and description that
@@ -176,6 +179,10 @@ and next action.
       substitute Codex or another reviewer for this first cut.
     - Developer review: keep the PR/MR open and report pending human review; do
       not fabricate approval.
+    Hosted review gates block implementation sequencing. A clean local planning
+    commit is necessary evidence for the planning branch, but sequencing starts
+    only after the hosted `planning_review` handoff records latest-head Nitro
+    closure and actionable feedback disposition.
 14. Apply only plan/documentation feedback. If feedback asks for implementation,
     record it as a follow-up or blocker; do not start coding.
 15. If the branch head changes after feedback fixes, rerun artifact validation,
