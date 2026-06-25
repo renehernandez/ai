@@ -53,6 +53,11 @@ including local skill paths, temporary planning files, subagent gates, internal
 review labels, verification ledgers, automation-routing details, and routine
 local commands already represented by CI or standard repo hooks.
 
+For plan workflow artifacts, do not present local reviewer evidence or AX
+review-gate state as hosted review, CI, approval, or Nitro evidence. Convert
+only reviewer-relevant risk facts into plain description text, or omit the
+local process details.
+
 Keep evidence when it helps a reviewer assess risk:
 
 - targeted regression commands or fixtures;

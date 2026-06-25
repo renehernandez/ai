@@ -112,7 +112,7 @@
   files such as `rules/git-and-review.md` so agents use `ax commit`, workflow
   skills use required-gate mode for workflow-owned commits, and raw
   `git commit` remains Rene's manual escape hatch.
-- [ ] 7.2 Update `skills/ax-cli`, affected plan workflow skills, and adapter
+- [x] 7.2 Update `skills/ax-cli`, affected plan workflow skills, and adapter
   prompts for explicit reviewer evidence and required-gate commit behavior.
 - [ ] 7.3 Add or update instruction and skill validation tests for the new
   guidance.

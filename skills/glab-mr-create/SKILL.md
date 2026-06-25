@@ -68,6 +68,8 @@ first so routing and full description policy stay in one place.
    - Preserve project template sections and required checklist semantics.
    - Include targeted evidence or hosted status only when it helps reviewers understand risk.
    - Omit unnecessary author-workflow references and routine validation already represented by CI or repository hooks.
+   - Omit raw local reviewer evidence, AX review-gate state, and private plan
+     support artifacts; do not present them as hosted review or Nitro evidence.
    - Link directly to reviewer-needed issues, related MRs, or upstream resources.
 
    Fallback body:
@@ -127,6 +129,7 @@ first so routing and full description policy stay in one place.
 | Opening a ready MR by default | Use `--draft` unless the user asks for ready review |
 | Guessing target branch | Read remote HEAD, branch config, or project docs |
 | Leaking local process into the MR body | Keep reviewer evidence self-contained and omit local-only artifacts |
+| Treating local review-gate evidence as hosted review | Use host metadata, CI/no-pipeline inspection, and Nitro feedback for hosted status |
 | Naming upstream resources without links | Include actual URLs for reviewer-needed references |
 | Handling a neutral PR/MR request here | Use `change-request-create` before provider mutation |
 
@@ -136,7 +139,11 @@ first so routing and full description policy stay in one place.
 - GitLab repo with multiple remotes or hosts: pass only if the agent verifies the intended artifact remote before pushing or creating the MR.
 - User asks for a ready MR: pass only if the agent does not force `--draft` and reports the readiness choice.
 - User asks for a host-neutral change request: pass only if the agent routes through `change-request-create` instead of this provider adapter directly.
-- Process-heavy change with local plans, pressure tests, or internal review gates: pass only if the MR body includes self-contained reviewer evidence, omits references to excluded/local artifacts, and links directly to reviewer-needed upstream resources.
+- Process-heavy change with local plans, pressure tests, internal review gates,
+  or private plan-support artifacts: pass only if the MR body includes
+  self-contained reviewer evidence, omits references to excluded/local
+  artifacts, does not treat local gates as hosted review, and links directly to
+  reviewer-needed upstream resources.
 
 ## Test Evidence
 
