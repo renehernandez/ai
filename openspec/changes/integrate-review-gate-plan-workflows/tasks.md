@@ -33,7 +33,7 @@
 
 ## 3. Plan Unit Delivery Gate Activation
 
-- [ ] 3.1 Add a private
+- [x] 3.1 Add a private
   `skills/plan-unit-delivery/scripts/plan-unit-delivery.ts` command or helper
   that maps a validated handoff plus `reviewer_launch` and `reviewer_report`
   into the shared `scripts/review-gate.ts` API input shape.
