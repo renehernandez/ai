@@ -147,6 +147,10 @@ test("active review gate writes persisted state for the staged diff", () => {
     assert.equal(state.status, "active");
     assert.equal(state.workflow, "test-workflow");
     assert.equal(state.sourceProvenance?.kind, "test");
+    assert.equal(state.identity?.workflow, "test-workflow");
+    assert.equal(state.identity?.unitId, "unit-1");
+    assert.equal(state.identity?.stagedDiffHash, stagedDiffHash(cwd));
+    assert.equal(typeof state.identity?.gitDir, "string");
     assert.equal(state.stagedDiffHash, stagedDiffHash(cwd));
     assert.deepEqual(state.requiredReviewPasses, [
       "implementation-readiness",
@@ -154,6 +158,7 @@ test("active review gate writes persisted state for the staged diff", () => {
     ]);
     assert.equal(persisted.active, true);
     assert.equal(persisted.status, "active");
+    assert.equal(persisted.identity.workflow, "test-workflow");
     assert.equal(persisted.stagedDiffHash, state.stagedDiffHash);
     assert.equal(validation.ok, true);
     assert.equal(validation.active, true);
@@ -361,6 +366,66 @@ test("consumed review gate state is inactive for commit validation", () => {
   }
 });
 
+test("active review gate rejects identity drift", () => {
+  const cwd = createGitFixture("review-gate-identity-drift-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], cwd);
+    writeActiveReviewGate(validReviewGateInput(cwd), cwd);
+    const original = JSON.parse(
+      readFileSync(reviewGateStatePath(cwd), "utf-8"),
+    );
+    writeGateState(
+      cwd,
+      JSON.stringify({
+        ...original,
+        identity: {
+          ...original.identity,
+          branchRef: "refs/heads/other",
+          workflow: "other-workflow",
+          unitId: "unit-2",
+        },
+      }),
+    );
+
+    const validation = validateReviewGateForCommit(cwd);
+
+    assert.equal(validation.ok, false);
+    assert.deepEqual(validation.identityMismatches.sort(), [
+      "branchRef",
+      "unitId",
+      "workflow",
+    ]);
+    assert.match(
+      validation.errors.join("\n"),
+      /Review gate identity mismatch: branchRef/,
+    );
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("active review gate requires persisted identity", () => {
+  const cwd = createGitFixture("review-gate-missing-identity-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], cwd);
+    writeActiveReviewGate(validReviewGateInput(cwd), cwd);
+    const original = JSON.parse(
+      readFileSync(reviewGateStatePath(cwd), "utf-8"),
+    );
+    delete original.identity;
+    writeGateState(cwd, JSON.stringify(original));
+
+    const validation = validateReviewGateForCommit(cwd);
+
+    assert.equal(validation.ok, false);
+    assert.match(validation.errors.join("\n"), /requires identity/);
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
 test("compare-and-consume consumes only a matching active review gate", () => {
   const cwd = createGitFixture("review-gate-compare-consume-");
   try {
@@ -399,6 +464,9 @@ test("compare-and-consume preserves a changed active review gate", () => {
     const expectedHash = stagedDiffHash(cwd);
     writeActiveReviewGate(validReviewGateInput(cwd), cwd);
     const expectedFingerprint = activeReviewGateFingerprint(cwd);
+    const original = JSON.parse(
+      readFileSync(reviewGateStatePath(cwd), "utf-8"),
+    );
     const changedHash = `sha256:${"0".repeat(64)}`;
     writeGateState(
       cwd,
@@ -410,6 +478,10 @@ test("compare-and-consume preserves a changed active review gate", () => {
         sourceProvenance: {
           kind: "test",
           ref: "changed",
+        },
+        identity: {
+          ...original.identity,
+          stagedDiffHash: changedHash,
         },
         stagedDiffHash: changedHash,
         requiredReviewPasses: ["implementation-readiness"],
@@ -453,6 +525,9 @@ test("compare-and-consume preserves a changed required review pass set", () => {
     const expectedHash = stagedDiffHash(cwd);
     writeActiveReviewGate(validReviewGateInput(cwd), cwd);
     const expectedFingerprint = activeReviewGateFingerprint(cwd);
+    const original = JSON.parse(
+      readFileSync(reviewGateStatePath(cwd), "utf-8"),
+    );
     writeGateState(
       cwd,
       JSON.stringify({
@@ -464,6 +539,7 @@ test("compare-and-consume preserves a changed required review pass set", () => {
           kind: "test",
           ref: "changed-passes",
         },
+        identity: original.identity,
         stagedDiffHash: expectedHash,
         requiredReviewPasses: ["implementation-readiness"],
         results: {
@@ -511,6 +587,9 @@ test("compare-and-consume preserves a changed active review gate identity", () =
     const expectedHash = stagedDiffHash(cwd);
     writeActiveReviewGate(validReviewGateInput(cwd), cwd);
     const expectedFingerprint = activeReviewGateFingerprint(cwd);
+    const original = JSON.parse(
+      readFileSync(reviewGateStatePath(cwd), "utf-8"),
+    );
     writeGateState(
       cwd,
       JSON.stringify({
@@ -527,6 +606,7 @@ test("compare-and-consume preserves a changed active review gate identity", () =
           ref: "changed-identity",
           evidence: ["other-evidence"],
         },
+        identity: original.identity,
         stagedDiffHash: expectedHash,
         requiredReviewPasses: [
           "implementation-readiness",
@@ -568,6 +648,56 @@ test("compare-and-consume preserves a changed active review gate identity", () =
     assert.equal(persisted.active, true);
     assert.equal(persisted.status, "active");
     assert.equal(persisted.sourceProvenance.ref, "changed-identity");
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("compare-and-consume preserves an identity-only changed active review gate", () => {
+  const cwd = createGitFixture("review-gate-compare-identity-only-mismatch-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], cwd);
+    const expectedHash = stagedDiffHash(cwd);
+    writeActiveReviewGate(validReviewGateInput(cwd), cwd);
+    const expectedFingerprint = activeReviewGateFingerprint(cwd);
+    const original = JSON.parse(
+      readFileSync(reviewGateStatePath(cwd), "utf-8"),
+    );
+    writeGateState(
+      cwd,
+      JSON.stringify({
+        ...original,
+        identity: {
+          ...original.identity,
+          gitDir: `${original.identity.gitDir}-changed`,
+        },
+      }),
+    );
+
+    const consumed = consumeReviewGateForDiff(
+      {
+        expectedStagedDiffHash: expectedHash,
+        expectedRequiredReviewPasses: [
+          "implementation-readiness",
+          "edge-cases-and-risks",
+        ],
+        expectedActiveReviewGateFingerprint: expectedFingerprint,
+      },
+      cwd,
+    );
+    const persisted = JSON.parse(
+      readFileSync(reviewGateStatePath(cwd), "utf-8"),
+    );
+
+    assert.equal(consumed.consumed, false);
+    assert.match(consumed.note ?? "", /identity or evidence changed/);
+    assert.equal(persisted.active, true);
+    assert.equal(persisted.status, "active");
+    assert.equal(
+      persisted.identity.gitDir,
+      `${original.identity.gitDir}-changed`,
+    );
   } finally {
     rmSync(cwd, { force: true, recursive: true });
   }
