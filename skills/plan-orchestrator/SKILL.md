@@ -30,13 +30,15 @@ All work goes through planning review before implementation:
    the configured OpenSpec propose entrypoint, apply the source-plan cleanup
    rule below, create a `plan_review_request`, and run `plan-review`.
 6. Consume only a validated `planning_review` handoff before implementation.
-7. Run `plan-unit-sequencer` for unit selection.
-8. Let `plan-unit-delivery` implement exactly one selected unit at a time.
+7. Run `plan-unit-sequencer` for delivery-unit selection.
+8. Let `plan-unit-delivery` implement exactly one selected delivery unit at a
+   time. A delivery unit normally maps to one implementation PR/MR; nested work
+   items inside that unit become commits in that same PR/MR.
 
 Intermediate outputs such as `plan_delivery_handoff`, `openspec_blueprint`,
-`planning_review`, or one delivered unit are not terminal success for
-`plan-orchestrator`; continue until `stack_ready` or report `delivery_blocked`
-with evidence.
+`planning_review`, or one delivered delivery-unit MR are not terminal success
+for `plan-orchestrator`; continue until `stack_ready` or report
+`delivery_blocked` with evidence.
 
 ## Stacked Delivery Mode
 
@@ -103,18 +105,18 @@ The resume state must account for:
 - intake kind: ready plan, OpenSpec blueprint, existing OpenSpec, or
   continue/resume;
 - planning MR and latest Nitro gate state;
-- implementation stack order;
+- implementation stack order by delivery-unit MR;
 - current stack tip;
 - latest head SHA and Nitro gate state for every MR;
 - stack-tip `tasks.md` fingerprint;
-- concrete stack-tip `tasks.md` content and task-to-artifact evidence for
-  checked deliverables;
+- concrete stack-tip `tasks.md` content and delivery-unit-to-artifact evidence
+  for checked units, including completed nested work-item IDs;
 - no lifecycle-only, validation-only, proof-only, or manual-looking proof task
   shapes in stack-tip `tasks.md`; if validation reports `needs_spec_redesign`,
   stop and ask the user whether to redo the spec, brainstorm, narrow scope, or
   choose another route before continuing delivery;
-- predecessor artifact, task-delta validation, and cumulative task-state
-  evidence for every implementation artifact;
+- predecessor artifact, delivery-unit delta validation, and cumulative
+  task-state evidence for every implementation artifact;
 - restack requirements and evidence.
 
 If an earlier MR changed after descendants exist, restack affected descendants
@@ -134,8 +136,9 @@ Finish with `stack_ready` only after:
 - the planning MR and every implementation MR have latest-head Nitro gate
   outcome `passed`;
 - stack base/head relationships are valid;
-- stack-tip task state has all deliverable tasks checked and no invalid
-  lifecycle/proof-only task shapes;
+- stack-tip task state has all delivery units checked, every checked unit has
+  implementation-artifact evidence, nested work-item completion is accounted
+  for, and no invalid lifecycle/proof-only task shapes remain;
 - `restack_required` is `false`.
 
 Validate the final result with `scripts/plan-orchestrator.ts

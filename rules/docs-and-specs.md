@@ -30,22 +30,52 @@ These rules cover documentation workflow, OpenSpec, and diagrams.
 
 ## OpenSpec Task Shape
 
-- OpenSpec `tasks.md` groups must represent deliverable implementation areas,
-  not process lifecycle phases.
+- OpenSpec `tasks.md` headings are delivery units. In stacked plan delivery, one
+  delivery-unit heading normally maps to one implementation PR/MR. The checkboxes
+  under that heading are nested work items for that same PR/MR, usually one
+  commit each.
+- Use delivery-unit headings for deliverable implementation areas with
+  reviewable outcomes, often the phases named in the plan. Do not use headings
+  for process lifecycle phases.
+- Target 2-6 nested work items per delivery unit. More than 6 and at most 8
+  work items is a split smell and needs a `Justification:` paragraph attached
+  to the heading before the first checkbox. More than 8 work items is a
+  planning-readiness blocker. A one-item delivery unit is a merge smell unless
+  risk, deployment, reviewability, or ownership boundaries justify a separate
+  PR/MR.
 - Do not add task groups anywhere in the file that are dedicated only to
   documentation, linting, testing, review, validation, or verification.
 - Documentation, linting, testing, review, validation, and verification belong
-  in the corresponding deliverable task as acceptance or verification work. When
-  warranted, make them a proof subcheck or acceptance/verification bullet inside
-  the related deliverable task, not a separate OpenSpec task checkbox or
-  independent delivery unit.
+  in the corresponding delivery unit or nested work item as acceptance or
+  verification work. When warranted, make them a proof subcheck or
+  acceptance/verification bullet inside the related work item. They are not a separate OpenSpec task checkbox
+  or independent delivery unit.
 - Docs, testing, validation, CI, reviewer tooling, runtime validation tooling,
   or reusable AI workflow machinery are valid only when that area is the feature being
   changed. Deliverable-scoped proof subchecks are valid only inside the related
-  deliverable task, not as OpenSpec task checkboxes.
+  nested work item, not as independent OpenSpec task checkboxes.
 - Existing bad task shape must block with `needs_spec_redesign`. Ask the user
   whether to redo the spec, brainstorm a better breakdown, narrow the change, or
   choose another planning route. Do not silently rewrite `tasks.md`.
+
+Valid delivery-unit breakdown:
+
+```md
+## 1. Contract Shape
+
+- [ ] 1.1 Update the shared task-shape rule
+- [ ] 1.2 Update readiness blueprint guidance
+- [ ] 1.3 Update planning review guidance
+```
+
+Invalid lifecycle breakdown:
+
+```md
+## 4. Testing and Documentation
+
+- [ ] 4.1 Run validation
+- [ ] 4.2 Update docs
+```
 
 ## Diagrams in Documentation
 

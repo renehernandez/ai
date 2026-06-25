@@ -43,7 +43,7 @@ sidecars such as `*.reviewer-selection.yaml`, `*.handoff.json`, or
 4. Apply the atomicity gate:
    - one user or system outcome;
    - one primary ownership area;
-   - no required sequencing across multiple PRs or MRs;
+   - no required sequencing across multiple delivery-unit PRs or MRs;
    - one verification story;
    - no hidden migration, deployment, or manual prerequisite chain.
 5. Run reviewer selection, plan reviewers, and final scrutiny.
@@ -218,9 +218,24 @@ blueprint comes from a `.agents/plans/**` artifact, `source_plan.ref` and
 `plan-orchestrator` must pass as `--expected-source-plan` and
 `--expected-change-id` during source-plan cleanup.
 
-OpenSpec blueprint tasks must be deliverable units. Do not create
-documentation, testing, linting, review, validation, or verification phases
-anywhere in the task list.
+OpenSpec blueprints must describe the expected implementation shape before
+OpenSpec files are created. Include the expected delivery-unit count, the nested
+work-item count for each unit, split smells, merge smells, and any sizing
+justification the OpenSpec task file will need.
+
+OpenSpec blueprint delivery units must be deliverable implementation areas. One
+delivery unit normally becomes one implementation PR/MR, often matching one plan
+phase. The nested work items under that unit are the commit-sized sub-tasks
+inside that PR/MR.
+
+Target 2-6 nested work items per delivery unit. More than 6 and at most 8 work
+items is a split smell and requires an explicit `Justification:` note attached
+to the delivery unit. More than 8 work items is a readiness blocker. A one-item
+delivery unit is a merge smell unless risk, deployment, reviewability, or
+ownership boundaries justify a separate PR/MR.
+
+Do not create documentation, testing, linting, review, validation, or
+verification phases anywhere in the task list.
 Put those activities in the acceptance or verification for the corresponding
 deliverable task. They may be separate tasks only when docs, tests, validation,
 CI, reviewer tooling, runtime validation tooling, or reusable AI workflow
@@ -244,6 +259,30 @@ checkboxes.
 `validate-blueprint` also enforces earliest objective proof with the shared
 objective-proof analyzer. It must reject missing, implicit, late, deferred,
 setup-only, or marker-only objective proof with `needs_spec_redesign`.
+
+Valid delivery-unit blueprint shape:
+
+```yaml
+delivery_units:
+  - id: "1"
+    title: Contract Shape
+    expected_mr: true
+    work_item_count: 3
+    work_items:
+      - id: "1.1"
+        title: Update the shared task-shape rule
+      - id: "1.2"
+        title: Update readiness blueprint guidance
+      - id: "1.3"
+        title: Update planning review guidance
+```
+
+Invalid sizing shapes:
+
+- A unit with 9 work items blocks readiness.
+- A unit with 7 work items and no `Justification:` note blocks readiness.
+- A one-item unit without risk, deployment, reviewability, or ownership
+  justification should merge into a neighboring unit before readiness succeeds.
 
 Legacy `slice_plan_review`, `reviewed_slices`,
 `plan_ready_handoff`, `plan_followthrough_slice_handoff`, and
@@ -278,7 +317,7 @@ Linear comments by default.
 
 | Mistake | Fix |
 | --- | --- |
-| Failing hard for complex work | Produce a reviewed `openspec_blueprint` |
+| Failing hard for complex work | Produce a reviewed `openspec_blueprint` with delivery units and nested work items |
 | Writing OpenSpec files in PlanReady | Stop at `openspec_blueprint` |
 | Maintaining a followthrough ledger | Use OpenSpec `tasks.md` for multi-step state |
 | Accepting old handoff shapes | Return `needs_plan_ready` |
@@ -286,6 +325,7 @@ Linear comments by default.
 | Treating readiness as orchestrator completion | Continue through planning review and stacked delivery until `stack_ready` or `delivery_blocked` |
 | Adding a documentation or validation OpenSpec phase anywhere | Fold proof work into deliverable tasks or block with `blocked_readiness.reason: needs_spec_redesign` |
 | Letting validation-only blueprint tasks pass schema validation | Treat `validate-blueprint` `needs_spec_redesign` output as a readiness block |
+| Omitting expected implementation shape from a multi-deliverable blueprint | Add delivery-unit count, work-item counts, split smells, merge smells, and justification notes before returning ready |
 | Skipping baseline reviewers | Run all baseline reviewers before ready |
 | Returning YAML without a readable thread summary | Add `## Readable Summary` before the YAML |
 
