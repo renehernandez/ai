@@ -33,6 +33,7 @@ These rules cover Git, GitHub, GitLab, Linear, review routing, and external comm
 ## Git Commits
 
 - Agents must use `ax commit` for commits instead of invoking `git commit` manually. `ax commit` validates local review-gate state before delegating to Git and preserves the user's manual terminal escape hatch.
+- Plan workflow skills that own planning or implementation commits must use their required-gate commit helpers, which delegate to `ax commit --require-review-gate`; raw `git commit` remains Rene's manual terminal escape hatch.
 - Legacy slash commit helpers may still shape commit messages or host-specific publish flow when explicitly available, but they must not bypass `ax commit` for agent-authored commits.
 - Never use `--no-verify` when committing.
 - Do not force push for ordinary follow-up work, review feedback, or CI fixes. Use subsequent commits because the user's hosted diffs are squash-merged. Force push only when it is necessary to resolve a Git history change, rebase, conflict, stale remote update, or when the user explicitly asks for a history rewrite.
