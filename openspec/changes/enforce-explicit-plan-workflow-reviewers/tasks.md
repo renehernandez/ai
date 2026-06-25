@@ -18,7 +18,7 @@
 
 - [x] 2.1 Add a required-gate workflow commit mode to `ax commit`, such as
   `ax commit --require-review-gate -m "..."`.
-- [ ] 2.2 Make required-gate mode fail when no active fresh gate exists while
+- [x] 2.2 Make required-gate mode fail when no active fresh gate exists while
   ordinary `ax commit -m "..."` keeps the no-gate allow path for non-workflow
   commits only when no active workflow-required gate exists.
 - [ ] 2.3 Make ordinary `ax commit` fail with a required-gate diagnostic when an

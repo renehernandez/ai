@@ -330,6 +330,7 @@ export function validateReviewGateForCommit(
 
 export function formatReviewGateStatus(
   validation: ReviewGateValidation,
+  options: { next?: string } = {},
 ): string {
   const lines = [
     `state_path: ${validation.statePath}`,
@@ -349,10 +350,11 @@ export function formatReviewGateStatus(
     lines.push("errors:");
     lines.push(...validation.errors.map((error) => `- ${error}`));
     lines.push(
-      "next: complete or rerun required local reviews, then retry ax commit",
+      options.next ??
+        "next: complete or rerun required local reviews, then retry ax commit",
     );
   } else {
-    lines.push("next: ax commit");
+    lines.push(options.next ?? "next: ax commit");
   }
 
   return `${lines.join("\n")}\n`;
