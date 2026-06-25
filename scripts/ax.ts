@@ -46,6 +46,8 @@ type RuntimeCommand = "install" | "update" | "validate" | "status";
 type SkillCommand = Extract<RuntimeCommand, "install" | "update" | "validate">;
 type ShimCommand = "install" | "status" | "uninstall";
 
+const REQUIRE_REVIEW_GATE_FLAG = "--require-review-gate";
+
 type RemoteSkillSource = {
   url: string;
   ref: string;
@@ -697,6 +699,10 @@ function addCommitCommand(program: Command): void {
   program
     .command("commit")
     .description("Validate the local review gate, then run git commit")
+    .option(
+      REQUIRE_REVIEW_GATE_FLAG,
+      "Enable workflow-owned review-gate commit mode",
+    )
     .allowUnknownOption(true)
     .allowExcessArguments(true)
     .argument("[args...]", "Supported git commit arguments")
@@ -731,7 +737,6 @@ function addCommitCommand(program: Command): void {
         process.exitCode = 1;
         return;
       }
-
       const result = spawnSync("git", ["commit", ...parsed.gitArgs], {
         cwd: process.cwd(),
         encoding: "utf-8",
