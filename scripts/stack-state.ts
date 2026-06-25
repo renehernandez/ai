@@ -1,12 +1,15 @@
-import type { OpenSpecTask } from "../skills/openspec-tasks/scripts/openspec-tasks.ts";
+import type {
+  OpenSpecDeliveryUnit,
+  OpenSpecWorkItem,
+} from "../skills/openspec-tasks/scripts/openspec-tasks.ts";
 import {
-  parseTasks,
-  validateTasks,
+  parseDeliveryUnits,
+  validateDeliveryUnits,
 } from "../skills/openspec-tasks/scripts/openspec-tasks.ts";
 
 export type UnitTaskDelta = {
   errors: string[];
-  addedTask?: OpenSpecTask;
+  addedTask?: OpenSpecWorkItem;
 };
 
 export type TaskArtifactEvidence = {
@@ -59,12 +62,14 @@ export function validateUnitTaskDelta(
   expectedTaskId: string,
 ): UnitTaskDelta {
   const errors: string[] = [];
-  const baseTasks = parseTasks(baseMarkdown);
-  const headTasks = parseTasks(headMarkdown);
+  const baseUnits = parseDeliveryUnits(baseMarkdown);
+  const headUnits = parseDeliveryUnits(headMarkdown);
+  const baseTasks = flattenDeliveryUnits(baseUnits);
+  const headTasks = flattenDeliveryUnits(headUnits);
 
   errors.push(
-    ...taskShapeErrors(baseTasks, "base tasks.md"),
-    ...taskShapeErrors(headTasks, "head tasks.md"),
+    ...deliveryUnitShapeErrors(baseUnits, "base tasks.md"),
+    ...deliveryUnitShapeErrors(headUnits, "head tasks.md"),
   );
 
   const baseById = new Map(baseTasks.map((task) => [task.id, task]));
@@ -173,8 +178,9 @@ export function validateStackTipTaskState(
     return [`${context}.task_state.tasks_markdown is required`];
   }
 
-  const tasks = parseTasks(tasksMarkdown);
-  errors.push(...taskShapeErrors(tasks, "tasks.md"));
+  const units = parseDeliveryUnits(tasksMarkdown);
+  const tasks = flattenDeliveryUnits(units);
+  errors.push(...deliveryUnitShapeErrors(units, "tasks.md"));
 
   const tasksById = new Map(tasks.map((task) => [task.id, task]));
   const artifactByTask = new Map<string, string>();
@@ -228,10 +234,19 @@ export function validateStackTipTaskState(
   return errors;
 }
 
-function taskShapeErrors(tasks: OpenSpecTask[], prefix: string): string[] {
-  return validateTasks(tasks).map((error) =>
+function deliveryUnitShapeErrors(
+  units: OpenSpecDeliveryUnit[],
+  prefix: string,
+): string[] {
+  return validateDeliveryUnits(units).map((error) =>
     error.startsWith("needs_spec_redesign")
       ? `${prefix}: ${error}; ask the user whether to redo the spec, brainstorm, narrow scope, or choose another route before continuing delivery`
       : `${prefix}: ${error}`,
   );
+}
+
+function flattenDeliveryUnits(
+  units: OpenSpecDeliveryUnit[],
+): OpenSpecWorkItem[] {
+  return units.flatMap((unit) => unit.work_items);
 }
