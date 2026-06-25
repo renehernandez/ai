@@ -121,7 +121,7 @@
 
 ## 8. Verification And Runtime Refresh
 
-- [ ] 8.1 Run focused tests:
+- [x] 8.1 Run focused tests:
   `pnpm exec node --import tsx --test tests/unit/review-gate.test.ts`,
   `pnpm exec node --import tsx --test tests/unit/plan-ready-script.test.ts`,
   `pnpm exec node --import tsx --test tests/unit/plan-review-script.test.ts`,
