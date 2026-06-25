@@ -868,7 +868,7 @@ function validateDeliveryGateSemantics(
     )
   ) {
     errors.push(
-      "unit_artifact_boundary.evidence must prove the approved task is delivered in one separate PR/MR or implementation artifact",
+      "unit_artifact_boundary.evidence must prove the approved delivery unit is delivered in one separate PR/MR or implementation artifact",
     );
   }
 

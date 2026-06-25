@@ -64,15 +64,15 @@
 
 ## 4. Runtime Surfaces
 
-- [ ] 4.1 Update plan skill agent prompts under `skills/*/agents/` so delegated
+- [x] 4.1 Update plan skill agent prompts under `skills/*/agents/` so delegated
       planning and delivery agents use delivery-unit and nested-work-item
       terminology.
-- [ ] 4.2 Update OpenSpec-generated or installed skill surfaces in this repo
+- [x] 4.2 Update OpenSpec-generated or installed skill surfaces in this repo
       that duplicate the legacy per-task MR language.
-- [ ] 4.3 Update docs, examples, and change-request body guidance that mention
+- [x] 4.3 Update docs, examples, and change-request body guidance that mention
       one implementation MR per OpenSpec task or omit delivery-unit MR
       evidence.
-- [ ] 4.4 Add prompt and template contract assertions that fail on stale
+- [x] 4.4 Add prompt and template contract assertions that fail on stale
       `selected_task_id`, `unit_task_delta_valid`, or per-task MR wording in
       active runtime-facing surfaces unless the wording is explicitly legacy
       context.
