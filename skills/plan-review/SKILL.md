@@ -144,10 +144,15 @@ and next action.
    rationale.
 6. Run `review-feedback-routing` before PR/MR creation. Detect artifact host
    from remotes and route reviewer feedback separately from artifact creation.
-7. Commit and push the planning-only branch when the hosted-review creation path
+7. Bind the validated readiness reviewer evidence to the current staged
+   planning diff with `scripts/plan-review.ts review-gate-input --diff-hash
+   <current-staged-diff-hash> --file <plan-review-request>`. This prepares the
+   shared review-gate input for the planning commit boundary; do not recompute
+   reviewer lists.
+8. Commit and push the planning-only branch when the hosted-review creation path
    requires a clean pushed branch. Do not include implementation changes in the
    commit.
-8. Create or update the routed draft PR/MR with a title and description that
+9. Create or update the routed draft PR/MR with a title and description that
    makes the planning-only state explicit:
    - state that implementation has not started;
    - name the plan/OpenSpec artifact;
