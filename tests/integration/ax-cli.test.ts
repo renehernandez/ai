@@ -948,6 +948,41 @@ test("ax commit delegates normal staged commits after review-gate validation", (
   }
 });
 
+test("ax commit accepts required review-gate mode as a workflow flag", () => {
+  const cwd = createGitFixture("ax-commit-required-gate-flag-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+
+    const result = runAgentRuntime(
+      ["commit", "--require-review-gate", "-m", "add fixture file"],
+      {
+        cwd,
+      },
+    );
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.doesNotMatch(
+      result.stderr,
+      /unknown option|Unsupported ax commit option|Pathspec commits are not supported/i,
+    );
+    assert.equal(
+      runGit(["log", "-1", "--pretty=%s"], { cwd }),
+      "add fixture file",
+    );
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("ax commit help documents required review-gate mode", () => {
+  const result = runAgentRuntime(["commit", "--help"]);
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /--require-review-gate/);
+  assert.match(result.stdout, /Enable workflow-owned review-gate commit mode/);
+});
+
 test("ax commit ignores parent Git repository env when delegating", () => {
   const cwd = createGitFixture("ax-commit-sanitizes-env-");
   try {
