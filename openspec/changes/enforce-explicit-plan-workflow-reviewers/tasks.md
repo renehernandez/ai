@@ -103,7 +103,7 @@
 - [x] 6.1 Add validation or tests proving local reviewer gate evidence cannot
   satisfy `planning_review`, `nitro_feedback_gate`, MR approval,
   CI/no-pipeline inspection, or unsupported-host routing.
-- [ ] 6.2 Keep `/request_review @nitro`, latest-head Nitro feedback, and
+- [x] 6.2 Keep `/request_review @nitro`, latest-head Nitro feedback, and
   actionable-feedback resolution as separate hosted-review requirements after
   local commit gates pass.
 - [ ] 6.3 Document that local review gates block commits and hosted Nitro gates

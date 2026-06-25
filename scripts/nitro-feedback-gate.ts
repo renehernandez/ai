@@ -153,6 +153,14 @@ export function nitroFeedbackGateErrors(input: string): string[] {
   if (gate.requestEvidence.length === 0) {
     errors.push("request.evidence is required");
   }
+  if (
+    gate.requestEvidence.length > 0 &&
+    !gate.requestEvidence.some((item) =>
+      /\/request_review\s+@nitro\b/i.test(item),
+    )
+  ) {
+    errors.push("request.evidence must include /request_review @nitro");
+  }
   if (gate.startStatus !== "blocked" && gate.startEvidence.length === 0) {
     errors.push("start.evidence is required unless start.status is blocked");
   }
@@ -342,7 +350,7 @@ function normalizedGateForStatus(
     required: true
     requested_after_latest_push: true
     evidence:
-      - Nitro review requested for latest head
+      - /request_review @nitro posted for latest head
   start:
     status: ${startStatus}
     timeout_minutes: 10
