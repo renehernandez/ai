@@ -128,6 +128,8 @@ const REVIEW_OUTCOME_STATUSES = [
   "not_applicable",
 ] as const;
 const REVIEWED_DIFF_HASH_PATTERN = /^sha256:[a-f0-9]{64}$/;
+const LOCAL_REVIEW_EVIDENCE_PATTERN =
+  /\b(local[_ -]review(?:er)?(?:[_ -]?gate)?|reviewer[_-]passes|reviewer[_ -]?report|review[_ -]?gate|implementation[_-]review|implementation[_-]scrutiny|code[_-]quality[_-]review|code[_-]simplifier|deslop|docs[_-]alignment(?:[_-]review)?|ai[_-]readiness[_-]upkeep|security[_-]review)\b/i;
 const PLAN_UNIT_DELIVERY_REVIEW_PHASE = "plan-unit-delivery";
 type Command =
   | "detect"
@@ -1337,6 +1339,31 @@ function validateDeliveryGateSemantics(
     );
   }
 
+  rejectLocalReviewEvidenceForHostedGate(
+    section,
+    "review_feedback_routing",
+    "routing or unsupported-host evidence",
+    errors,
+  );
+  rejectLocalReviewEvidenceForHostedGate(
+    section,
+    "artifact_host_review",
+    "artifact-host MR/PR review or approval evidence",
+    errors,
+  );
+  rejectLocalReviewEvidenceForHostedGate(
+    section,
+    "pipeline_monitoring",
+    "CI, pipeline, no-pipeline, or unavailable-pipeline evidence",
+    errors,
+  );
+  rejectLocalReviewEvidenceForHostedGate(
+    section,
+    "automatic_review_feedback_wait",
+    "latest-head Nitro feedback wait evidence",
+    errors,
+  );
+
   const artifactBoundaryGate = findSection(section, "unit_artifact_boundary");
   const artifactBoundaryEvidence = artifactBoundaryGate
     ? scalar(artifactBoundaryGate, "evidence")
@@ -1399,6 +1426,25 @@ function optionalArg(args: string[], name: string): string | undefined {
   }
 
   return value;
+}
+
+function rejectLocalReviewEvidenceForHostedGate(
+  ledgerSection: string,
+  gate: (typeof LEDGER_GATES)[number],
+  expectedEvidence: string,
+  errors: string[],
+): void {
+  const gateSection = findSection(ledgerSection, gate);
+  const evidence = gateSection ? scalar(gateSection, "evidence") : undefined;
+  if (!evidence) {
+    return;
+  }
+
+  if (LOCAL_REVIEW_EVIDENCE_PATTERN.test(evidence)) {
+    errors.push(
+      `${gate}.evidence must cite ${expectedEvidence}; local review gate evidence cannot satisfy hosted gates`,
+    );
+  }
 }
 
 function scalarOrBlock(input: string, key: string): string | undefined {
