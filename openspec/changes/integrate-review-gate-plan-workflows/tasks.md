@@ -43,7 +43,7 @@
   required gate passes for the current staged diff.
 - [x] 3.3 Preserve explicit `not_applicable` skipped reviewer evidence where
   currently permitted, without counting skipped reviewers as required passes.
-- [ ] 3.4 Make `plan-unit-delivery` fail closed before implementation commits
+- [x] 3.4 Make `plan-unit-delivery` fail closed before implementation commits
   when implementation-review subagents are unavailable, reviewer outcomes are
   missing or blocking, evidence is stale, gate writing fails, or gate validation
   fails.
