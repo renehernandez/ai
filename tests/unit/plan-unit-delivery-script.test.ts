@@ -265,6 +265,23 @@ function reviewerEvidenceWithLaunchedSecurityReview(): {
   return { launch, report };
 }
 
+function reviewerEvidenceWithOverlappingSecurityReview(): {
+  launch: string;
+  report: string;
+} {
+  const evidence = reviewerEvidenceWithLaunchedSecurityReview();
+  return {
+    launch: evidence.launch.replace(
+      "    - ai-readiness-upkeep: not_applicable - no AI readiness verification or agent-surface contract changed\n",
+      "    - ai-readiness-upkeep: not_applicable - no AI readiness verification or agent-surface contract changed\n    - security-review: not_applicable - no security-sensitive surface changed\n",
+    ),
+    report: evidence.report.replace(
+      "    - ai-readiness-upkeep: not_applicable - no AI readiness verification or agent-surface contract changed\n",
+      "    - ai-readiness-upkeep: not_applicable - no AI readiness verification or agent-surface contract changed\n    - security-review: not_applicable - no security-sensitive surface changed\n",
+    ),
+  };
+}
+
 const deliveryLedger = `nitro_feedback_gate:
   artifact: https://git.fullscript.io/group/project/-/merge_requests/2
   head_sha: abc789
@@ -461,7 +478,11 @@ test("review-gate-input maps validated delivery evidence to active gate input", 
   assert.equal(output.sourceProvenance.kind, "plan_delivery_handoff");
   assert.equal(output.sourceProvenance.ref, "openspec/changes/example-change");
   assert.equal(output.sourceProvenance.phase, "plan-unit-delivery");
-  assert.deepEqual(output.sourceProvenance.evidence, ["handoff.yaml"]);
+  assert.deepEqual(output.sourceProvenance.evidence, [
+    "handoff.yaml",
+    "skipped reviewer ai-readiness-upkeep: not_applicable - no AI readiness verification or agent-surface contract changed",
+    "skipped reviewer security-review: not_applicable - no security-sensitive surface changed",
+  ]);
   assert.deepEqual(output.requiredReviewPasses, [
     "implementation-review",
     "implementation-scrutiny",
@@ -479,6 +500,8 @@ test("review-gate-input maps validated delivery evidence to active gate input", 
     output.results["implementation-review"].summary,
     /no blocking issues/,
   );
+  assert.ok(!output.requiredReviewPasses.includes("ai-readiness-upkeep"));
+  assert.ok(!output.requiredReviewPasses.includes("security-review"));
   assert.equal(output.results["security-review"], undefined);
   assert.deepEqual(output.blockingFindings, []);
 });
@@ -523,8 +546,29 @@ test("review-gate-input promotes launched dynamic reviewers to required gate pas
 
   assert.equal(result.status, 0);
   assert.ok(output.requiredReviewPasses.includes("security-review"));
+  assert.ok(!output.requiredReviewPasses.includes("ai-readiness-upkeep"));
   assert.equal(output.results["security-review"].status, "passed");
   assert.equal(output.results["security-review"].diffHash, reviewGateDiffHash);
+  assert.match(output.sourceProvenance.evidence[0], /input\.yaml$/);
+  assert.deepEqual(output.sourceProvenance.evidence.slice(1), [
+    "skipped reviewer ai-readiness-upkeep: not_applicable - no AI readiness verification or agent-surface contract changed",
+  ]);
+});
+
+test("review-gate-input rejects reviewers listed as both launched and skipped", () => {
+  const evidence = reviewerEvidenceWithOverlappingSecurityReview();
+  const result = runPlanUnitDelivery(
+    "review-gate-input",
+    `${validHandoff}\n${evidence.launch}\n${evidence.report}`,
+    ["--diff-hash", reviewGateDiffHash],
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /security-review cannot be both launched and skipped/,
+  );
+  assert.equal(result.stdout, "");
 });
 
 test("review-gate-input rejects nonpassing launched required gate passes", () => {
@@ -790,6 +834,39 @@ test("validate-launch-report requires AI readiness accounting", () => {
   assert.match(
     invalid.stderr,
     /ai-readiness-upkeep must be launched or listed/,
+  );
+
+  const placeholderEvidence = runPlanUnitDelivery(
+    "validate-launch-report",
+    launchedReport.replace(
+      "    - ai-readiness-upkeep: not_applicable - no AI readiness verification or agent-surface contract changed\n",
+      "    - ai-readiness-upkeep: not_applicable - <evidence>\n",
+    ),
+  );
+
+  assert.notEqual(placeholderEvidence.status, 0);
+  assert.match(
+    placeholderEvidence.stderr,
+    /ai-readiness-upkeep skipped evidence is required/,
+  );
+  assert.match(
+    placeholderEvidence.stderr,
+    /ai-readiness-upkeep must be launched or listed/,
+  );
+
+  const unknownSkippedReviewer = runPlanUnitDelivery(
+    "validate-launch-report",
+    launchedReport.replace(
+      "    - security-review: not_applicable - no security-sensitive surface changed\n",
+      "    - unknown-review: not_applicable - no security-sensitive surface changed\n",
+    ),
+  );
+
+  assert.notEqual(unknownSkippedReviewer.status, 0);
+  assert.match(unknownSkippedReviewer.stderr, /unknown skipped reviewer/);
+  assert.match(
+    unknownSkippedReviewer.stderr,
+    /security-review must be launched or listed/,
   );
 });
 
