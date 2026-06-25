@@ -248,6 +248,38 @@ function reviewGateStatePath(cwd: string): string {
   return join(gitPath, "ax", "review-gate.json");
 }
 
+function reviewGateInvalidationPath(cwd: string): string {
+  return join(
+    dirname(reviewGateStatePath(cwd)),
+    "review-gate.invalidated.json",
+  );
+}
+
+function writeReviewGateInvalidation(
+  cwd: string,
+  diffHash: string,
+  blockers: string[],
+): void {
+  const invalidationPath = reviewGateInvalidationPath(cwd);
+  mkdirSync(dirname(invalidationPath), { recursive: true });
+  writeFileSync(
+    invalidationPath,
+    `${JSON.stringify(
+      {
+        version: 1,
+        active: true,
+        status: "invalidated",
+        stagedDiffHash: diffHash,
+        blockers,
+        updatedAt: new Date().toISOString(),
+      },
+      null,
+      2,
+    )}\n`,
+    "utf-8",
+  );
+}
+
 function readReviewGateState(cwd: string): Record<string, unknown> {
   return JSON.parse(readFileSync(reviewGateStatePath(cwd), "utf-8")) as Record<
     string,
@@ -750,6 +782,46 @@ test("CLI shows hooks scope help", () => {
   assert.match(result.stdout, /validate/);
 });
 
+test("review-gate force-unlock removes a stuck local lock", () => {
+  const cwd = createGitFixture("ax-review-gate-force-unlock-");
+  try {
+    const lockPath = join(
+      dirname(reviewGateStatePath(cwd)),
+      "review-gate.lock",
+    );
+    mkdirSync(dirname(lockPath), { recursive: true });
+    writeFileSync(lockPath, "locked\n", "utf-8");
+
+    const result = runAgentRuntime(["review-gate", "force-unlock"], { cwd });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /removed_review_gate_lock:/);
+    assert.match(result.stdout, /review-gate\.lock/);
+    assert.equal(existsSync(lockPath), false);
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("review-gate force-unlock reports when no local lock exists", () => {
+  const cwd = createGitFixture("ax-review-gate-force-unlock-missing-");
+  try {
+    const lockPath = join(
+      dirname(reviewGateStatePath(cwd)),
+      "review-gate.lock",
+    );
+
+    const result = runAgentRuntime(["review-gate", "force-unlock"], { cwd });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /review_gate_lock_missing:/);
+    assert.match(result.stdout, /review-gate\.lock/);
+    assert.equal(existsSync(lockPath), false);
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
 test("review-gate validate-commit allows missing inactive gate state", () => {
   const cwd = createGitFixture("ax-review-gate-missing-");
   try {
@@ -1083,6 +1155,56 @@ test("ax commit required review-gate mode delegates and consumes an active fresh
   }
 });
 
+test("ax commit required review-gate mode rejects an invalidated active gate", () => {
+  const cwd = createGitFixture("ax-commit-required-gate-invalidated-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+    const hash = stagedHash(cwd);
+    writeReviewGateState(cwd, {
+      version: 1,
+      active: true,
+      status: "active",
+      workflow: "plan-unit-delivery",
+      sourceProvenance: {
+        kind: "plan_delivery_handoff",
+        ref: "/tmp/example-handoff.yaml",
+      },
+      stagedDiffHash: hash,
+      requiredReviewPasses: ["implementation-review"],
+      results: {
+        "implementation-review": {
+          status: "passed",
+          diffHash: hash,
+        },
+      },
+      blockingFindings: [],
+    });
+    writeReviewGateInvalidation(cwd, hash, ["blocked after review"]);
+
+    const result = runAgentRuntime(
+      ["commit", "--require-review-gate", "-m", "add fixture file"],
+      {
+        cwd,
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Review gate was invalidated/);
+    assert.match(result.stderr, /Blocked activation finding/);
+    assert.match(
+      result.stderr,
+      /next: complete or rerun required local reviews, then retry ax commit/,
+    );
+    assert.equal(runGit(["status", "--short"], { cwd }), "A  file.txt");
+    const state = readReviewGateState(cwd);
+    assert.equal(state.active, true);
+    assert.equal(state.status, "active");
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
 test("ax commit required review-gate mode preserves active gate when a hook mutates the committed diff", () => {
   const cwd = createGitFixture("ax-commit-required-gate-mutated-diff-");
   try {
@@ -1200,7 +1322,7 @@ test("ax commit required review-gate mode preserves active gate when git commit 
   }
 });
 
-test("ax commit required review-gate mode warns when post-commit consume fails", () => {
+test("ax commit required review-gate mode fails when post-commit consume throws", () => {
   const cwd = createGitFixture("ax-commit-required-gate-consume-fails-");
   try {
     writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
@@ -1240,16 +1362,350 @@ test("ax commit required review-gate mode warns when post-commit consume fails",
       },
     );
 
-    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(result.status, 1);
     assert.equal(
       runGit(["log", "-1", "--pretty=%s"], { cwd }),
       "add fixture file",
     );
     assert.match(
       result.stderr,
-      /warning: committed successfully but failed to consume review gate/,
+      /error: committed successfully but failed to consume review gate/,
     );
     assert.match(result.stderr, /not valid JSON/);
+    assert.match(result.stderr, /rerun required local reviews/);
+    assert.match(result.stderr, /activate a fresh gate/);
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("ax commit required review-gate mode fails when post-commit consume is locked", () => {
+  const cwd = createGitFixture("ax-commit-required-gate-consume-locked-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+    const hash = stagedHash(cwd);
+    writeReviewGateState(cwd, {
+      version: 1,
+      active: true,
+      status: "active",
+      workflow: "plan-unit-delivery",
+      sourceProvenance: {
+        kind: "plan_delivery_handoff",
+        ref: "/tmp/example-handoff.yaml",
+      },
+      stagedDiffHash: hash,
+      requiredReviewPasses: ["implementation-review"],
+      results: {
+        "implementation-review": {
+          status: "passed",
+          diffHash: hash,
+        },
+      },
+      blockingFindings: [],
+    });
+    writeFileSync(
+      join(dirname(reviewGateStatePath(cwd)), "review-gate.lock"),
+      "locked\n",
+      "utf-8",
+    );
+
+    const result = runAgentRuntime(
+      ["commit", "--require-review-gate", "-m", "add fixture file"],
+      {
+        cwd,
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.equal(
+      runGit(["log", "-1", "--pretty=%s"], { cwd }),
+      "add fixture file",
+    );
+    assert.match(
+      result.stderr,
+      /error: committed successfully but review gate was not consumed/,
+    );
+    assert.match(result.stderr, /locked by another operation/);
+    assert.match(result.stderr, /rerun required local reviews/);
+    assert.match(result.stderr, /activate a fresh gate/);
+    const state = readReviewGateState(cwd);
+    assert.equal(state.active, true);
+    assert.equal(state.status, "active");
+    assert.equal(state.consumedAt, undefined);
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("ax commit required review-gate mode fails when post-commit gate state changes", () => {
+  const cwd = createGitFixture("ax-commit-required-gate-consume-mismatch-");
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+    const hash = stagedHash(cwd);
+    const changedHash = `sha256:${"0".repeat(64)}`;
+    writeReviewGateState(cwd, {
+      version: 1,
+      active: true,
+      status: "active",
+      workflow: "plan-unit-delivery",
+      sourceProvenance: {
+        kind: "plan_delivery_handoff",
+        ref: "/tmp/example-handoff.yaml",
+      },
+      stagedDiffHash: hash,
+      requiredReviewPasses: ["implementation-review"],
+      results: {
+        "implementation-review": {
+          status: "passed",
+          diffHash: hash,
+        },
+      },
+      blockingFindings: [],
+    });
+    const postCommitHook = join(cwd, ".git", "hooks", "post-commit");
+    writeFileSync(
+      postCommitHook,
+      `#!/bin/sh
+cat > '${reviewGateStatePath(cwd)}' <<'JSON'
+{
+  "version": 1,
+  "active": true,
+  "status": "active",
+  "workflow": "plan-unit-delivery",
+  "sourceProvenance": {
+    "kind": "plan_delivery_handoff",
+    "ref": "/tmp/other-handoff.yaml"
+  },
+  "stagedDiffHash": "${changedHash}",
+  "requiredReviewPasses": ["implementation-review"],
+  "results": {
+    "implementation-review": {
+      "status": "passed",
+      "diffHash": "${changedHash}"
+    }
+  },
+  "blockingFindings": []
+}
+JSON
+`,
+      "utf-8",
+    );
+    chmodSync(postCommitHook, 0o755);
+
+    const result = runAgentRuntime(
+      ["commit", "--require-review-gate", "-m", "add fixture file"],
+      {
+        cwd,
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.equal(
+      runGit(["log", "-1", "--pretty=%s"], { cwd }),
+      "add fixture file",
+    );
+    assert.match(
+      result.stderr,
+      /error: committed successfully but review gate was not consumed/,
+    );
+    assert.match(result.stderr, /staged diff hash changed/);
+    assert.match(result.stderr, /rerun required local reviews/);
+    assert.match(result.stderr, /activate a fresh gate/);
+    const state = readReviewGateState(cwd);
+    assert.equal(state.active, true);
+    assert.equal(state.status, "active");
+    assert.equal(state.stagedDiffHash, changedHash);
+    assert.equal(state.consumedAt, undefined);
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("ax commit required review-gate mode fails when post-commit gate required passes change", () => {
+  const cwd = createGitFixture(
+    "ax-commit-required-gate-consume-passes-mismatch-",
+  );
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+    const hash = stagedHash(cwd);
+    writeReviewGateState(cwd, {
+      version: 1,
+      active: true,
+      status: "active",
+      workflow: "plan-unit-delivery",
+      sourceProvenance: {
+        kind: "plan_delivery_handoff",
+        ref: "/tmp/example-handoff.yaml",
+      },
+      stagedDiffHash: hash,
+      requiredReviewPasses: ["implementation-review", "docs-alignment-review"],
+      results: {
+        "implementation-review": {
+          status: "passed",
+          diffHash: hash,
+        },
+        "docs-alignment-review": {
+          status: "passed",
+          diffHash: hash,
+        },
+      },
+      blockingFindings: [],
+    });
+    const postCommitHook = join(cwd, ".git", "hooks", "post-commit");
+    writeFileSync(
+      postCommitHook,
+      `#!/bin/sh
+cat > '${reviewGateStatePath(cwd)}' <<'JSON'
+{
+  "version": 1,
+  "active": true,
+  "status": "active",
+  "workflow": "plan-unit-delivery",
+  "sourceProvenance": {
+    "kind": "plan_delivery_handoff",
+    "ref": "/tmp/other-handoff.yaml"
+  },
+  "stagedDiffHash": "${hash}",
+  "requiredReviewPasses": ["implementation-review"],
+  "results": {
+    "implementation-review": {
+      "status": "passed",
+      "diffHash": "${hash}"
+    }
+  },
+  "blockingFindings": []
+}
+JSON
+`,
+      "utf-8",
+    );
+    chmodSync(postCommitHook, 0o755);
+
+    const result = runAgentRuntime(
+      ["commit", "--require-review-gate", "-m", "add fixture file"],
+      {
+        cwd,
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.equal(
+      runGit(["log", "-1", "--pretty=%s"], { cwd }),
+      "add fixture file",
+    );
+    assert.match(
+      result.stderr,
+      /error: committed successfully but review gate was not consumed/,
+    );
+    assert.match(result.stderr, /required review passes changed/);
+    assert.match(result.stderr, /rerun required local reviews/);
+    assert.match(result.stderr, /activate a fresh gate/);
+    const state = readReviewGateState(cwd);
+    assert.equal(state.active, true);
+    assert.equal(state.status, "active");
+    assert.deepEqual(state.requiredReviewPasses, ["implementation-review"]);
+    assert.equal(state.consumedAt, undefined);
+  } finally {
+    rmSync(cwd, { force: true, recursive: true });
+  }
+});
+
+test("ax commit required review-gate mode fails when post-commit gate identity changes", () => {
+  const cwd = createGitFixture(
+    "ax-commit-required-gate-consume-identity-mismatch-",
+  );
+  try {
+    writeFileSync(join(cwd, "file.txt"), "one\n", "utf-8");
+    runGit(["add", "file.txt"], { cwd });
+    const hash = stagedHash(cwd);
+    writeReviewGateState(cwd, {
+      version: 1,
+      active: true,
+      status: "active",
+      workflow: "plan-unit-delivery",
+      unit: {
+        id: "unit-1",
+        title: "Fixture unit",
+      },
+      sourceProvenance: {
+        kind: "plan_delivery_handoff",
+        ref: "/tmp/example-handoff.yaml",
+        evidence: ["/tmp/reviewer-report.yaml"],
+      },
+      stagedDiffHash: hash,
+      requiredReviewPasses: ["implementation-review"],
+      results: {
+        "implementation-review": {
+          status: "passed",
+          diffHash: hash,
+          summary: "Reviewed original gate.",
+        },
+      },
+      blockingFindings: [],
+    });
+    const postCommitHook = join(cwd, ".git", "hooks", "post-commit");
+    writeFileSync(
+      postCommitHook,
+      `#!/bin/sh
+cat > '${reviewGateStatePath(cwd)}' <<'JSON'
+{
+  "version": 1,
+  "active": true,
+  "status": "active",
+  "workflow": "plan-unit-delivery",
+  "unit": {
+    "id": "unit-2",
+    "title": "Other fixture unit"
+  },
+  "sourceProvenance": {
+    "kind": "plan_delivery_handoff",
+    "ref": "/tmp/other-handoff.yaml",
+    "evidence": ["/tmp/other-reviewer-report.yaml"]
+  },
+  "stagedDiffHash": "${hash}",
+  "requiredReviewPasses": ["implementation-review"],
+  "results": {
+    "implementation-review": {
+      "status": "passed",
+      "diffHash": "${hash}",
+      "summary": "Reviewed other gate."
+    }
+  },
+  "blockingFindings": []
+}
+JSON
+`,
+      "utf-8",
+    );
+    chmodSync(postCommitHook, 0o755);
+
+    const result = runAgentRuntime(
+      ["commit", "--require-review-gate", "-m", "add fixture file"],
+      {
+        cwd,
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.equal(
+      runGit(["log", "-1", "--pretty=%s"], { cwd }),
+      "add fixture file",
+    );
+    assert.match(
+      result.stderr,
+      /error: committed successfully but review gate was not consumed/,
+    );
+    assert.match(result.stderr, /identity or evidence changed/);
+    assert.match(result.stderr, /rerun required local reviews/);
+    assert.match(result.stderr, /activate a fresh gate/);
+    const state = readReviewGateState(cwd);
+    assert.equal(state.active, true);
+    assert.equal(state.status, "active");
+    assert.equal(state.unit.id, "unit-2");
+    assert.equal(state.consumedAt, undefined);
   } finally {
     rmSync(cwd, { force: true, recursive: true });
   }

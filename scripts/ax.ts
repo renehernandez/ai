@@ -37,7 +37,8 @@ import ts from "typescript";
 import { listPlanArtifacts, recordPlanArtifact } from "./plan-artifacts.ts";
 import {
   committedDiffHash,
-  consumeReviewGate,
+  consumeReviewGateForDiff,
+  forceUnlockReviewGate,
   formatReviewGateStatus,
   hasStagedDiff,
   type ReviewGateValidation,
@@ -700,6 +701,20 @@ function addReviewGateCommands(program: Command): void {
       }
       process.stdout.write(formatReviewGateStatus(validation));
     });
+
+  reviewGate
+    .command("force-unlock")
+    .description(
+      "Remove a stuck local review gate lock after manual inspection",
+    )
+    .action(() => {
+      const result = forceUnlockReviewGate(process.cwd());
+      if (result.removed) {
+        process.stdout.write(`removed_review_gate_lock: ${result.lockPath}\n`);
+        return;
+      }
+      process.stdout.write(`review_gate_lock_missing: ${result.lockPath}\n`);
+    });
 }
 
 function addCommitCommand(program: Command): void {
@@ -755,6 +770,19 @@ function addCommitCommand(program: Command): void {
         return;
       }
       const reviewedDiffHash = validation.stagedDiffHash;
+      const reviewedRequiredReviewPasses = validation.requiredReviewPasses;
+      const reviewedActiveReviewGateFingerprint =
+        validation.activeReviewGateFingerprint;
+      if (
+        options.requireReviewGate === true &&
+        !reviewedActiveReviewGateFingerprint
+      ) {
+        process.stderr.write(
+          "Unable to validate review gate: active review gate fingerprint is missing.\n",
+        );
+        process.exitCode = 1;
+        return;
+      }
       const result = spawnSync("git", ["commit", ...parsed.gitArgs], {
         cwd: process.cwd(),
         encoding: "utf-8",
@@ -791,18 +819,36 @@ function addCommitCommand(program: Command): void {
           return;
         }
         try {
-          const consumed = consumeReviewGate(process.cwd());
+          const consumed = consumeReviewGateForDiff(
+            {
+              expectedStagedDiffHash: reviewedDiffHash,
+              expectedRequiredReviewPasses: reviewedRequiredReviewPasses,
+              expectedActiveReviewGateFingerprint:
+                reviewedActiveReviewGateFingerprint,
+            },
+            process.cwd(),
+          );
           if (!consumed.consumed) {
             process.stderr.write(
-              `warning: committed successfully but review gate was not consumed: ${consumed.note ?? "review gate is inactive"}\n`,
+              `error: committed successfully but review gate was not consumed: ${consumed.note ?? "review gate is inactive"}\n`,
             );
+            process.stderr.write(
+              "next: inspect the created commit, rerun required local reviews for the current gate state, activate a fresh gate, then retry.\n",
+            );
+            process.exitCode = 1;
+            return;
           }
         } catch (error) {
           const message =
             error instanceof Error ? error.message : String(error);
           process.stderr.write(
-            `warning: committed successfully but failed to consume review gate: ${message.split(/\r?\n/, 1)[0]}\n`,
+            `error: committed successfully but failed to consume review gate: ${message.split(/\r?\n/, 1)[0]}\n`,
           );
+          process.stderr.write(
+            "next: inspect the created commit, rerun required local reviews for the current gate state, activate a fresh gate, then retry.\n",
+          );
+          process.exitCode = 1;
+          return;
         }
       }
       process.exitCode = result.status ?? 1;

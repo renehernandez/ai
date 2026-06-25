@@ -38,6 +38,10 @@ validated readiness reviewer evidence before material readiness commits.
   fails, or blocking findings remain
 - **THEN** `plan-ready` emits a blocked readiness outcome
 - **AND** it does not write a passing gate
+- **AND** if writing a blocked gate fails after a previous passing gate may
+  exist for the same staged diff, it invalidates that staged diff so
+  `ax commit --require-review-gate` fails closed until fresh reviewers activate
+  a new passing gate
 - **AND** it does not invoke `ax commit` for the material readiness commit
 
 ### Requirement: Plan Unit Delivery Review Gate Activation
@@ -58,6 +62,10 @@ commits.
 - **WHEN** required implementation-review subagents are unavailable
 - **THEN** `plan-unit-delivery` emits a blocked delivery state
 - **AND** it does not write a passing gate
+- **AND** if writing a blocked gate fails after a previous passing gate may
+  exist for the same staged diff, it invalidates that staged diff so
+  `ax commit --require-review-gate` fails closed until fresh reviewers activate
+  a new passing gate
 - **AND** it does not invoke `ax commit` for the material implementation commit
 
 #### Scenario: Each material implementation commit requires fresh gate
@@ -96,7 +104,7 @@ runtime validation with phase-owned review-gate activation.
 - **WHEN** shared agent instructions describe committing material plan workflow
   changes
 - **THEN** they state that the owning workflow phase must arm and validate the
-  local review gate before `ax commit`
+  local review gate before `ax commit --require-review-gate`
 - **AND** they preserve the user's raw `git commit` escape hatch
 
 #### Scenario: Adapter prompts describe installed behavior

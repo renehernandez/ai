@@ -24,15 +24,14 @@
 - [x] 2.3 Make ordinary `ax commit` fail with a required-gate diagnostic when an
   active workflow-required gate exists.
 - [x] 2.4 Reuse existing active-gate consume/clear semantics for required-gate
-  commits, preserve active gates when Git fails before creating a commit, and
-  warn without failing retroactively when post-commit cleanup fails.
+  commits and preserve active gates when Git fails before creating a commit.
 - [x] 2.5 Update `ax review-gate status` and `validate-commit` so missing,
   active, blocking, stale, and consumed gates are reported clearly.
 - [x] 2.6 Implement post-commit reviewed-diff verification so the created
   commit must still match the reviewed staged diff before a required gate is
   consumed; fail the command and preserve or mark the gate blocked when
   commit-time mutation produces a different diff.
-- [ ] 2.7 Add atomic validate-and-consume behavior with repo/worktree-scoped
+- [x] 2.7 Add atomic validate-and-consume behavior with repo/worktree-scoped
   locking or equivalent compare-and-consume semantics.
 - [ ] 2.8 Bind active gates to worktree identity and reject linked-worktree,
   branch, `HEAD`, workflow, unit, or staged-diff mismatches.
@@ -41,8 +40,8 @@
   consumption, failed commit preservation, post-commit diff mismatch recovery,
   concurrent consume rejection, linked-worktree rejection, branch mismatch,
   `HEAD` mismatch, workflow mismatch, unit mismatch, staged-diff mismatch,
-  cleanup warning behavior, consumed gate validation no-op, active gate
-  blocking, and public help excluding activation.
+  consume failure recovery, consumed gate validation no-op, active gate
+  blocking, manual force-unlock recovery, and public help excluding activation.
 
 ## 3. Planning Commit Boundary
 

@@ -1,10 +1,13 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  closeSync,
   existsSync,
   mkdirSync,
+  openSync,
   readFileSync,
   renameSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, isAbsolute, resolve } from "node:path";
@@ -88,6 +91,11 @@ export type ReviewGateConsumeResult = {
   note?: string;
 };
 
+export type ReviewGateInvalidationWriteResult = {
+  statePath: string;
+  invalidationPath: string;
+};
+
 type ReviewGateReadResult =
   | { exists: false }
   | { exists: true; ok: true; state: unknown }
@@ -97,6 +105,13 @@ export function reviewGateStatePath(cwd = process.cwd()): string {
   const gitDir = gitOutput(["rev-parse", "--git-dir"], cwd);
   const resolvedGitDir = isAbsolute(gitDir) ? gitDir : resolve(cwd, gitDir);
   return resolve(resolvedGitDir, "ax", "review-gate.json");
+}
+
+export function reviewGateInvalidationPath(cwd = process.cwd()): string {
+  return resolve(
+    dirname(reviewGateStatePath(cwd)),
+    "review-gate.invalidated.json",
+  );
 }
 
 export function ensureReviewGateStateDirectory(cwd = process.cwd()): string {
@@ -129,91 +144,130 @@ export function writeActiveReviewGate(
   input: ActiveReviewGateInput,
   cwd = process.cwd(),
 ): ReviewGateWriteResult {
+  return withReviewGateLock(cwd, () => {
+    const statePath = reviewGateStatePath(cwd);
+    const diffHash = stagedDiffHash(cwd);
+    const now = new Date().toISOString();
+    const state: ReviewGateState = {
+      version: 1,
+      active: true,
+      status: "active",
+      workflow: input.workflow,
+      unit: input.unit,
+      sourceProvenance: input.sourceProvenance,
+      stagedDiffHash: diffHash,
+      requiredReviewPasses: input.requiredReviewPasses,
+      results: normalizeResultInput(input.results, diffHash),
+      blockingFindings: input.blockingFindings ?? [],
+      updatedAt: now,
+    };
+
+    writeValidatedState(statePath, state);
+    clearReviewGateInvalidation(reviewGateInvalidationPath(cwd));
+    return { statePath, state };
+  });
+}
+
+export function writeReviewGateInvalidation(
+  cwd: string,
+  diffHash: string,
+  blockers: string[],
+): ReviewGateInvalidationWriteResult {
+  if (!isDiffHash(diffHash)) {
+    throw new Error(
+      "Review gate invalidation diff hash must be a sha256 hash.",
+    );
+  }
   const statePath = reviewGateStatePath(cwd);
-  const diffHash = stagedDiffHash(cwd);
-  const now = new Date().toISOString();
-  const state: ReviewGateState = {
+  const invalidationPath = reviewGateInvalidationPath(cwd);
+  atomicWriteJson(invalidationPath, {
     version: 1,
     active: true,
-    status: "active",
-    workflow: input.workflow,
-    unit: input.unit,
-    sourceProvenance: input.sourceProvenance,
+    status: "invalidated",
     stagedDiffHash: diffHash,
-    requiredReviewPasses: input.requiredReviewPasses,
-    results: normalizeResultInput(input.results, diffHash),
-    blockingFindings: input.blockingFindings ?? [],
-    updatedAt: now,
-  };
-
-  writeValidatedState(statePath, state);
-  return { statePath, state };
+    blockers,
+    updatedAt: new Date().toISOString(),
+  });
+  return { statePath, invalidationPath };
 }
 
 export function consumeReviewGate(
   cwd = process.cwd(),
 ): ReviewGateConsumeResult {
-  const statePath = reviewGateStatePath(cwd);
-  const readResult = readReviewGateState(statePath);
-  if (!readResult.exists) {
-    return {
-      statePath,
-      consumed: false,
-      note: "No review gate state found; nothing to consume.",
-    };
-  }
-  if (!readResult.ok) {
-    throw new Error(
-      `Cannot consume invalid review gate state: Review gate state is not valid JSON: ${readResult.error}`,
-    );
-  }
-  const state = readResult.state;
-  const schemaErrors = validateStateShape(state);
-  if (schemaErrors.length > 0) {
-    throw new Error(
-      `Cannot consume invalid review gate state: ${schemaErrors.join("; ")}`,
-    );
-  }
-  if (!isPlainRecord(state)) {
-    throw new Error("Cannot consume invalid review gate state.");
-  }
-  const reviewGateState = state as ReviewGateState;
-  if (!reviewGateState.active) {
-    return {
-      statePath,
-      consumed: false,
-      state: reviewGateState,
-      note: "Review gate is already inactive; nothing to consume.",
-    };
-  }
+  return withReviewGateLock(
+    cwd,
+    () => {
+      const statePath = reviewGateStatePath(cwd);
+      const readResult = readReviewGateState(statePath);
+      if (!readResult.exists) {
+        return {
+          statePath,
+          consumed: false,
+          note: "No review gate state found; nothing to consume.",
+        };
+      }
+      if (!readResult.ok) {
+        throw new Error(
+          `Cannot consume invalid review gate state: Review gate state is not valid JSON: ${readResult.error}`,
+        );
+      }
+      const state = readResult.state;
+      const schemaErrors = validateStateShape(state);
+      if (schemaErrors.length > 0) {
+        throw new Error(
+          `Cannot consume invalid review gate state: ${schemaErrors.join("; ")}`,
+        );
+      }
+      if (!isPlainRecord(state)) {
+        throw new Error("Cannot consume invalid review gate state.");
+      }
+      const reviewGateState = state as ReviewGateState;
+      if (!reviewGateState.active) {
+        return {
+          statePath,
+          consumed: false,
+          state: reviewGateState,
+          note: "Review gate is already inactive; nothing to consume.",
+        };
+      }
 
-  const now = new Date().toISOString();
-  const consumedState: ReviewGateState = {
-    ...reviewGateState,
-    active: false,
-    status: "consumed",
-    updatedAt: now,
-    consumedAt: now,
-  };
-  writeValidatedState(statePath, consumedState);
-  return { statePath, consumed: true, state: consumedState };
+      const now = new Date().toISOString();
+      const consumedState: ReviewGateState = {
+        ...reviewGateState,
+        active: false,
+        status: "consumed",
+        updatedAt: now,
+        consumedAt: now,
+      };
+      writeValidatedState(statePath, consumedState);
+      return { statePath, consumed: true, state: consumedState };
+    },
+    (statePath) => ({
+      statePath,
+      consumed: false,
+      note: "Review gate is locked by another operation; nothing consumed.",
+    }),
+  );
 }
 
 export function clearReviewGate(cwd = process.cwd()): ReviewGateWriteResult {
-  const statePath = reviewGateStatePath(cwd);
-  const now = new Date().toISOString();
-  const state: ReviewGateState = {
-    version: 1,
-    active: false,
-    status: "cleared",
-    requiredReviewPasses: [],
-    results: {},
-    blockingFindings: [],
-    updatedAt: now,
-    clearedAt: now,
-  };
-  writeValidatedState(statePath, state);
-  return { statePath, state };
+  return withReviewGateLock(cwd, () => {
+    const statePath = reviewGateStatePath(cwd);
+    const now = new Date().toISOString();
+    const state: ReviewGateState = {
+      version: 1,
+      active: false,
+      status: "cleared",
+      requiredReviewPasses: [],
+      results: {},
+      blockingFindings: [],
+      updatedAt: now,
+      clearedAt: now,
+    };
+    writeValidatedState(statePath, state);
+    clearReviewGateInvalidation(reviewGateInvalidationPath(cwd));
+    return { statePath, state };
+  });
 }
 
 export function validateReviewGateForCommit(
@@ -605,7 +659,52 @@ function writeValidatedState(statePath: string, state: ReviewGateState): void {
   atomicWriteJson(statePath, state);
 }
 
-function atomicWriteJson(statePath: string, state: ReviewGateState): void {
+function withReviewGateLock<T>(
+  cwd: string,
+  callback: () => T,
+  lockedResult?: (statePath: string) => T,
+): T {
+  const statePath = ensureReviewGateStateDirectory(cwd);
+  const lockPath = resolve(dirname(statePath), "review-gate.lock");
+  let lockFd: number | undefined;
+  try {
+    lockFd = openSync(lockPath, "wx");
+  } catch (error) {
+    if (isFileExistsError(error)) {
+      if (lockedResult) {
+        return lockedResult(statePath);
+      }
+      throw new Error("Review gate is locked by another operation.");
+    }
+    throw error;
+  }
+
+  try {
+    const result = callback();
+    releaseReviewGateLock(lockFd, lockPath);
+    return result;
+  } catch (error) {
+    try {
+      releaseReviewGateLock(lockFd, lockPath);
+    } catch {
+      // Preserve the original operation failure; stale lock cleanup is secondary.
+    }
+    throw error;
+  }
+}
+
+function releaseReviewGateLock(lockFd: number, lockPath: string): void {
+  closeSync(lockFd);
+  try {
+    unlinkSync(lockPath);
+  } catch (error) {
+    if (!isFileNotFoundError(error)) {
+      throw error;
+    }
+  }
+}
+
+function atomicWriteJson(statePath: string, state: unknown): void {
   const directory = dirname(statePath);
   mkdirSync(directory, { recursive: true });
   const temporaryPath = resolve(
@@ -614,6 +713,16 @@ function atomicWriteJson(statePath: string, state: ReviewGateState): void {
   );
   writeFileSync(temporaryPath, `${JSON.stringify(state, null, 2)}\n`, "utf-8");
   renameSync(temporaryPath, statePath);
+}
+
+function clearReviewGateInvalidation(invalidationPath: string): void {
+  try {
+    unlinkSync(invalidationPath);
+  } catch (error) {
+    if (!isFileNotFoundError(error)) {
+      throw error;
+    }
+  }
 }
 
 function normalizeState(state: unknown): {
@@ -709,6 +818,22 @@ function hasOwn(value: Record<string, unknown>, key: string): boolean {
 
 function isDiffHash(value: string): boolean {
   return HASH_PATTERN.test(value);
+}
+
+function isFileExistsError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    (error as NodeJS.ErrnoException).code === "EEXIST"
+  );
+}
+
+function isFileNotFoundError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    (error as NodeJS.ErrnoException).code === "ENOENT"
+  );
 }
 
 function errorMessage(error: unknown): string {

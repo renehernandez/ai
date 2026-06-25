@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { nitroFeedbackGateErrors } from "./lib/nitro-feedback-gate.ts";
 import {
   extractSection,
@@ -25,10 +25,10 @@ import type {
 } from "./lib/review-gate.ts";
 import {
   hasStagedDiff,
-  reviewGateStatePath,
   stagedDiffHash,
   validateReviewGateForCommit,
   writeActiveReviewGate,
+  writeReviewGateInvalidation,
 } from "./lib/review-gate.ts";
 import {
   artifactHostHintFromRemoteText,
@@ -737,13 +737,17 @@ function emitBlockedReviewGate(
       blockedGate = writeBlockedReviewGate(cwd, diffHash, blockers);
     } catch (error) {
       try {
-        blockedGate = writePoisonedReviewGate(cwd, diffHash, blockers);
-        blockers.push(
-          `failed to write blocked review gate through shared API; wrote fail-closed poison gate instead: ${errorMessage(error)}`,
+        const invalidation = writeReviewGateInvalidation(
+          cwd,
+          diffHash,
+          blockers,
         );
-      } catch (poisonError) {
         blockers.push(
-          `failed to write blocked review gate and failed to write fail-closed poison gate: ${errorMessage(error)}; ${errorMessage(poisonError)}`,
+          `failed to write blocked review gate through shared API; wrote invalidation marker to block stale prior gates: ${invalidation.invalidationPath}; cause: ${errorMessage(error)}`,
+        );
+      } catch (invalidationError) {
+        blockers.push(
+          `failed to write blocked review gate through shared API and failed to write invalidation marker; stale prior gate may remain: ${errorMessage(error)}; invalidation error: ${errorMessage(invalidationError)}`,
         );
       }
     }
@@ -762,45 +766,6 @@ function emitBlockedReviewGate(
     ),
   );
   process.exit(1);
-}
-
-function writePoisonedReviewGate(
-  cwd: string,
-  diffHash: string,
-  blockers: string[],
-): ReviewGateWriteResult {
-  const statePath = reviewGateStatePath(cwd);
-  const now = new Date().toISOString();
-  const state: ReviewGateWriteResult["state"] = {
-    version: 1,
-    active: true,
-    status: "active",
-    workflow: "plan-unit-delivery",
-    unit: {
-      id: "blocked_implementation",
-      title: "Blocked Plan Unit Delivery implementation gate",
-    },
-    sourceProvenance: {
-      kind: "blocked_implementation",
-      ref: "plan-unit-delivery",
-      phase: PLAN_UNIT_DELIVERY_REVIEW_PHASE,
-      evidence: ["blocked review-gate API write fallback"],
-    },
-    stagedDiffHash: diffHash,
-    requiredReviewPasses: ["implementation-review"],
-    results: {
-      "implementation-review": {
-        status: "blocked",
-        diffHash,
-        summary: blockers.join("; "),
-      },
-    },
-    blockingFindings: blockers,
-    updatedAt: now,
-  };
-  mkdirSync(dirname(statePath), { recursive: true });
-  writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`);
-  return { statePath, state };
 }
 
 function writeBlockedReviewGate(
