@@ -144,3 +144,100 @@ for (const file of [
     assert.match(text, /actionable feedback|actionable-feedback/i);
   });
 }
+
+test("ax-cli prompt documents required-gate workflow commit behavior", () => {
+  const text = readFileSync("skills/ax-cli/agents/openai.yaml", "utf-8");
+
+  assert.match(text, /ax commit/);
+  assert.match(text, /raw git commit/);
+  assert.match(text, /workflow-owned commits/);
+  assert.match(text, /explicit reviewer evidence/);
+  assert.match(text, /ax commit --require-review-gate/);
+  assert.match(text, /owning workflow helper/);
+  assert.match(text, /stop before push or hosted review/);
+  assert.match(text, /--no-verify/);
+});
+
+for (const file of [
+  "skills/plan-orchestrator/SKILL.md",
+  "skills/plan-orchestrator/agents/openai.yaml",
+] as const) {
+  test(`${file} preserves phase-owned reviewer evidence and commit ownership`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /reviewer lists/);
+    assert.match(text, /reviewer evidence/);
+    assert.match(text, /owning phase/);
+    assert.match(text, /do not recompute|must not recompute/);
+    assert.match(text, /local review-gate state/);
+    assert.match(text, /plan-review/);
+    assert.match(text, /plan-unit-delivery/);
+  });
+}
+
+test("plan-unit-sequencer prompt keeps local gates out of stack advancement", () => {
+  const text = readFileSync(
+    "skills/plan-unit-sequencer/agents/openai.yaml",
+    "utf-8",
+  );
+
+  assert.match(text, /local reviewer gates/);
+  assert.match(text, /commit-boundary proof/);
+  assert.match(text, /MR approval/);
+  assert.match(text, /CI\/no-pipeline inspection/);
+  assert.match(text, /Nitro feedback/);
+  assert.match(text, /stack advancement evidence/);
+  assert.match(text, /latest-head Nitro review/);
+});
+
+const hostedReviewEvidenceFiles = [
+  {
+    file: "skills/review-feedback-routing/SKILL.md",
+    patterns: [
+      /Local reviewer evidence/,
+      /source provenance/,
+      /artifact-host inspection/,
+      /CI or no-pipeline/,
+      /nitro_feedback_gate/,
+    ],
+  },
+  {
+    file: "skills/gitlab-adapter-review/SKILL.md",
+    patterns: [
+      /Local reviewer evidence/,
+      /AX review-gate state/,
+      /not artifact-host context/,
+      /pipeline\/check state/,
+    ],
+  },
+  {
+    file: "skills/change-request-create/SKILL.md",
+    patterns: [
+      /local reviewer evidence/,
+      /AX\s+review-gate state/,
+      /hosted review/,
+      /CI/,
+      /Nitro evidence/,
+    ],
+  },
+  {
+    file: "skills/glab-mr-create/SKILL.md",
+    patterns: [
+      /local reviewer evidence|local review-gate evidence/,
+      /AX review-gate state/,
+      /hosted review/,
+      /CI\/no-pipeline inspection/,
+      /Nitro evidence/,
+    ],
+  },
+] as const;
+
+for (const { file, patterns } of hostedReviewEvidenceFiles) {
+  test(`${file} rejects local review-gate evidence as hosted review evidence`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    for (const pattern of patterns) {
+      assert.match(text, pattern);
+    }
+  });
+}
