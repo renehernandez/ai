@@ -138,5 +138,5 @@
   `pnpm ax update --all-profiles`.
 - [x] 8.5 Validate installed runtime surfaces with
   `pnpm ax validate --all-profiles` and `pnpm ax status --all-profiles`.
-- [ ] 8.6 Run `pnpm ax hooks validate` only if hook source or hook registration
+- [x] 8.6 Run `pnpm ax hooks validate` only if hook source or hook registration
   behavior changes in the implementation stack.
