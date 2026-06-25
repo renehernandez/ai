@@ -5,12 +5,11 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import test from "node:test";
 
 const repoRoot = process.cwd();
@@ -100,77 +99,6 @@ function withoutGitRepositoryEnv(): NodeJS.ProcessEnv {
   delete env.GIT_OBJECT_DIRECTORY;
   delete env.GIT_ALTERNATE_OBJECT_DIRECTORIES;
   return env;
-}
-
-function stagedDiffHashFor(cwd: string): string {
-  const result = spawnSync("git", ["diff", "--cached", "--binary"], {
-    cwd,
-    encoding: "buffer",
-    env: withoutGitRepositoryEnv(),
-  });
-  assert.equal(
-    result.status,
-    0,
-    result.stderr.toString() || result.stdout.toString(),
-  );
-  return `sha256:${createHash("sha256").update(result.stdout).digest("hex")}`;
-}
-
-function withReviewerResultsFile(
-  cwd: string,
-  reviewers: string[],
-  callback: (path: string) => void,
-): void {
-  const path = join(cwd, "reviewer-results.json");
-  const diffHash = stagedDiffHashFor(cwd);
-  writeFileSync(
-    path,
-    `${JSON.stringify(
-      {
-        reviewer_results: reviewers.map((reviewer) => ({
-          reviewer,
-          status: "passed",
-          diff_hash: diffHash,
-          summary: `${reviewer} passed.`,
-        })),
-        blocking_findings: [],
-      },
-      null,
-      2,
-    )}\n`,
-    "utf8",
-  );
-  callback(path);
-}
-
-function writeReviewerResultsFile(
-  cwd: string,
-  reviewerResults: Array<Record<string, string>>,
-): string {
-  const path = join(cwd, "reviewer-results.json");
-  writeFileSync(
-    path,
-    `${JSON.stringify(
-      {
-        reviewer_results: reviewerResults,
-        blocking_findings: [],
-      },
-      null,
-      2,
-    )}\n`,
-    "utf8",
-  );
-  return path;
-}
-
-function reviewerResultRecords(cwd: string, reviewers: string[]) {
-  const diffHash = stagedDiffHashFor(cwd);
-  return reviewers.map((reviewer) => ({
-    reviewer,
-    status: "passed",
-    diff_hash: diffHash,
-    summary: `${reviewer} passed.`,
-  }));
 }
 
 function runPlanReady(
@@ -1289,135 +1217,12 @@ test("review-gate-input rejects partial blueprints before mapping", () => {
   assert.equal(result.stdout, "");
 });
 
-test("activate-review-gate writes a validated active handoff gate", () => {
+test("activate-review-gate rejects legacy activation and writes no state", () => {
   withTempPlan(({ artifactRef, fingerprint }) => {
     withGitFixture((cwd) => {
       writeFileSync(join(cwd, "file.txt"), "ready\n", "utf8");
       git(cwd, ["add", "file.txt"]);
 
-      let result: ReturnType<typeof runPlanReadyInRepo> | undefined;
-      withReviewerResultsFile(cwd, BASELINE_REVIEWERS, (resultsPath) => {
-        result = runPlanReadyInRepo(
-          "activate-review-gate",
-          validHandoff(artifactRef, fingerprint),
-          cwd,
-          ["--review-results-file", resultsPath],
-        );
-      });
-      assert.ok(result);
-      const output = JSON.parse(result.stdout);
-      const state = JSON.parse(
-        readFileSync(join(cwd, ".git", "ax", "review-gate.json"), "utf8"),
-      );
-
-      assert.equal(result.status, 0);
-      assert.equal(output.status, "ready");
-      assert.equal(output.gate_outcome, "passed");
-      assert.equal(state.active, true);
-      assert.equal(state.workflow, "plan-ready");
-      assert.equal(state.unit.id, "atomic");
-      assert.equal(state.unit.title, "Example atomic unit");
-      assert.equal(state.sourceProvenance.kind, "plan_delivery_handoff");
-      assert.equal(state.sourceProvenance.ref, artifactRef);
-      assert.equal(state.sourceProvenance.phase, "plan-ready");
-      assert.equal(state.stagedDiffHash, output.staged_diff_hash);
-      assert.deepEqual(state.requiredReviewPasses, [
-        "implementation-readiness",
-        "edge-cases-and-risks",
-        "simplification-and-scope-control",
-        "refactoring-opportunities",
-      ]);
-      assert.equal(
-        state.results["implementation-readiness"].diffHash,
-        output.staged_diff_hash,
-      );
-      assert.equal(state.results["implementation-readiness"].status, "passed");
-    });
-  });
-});
-
-test("activate-review-gate writes a validated active blueprint gate", () => {
-  withGitFixture((cwd) => {
-    const fingerprint = writeBlueprintSourcePlan(cwd);
-    writeFileSync(join(cwd, "file.txt"), "blueprint\n", "utf8");
-    git(cwd, ["add", "file.txt"]);
-
-    let result: ReturnType<typeof runPlanReadyInRepo> | undefined;
-    withReviewerResultsFile(cwd, BASELINE_REVIEWERS, (resultsPath) => {
-      result = runPlanReadyInRepo(
-        "activate-review-gate",
-        validBlueprintWithOptionalReviewers([], [], fingerprint),
-        cwd,
-        ["--review-results-file", resultsPath],
-      );
-    });
-    assert.ok(result);
-    const output = JSON.parse(result.stdout);
-    const state = JSON.parse(
-      readFileSync(join(cwd, ".git", "ax", "review-gate.json"), "utf8"),
-    );
-
-    assert.equal(result.status, 0);
-    assert.equal(output.status, "ready");
-    assert.equal(state.active, true);
-    assert.equal(state.workflow, "plan-ready");
-    assert.equal(state.unit.id, "add-plan-blueprints");
-    assert.equal(state.unit.title, "Add PlanReady OpenSpec blueprints");
-    assert.equal(state.sourceProvenance.kind, "openspec_blueprint");
-    assert.equal(state.sourceProvenance.ref, ".agents/plans/example.md");
-    assert.equal(state.sourceProvenance.phase, "plan-ready");
-    assert.equal(state.stagedDiffHash, output.staged_diff_hash);
-    assert.deepEqual(state.blockingFindings, []);
-  });
-});
-
-test("activate-review-gate promotes selected optional reviewers in written gate", () => {
-  withGitFixture((cwd) => {
-    const fingerprint = writeBlueprintSourcePlan(cwd);
-    writeFileSync(join(cwd, "file.txt"), "optional\n", "utf8");
-    git(cwd, ["add", "file.txt"]);
-    const blueprint = validBlueprintWithOptionalReviewers(
-      ["docs-and-agent-alignment"],
-      ["docs-and-agent-alignment"],
-      fingerprint,
-    );
-    const resultsPath = writeReviewerResultsFile(
-      cwd,
-      reviewerResultRecords(cwd, [
-        ...BASELINE_REVIEWERS,
-        "docs-and-agent-alignment",
-      ]),
-    );
-
-    const result = runPlanReadyInRepo("activate-review-gate", blueprint, cwd, [
-      "--review-results-file",
-      resultsPath,
-    ]);
-    const output = JSON.parse(result.stdout);
-    const state = JSON.parse(
-      readFileSync(join(cwd, ".git", "ax", "review-gate.json"), "utf8"),
-    );
-
-    assert.equal(result.status, 0);
-    assert.equal(output.status, "ready");
-    assert.deepEqual(state.requiredReviewPasses, [
-      "implementation-readiness",
-      "edge-cases-and-risks",
-      "simplification-and-scope-control",
-      "refactoring-opportunities",
-      "docs-and-agent-alignment",
-    ]);
-    assert.equal(state.results["docs-and-agent-alignment"].status, "passed");
-    assert.equal(
-      state.requiredReviewPasses.includes("ax-and-skill-compatibility"),
-      false,
-    );
-  });
-});
-
-test("activate-review-gate fails closed without a staged diff", () => {
-  withTempPlan(({ artifactRef, fingerprint }) => {
-    withGitFixture((cwd) => {
       const result = runPlanReadyInRepo(
         "activate-review-gate",
         validHandoff(artifactRef, fingerprint),
@@ -1428,282 +1233,49 @@ test("activate-review-gate fails closed without a staged diff", () => {
       assert.notEqual(result.status, 0);
       assert.equal(output.status, "blocked");
       assert.equal(output.gate_outcome, "blocked");
-      assert.match(output.blockers.join("\n"), /requires a staged diff/);
+      assert.equal(output.route_to, "plan-review");
+      assert.match(
+        output.blockers.join("\n"),
+        /activate-review-gate is legacy/,
+      );
+      assert.match(
+        output.blockers.join("\n"),
+        /plan-review owns readiness-to-planning-commit gate binding/,
+      );
       assert.equal(
         existsSync(join(cwd, ".git", "ax", "review-gate.json")),
+        false,
+      );
+      assert.equal(
+        existsSync(join(cwd, ".git", "ax", "review-gate.invalidated.json")),
         false,
       );
     });
   });
 });
 
-test("activate-review-gate fails closed when blockers remain", () => {
+test("review-gate-input still emits readiness gate input without writing state", () => {
   withTempPlan(({ artifactRef, fingerprint }) => {
     withGitFixture((cwd) => {
-      writeFileSync(join(cwd, "file.txt"), "blocked\n", "utf8");
-      git(cwd, ["add", "file.txt"]);
-
-      let result: ReturnType<typeof runPlanReadyInRepo> | undefined;
-      withReviewerResultsFile(cwd, BASELINE_REVIEWERS, (resultsPath) => {
-        result = runPlanReadyInRepo(
-          "activate-review-gate",
-          validHandoff(artifactRef, fingerprint).replace(
-            "  blockers: []",
-            "  blockers:\n    - reviewer found a blocking issue",
-          ),
-          cwd,
-          ["--review-results-file", resultsPath],
-        );
-      });
-      assert.ok(result);
-      const output = JSON.parse(result.stdout);
-
-      assert.notEqual(result.status, 0);
-      assert.equal(output.status, "blocked");
-      assert.match(output.blockers.join("\n"), /Invalid plan_delivery_handoff/);
-      const state = JSON.parse(
-        readFileSync(join(cwd, ".git", "ax", "review-gate.json"), "utf8"),
-      );
-      assert.equal(state.active, true);
-      assert.equal(state.workflow, "plan-ready");
-      assert.equal(state.unit.id, "blocked_readiness");
-      assert.equal(state.sourceProvenance.kind, "blocked_readiness");
-      assert.deepEqual(state.blockingFindings, output.blockers);
-    });
-  });
-});
-
-test("activate-review-gate invalidates stale passing gate when blocked gate write is locked", () => {
-  withTempPlan(({ artifactRef, fingerprint }) => {
-    withGitFixture((cwd) => {
-      writeFileSync(join(cwd, "file.txt"), "blocked\n", "utf8");
-      git(cwd, ["add", "file.txt"]);
-
-      withReviewerResultsFile(cwd, BASELINE_REVIEWERS, (resultsPath) => {
-        const passingResult = runPlanReadyInRepo(
-          "activate-review-gate",
-          validHandoff(artifactRef, fingerprint),
-          cwd,
-          ["--review-results-file", resultsPath],
-        );
-        assert.equal(passingResult.status, 0);
-      });
-
-      const statePath = join(cwd, ".git", "ax", "review-gate.json");
-      const lockPath = join(dirname(statePath), "review-gate.lock");
-      const invalidationPath = join(
-        dirname(statePath),
-        "review-gate.invalidated.json",
-      );
-      writeFileSync(lockPath, "locked\n", "utf8");
-
-      let result: ReturnType<typeof runPlanReadyInRepo> | undefined;
-      withReviewerResultsFile(cwd, BASELINE_REVIEWERS, (resultsPath) => {
-        result = runPlanReadyInRepo(
-          "activate-review-gate",
-          validHandoff(artifactRef, fingerprint).replace(
-            "  blockers: []",
-            "  blockers:\n    - reviewer found a blocking issue",
-          ),
-          cwd,
-          ["--review-results-file", resultsPath],
-        );
-      });
-      assert.ok(result);
-      const output = JSON.parse(result.stdout);
-      const invalidation = JSON.parse(readFileSync(invalidationPath, "utf8"));
-
-      assert.notEqual(result.status, 0);
-      assert.equal(output.status, "blocked");
-      assert.match(output.blockers.join("\n"), /wrote invalidation marker/);
-      assert.equal(invalidation.active, true);
-      assert.equal(invalidation.status, "invalidated");
-      assert.equal(invalidation.stagedDiffHash, stagedDiffHashFor(cwd));
-    });
-  });
-});
-
-test("activate-review-gate fails closed when reviewer evidence is missing", () => {
-  withTempPlan(({ artifactRef, fingerprint }) => {
-    withGitFixture((cwd) => {
-      writeFileSync(join(cwd, "file.txt"), "partial\n", "utf8");
-      git(cwd, ["add", "file.txt"]);
-
-      withReviewerResultsFile(cwd, BASELINE_REVIEWERS, (resultsPath) => {
-        const passingResult = runPlanReadyInRepo(
-          "activate-review-gate",
-          validHandoff(artifactRef, fingerprint),
-          cwd,
-          ["--review-results-file", resultsPath],
-        );
-        assert.equal(passingResult.status, 0);
-      });
-
-      let result: ReturnType<typeof runPlanReadyInRepo> | undefined;
-      withReviewerResultsFile(
-        cwd,
-        BASELINE_REVIEWERS.filter(
-          (reviewer) => reviewer !== "refactoring-opportunities",
-        ),
-        (resultsPath) => {
-          result = runPlanReadyInRepo(
-            "activate-review-gate",
-            validHandoff(artifactRef, fingerprint),
-            cwd,
-            ["--review-results-file", resultsPath],
-          );
-        },
-      );
-      assert.ok(result);
-      const output = JSON.parse(result.stdout);
-      const state = JSON.parse(
-        readFileSync(join(cwd, ".git", "ax", "review-gate.json"), "utf8"),
-      );
-
-      assert.notEqual(result.status, 0);
-      assert.equal(output.status, "blocked");
-      assert.match(output.blockers.join("\n"), /missing reviewer evidence/);
-      assert.equal(state.active, true);
-      assert.equal(state.unit.id, "blocked_readiness");
-      assert.deepEqual(state.requiredReviewPasses, ["plan-ready-readiness"]);
-      assert.equal(state.results["plan-ready-readiness"].status, "blocked");
-    });
-  });
-});
-
-test("activate-review-gate rejects malformed reviewer evidence", () => {
-  withTempPlan(({ artifactRef, fingerprint }) => {
-    withGitFixture((cwd) => {
-      writeFileSync(join(cwd, "file.txt"), "malformed\n", "utf8");
-      git(cwd, ["add", "file.txt"]);
-      const resultsPath = join(cwd, "reviewer-results.json");
-      writeFileSync(resultsPath, "{not-json", "utf8");
-
       const result = runPlanReadyInRepo(
-        "activate-review-gate",
+        "review-gate-input",
         validHandoff(artifactRef, fingerprint),
         cwd,
-        ["--review-results-file", resultsPath],
-      );
-      const output = JSON.parse(result.stdout);
-      const state = JSON.parse(
-        readFileSync(join(cwd, ".git", "ax", "review-gate.json"), "utf8"),
-      );
-
-      assert.notEqual(result.status, 0);
-      assert.equal(output.status, "blocked");
-      assert.match(output.blockers.join("\n"), /not valid JSON/);
-      assert.equal(state.active, true);
-      assert.equal(state.unit.id, "blocked_readiness");
-      assert.equal(state.results["plan-ready-readiness"].status, "blocked");
-    });
-  });
-});
-
-test("activate-review-gate rejects duplicate reviewer evidence", () => {
-  withTempPlan(({ artifactRef, fingerprint }) => {
-    withGitFixture((cwd) => {
-      writeFileSync(join(cwd, "file.txt"), "duplicate\n", "utf8");
-      git(cwd, ["add", "file.txt"]);
-      const diffHash = stagedDiffHashFor(cwd);
-      const resultsPath = writeReviewerResultsFile(cwd, [
-        ...BASELINE_REVIEWERS.map((reviewer) => ({
-          reviewer,
-          status: "passed",
-          diff_hash: diffHash,
-          summary: `${reviewer} passed.`,
-        })),
-        {
-          reviewer: "implementation-readiness",
-          status: "blocked",
-          diff_hash: diffHash,
-          summary: "duplicate conflicting result",
-        },
-      ]);
-
-      const result = runPlanReadyInRepo(
-        "activate-review-gate",
-        validHandoff(artifactRef, fingerprint),
-        cwd,
-        ["--review-results-file", resultsPath],
+        ["--diff-hash", reviewGateDiffHash],
       );
       const output = JSON.parse(result.stdout);
 
-      assert.notEqual(result.status, 0);
-      assert.equal(output.status, "blocked");
-      assert.match(output.blockers.join("\n"), /duplicate reviewer/);
-    });
-  });
-});
-
-test("activate-review-gate rejects unknown reviewer evidence", () => {
-  withTempPlan(({ artifactRef, fingerprint }) => {
-    withGitFixture((cwd) => {
-      writeFileSync(join(cwd, "file.txt"), "unknown-reviewer\n", "utf8");
-      git(cwd, ["add", "file.txt"]);
-      const diffHash = stagedDiffHashFor(cwd);
-      const resultsPath = writeReviewerResultsFile(cwd, [
-        ...BASELINE_REVIEWERS.map((reviewer) => ({
-          reviewer,
-          status: "passed",
-          diff_hash: diffHash,
-          summary: `${reviewer} passed.`,
-        })),
-        {
-          reviewer: "made-up-reviewer",
-          status: "passed",
-          diff_hash: diffHash,
-          summary: "unknown reviewer passed.",
-        },
-      ]);
-
-      const result = runPlanReadyInRepo(
-        "activate-review-gate",
-        validHandoff(artifactRef, fingerprint),
-        cwd,
-        ["--review-results-file", resultsPath],
+      assert.equal(result.status, 0);
+      assert.equal(output.workflow, "plan-ready");
+      assert.deepEqual(output.requiredReviewPasses, BASELINE_REVIEWERS);
+      assert.equal(
+        output.results["implementation-readiness"].diffHash,
+        reviewGateDiffHash,
       );
-      const output = JSON.parse(result.stdout);
-
-      assert.notEqual(result.status, 0);
-      assert.equal(output.status, "blocked");
-      assert.match(output.blockers.join("\n"), /unknown reviewer/);
-    });
-  });
-});
-
-test("activate-review-gate rejects stale reviewer evidence", () => {
-  withTempPlan(({ artifactRef, fingerprint }) => {
-    withGitFixture((cwd) => {
-      writeFileSync(join(cwd, "file.txt"), "stale\n", "utf8");
-      git(cwd, ["add", "file.txt"]);
-      const resultsPath = writeReviewerResultsFile(
-        cwd,
-        BASELINE_REVIEWERS.map((reviewer) => ({
-          reviewer,
-          status: "passed",
-          diff_hash: `sha256:${"0".repeat(64)}`,
-          summary: `${reviewer} passed.`,
-        })),
+      assert.equal(
+        existsSync(join(cwd, ".git", "ax", "review-gate.json")),
+        false,
       );
-
-      const result = runPlanReadyInRepo(
-        "activate-review-gate",
-        validHandoff(artifactRef, fingerprint),
-        cwd,
-        ["--review-results-file", resultsPath],
-      );
-      const output = JSON.parse(result.stdout);
-
-      assert.notEqual(result.status, 0);
-      assert.equal(output.status, "blocked");
-      assert.match(output.blockers.join("\n"), /diff_hash is stale/);
-      const state = JSON.parse(
-        readFileSync(join(cwd, ".git", "ax", "review-gate.json"), "utf8"),
-      );
-      assert.equal(state.active, true);
-      assert.equal(state.unit.id, "blocked_readiness");
-      assert.equal(state.results["plan-ready-readiness"].status, "blocked");
     });
   });
 });
