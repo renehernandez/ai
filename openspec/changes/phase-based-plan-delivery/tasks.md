@@ -1,23 +1,23 @@
 ## 1. Contract Shape
 
-- [ ] 1.1 Update `rules/docs-and-specs.md` and related normative guidance to
+- [x] 1.1 Update `rules/docs-and-specs.md` and related normative guidance to
       define delivery-unit headings and nested work items for OpenSpec plan
       delivery.
       First real confirmation: the `plan-review` command reports a valid
       four-unit OpenSpec task file with expected implementation shape `4 phase
       MRs, 22 sub-tasks` as visible success evidence.
-- [ ] 1.2 Update `skills/plan-ready/SKILL.md` so blueprints describe expected
+- [x] 1.2 Update `skills/plan-ready/SKILL.md` so blueprints describe expected
       delivery-unit count, nested work-item count, split smells, merge smells,
       and justification requirements.
-- [ ] 1.3 Update `skills/plan-review/SKILL.md` so planning MRs report expected
+- [x] 1.3 Update `skills/plan-review/SKILL.md` so planning MRs report expected
       implementation shape and block invalid delivery-unit sizing before
       implementation starts.
-- [ ] 1.4 Update `skills/openspec-tasks/SKILL.md` so task audits describe the
+- [x] 1.4 Update `skills/openspec-tasks/SKILL.md` so task audits describe the
       shared delivery-unit model and distinguish lifecycle-only groups from
       valid workflow-machinery deliverables.
-- [ ] 1.5 Add examples of valid and invalid delivery-unit breakdowns to the
+- [x] 1.5 Add examples of valid and invalid delivery-unit breakdowns to the
       relevant skill or rule guidance.
-- [ ] 1.6 Update `skills/plan-orchestrator/SKILL.md` so top-level workflow,
+- [x] 1.6 Update `skills/plan-orchestrator/SKILL.md` so top-level workflow,
       resume requirements, and stack-ready evidence refer to delivery-unit MRs
       rather than the legacy per-task MR mapping.
 

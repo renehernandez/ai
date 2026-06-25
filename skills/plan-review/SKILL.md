@@ -112,6 +112,13 @@ and next action.
    are valid only as acceptance or verification bullets inside the
    related deliverable task, not as OpenSpec task checkboxes or independent
    delivery units.
+   The planning review must also report expected implementation shape from the
+   task audit: delivery-unit count, nested work-item counts, split smells, merge
+   smells, and accepted sizing justifications. Invalid sizing blocks planning
+   review before implementation starts: more than 8 nested work items in one
+   delivery unit, more than 6 without an attached `Justification:` note, or a
+   one-item delivery unit without risk, deployment, reviewability, or ownership
+   rationale.
 6. Run `review-feedback-routing` before PR/MR creation. Detect artifact host
    from remotes and route reviewer feedback separately from artifact creation.
 7. Commit and push the planning-only branch when the hosted-review creation path
@@ -122,7 +129,9 @@ and next action.
    - state that implementation has not started;
    - name the plan/OpenSpec artifact;
    - name the requested feedback, such as Nitro and developer review;
-   - include exact planning validation performed.
+   - include exact planning validation performed;
+   - state the expected implementation stack shape, for example `4
+     delivery-unit MRs, 22 nested work items`.
    Do not expose local private support paths, raw private support artifacts, or
    private thread metadata in hosted descriptions. Use summaries, hashes, note
    IDs, discussion IDs, or stable correlation IDs when support-artifact evidence
@@ -202,7 +211,7 @@ implementation units until it can report `stack_ready`, or report
 | Planning-only diff | Diff contains no implementation changes, or implementation changes are explicitly split out |
 | OpenSpec source-plan boundary | OpenSpec review diffs contain no `.agents/plans/**`; atomic plan artifacts may keep only the primary `.agents/plans/**` markdown plan, not support sidecars |
 | Artifact validation | OpenSpec/doc/ticket validation passes or a precise gap is reported |
-| OpenSpec task shape | `validate-openspec-tasks` passes, or planning blocks with `needs_spec_redesign` before PR/MR creation or update |
+| OpenSpec task shape | `validate-openspec-tasks` passes with delivery-unit counts, nested work-item counts, and sizing verdicts, or planning blocks with `needs_spec_redesign` before PR/MR creation or update |
 | Review feedback routing | Artifact and feedback adapters are selected, or ambiguity is blocked |
 | Description policy | Hosted description was created or updated through the selected policy owner, read back at the current artifact head, preserves manual content, omits process-history/private-artifact drift, and has restore-or-block evidence |
 | Artifact creation/update | Draft PR/MR exists for the latest planning-only branch |
@@ -211,6 +220,47 @@ implementation units until it can report `stack_ready`, or report
 | Automated feedback | Routed automated feedback is resolved, pending, unavailable, or waived with evidence |
 | Developer review | Human developer review is requested or pending on the hosted artifact |
 | No implementation | No implementation work starts in this workflow |
+
+## Delivery-Unit Examples
+
+Valid planning-review shape:
+
+```md
+## 1. Contract Shape
+
+- [ ] 1.1 Update shared task-shape rules
+- [ ] 1.2 Update readiness blueprint guidance
+- [ ] 1.3 Update planning review guidance
+```
+
+Invalid oversized shape:
+
+```md
+## 2. Runtime Rewrite
+
+- [ ] 2.1 Update parser
+- [ ] 2.2 Update readiness gate
+- [ ] 2.3 Update planning gate
+- [ ] 2.4 Update sequencer
+- [ ] 2.5 Update delivery ledger
+- [ ] 2.6 Update resume validation
+- [ ] 2.7 Update stack-ready validation
+- [ ] 2.8 Update fixtures
+- [ ] 2.9 Update prompts
+```
+
+Invalid merge-smell shape:
+
+```md
+## 3. Rename Label
+
+- [ ] 3.1 Rename one prompt label
+```
+
+The valid shape creates one reviewable delivery-unit MR with multiple nested
+work-item commits. The oversized shape blocks because one unit has more than
+eight work items. The one-item shape should merge into a neighboring unit unless
+the plan records risk, deployment, reviewability, or ownership justification.
 
 ## Final Planning Review Handoff
 
@@ -314,6 +364,8 @@ planning_review:
 | Accepting legacy handoffs | Return `needs_plan_ready` |
 | Publishing implementation files in the review branch | Split them out before creating the planning review |
 | Publishing an OpenSpec with a documentation or validation phase anywhere | Block with `needs_spec_redesign` and ask the user how to proceed |
+| Publishing an OpenSpec with an oversized or unjustified tiny delivery unit | Block with `needs_spec_redesign`; ask for a redesigned delivery-unit breakdown before implementation starts |
+| Omitting expected implementation shape from the planning MR | Add delivery-unit MR count, nested work-item count, and sizing-smell disposition to the MR description |
 | Treating routing metadata as sufficient after pushing a new head to an existing Fullscript MR | Request a fresh Nitro review for the current head, then wait for latest-head feedback or pending state |
 | Requesting Nitro repeatedly when a fresh latest-head Nitro review is already pending | Stop polling after recording the pending review state, MR head, and request evidence |
 | Requesting Nitro before hosted description readback proves current reviewer-facing content | Run the description policy gate first, then request Nitro |
