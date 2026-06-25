@@ -792,6 +792,54 @@ test("validate-resume routes stale delivery evidence to plan-unit-delivery", () 
   );
 });
 
+test("validate-resume routes missing readiness evidence to plan-ready", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport.replace(
+      "    readiness:\n      owner: plan-ready\n      status: fresh\n      artifact_fingerprint: feedface\n      expected_artifact_fingerprint: feedface\n      route_to:\n",
+      "",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /phase_evidence\.readiness is missing; route_to plan-ready/,
+  );
+});
+
+test("validate-resume routes missing planning commit evidence to plan-review", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport.replace(
+      "    planning_commit:\n      owner: plan-review\n      status: fresh\n      reviewed_head: def456\n      expected_head_sha: def456\n      route_to:\n",
+      "",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /phase_evidence\.planning_commit is missing; route_to plan-review/,
+  );
+});
+
+test("validate-resume routes missing delivery evidence to plan-unit-delivery", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport.replace(
+      "    delivery:\n      owner: plan-unit-delivery\n      status: fresh\n      task_state_fingerprint: feedface\n      expected_task_state_fingerprint: feedface\n      route_to:\n",
+      "",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /phase_evidence\.delivery is missing; route_to plan-unit-delivery/,
+  );
+});
+
 test("validate-resume accepts blocked stale phase evidence with owning route", () => {
   const result = runPlanOrchestrator(
     "validate-resume",

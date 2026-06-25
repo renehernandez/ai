@@ -92,7 +92,7 @@
   to the owning phase.
 - [x] 5.2 Prove `plan-orchestrator` does not write review-gate state.
 - [x] 5.3 Prove `plan-orchestrator` does not invent or recompute reviewer lists.
-- [ ] 5.4 Add tests for missing readiness evidence routing to `plan-ready` and
+- [x] 5.4 Add tests for missing readiness evidence routing to `plan-ready` and
   missing planning or delivery evidence routing to the owning phase.
 
 ## 6. Local Gate And Hosted Gate Separation
