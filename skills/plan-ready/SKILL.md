@@ -196,6 +196,12 @@ openspec_blueprint:
       dependencies: []
   recommended_first_task: "1.1"
   review:
+    required_reviewers:
+      - implementation-readiness
+      - edge-cases-and-risks
+      - simplification-and-scope-control
+      - refactoring-opportunities
+    optional_reviewers: []
     reviewers_used:
       - implementation-readiness
       - edge-cases-and-risks
@@ -283,6 +289,11 @@ Invalid sizing shapes:
 - A unit with 7 work items and no `Justification:` note blocks readiness.
 - A one-item unit without risk, deployment, reviewability, or ownership
   justification should merge into a neighboring unit before readiness succeeds.
+
+For `openspec_blueprint.review`, keep `required_reviewers` as the baseline
+reviewers required for readiness, put selected catalog reviewers in
+`optional_reviewers`, and preserve `reviewers_used` plus `findings` as the
+review execution summary.
 
 Legacy `slice_plan_review`, `reviewed_slices`,
 `plan_ready_handoff`, `plan_followthrough_slice_handoff`, and

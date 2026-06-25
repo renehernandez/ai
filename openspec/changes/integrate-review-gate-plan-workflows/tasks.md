@@ -1,6 +1,6 @@
 ## 1. Contract And Shared Gate Foundation
 
-- [ ] 1.1 Update `skills/plan-ready/SKILL.md`,
+- [x] 1.1 Update `skills/plan-ready/SKILL.md`,
   `skills/plan-ready/agents/openai.yaml`, and
   `skills/plan-ready/scripts/plan-ready.ts` so `openspec_blueprint.review`
   includes `required_reviewers` and `optional_reviewers` while preserving

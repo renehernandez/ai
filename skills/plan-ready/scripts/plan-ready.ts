@@ -106,6 +106,8 @@ type ParsedBlueprint = {
   proposed_requirements: string[];
   tasks: BlueprintTask[];
   recommended_first_task?: string;
+  required_reviewers: string[];
+  optional_reviewers: string[];
   reviewers_used: string[];
   findings: string[];
   risks: string[];
@@ -295,6 +297,9 @@ openspec_blueprint:
       dependencies: []
   recommended_first_task: "1.1"
   review:
+    required_reviewers:
+${BASELINE_REVIEWERS.map((reviewer) => `      - ${reviewer}`).join("\n")}
+    optional_reviewers: []
     reviewers_used:
 ${BASELINE_REVIEWERS.map((reviewer) => `      - ${reviewer}`).join("\n")}
     findings:
@@ -743,6 +748,8 @@ function parseBlueprint(input: string): ParsedBlueprint {
     proposed_requirements: list(specs, "proposed_requirements"),
     tasks: parseBlueprintTasks(extractSection(section, "tasks")),
     recommended_first_task: scalar(section, "recommended_first_task"),
+    required_reviewers: list(review, "required_reviewers"),
+    optional_reviewers: list(review, "optional_reviewers"),
     reviewers_used: list(review, "reviewers_used"),
     findings: list(review, "findings"),
     risks: list(section, "risks"),
