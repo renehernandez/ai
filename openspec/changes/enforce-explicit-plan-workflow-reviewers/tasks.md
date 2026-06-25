@@ -111,7 +111,7 @@
 
 ## 7. Instructions, Prompts, And Runtime Alignment
 
-- [ ] 7.1 Update root `AGENTS.md`, `instructions/AGENTS.md`, and linked rule
+- [x] 7.1 Update root `AGENTS.md`, `instructions/AGENTS.md`, and linked rule
   files such as `rules/git-and-review.md` so agents use `ax commit`, workflow
   skills use required-gate mode for workflow-owned commits, and raw
   `git commit` remains Rene's manual escape hatch.
