@@ -130,6 +130,66 @@ test("planning skills reject lifecycle-only OpenSpec task phases", () => {
   assert.match(orchestratorText, /silently rewriting/);
 });
 
+test("plan workflow agent prompts use delivery-unit MR contracts", () => {
+  const promptFiles = [
+    "skills/plan-unit-delivery/agents/openai.yaml",
+    "skills/plan-unit-sequencer/agents/openai.yaml",
+    "skills/plan-orchestrator/agents/openai.yaml",
+  ] as const;
+  const activeSkillFiles = [
+    "skills/plan-unit-delivery/SKILL.md",
+    "skills/plan-unit-sequencer/SKILL.md",
+    "skills/plan-orchestrator/SKILL.md",
+  ] as const;
+  const stalePromptPatterns = [
+    /selected_task_id/,
+    /unit_task_delta_valid/,
+    /selected task ID/i,
+    /selected task base SHA/i,
+    /OpenSpec task checkbox/i,
+    /exactly one expected deliverable task/i,
+    /each selected OpenSpec task/i,
+    /each OpenSpec task delivered/i,
+    /task-delta validation/i,
+    /task-to-artifact evidence/i,
+  ];
+  const staleRuntimeSurfacePatterns = [
+    /selected_task_id/,
+    /unit_task_delta_valid/,
+    /one implementation MR per OpenSpec task/i,
+    /one MR per OpenSpec task/i,
+    /each selected OpenSpec task/i,
+    /each OpenSpec task delivered/i,
+  ];
+
+  for (const file of promptFiles) {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /delivery unit/i);
+    assert.match(text, /one separate stacked PR\/MR|one separate PR\/MR/i);
+    for (const pattern of stalePromptPatterns) {
+      assert.doesNotMatch(text, pattern);
+    }
+  }
+
+  for (const file of activeSkillFiles) {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /delivery unit/i);
+    for (const pattern of staleRuntimeSurfacePatterns) {
+      assert.doesNotMatch(text, pattern);
+    }
+  }
+
+  const deliveryPrompt = readFileSync(
+    "skills/plan-unit-delivery/agents/openai.yaml",
+    "utf-8",
+  );
+  assert.match(deliveryPrompt, /delivery_unit_delta_valid/);
+  assert.match(deliveryPrompt, /one commit per nested work item/i);
+  assert.match(deliveryPrompt, /validate-task-delta.*--unit/);
+});
+
 test("implementation rules keep local workflow artifacts out of work-project repos", () => {
   const text = readFileSync(
     "rules/investigation-and-implementation.md",
