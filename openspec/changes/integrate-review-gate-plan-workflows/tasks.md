@@ -5,7 +5,7 @@
   `skills/plan-ready/scripts/plan-ready.ts` so `openspec_blueprint.review`
   includes `required_reviewers` and `optional_reviewers` while preserving
   `reviewers_used` and `findings`.
-- [ ] 1.2 Update `skills/plan-ready/scripts/plan-ready.ts validate-blueprint`
+- [x] 1.2 Update `skills/plan-ready/scripts/plan-ready.ts validate-blueprint`
   and tests so baseline reviewers are required, optional reviewers are
   catalog-only, and legacy blueprint output without normalized reviewer fields
   is rejected.
