@@ -71,6 +71,14 @@ Do not restate routine green hosted checks or routine local typecheck, lint,
 format, pre-commit, pre-push, or diff-hygiene commands when the artifact host,
 CI, or repository hooks already show them.
 
+Verification sections are for reviewer-risk evidence, not an audit log of every
+command. Do not list commands just because they were run. Include commands that
+prove changed behavior, expose a risk-specific fixture, or explain a gap. For
+example, `bash scripts/cleanup-nitro-resources.test.sh` is targeted evidence for
+a cleanup-policy change; omit `bunx prettier --check`, `git diff --check`, and
+`shellcheck` when an automatic local gate or CI job already owns that routine
+hygiene.
+
 ## Template And Update Safety
 
 Prefer project templates and preserve their structure. Fill placeholders with
@@ -100,6 +108,7 @@ such as:
 ```
 
 Ask before replacing any section whose ownership is ambiguous.
+Do not bypass this policy with a direct provider CLI body update. Raw provider updates are mutation mechanics, not description-policy review; apply this policy first, then delegate or execute the provider update.
 
 ## Workflow
 
@@ -130,7 +139,9 @@ flags.
 | Choosing the first remote in a mixed-host repo | Apply route precedence and ask when ambiguous |
 | Duplicating provider CLI mechanics here | Delegate mutation to `github-pr-create` or `glab-mr-create` |
 | Replacing a whole existing description | Preserve manual content and update only managed sections |
+| Updating a PR/MR body directly through `gh`, `glab`, or an API call | Apply this description policy first, then use the provider command only for mutation |
 | Listing routine format/lint/typecheck commands | Mention only targeted evidence or hosted status that changes reviewer confidence |
+| Listing commands just because they ran locally | Keep only reviewer-risk evidence, gaps, or hosted state |
 | Referring to local plans, skills, or subagents | Convert useful facts into reviewer-facing evidence or omit them |
 | Exposing private plan-support paths | Use summaries, hashes, thread references, note IDs, discussion IDs, or stable correlation IDs |
 | Ignoring project templates | Preserve template shape and fill placeholders |
@@ -143,10 +154,17 @@ flags.
 - Existing open artifact for the branch: pass only if no duplicate is created.
 - Existing body with manual reviewer notes and managed HTML comments: pass only
   if manual content is preserved and managed content is updated.
+- Existing PR/MR body update after a reviewer reports description-policy drift:
+  pass only if the policy is applied before the provider CLI or API mutates the
+  body; direct `gh`, `glab`, or API updates are not enough by themselves.
 - Description evidence includes local skill paths, planning gates, routine
   formatter output, targeted regression proof, and a pending hosted check: pass
   only if internal/routine references are omitted while targeted proof and
   hosted status are retained.
+- Description evidence includes one targeted fixture command plus routine
+  formatter, shell lint, and diff-hygiene commands covered by hooks or CI: pass
+  only if the description keeps the fixture evidence and omits the automatic
+  hygiene commands.
 - Description evidence includes private plan support artifacts: pass only if
   local paths and raw private artifacts are omitted while reviewer-useful
   summaries, hashes, thread references, note IDs, discussion IDs, or stable

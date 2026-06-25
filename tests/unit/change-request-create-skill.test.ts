@@ -96,6 +96,14 @@ test("change-request-create preserves existing artifact bodies through managed s
     /Ask before replacing any section whose ownership is ambiguous/,
   );
   assert.match(skill, /Return or update it instead of creating a duplicate/);
+  assert.match(
+    skill,
+    /Do not bypass this policy with a direct provider CLI body update/,
+  );
+  assert.match(
+    skill,
+    /Raw provider updates are mutation mechanics, not description-policy review/,
+  );
 });
 
 test("change-request-create includes hosted failures without restating routine green checks", () => {
@@ -109,5 +117,27 @@ test("change-request-create includes hosted failures without restating routine g
   assert.match(
     skill,
     /Do not restate routine green hosted checks or routine local typecheck, lint,\nformat, pre-commit, pre-push, or diff-hygiene commands/,
+  );
+});
+
+test("change-request-create keeps targeted evidence out of automatic verification noise", () => {
+  const skill = read("skills/change-request-create/SKILL.md");
+  const gitlab = read("skills/glab-mr-create/SKILL.md");
+  const github = read("skills/github-pr-create/SKILL.md");
+
+  assert.match(skill, /Verification sections are for reviewer-risk evidence/);
+  assert.match(skill, /Do not list commands just because they were run/);
+  assert.match(skill, /`bash scripts\/cleanup-nitro-resources\.test\.sh`/);
+  assert.match(skill, /`bunx prettier --check`/);
+  assert.match(skill, /`git diff --check`/);
+  assert.match(skill, /`shellcheck`/);
+  assert.match(skill, /automatic local gate or CI job/);
+  assert.match(
+    gitlab,
+    /targeted reviewer evidence, verification gaps, and hosted state/,
+  );
+  assert.match(
+    github,
+    /targeted reviewer evidence, verification gaps, and hosted state/,
   );
 });

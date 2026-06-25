@@ -65,6 +65,7 @@ first so routing and full description policy stay in one place.
    - Preserve the selected template shape and fill placeholders concisely.
    - Include targeted evidence or hosted status only when it helps reviewers understand risk.
    - Omit unnecessary author-workflow references and routine validation already represented by CI or repository hooks.
+   - Treat Testing or Verification sections as targeted reviewer evidence, verification gaps, and hosted state; do not list routine checks merely because they ran.
    - Do not expose local private support artifact paths, raw private support
      artifacts, or private thread metadata. Use summaries, hashes, thread
      references, note IDs, discussion IDs, or stable correlation IDs when
@@ -77,7 +78,7 @@ first so routing and full description policy stay in one place.
    [One sentence describing the change]
 
    ## Testing
-   [Exact verification performed]
+   [Targeted reviewer evidence, verification gaps, and hosted state if relevant]
    ```
 
 7. Create a draft PR:
