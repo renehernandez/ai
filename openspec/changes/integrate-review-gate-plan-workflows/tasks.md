@@ -9,7 +9,7 @@
   and tests so baseline reviewers are required, optional reviewers are
   catalog-only, and legacy blueprint output without normalized reviewer fields
   is rejected.
-- [ ] 1.3 Extend `scripts/review-gate.ts` with typed active-gate write and
+- [x] 1.3 Extend `scripts/review-gate.ts` with typed active-gate write and
   consume/clear helpers that own path resolution, staged diff hashing, schema
   validation, atomic writes, status semantics, and consumed-state behavior.
 - [ ] 1.4 Add shared review-gate unit tests for active writes, malformed input
