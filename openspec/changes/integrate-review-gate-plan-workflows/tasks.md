@@ -41,7 +41,7 @@
   Required implementation reviewers must have passing
   reconciled outcomes, and treat selected or non-skipped dynamic reviewers as
   required gate passes for the current staged diff.
-- [ ] 3.3 Preserve explicit `not_applicable` skipped reviewer evidence where
+- [x] 3.3 Preserve explicit `not_applicable` skipped reviewer evidence where
   currently permitted, without counting skipped reviewers as required passes.
 - [ ] 3.4 Make `plan-unit-delivery` fail closed before implementation commits
   when implementation-review subagents are unavailable, reviewer outcomes are
