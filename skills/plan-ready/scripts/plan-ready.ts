@@ -62,7 +62,8 @@ type Command =
   | "handoff-template"
   | "validate-handoff"
   | "blueprint-template"
-  | "validate-blueprint";
+  | "validate-blueprint"
+  | "review-gate-input";
 
 type ParsedHandoff = {
   status?: string;
@@ -117,6 +118,29 @@ type ParsedBlueprint = {
   next_action?: string;
 };
 
+type ActiveReviewGateResultInput = {
+  status: "passed" | "failed" | "blocked";
+  diffHash: string;
+  completedAt?: string;
+  summary?: string;
+};
+
+type ActiveReviewGateInput = {
+  workflow: string;
+  unit?: {
+    id?: string;
+    title?: string;
+  };
+  sourceProvenance: {
+    kind: string;
+    ref: string;
+    evidence?: string[];
+  };
+  requiredReviewPasses: string[];
+  results: Record<string, ActiveReviewGateResultInput>;
+  blockingFindings?: unknown[];
+};
+
 function main(): void {
   const [command, ...args] = process.argv.slice(2);
 
@@ -148,6 +172,11 @@ function main(): void {
 
   if (command === "blueprint-template") {
     printBlueprintTemplate();
+    return;
+  }
+
+  if (command === "review-gate-input") {
+    printReviewGateInput(args);
     return;
   }
 
@@ -315,8 +344,32 @@ ${BASELINE_REVIEWERS.map((reviewer) => `      - ${reviewer}`).join("\n")}
 }
 
 function validateHandoff(input: string): void {
-  const errors = legacyErrors(input);
+  try {
+    validatedHandoff(input);
+  } catch (error) {
+    fail(errorMessage(error));
+  }
+  console.log("plan_delivery_handoff valid");
+}
+
+function validatedHandoff(input: string): ParsedHandoff {
   const handoff = parseHandoff(input);
+  const errors = handoffValidationErrors(input, handoff);
+
+  if (errors.length > 0) {
+    throw new Error(
+      `Invalid plan_delivery_handoff:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+    );
+  }
+
+  return handoff;
+}
+
+function handoffValidationErrors(
+  input: string,
+  handoff: ParsedHandoff,
+): string[] {
+  const errors = legacyErrors(input);
 
   requireValue(handoff.status, "status", errors);
   requireValue(handoff.route, "route", errors);
@@ -379,6 +432,14 @@ function validateHandoff(input: string): void {
     }
   }
 
+  for (const reviewer of handoff.required_reviewers) {
+    if (!includes(BASELINE_REVIEWERS, reviewer)) {
+      errors.push(
+        `required_reviewers can include only baseline reviewers: ${reviewer}`,
+      );
+    }
+  }
+
   for (const reviewer of handoff.optional_reviewers) {
     if (!includes(OPTIONAL_REVIEWERS, reviewer)) {
       errors.push(
@@ -421,19 +482,153 @@ function validateHandoff(input: string): void {
     }
   }
 
-  if (errors.length > 0) {
-    console.error(
-      `Invalid plan_delivery_handoff:\n${errors.map((error) => `- ${error}`).join("\n")}`,
-    );
-    process.exit(1);
+  return errors;
+}
+
+type ReviewGateInputOptions = {
+  diffHash: string;
+  evidenceRef?: string;
+  fallbackRef?: string;
+};
+
+function buildPlanReadyReviewGateInput(
+  input: string,
+  options: ReviewGateInputOptions,
+): ActiveReviewGateInput {
+  const body = extractYaml(input);
+  if (hasSection(body, "plan_delivery_handoff")) {
+    return handoffReviewGateInput(validatedHandoff(input), options);
+  }
+  if (hasSection(body, "openspec_blueprint")) {
+    return blueprintReviewGateInput(validatedBlueprint(input), options);
   }
 
-  console.log("plan_delivery_handoff valid");
+  throw new Error(
+    "review-gate input requires plan_delivery_handoff or openspec_blueprint",
+  );
+}
+
+function printReviewGateInput(args: string[]): void {
+  const diffHash = optionValue(args, "--diff-hash");
+  if (!diffHash) {
+    fail("review-gate-input requires --diff-hash");
+  }
+
+  const input = readInput(args);
+  const evidenceRef =
+    optionValue(args, "--source-ref") ?? optionValue(args, "--file");
+  let reviewGateInput: ActiveReviewGateInput;
+  try {
+    reviewGateInput = buildPlanReadyReviewGateInput(input, {
+      diffHash,
+      evidenceRef,
+      fallbackRef: evidenceRef,
+    });
+  } catch (error) {
+    fail(errorMessage(error));
+  }
+  console.log(JSON.stringify(reviewGateInput, null, 2));
+}
+
+function handoffReviewGateInput(
+  handoff: ParsedHandoff,
+  options: ReviewGateInputOptions,
+): ActiveReviewGateInput {
+  return {
+    workflow: "plan-ready",
+    unit: {
+      id: handoff.approved_unit_id,
+      title: handoff.approved_unit_title,
+    },
+    sourceProvenance: {
+      kind: "plan_delivery_handoff",
+      ref: handoff.artifact_ref ?? options.fallbackRef ?? "unknown",
+      evidence: sourceEvidence(options),
+    },
+    requiredReviewPasses: baselineReviewers(handoff.required_reviewers),
+    results: reviewerResults(
+      baselineReviewers(handoff.required_reviewers),
+      options.diffHash,
+    ),
+    blockingFindings: handoff.blockers,
+  };
+}
+
+function blueprintReviewGateInput(
+  blueprint: ParsedBlueprint,
+  options: ReviewGateInputOptions,
+): ActiveReviewGateInput {
+  return {
+    workflow: "plan-ready",
+    unit: {
+      id: blueprint.suggested_id,
+      title: blueprint.title,
+    },
+    sourceProvenance: {
+      kind: "openspec_blueprint",
+      ref: blueprint.source_plan_ref ?? options.fallbackRef ?? "unknown",
+      evidence: sourceEvidence(options),
+    },
+    requiredReviewPasses: baselineReviewers(blueprint.required_reviewers),
+    results: reviewerResults(
+      baselineReviewers(blueprint.required_reviewers),
+      options.diffHash,
+    ),
+    blockingFindings: blueprint.blockers,
+  };
+}
+
+function baselineReviewers(reviewers: string[]): string[] {
+  return reviewers.filter((reviewer) => includes(BASELINE_REVIEWERS, reviewer));
+}
+
+function reviewerResults(
+  reviewers: string[],
+  diffHash: string,
+): ActiveReviewGateInput["results"] {
+  return Object.fromEntries(
+    reviewers.map((reviewer) => [
+      reviewer,
+      {
+        status: "passed" as const,
+        diffHash,
+        summary: `PlanReady reviewer evidence satisfied ${reviewer}.`,
+      },
+    ]),
+  );
+}
+
+function sourceEvidence(options: ReviewGateInputOptions): string[] {
+  return options.evidenceRef ? [options.evidenceRef] : [];
 }
 
 function validateBlueprint(input: string): void {
-  const errors = legacyErrors(input);
+  try {
+    validatedBlueprint(input);
+  } catch (error) {
+    fail(errorMessage(error));
+  }
+  console.log("openspec_blueprint valid");
+}
+
+function validatedBlueprint(input: string): ParsedBlueprint {
   const blueprint = parseBlueprint(input);
+  const errors = blueprintValidationErrors(input, blueprint);
+
+  if (errors.length > 0) {
+    throw new Error(
+      `Invalid openspec_blueprint:\n${errors.map((error) => `- ${error}`).join("\n")}`,
+    );
+  }
+
+  return blueprint;
+}
+
+function blueprintValidationErrors(
+  input: string,
+  blueprint: ParsedBlueprint,
+): string[] {
+  const errors = legacyErrors(input);
   const taskIds = blueprint.tasks
     .map((task) => task.id)
     .filter((id): id is string => Boolean(id));
@@ -627,14 +822,7 @@ function validateBlueprint(input: string): void {
     errors.push("next_action must be create_openspec_change");
   }
 
-  if (errors.length > 0) {
-    console.error(
-      `Invalid openspec_blueprint:\n${errors.map((error) => `- ${error}`).join("\n")}`,
-    );
-    process.exit(1);
-  }
-
-  console.log("openspec_blueprint valid");
+  return errors;
 }
 
 function validateSelection(input: string): void {
@@ -914,7 +1102,21 @@ function isCommand(command: string | undefined): command is Command {
     "validate-handoff",
     "blueprint-template",
     "validate-blueprint",
+    "review-gate-input",
   ].includes(command ?? "");
+}
+
+function optionValue(args: string[], name: string): string | undefined {
+  const index = args.indexOf(name);
+  if (index === -1) {
+    return undefined;
+  }
+  const value = args[index + 1];
+  return value && !value.startsWith("-") ? value : undefined;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function isKnownReviewer(reviewer: string): boolean {

@@ -37,6 +37,7 @@ function withTempPlan(
 function runPlanReady(
   command: string,
   content: string,
+  extraArgs: string[] = [],
 ): { status: number | null; stderr: string; stdout: string } {
   let result: ReturnType<typeof spawnSync> | undefined;
   withTempFile(content, (path) => {
@@ -47,6 +48,7 @@ function runPlanReady(
         "tsx",
         "skills/plan-ready/scripts/plan-ready.ts",
         command,
+        ...extraArgs,
         "--file",
         path,
       ],
@@ -64,6 +66,8 @@ function runPlanReady(
     stdout: result.stdout,
   };
 }
+
+const reviewGateDiffHash = `sha256:${"1".repeat(64)}`;
 
 function validHandoff(artifactRef: string, fingerprint: string): string {
   return `plan_delivery_handoff:
@@ -227,6 +231,24 @@ test("validate-handoff rejects stale artifact fingerprints", () => {
       result.stderr,
       /artifact.fingerprint must match current artifact.ref content/,
     );
+  });
+});
+
+test("validate-handoff rejects optional reviewers in required reviewers", () => {
+  withTempPlan(({ artifactRef, fingerprint }) => {
+    const handoff = validHandoff(artifactRef, fingerprint).replace(
+      "      - refactoring-opportunities\n    optional_reviewers: []",
+      "      - refactoring-opportunities\n      - docs-and-agent-alignment\n    optional_reviewers: []",
+    );
+    const result = runPlanReady("validate-handoff", handoff);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Invalid plan_delivery_handoff/);
+    assert.match(
+      result.stderr,
+      /required_reviewers can include only baseline reviewers: docs-and-agent-alignment/,
+    );
+    assert.equal(result.stdout, "");
   });
 });
 
@@ -658,6 +680,158 @@ test("validate-blueprint accepts docs and validation tooling as feature work", (
   assert.match(docsFeature.stdout, /openspec_blueprint valid/);
   assert.equal(validationFeature.status, 0);
   assert.match(validationFeature.stdout, /openspec_blueprint valid/);
+});
+
+test("review-gate-input maps a validated handoff to active gate input", () => {
+  withTempPlan(({ artifactRef, fingerprint }) => {
+    const result = runPlanReady(
+      "review-gate-input",
+      validHandoff(artifactRef, fingerprint),
+      ["--diff-hash", reviewGateDiffHash, "--source-ref", "handoff.yaml"],
+    );
+    const output = JSON.parse(result.stdout);
+
+    assert.equal(result.status, 0);
+    assert.equal(output.workflow, "plan-ready");
+    assert.equal(output.unit.id, "atomic");
+    assert.equal(output.unit.title, "Example atomic unit");
+    assert.equal(output.sourceProvenance.kind, "plan_delivery_handoff");
+    assert.equal(output.sourceProvenance.ref, artifactRef);
+    assert.deepEqual(output.sourceProvenance.evidence, ["handoff.yaml"]);
+    assert.deepEqual(output.requiredReviewPasses, [
+      "implementation-readiness",
+      "edge-cases-and-risks",
+      "simplification-and-scope-control",
+      "refactoring-opportunities",
+    ]);
+    assert.equal(
+      output.results["implementation-readiness"].diffHash,
+      reviewGateDiffHash,
+    );
+    assert.equal(output.results["implementation-readiness"].status, "passed");
+    assert.deepEqual(output.blockingFindings, []);
+  });
+});
+
+test("review-gate-input does not promote handoff optional reviewers before activation", () => {
+  withTempPlan(({ artifactRef, fingerprint }) => {
+    const handoff = validHandoff(artifactRef, fingerprint).replace(
+      "    optional_reviewers: []",
+      "    optional_reviewers:\n      - docs-and-agent-alignment",
+    );
+    const result = runPlanReady("review-gate-input", handoff, [
+      "--diff-hash",
+      reviewGateDiffHash,
+    ]);
+    const output = JSON.parse(result.stdout);
+
+    assert.equal(result.status, 0);
+    assert.deepEqual(output.requiredReviewPasses, [
+      "implementation-readiness",
+      "edge-cases-and-risks",
+      "simplification-and-scope-control",
+      "refactoring-opportunities",
+    ]);
+    assert.equal(output.results["docs-and-agent-alignment"], undefined);
+  });
+});
+
+test("review-gate-input rejects handoff optional reviewers in required reviewers", () => {
+  withTempPlan(({ artifactRef, fingerprint }) => {
+    const handoff = validHandoff(artifactRef, fingerprint).replace(
+      "      - refactoring-opportunities\n    optional_reviewers: []",
+      "      - refactoring-opportunities\n      - docs-and-agent-alignment\n    optional_reviewers: []",
+    );
+    const result = runPlanReady("review-gate-input", handoff, [
+      "--diff-hash",
+      reviewGateDiffHash,
+    ]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Invalid plan_delivery_handoff/);
+    assert.match(
+      result.stderr,
+      /required_reviewers can include only baseline reviewers: docs-and-agent-alignment/,
+    );
+    assert.equal(result.stdout, "");
+  });
+});
+
+test("review-gate-input requires a diff hash value", () => {
+  withTempPlan(({ artifactRef, fingerprint }) => {
+    const result = runPlanReady(
+      "review-gate-input",
+      validHandoff(artifactRef, fingerprint),
+      ["--diff-hash", "--source-ref", "handoff.yaml"],
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /review-gate-input requires --diff-hash/);
+    assert.equal(result.stdout, "");
+  });
+});
+
+test("review-gate-input rejects unsupported input contracts", () => {
+  const result = runPlanReady("review-gate-input", "example: true\n", [
+    "--diff-hash",
+    reviewGateDiffHash,
+  ]);
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /review-gate input requires plan_delivery_handoff or openspec_blueprint/,
+  );
+  assert.equal(result.stdout, "");
+});
+
+test("review-gate-input maps a validated blueprint to active gate input", () => {
+  const result = runPlanReady("review-gate-input", validBlueprint(), [
+    "--diff-hash",
+    reviewGateDiffHash,
+    "--source-ref",
+    "blueprint.yaml",
+  ]);
+  const output = JSON.parse(result.stdout);
+
+  assert.equal(result.status, 0);
+  assert.equal(output.workflow, "plan-ready");
+  assert.equal(output.unit.id, "add-plan-blueprints");
+  assert.equal(output.unit.title, "Add PlanReady OpenSpec blueprints");
+  assert.equal(output.sourceProvenance.kind, "openspec_blueprint");
+  assert.equal(output.sourceProvenance.ref, ".agents/plans/example.md");
+  assert.deepEqual(output.sourceProvenance.evidence, ["blueprint.yaml"]);
+  assert.deepEqual(output.requiredReviewPasses, [
+    "implementation-readiness",
+    "edge-cases-and-risks",
+    "simplification-and-scope-control",
+    "refactoring-opportunities",
+  ]);
+  assert.equal(
+    output.results["edge-cases-and-risks"].diffHash,
+    reviewGateDiffHash,
+  );
+  assert.equal(output.results["edge-cases-and-risks"].status, "passed");
+  assert.deepEqual(output.blockingFindings, []);
+});
+
+test("review-gate-input rejects partial blueprints before mapping", () => {
+  const result = runPlanReady(
+    "review-gate-input",
+    validBlueprint().replace(
+      "    reviewers_used:\n      - implementation-readiness\n      - edge-cases-and-risks\n      - simplification-and-scope-control\n      - refactoring-opportunities\n",
+      "",
+    ),
+    ["--diff-hash", reviewGateDiffHash],
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Invalid openspec_blueprint/);
+  assert.match(
+    result.stderr,
+    /reviewers_used must include implementation-readiness/,
+  );
+  assert.equal(result.stdout, "");
 });
 
 test("validate-blueprint requires source plan ref", () => {
