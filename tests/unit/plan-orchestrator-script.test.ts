@@ -251,8 +251,8 @@ const resumeReport = `orchestrator_resume:
 
       - [x] 1.1 First deliverable
       - [ ] 1.2 Future deliverable
-  task_artifacts:
-    - task_id: "1.1"
+  unit_artifacts:
+    - unit_id: "1"
       artifact: https://git.fullscript.io/group/project/-/merge_requests/2
   implementation_stack:
     - artifact: https://git.fullscript.io/group/project/-/merge_requests/1
@@ -260,14 +260,14 @@ const resumeReport = `orchestrator_resume:
       head_sha: def456
       nitro_gate_outcome: passed
       predecessor_artifact:
-      task_delta_validated: true
+      delivery_unit_delta_validated: true
       cumulative_task_state_valid: true
     - artifact: https://git.fullscript.io/group/project/-/merge_requests/2
       role: implementation
       head_sha: abc789
       nitro_gate_outcome: passed
       predecessor_artifact: https://git.fullscript.io/group/project/-/merge_requests/1
-      task_delta_validated: true
+      delivery_unit_delta_validated: true
       cumulative_task_state_valid: true
   restack_required: false
   restack_evidence:
@@ -287,11 +287,9 @@ const stackReady = `stack_ready:
 
       - [x] 1.1 First deliverable
       - [x] 1.2 Second deliverable
-  task_artifacts:
-    - task_id: "1.1"
+  unit_artifacts:
+    - unit_id: "1"
       artifact: https://git.fullscript.io/group/project/-/merge_requests/2
-    - task_id: "1.2"
-      artifact: https://git.fullscript.io/group/project/-/merge_requests/3
   stack:
     - artifact: https://git.fullscript.io/group/project/-/merge_requests/1
       role: planning
@@ -687,8 +685,8 @@ test("validate-resume blocks resume-ready with invalid cumulative task state", (
   const result = runPlanOrchestrator(
     "validate-resume",
     resumeReport.replace(
-      "      predecessor_artifact: https://git.fullscript.io/group/project/-/merge_requests/1\n      task_delta_validated: true\n      cumulative_task_state_valid: true",
-      "      predecessor_artifact: https://git.fullscript.io/group/project/-/merge_requests/1\n      task_delta_validated: true\n      cumulative_task_state_valid: false",
+      "      predecessor_artifact: https://git.fullscript.io/group/project/-/merge_requests/1\n      delivery_unit_delta_validated: true\n      cumulative_task_state_valid: true",
+      "      predecessor_artifact: https://git.fullscript.io/group/project/-/merge_requests/1\n      delivery_unit_delta_validated: true\n      cumulative_task_state_valid: false",
     ),
   );
 
@@ -729,11 +727,11 @@ test("validate-resume blocks implementation entries without predecessor artifact
   );
 });
 
-test("validate-resume blocks implementation entries without task-delta evidence", () => {
+test("validate-resume blocks implementation entries without delivery-unit-delta evidence", () => {
   const result = runPlanOrchestrator(
     "validate-resume",
     resumeReport.replace(
-      "      predecessor_artifact: https://git.fullscript.io/group/project/-/merge_requests/1\n      task_delta_validated: true",
+      "      predecessor_artifact: https://git.fullscript.io/group/project/-/merge_requests/1\n      delivery_unit_delta_validated: true",
       "      predecessor_artifact: https://git.fullscript.io/group/project/-/merge_requests/1",
     ),
   );
@@ -741,7 +739,7 @@ test("validate-resume blocks implementation entries without task-delta evidence"
   assert.notEqual(result.status, 0);
   assert.match(
     result.stderr,
-    /task_delta_validated must be true for every implementation artifact before resume_ready/,
+    /delivery_unit_delta_validated must be true for every implementation artifact before resume_ready/,
   );
 });
 
@@ -752,20 +750,20 @@ test("validate-resume blocks later implementation entries without predecessor ar
       head_sha: abc789
       nitro_gate_outcome: passed
       predecessor_artifact: https://git.fullscript.io/group/project/-/merge_requests/1
-      task_delta_validated: true
+      delivery_unit_delta_validated: true
       cumulative_task_state_valid: true`,
     `    - artifact: https://git.fullscript.io/group/project/-/merge_requests/2
       role: implementation
       head_sha: abc789
       nitro_gate_outcome: passed
       predecessor_artifact: https://git.fullscript.io/group/project/-/merge_requests/1
-      task_delta_validated: true
+      delivery_unit_delta_validated: true
       cumulative_task_state_valid: true
     - artifact: https://git.fullscript.io/group/project/-/merge_requests/3
       role: implementation
       head_sha: beef123
       nitro_gate_outcome: passed
-      task_delta_validated: true
+      delivery_unit_delta_validated: true
       cumulative_task_state_valid: true`,
   );
   const result = runPlanOrchestrator(
@@ -784,7 +782,7 @@ test("validate-resume blocks checked predecessor tasks without artifact evidence
   const result = runPlanOrchestrator(
     "validate-resume",
     resumeReport.replace(
-      '    - task_id: "1.1"\n      artifact: https://git.fullscript.io/group/project/-/merge_requests/2\n',
+      '    - unit_id: "1"\n      artifact: https://git.fullscript.io/group/project/-/merge_requests/2\n',
       "",
     ),
   );
@@ -933,7 +931,7 @@ test("validate-stack-ready rejects checked tasks without artifact evidence", () 
   const result = runPlanOrchestrator(
     "validate-stack-ready",
     stackReady.replace(
-      '    - task_id: "1.2"\n      artifact: https://git.fullscript.io/group/project/-/merge_requests/3\n',
+      '    - unit_id: "1"\n      artifact: https://git.fullscript.io/group/project/-/merge_requests/2\n',
       "",
     ),
   );
@@ -941,7 +939,7 @@ test("validate-stack-ready rejects checked tasks without artifact evidence", () 
   assert.notEqual(result.status, 0);
   assert.match(
     result.stderr,
-    /missing implementation artifact evidence for checked deliverable tasks 1\.2/,
+    /missing implementation artifact evidence for checked deliverable tasks 1\.1, 1\.2/,
   );
 });
 

@@ -19,6 +19,7 @@ import {
 } from "./lib/planning-contracts.ts";
 import {
   artifactHostHintFromRemoteText,
+  validateDeliveryUnitDelta,
   validateUnitTaskDelta,
 } from "./lib/stack-state.ts";
 
@@ -74,7 +75,7 @@ const LEDGER_GATES = [
   "slice_status",
   "implementation",
   "unit_artifact_boundary",
-  "unit_task_delta",
+  "delivery_unit_delta",
   "local_verification",
   "refactoring_execution",
   "reviewer_passes",
@@ -102,7 +103,7 @@ const LEDGER_NOT_APPLICABLE_GATES = [
   "security_review",
   "ai_readiness_upkeep",
   "docs_alignment",
-  "unit_task_delta",
+  "delivery_unit_delta",
 ] as const;
 
 const LEDGER_STATUSES = ["passed", "blocked", "not_applicable"] as const;
@@ -139,7 +140,7 @@ type ParsedHandoff = {
   expected_base_ref?: string;
   expected_base_sha?: string;
   predecessor_artifact?: string;
-  selected_task_base_sha?: string;
+  selected_unit_base_sha?: string;
   restack_required?: string;
   completion_updates: string[];
   required_reviewers: string[];
@@ -152,7 +153,7 @@ function main(): void {
 
   if (!isCommand(command)) {
     fail(
-      "Usage: plan-unit-delivery.ts <detect|validate-handoff|reviewer-template|validate-launch-report|validate-review-report|refactoring-template|gate-template|validate-ledger|validate-task-delta> [--file path|--base path --head path --task id] [--expected-head-sha sha] [--expected-artifact url]",
+      "Usage: plan-unit-delivery.ts <detect|validate-handoff|reviewer-template|validate-launch-report|validate-review-report|refactoring-template|gate-template|validate-ledger|validate-task-delta> [--file path|--base path --head path --unit id|--task id] [--expected-head-sha sha] [--expected-artifact url]",
     );
   }
 
@@ -225,10 +226,10 @@ function printGateTemplate(): void {
     status: passed
     evidence: <evidence>`;
     if (gate !== "stack_identity") {
-      if (gate === "unit_task_delta") {
+      if (gate === "delivery_unit_delta") {
         return `${base}
-    command: <validate-task-delta command, or omit when selected_task_id is atomic>
-    output: <validate-task-delta output containing unit_task_delta_valid, or omit when selected_task_id is atomic>`;
+    command: <validate-task-delta --unit command, or omit when selected_unit_id is atomic>
+    output: <validate-task-delta output containing delivery_unit_delta_valid, or omit when selected_unit_id is atomic>`;
       }
 
       if (gate === "description_policy") {
@@ -254,8 +255,9 @@ function printGateTemplate(): void {
     }
 
     return `${base}
-    selected_task_id: <OpenSpec task id>
-    selected_task_base_sha: <selected task base sha>
+    selected_unit_id: <OpenSpec delivery unit id>
+    completed_work_item_ids: <comma-separated nested work item ids completed in this MR>
+    selected_unit_base_sha: <selected unit base sha>
     predecessor_artifact: <predecessor PR or MR URL, or none for first implementation unit>
     implementation_artifact: <implementation PR or MR URL>
     implementation_head_sha: <implementation artifact latest head sha>
@@ -265,7 +267,7 @@ function printGateTemplate(): void {
   console.log(`## Readable Summary
 
 - Delivery state: all required gates have evidence.
-- Verification: one-task PR/MR boundary, local checks, reviewer outcomes, artifact separation, hosted review, pipelines, and automatic feedback wait are accounted for.
+- Verification: one delivery-unit MR boundary, local checks, reviewer outcomes, artifact separation, hosted review, pipelines, and automatic feedback wait are accounted for.
 - Finish condition: stack-ready or blocked with evidence.
 
 \`\`\`yaml
@@ -412,8 +414,8 @@ function validateHandoff(input: string): void {
     errors,
   );
   requireValue(
-    handoff.selected_task_base_sha,
-    "delivery.stack_identity.selected_task_base_sha",
+    handoff.selected_unit_base_sha,
+    "delivery.stack_identity.selected_unit_base_sha",
     errors,
   );
   requireValue(
@@ -523,11 +525,43 @@ function validateHandoff(input: string): void {
 function validateTaskDelta(args: string[]): void {
   const basePath = requiredArg(args, "--base");
   const headPath = requiredArg(args, "--head");
-  const expectedTaskId = requiredArg(args, "--task");
+  const expectedUnitId = optionalArg(args, "--unit");
+  const expectedTaskId = optionalArg(args, "--task");
+  if (!expectedUnitId && !expectedTaskId) {
+    fail("validate-task-delta requires --unit <unit-id> or --task <task-id>");
+  }
+
+  if (expectedUnitId) {
+    const delta = validateDeliveryUnitDelta(
+      readFileSync(basePath, "utf8"),
+      readFileSync(headPath, "utf8"),
+      expectedUnitId,
+    );
+    if (delta.errors.length > 0) {
+      console.error(
+        `Invalid delivery_unit_delta:\n${delta.errors.map((error) => `- ${error}`).join("\n")}`,
+      );
+      process.exit(1);
+    }
+
+    console.log(
+      JSON.stringify(
+        {
+          status: "delivery_unit_delta_valid",
+          added_unit: delta.addedUnit,
+          added_work_items: delta.addedWorkItems,
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+
   const delta = validateUnitTaskDelta(
     readFileSync(basePath, "utf8"),
     readFileSync(headPath, "utf8"),
-    expectedTaskId,
+    expectedTaskId ?? "",
   );
   if (delta.errors.length > 0) {
     console.error(
@@ -622,10 +656,13 @@ function validateDeliveryGateSemantics(
     ? scalar(stackIdentityGate, "implementation_head_sha")
     : undefined;
   const selectedTaskId = stackIdentityGate
-    ? scalar(stackIdentityGate, "selected_task_id")
+    ? scalar(stackIdentityGate, "selected_unit_id")
     : undefined;
   const selectedTaskBaseSha = stackIdentityGate
-    ? scalar(stackIdentityGate, "selected_task_base_sha")
+    ? scalar(stackIdentityGate, "selected_unit_base_sha")
+    : undefined;
+  const completedWorkItemIds = stackIdentityGate
+    ? scalar(stackIdentityGate, "completed_work_item_ids")
     : undefined;
   const predecessorArtifact = stackIdentityGate
     ? scalar(stackIdentityGate, "predecessor_artifact")
@@ -634,10 +671,15 @@ function validateDeliveryGateSemantics(
     ? scalar(stackIdentityGate, "restack_required")
     : undefined;
 
-  requireValue(selectedTaskId, "stack_identity.selected_task_id", errors);
+  requireValue(selectedTaskId, "stack_identity.selected_unit_id", errors);
+  requireValue(
+    completedWorkItemIds,
+    "stack_identity.completed_work_item_ids",
+    errors,
+  );
   requireValue(
     selectedTaskBaseSha,
-    "stack_identity.selected_task_base_sha",
+    "stack_identity.selected_unit_base_sha",
     errors,
   );
   requireValue(
@@ -708,65 +750,84 @@ function validateDeliveryGateSemantics(
     },
   );
 
-  const unitTaskDeltaGate = findSection(section, "unit_task_delta");
-  const unitTaskDeltaStatus = unitTaskDeltaGate
-    ? scalar(unitTaskDeltaGate, "status")
+  const deliveryUnitDeltaGate = findSection(section, "delivery_unit_delta");
+  const deliveryUnitDeltaStatus = deliveryUnitDeltaGate
+    ? scalar(deliveryUnitDeltaGate, "status")
     : undefined;
-  const unitTaskDeltaCommand = unitTaskDeltaGate
-    ? scalar(unitTaskDeltaGate, "command")
+  const deliveryUnitDeltaCommand = deliveryUnitDeltaGate
+    ? scalar(deliveryUnitDeltaGate, "command")
     : undefined;
-  const unitTaskDeltaOutput = unitTaskDeltaGate
-    ? scalarOrBlock(unitTaskDeltaGate, "output")
+  const deliveryUnitDeltaOutput = deliveryUnitDeltaGate
+    ? scalarOrBlock(deliveryUnitDeltaGate, "output")
     : undefined;
   const atomicPlanDelivery =
-    selectedTaskId === "atomic" && unitTaskDeltaStatus === "not_applicable";
+    selectedTaskId === "atomic" && deliveryUnitDeltaStatus === "not_applicable";
 
   if (atomicPlanDelivery) {
-    if (unitTaskDeltaCommand || unitTaskDeltaOutput) {
+    if (deliveryUnitDeltaCommand || deliveryUnitDeltaOutput) {
       errors.push(
-        "unit_task_delta.command and output must be omitted for atomic plan delivery",
+        "delivery_unit_delta.command and output must be omitted for atomic plan delivery",
       );
     }
   } else {
-    requireValue(unitTaskDeltaCommand, "unit_task_delta.command", errors);
-    requireValue(unitTaskDeltaOutput, "unit_task_delta.output", errors);
+    requireValue(
+      deliveryUnitDeltaCommand,
+      "delivery_unit_delta.command",
+      errors,
+    );
+    requireValue(deliveryUnitDeltaOutput, "delivery_unit_delta.output", errors);
     if (
-      unitTaskDeltaCommand &&
-      !unitTaskDeltaCommand.includes("validate-task-delta")
+      deliveryUnitDeltaCommand &&
+      !deliveryUnitDeltaCommand.includes("validate-task-delta")
     ) {
-      errors.push("unit_task_delta.command must run validate-task-delta");
+      errors.push("delivery_unit_delta.command must run validate-task-delta");
     }
     if (
-      unitTaskDeltaOutput &&
-      !unitTaskDeltaOutput.includes("unit_task_delta_valid")
+      deliveryUnitDeltaOutput &&
+      !deliveryUnitDeltaOutput.includes("delivery_unit_delta_valid")
     ) {
-      errors.push("unit_task_delta.output must include unit_task_delta_valid");
+      errors.push(
+        "delivery_unit_delta.output must include delivery_unit_delta_valid",
+      );
     }
-    if (unitTaskDeltaCommand && selectedTaskId) {
-      const commandTaskId = parseTaskDeltaCommandTask(unitTaskDeltaCommand);
-      if (!commandTaskId) {
+    if (deliveryUnitDeltaCommand && selectedTaskId) {
+      const commandUnitId = parseTaskDeltaCommandUnit(deliveryUnitDeltaCommand);
+      if (!commandUnitId) {
         errors.push(
-          "unit_task_delta.command must include --task <selected_task_id>",
+          "delivery_unit_delta.command must include --unit <selected_unit_id>",
         );
-      } else if (commandTaskId !== selectedTaskId) {
+      } else if (commandUnitId !== selectedTaskId) {
         errors.push(
-          "unit_task_delta.command --task must match stack_identity.selected_task_id",
+          "delivery_unit_delta.command --unit must match stack_identity.selected_unit_id",
         );
       }
     }
-    if (unitTaskDeltaOutput && selectedTaskId) {
-      const parsedOutput = parseTaskDeltaOutput(unitTaskDeltaOutput);
+    if (deliveryUnitDeltaOutput && selectedTaskId) {
+      const parsedOutput = parseDeliveryUnitDeltaOutput(
+        deliveryUnitDeltaOutput,
+      );
       if (!parsedOutput) {
-        errors.push("unit_task_delta.output must be parseable validator JSON");
+        errors.push(
+          "delivery_unit_delta.output must be parseable validator JSON",
+        );
       } else {
-        if (parsedOutput.status !== "unit_task_delta_valid") {
+        if (parsedOutput.status !== "delivery_unit_delta_valid") {
           errors.push(
-            "unit_task_delta.output status must be unit_task_delta_valid",
+            "delivery_unit_delta.output status must be delivery_unit_delta_valid",
           );
         }
-        if (parsedOutput.addedTaskId !== selectedTaskId) {
+        if (parsedOutput.addedUnitId !== selectedTaskId) {
           errors.push(
-            "unit_task_delta.output added_task.id must match stack_identity.selected_task_id",
+            "delivery_unit_delta.output added_unit.id must match stack_identity.selected_unit_id",
+          );
+        }
+        const completedIds = parseCompletedWorkItemIds(completedWorkItemIds);
+        const missingIds = completedIds.filter(
+          (id) => !parsedOutput.addedWorkItemIds.includes(id),
+        );
+        if (missingIds.length > 0) {
+          errors.push(
+            `delivery_unit_delta.output added_work_items must include stack_identity.completed_work_item_ids ${missingIds.join(", ")}`,
           );
         }
       }
@@ -889,35 +950,55 @@ function scalarOrBlock(input: string, key: string): string | undefined {
   return value || undefined;
 }
 
-function parseTaskDeltaCommandTask(command: string): string | undefined {
+function parseTaskDeltaCommandUnit(command: string): string | undefined {
   const match = command.match(
-    /(?:^|\s)--task(?:=|\s+)(?:"([^"]+)"|'([^']+)'|(\S+))/,
+    /(?:^|\s)--unit(?:=|\s+)(?:"([^"]+)"|'([^']+)'|(\S+))/,
   );
   return match ? (match[1] ?? match[2] ?? match[3]) : undefined;
 }
 
-function parseTaskDeltaOutput(
+function parseDeliveryUnitDeltaOutput(
   output: string,
-): { status?: string; addedTaskId?: string } | undefined {
+):
+  | { status?: string; addedUnitId?: string; addedWorkItemIds: string[] }
+  | undefined {
   try {
     const parsed = JSON.parse(output) as {
       status?: unknown;
-      added_task?: unknown;
+      added_unit?: unknown;
+      added_work_items?: unknown;
     };
-    const addedTask = parsed.added_task;
-    const addedTaskId =
-      typeof addedTask === "string"
-        ? addedTask
-        : addedTask && typeof addedTask === "object" && "id" in addedTask
-          ? String((addedTask as { id?: unknown }).id ?? "")
+    const addedUnit = parsed.added_unit;
+    const addedUnitId =
+      typeof addedUnit === "string"
+        ? addedUnit
+        : addedUnit && typeof addedUnit === "object" && "id" in addedUnit
+          ? String((addedUnit as { id?: unknown }).id ?? "")
           : undefined;
+    const addedWorkItemIds = Array.isArray(parsed.added_work_items)
+      ? parsed.added_work_items
+          .map((item) =>
+            item && typeof item === "object" && "id" in item
+              ? String((item as { id?: unknown }).id ?? "")
+              : "",
+          )
+          .filter(Boolean)
+      : [];
     return {
       status: typeof parsed.status === "string" ? parsed.status : undefined,
-      addedTaskId: addedTaskId || undefined,
+      addedUnitId: addedUnitId || undefined,
+      addedWorkItemIds,
     };
   } catch {
     return undefined;
   }
+}
+
+function parseCompletedWorkItemIds(value: string | undefined): string[] {
+  return (value ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function escapeRegExp(value: string): string {
@@ -1198,7 +1279,9 @@ function parseHandoff(input: string): ParsedHandoff {
     expected_base_ref: scalar(stackIdentity, "expected_base_ref"),
     expected_base_sha: scalar(stackIdentity, "expected_base_sha"),
     predecessor_artifact: scalar(stackIdentity, "predecessor_artifact"),
-    selected_task_base_sha: scalar(stackIdentity, "selected_task_base_sha"),
+    selected_unit_base_sha:
+      scalar(stackIdentity, "selected_unit_base_sha") ??
+      scalar(stackIdentity, "selected_task_base_sha"),
     restack_required: scalar(stackIdentity, "restack_required"),
     completion_updates: list(delivery, "completion_updates"),
     required_reviewers: list(review, "required_reviewers"),
@@ -1210,13 +1293,9 @@ function parseHandoff(input: string): ParsedHandoff {
 const legacyErrors = legacyPlanContractErrors;
 
 function requiredArg(args: string[], flag: string): string {
-  const index = args.indexOf(flag);
-  if (index === -1) {
-    fail(`validate-task-delta requires ${flag}`);
-  }
-  const value = args[index + 1];
+  const value = optionalArg(args, flag);
   if (!value) {
-    fail(`${flag} requires a value`);
+    fail(`validate-task-delta requires ${flag}`);
   }
   return value;
 }

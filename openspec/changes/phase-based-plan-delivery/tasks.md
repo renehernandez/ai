@@ -43,21 +43,21 @@
 
 ## 3. Stack Delivery Delta
 
-- [ ] 3.1 Update `skills/plan-unit-sequencer/SKILL.md` so it selects the next
+- [x] 3.1 Update `skills/plan-unit-sequencer/SKILL.md` so it selects the next
       unchecked delivery unit and hands that unit to `plan-unit-delivery`.
-- [ ] 3.2 Update `skills/plan-unit-delivery/SKILL.md` so one implementation MR
+- [x] 3.2 Update `skills/plan-unit-delivery/SKILL.md` so one implementation MR
       may include multiple nested work-item commits and checkbox updates within
       the selected unit.
-- [ ] 3.3 Replace or extend `validate-task-delta` with delivery-unit delta
+- [x] 3.3 Replace or extend `validate-task-delta` with delivery-unit delta
       validation that accepts exactly one unit completion and rejects unrelated
       work-item changes.
-- [ ] 3.4 Update delivery ledger requirements so they record selected unit ID,
+- [x] 3.4 Update delivery ledger requirements so they record selected unit ID,
       completed nested work-item IDs, unit base SHA, implementation artifact,
       head SHA, CI evidence, Nitro evidence, and restack state.
-- [ ] 3.5 Update resume and stack-ready validation so cumulative task state is
+- [x] 3.5 Update resume and stack-ready validation so cumulative task state is
       delivery-unit aware, including relevant `plan-orchestrator` script
       surfaces and shared stack-state helpers.
-- [ ] 3.6 Add compatibility fixtures for one unit with multiple nested items,
+- [x] 3.6 Add compatibility fixtures for one unit with multiple nested items,
       two units checked in one MR, future nested items checked early, legacy
       one-checkbox stacks, in-flight flat-task delivery, interrupted unit MRs,
       and rollback or downgrade status.

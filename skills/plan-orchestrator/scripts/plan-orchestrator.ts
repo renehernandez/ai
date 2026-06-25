@@ -180,16 +180,16 @@ orchestrator_resume:
 
       - [x] 1.1 Delivered task
       - [ ] 1.2 Undelivered future task
-  task_artifacts:
-    - task_id: "1.1"
-      artifact: <implementation MR URL for task 1.1>
+  unit_artifacts:
+    - unit_id: "1"
+      artifact: <implementation MR URL for delivery unit 1>
   implementation_stack:
     - artifact: <Fullscript GitLab planning or implementation MR URL>
       role: planning | implementation
       head_sha: <latest head sha>
       nitro_gate_outcome: passed | blocked | pending
       predecessor_artifact: <previous stack MR URL or empty for planning>
-      task_delta_validated: true | false
+      delivery_unit_delta_validated: true | false
       cumulative_task_state_valid: true | false
   restack_required: false
   restack_evidence:
@@ -220,11 +220,9 @@ stack_ready:
 
       - [x] 1.1 First deliverable
       - [x] 1.2 Second deliverable
-  task_artifacts:
-    - task_id: "1.1"
-      artifact: <implementation MR URL for task 1.1>
-    - task_id: "1.2"
-      artifact: <implementation MR URL for task 1.2>
+  unit_artifacts:
+    - unit_id: "1"
+      artifact: <implementation MR URL for delivery unit 1>
   stack:
     - artifact: <planning MR URL>
       role: planning
@@ -380,11 +378,11 @@ function validateResume(input: string): void {
       );
     }
     const invalidTaskDeltaEntries = implementationEntries.filter(
-      (entry) => entry.taskDeltaValidated !== "true",
+      (entry) => entry.deliveryUnitDeltaValidated !== "true",
     );
     if (invalidTaskDeltaEntries.length > 0) {
       errors.push(
-        "orchestrator_resume.implementation_stack task_delta_validated must be true for every implementation artifact before resume_ready",
+        "orchestrator_resume.implementation_stack delivery_unit_delta_validated must be true for every implementation artifact before resume_ready",
       );
     }
     const invalidCumulativeTaskEntries = implementationEntries.filter(
@@ -737,17 +735,33 @@ function blockScalar(input: string, key: string): string | undefined {
 }
 
 function taskArtifactEvidence(input: string): TaskArtifactEvidence[] {
-  const taskArtifacts = extractSection(input, "task_artifacts");
+  const entries: TaskArtifactEvidence[] = [];
+  entries.push(
+    ...artifactEvidenceEntries(extractSection(input, "task_artifacts"), "task"),
+  );
+  entries.push(
+    ...artifactEvidenceEntries(extractSection(input, "unit_artifacts"), "unit"),
+  );
+  return entries;
+}
+
+function artifactEvidenceEntries(
+  section: string,
+  mode: "task" | "unit",
+): TaskArtifactEvidence[] {
   const entries: TaskArtifactEvidence[] = [];
   let current: TaskArtifactEvidence | undefined;
 
-  for (const line of taskArtifacts.split(/\r?\n/)) {
-    const taskId = line.match(/^\s*-\s+task_id:\s*(.+?)\s*$/);
-    if (taskId) {
+  for (const line of section.split(/\r?\n/)) {
+    const id = line.match(new RegExp(`^\\s*-\\s+${mode}_id:\\s*(.+?)\\s*$`));
+    if (id) {
       if (current) {
         entries.push(current);
       }
-      current = { taskId: cleanInlineScalar(taskId[1]), artifact: "" };
+      current =
+        mode === "task"
+          ? { taskId: cleanInlineScalar(id[1]), artifact: "" }
+          : { unitId: cleanInlineScalar(id[1]), artifact: "" };
       continue;
     }
 
@@ -768,7 +782,7 @@ function implementationStackEntries(input: string): Array<{
   artifact: string;
   role?: string;
   predecessorArtifact?: string;
-  taskDeltaValidated?: string;
+  deliveryUnitDeltaValidated?: string;
   cumulativeTaskStateValid?: string;
 }> {
   const stack = extractSection(input, "implementation_stack");
@@ -776,7 +790,7 @@ function implementationStackEntries(input: string): Array<{
     artifact: string;
     role?: string;
     predecessorArtifact?: string;
-    taskDeltaValidated?: string;
+    deliveryUnitDeltaValidated?: string;
     cumulativeTaskStateValid?: string;
   }> = [];
   let current:
@@ -784,7 +798,7 @@ function implementationStackEntries(input: string): Array<{
         artifact: string;
         role?: string;
         predecessorArtifact?: string;
-        taskDeltaValidated?: string;
+        deliveryUnitDeltaValidated?: string;
         cumulativeTaskStateValid?: string;
       }
     | undefined;
@@ -818,10 +832,12 @@ function implementationStackEntries(input: string): Array<{
     }
 
     const taskDeltaValidated = line.match(
-      /^\s*task_delta_validated:\s*(.+?)\s*$/,
+      /^\s*(?:delivery_unit_delta_validated|task_delta_validated):\s*(.+?)\s*$/,
     );
     if (taskDeltaValidated) {
-      current.taskDeltaValidated = cleanInlineScalar(taskDeltaValidated[1]);
+      current.deliveryUnitDeltaValidated = cleanInlineScalar(
+        taskDeltaValidated[1],
+      );
       continue;
     }
 
