@@ -37,7 +37,7 @@
   `skills/plan-unit-delivery/scripts/plan-unit-delivery.ts` command or helper
   that maps a validated handoff plus `reviewer_launch` and `reviewer_report`
   into the shared `scripts/review-gate.ts` API input shape.
-- [ ] 3.2 Require required implementation reviewer passes in delivery gates.
+- [x] 3.2 Require required implementation reviewer passes in delivery gates.
   Required implementation reviewers must have passing
   reconciled outcomes, and treat selected or non-skipped dynamic reviewers as
   required gate passes for the current staged diff.
