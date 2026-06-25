@@ -37,6 +37,7 @@ function withTempFiles(
 function runPlanUnitDelivery(
   command: string,
   content = "",
+  extraArgs: string[] = [],
 ): { status: number | null; stderr: string; stdout: string } {
   let result: ReturnType<typeof spawnSync> | undefined;
   if (content) {
@@ -50,6 +51,7 @@ function runPlanUnitDelivery(
           command,
           "--file",
           path,
+          ...extraArgs,
         ],
         {
           cwd: process.cwd(),
@@ -65,6 +67,7 @@ function runPlanUnitDelivery(
         "tsx",
         "skills/plan-unit-delivery/scripts/plan-unit-delivery.ts",
         command,
+        ...extraArgs,
       ],
       {
         cwd: process.cwd(),
@@ -106,6 +109,9 @@ function runPlanUnitDeliveryArgs(
     stdout: result.stdout,
   };
 }
+
+const reviewGateDiffHash =
+  "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
 function runTaskDelta(
   base: string,
@@ -202,6 +208,27 @@ const launchedReport = `reviewer_launch:
     - code-simplifier: inline-d
     - deslop: inline-e
     - docs-alignment-review: inline-f
+`;
+
+const reviewerReport = `reviewer_report:
+  status: complete
+  launched_reviewers:
+    - implementation-review
+    - implementation-scrutiny
+    - code-quality-review
+    - code-simplifier
+    - deslop
+    - docs-alignment-review
+  skipped_reviewers:
+    - ai-readiness-upkeep: not_applicable - no AI readiness verification or agent-surface contract changed
+    - security-review: not_applicable - no security-sensitive surface changed
+  outcomes:
+    - implementation-review: passed - implementation review found no blocking issues
+    - implementation-scrutiny: passed - scrutiny verdict ship
+    - code-quality-review: passed - code quality review found no maintainability findings
+    - code-simplifier: passed - simplification review found no needed changes
+    - deslop: passed - deslop review found no AI-shaped clutter
+    - docs-alignment-review: passed - docs-alignment-review verdict clean for touched skill surfaces
 `;
 
 const deliveryLedger = `nitro_feedback_gate:
@@ -383,6 +410,84 @@ test("validate-handoff requires completion updates for OpenSpec tasks", () => {
     result.stderr,
     /openspec_task route requires delivery.completion_updates/,
   );
+});
+
+test("review-gate-input maps validated delivery evidence to active gate input", () => {
+  const result = runPlanUnitDelivery(
+    "review-gate-input",
+    `${validHandoff}\n${launchedReport}\n${reviewerReport}`,
+    ["--diff-hash", reviewGateDiffHash, "--source-ref", "handoff.yaml"],
+  );
+  const output = JSON.parse(result.stdout);
+
+  assert.equal(result.status, 0);
+  assert.equal(output.workflow, "plan-unit-delivery");
+  assert.equal(output.unit.id, "1");
+  assert.equal(output.unit.title, "Add plan delivery");
+  assert.equal(output.sourceProvenance.kind, "plan_delivery_handoff");
+  assert.equal(output.sourceProvenance.ref, "openspec/changes/example-change");
+  assert.equal(output.sourceProvenance.phase, "plan-unit-delivery");
+  assert.deepEqual(output.sourceProvenance.evidence, ["handoff.yaml"]);
+  assert.deepEqual(output.requiredReviewPasses, [
+    "implementation-review",
+    "implementation-scrutiny",
+    "code-quality-review",
+    "code-simplifier",
+    "deslop",
+    "docs-alignment-review",
+  ]);
+  assert.equal(
+    output.results["implementation-review"].diffHash,
+    reviewGateDiffHash,
+  );
+  assert.equal(output.results["implementation-review"].status, "passed");
+  assert.match(
+    output.results["implementation-review"].summary,
+    /no blocking issues/,
+  );
+  assert.equal(output.results["security-review"], undefined);
+  assert.deepEqual(output.blockingFindings, []);
+});
+
+test("review-gate-input requires a diff hash value", () => {
+  const result = runPlanUnitDelivery(
+    "review-gate-input",
+    `${validHandoff}\n${launchedReport}\n${reviewerReport}`,
+    ["--diff-hash", "--source-ref", "handoff.yaml"],
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /review-gate-input requires --diff-hash/);
+  assert.equal(result.stdout, "");
+});
+
+test("review-gate-input rejects mismatched launch and report evidence", () => {
+  const launchWithSecurityReview = launchedReport
+    .replace(
+      "    - docs-alignment-review\n",
+      "    - docs-alignment-review\n    - security-review\n",
+    )
+    .replace(
+      "    - ai-readiness-upkeep: not_applicable - no AI readiness verification or agent-surface contract changed\n    - security-review: not_applicable - no security-sensitive surface changed\n",
+      "    - ai-readiness-upkeep: not_applicable - no AI readiness verification or agent-surface contract changed\n",
+    )
+    .replace(
+      "    - docs-alignment-review: inline-f\n",
+      "    - docs-alignment-review: inline-f\n    - security-review: inline-g\n",
+    );
+  const result = runPlanUnitDelivery(
+    "review-gate-input",
+    `${validHandoff}\n${launchWithSecurityReview}\n${reviewerReport}`,
+    ["--diff-hash", reviewGateDiffHash],
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Invalid reviewer launch\/report pair/);
+  assert.match(
+    result.stderr,
+    /reviewer_report missing launched reviewer: security-review/,
+  );
+  assert.equal(result.stdout, "");
 });
 
 test("old followthrough delivery commands are not supported", () => {
