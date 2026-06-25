@@ -157,6 +157,24 @@ plan_delivery_handoff:
       - simplification-and-scope-control
       - refactoring-opportunities
     optional_reviewers: []
+    reviewer_evidence:
+      artifact_fingerprint: <sha256 of artifact ref or current commit sha>
+      completed_at: <ISO-8601 timestamp>
+      gate_outcome: passed
+      baseline_reviewers:
+        - implementation-readiness
+        - edge-cases-and-risks
+        - simplification-and-scope-control
+        - refactoring-opportunities
+      selected_dynamic_reviewers: []
+      per_reviewer_status:
+        implementation-readiness: passed
+        edge-cases-and-risks: passed
+        simplification-and-scope-control: passed
+        refactoring-opportunities: passed
+      skipped_reviewers: []
+      skipped_rationale: []
+      blocking_findings: []
   blockers: []
 ```
 
@@ -207,6 +225,24 @@ openspec_blueprint:
       - edge-cases-and-risks
       - simplification-and-scope-control
       - refactoring-opportunities
+    reviewer_evidence:
+      artifact_fingerprint: <sha256 of source plan or reviewed artifact>
+      completed_at: <ISO-8601 timestamp>
+      gate_outcome: passed
+      baseline_reviewers:
+        - implementation-readiness
+        - edge-cases-and-risks
+        - simplification-and-scope-control
+        - refactoring-opportunities
+      selected_dynamic_reviewers: []
+      per_reviewer_status:
+        implementation-readiness: passed
+        edge-cases-and-risks: passed
+        simplification-and-scope-control: passed
+        refactoring-opportunities: passed
+      skipped_reviewers: []
+      skipped_rationale: []
+      blocking_findings: []
     findings:
       - <review finding that shaped the blueprint>
   risks:
@@ -292,8 +328,14 @@ Invalid sizing shapes:
 
 For `openspec_blueprint.review`, keep `required_reviewers` as the baseline
 reviewers required for readiness, put selected catalog reviewers in
-`optional_reviewers`, and preserve `reviewers_used` plus `findings` as the
-review execution summary.
+`optional_reviewers`, mirror selected catalog reviewers in
+`reviewer_evidence.selected_dynamic_reviewers`, and preserve `reviewers_used`
+plus `findings` as the review execution summary. The `reviewer_evidence`
+object is mandatory for both atomic handoffs and OpenSpec blueprints: it records
+baseline reviewers, selected dynamic reviewers, per-reviewer status, artifact
+fingerprint, skipped reviewer rationale, blocking findings, completion
+timestamp, and gate outcome. Downstream skills must consume this evidence
+explicitly instead of recomputing reviewer lists.
 
 Legacy `slice_plan_review`, `reviewed_slices`,
 `plan_ready_handoff`, `plan_followthrough_slice_handoff`, and

@@ -95,6 +95,7 @@ type ParsedHandoff = {
   completion_updates: string[];
   required_reviewers: string[];
   optional_reviewers: string[];
+  reviewer_evidence: ReviewerEvidenceContract;
   blockers: string[];
 };
 
@@ -125,6 +126,7 @@ type ParsedBlueprint = {
   required_reviewers: string[];
   optional_reviewers: string[];
   reviewers_used: string[];
+  reviewer_evidence: ReviewerEvidenceContract;
   findings: string[];
   risks: string[];
   blockers: string[];
@@ -154,6 +156,29 @@ type ActiveReviewGateInput = {
   results: Record<string, ActiveReviewGateResultInput>;
   blockingFindings?: unknown[];
 };
+
+type ReviewerEvidenceContract = {
+  present: boolean;
+  keys: Set<string>;
+  artifact_fingerprint?: string;
+  completed_at?: string;
+  gate_outcome?: string;
+  baseline_reviewers: string[];
+  selected_dynamic_reviewers: string[];
+  per_reviewer_status: Record<string, string>;
+  skipped_reviewers: string[];
+  skipped_rationale: string[];
+  blocking_findings: string[];
+};
+
+const REQUIRED_REVIEWER_EVIDENCE_KEYS = [
+  "baseline_reviewers",
+  "selected_dynamic_reviewers",
+  "per_reviewer_status",
+  "skipped_reviewers",
+  "skipped_rationale",
+  "blocking_findings",
+] as const;
 
 function main(): void {
   const [command, ...args] = process.argv.slice(2);
@@ -200,7 +225,7 @@ function main(): void {
   }
 
   if (command === "validate-blueprint") {
-    validateBlueprint(readInput(args));
+    validateBlueprint(args);
     return;
   }
 
@@ -302,6 +327,18 @@ plan_delivery_handoff:
     required_reviewers:
 ${BASELINE_REVIEWERS.map((reviewer) => `      - ${reviewer}`).join("\n")}
     optional_reviewers: []
+    reviewer_evidence:
+      artifact_fingerprint: <sha256 of artifact ref or current commit sha>
+      completed_at: <ISO-8601 timestamp>
+      gate_outcome: passed
+      baseline_reviewers:
+${BASELINE_REVIEWERS.map((reviewer) => `        - ${reviewer}`).join("\n")}
+      selected_dynamic_reviewers: []
+      per_reviewer_status:
+${BASELINE_REVIEWERS.map((reviewer) => `        ${reviewer}: passed`).join("\n")}
+      skipped_reviewers: []
+      skipped_rationale: []
+      blocking_findings: []
   blockers: []
 \`\`\`
 `);
@@ -352,6 +389,18 @@ ${BASELINE_REVIEWERS.map((reviewer) => `      - ${reviewer}`).join("\n")}
     optional_reviewers: []
     reviewers_used:
 ${BASELINE_REVIEWERS.map((reviewer) => `      - ${reviewer}`).join("\n")}
+    reviewer_evidence:
+      artifact_fingerprint: <sha256 of source plan or reviewed artifact>
+      completed_at: <ISO-8601 timestamp>
+      gate_outcome: passed
+      baseline_reviewers:
+${BASELINE_REVIEWERS.map((reviewer) => `        - ${reviewer}`).join("\n")}
+      selected_dynamic_reviewers: []
+      per_reviewer_status:
+${BASELINE_REVIEWERS.map((reviewer) => `        ${reviewer}: passed`).join("\n")}
+      skipped_reviewers: []
+      skipped_rationale: []
+      blocking_findings: []
     findings:
       - <review finding that shaped the blueprint>
   risks:
@@ -467,6 +516,16 @@ function handoffValidationErrors(
     }
   }
 
+  errors.push(
+    ...reviewerEvidenceValidationErrors({
+      label: "review.reviewer_evidence",
+      evidence: handoff.reviewer_evidence,
+      baselineReviewers: handoff.required_reviewers,
+      selectedDynamicReviewers: handoff.optional_reviewers,
+      expectedArtifactFingerprint: handoff.artifact_fingerprint,
+    }),
+  );
+
   if (handoff.blockers.length > 0) {
     errors.push("blockers must be empty before status ready");
   }
@@ -506,6 +565,7 @@ function handoffValidationErrors(
 
 type ReviewGateInputOptions = {
   diffHash: string;
+  cwd?: string;
   evidenceRef?: string;
   fallbackRef?: string;
   results?: Record<string, ReviewGateResultInput>;
@@ -525,7 +585,10 @@ function buildPlanReadyReviewGateInput(
     return handoffReviewGateInput(validatedHandoff(input), options);
   }
   if (hasSection(body, "openspec_blueprint")) {
-    return blueprintReviewGateInput(validatedBlueprint(input), options);
+    return blueprintReviewGateInput(
+      validatedBlueprint(input, { cwd: options.cwd }),
+      options,
+    );
   }
 
   throw new Error(
@@ -539,6 +602,7 @@ function printReviewGateInput(args: string[]): void {
     fail("review-gate-input requires --diff-hash");
   }
 
+  const cwd = optionValue(args, "--cwd") ?? process.cwd();
   const input = readInput(args);
   const evidenceRef =
     optionValue(args, "--source-ref") ?? optionValue(args, "--file");
@@ -546,6 +610,7 @@ function printReviewGateInput(args: string[]): void {
   try {
     reviewGateInput = buildPlanReadyReviewGateInput(input, {
       diffHash,
+      cwd,
       evidenceRef,
       fallbackRef: evidenceRef,
     });
@@ -572,6 +637,7 @@ function activateReviewGate(args: string[]): void {
     const reviewerEvidence = readReviewerEvidence(args, diffHash);
     reviewGateInput = buildPlanReadyReviewGateInput(input, {
       diffHash,
+      cwd,
       evidenceRef,
       fallbackRef: evidenceRef,
       results: reviewerEvidence.results,
@@ -779,8 +845,8 @@ function handoffReviewGateInput(
   options: ReviewGateInputOptions,
 ): ActiveReviewGateInput {
   const requiredReviewPasses = readinessReviewers(
-    handoff.required_reviewers,
-    handoff.optional_reviewers,
+    handoff.reviewer_evidence.baseline_reviewers,
+    handoff.reviewer_evidence.selected_dynamic_reviewers,
   );
 
   return {
@@ -808,8 +874,8 @@ function blueprintReviewGateInput(
   options: ReviewGateInputOptions,
 ): ActiveReviewGateInput {
   const requiredReviewPasses = readinessReviewers(
-    blueprint.required_reviewers,
-    blueprint.optional_reviewers,
+    blueprint.reviewer_evidence.baseline_reviewers,
+    blueprint.reviewer_evidence.selected_dynamic_reviewers,
   );
 
   return {
@@ -892,18 +958,22 @@ function sourceEvidence(options: ReviewGateInputOptions): string[] {
   return options.evidenceRef ? [options.evidenceRef] : [];
 }
 
-function validateBlueprint(input: string): void {
+function validateBlueprint(args: string[]): void {
+  const cwd = optionValue(args, "--cwd") ?? process.cwd();
   try {
-    validatedBlueprint(input);
+    validatedBlueprint(readInput(args), { cwd });
   } catch (error) {
     fail(errorMessage(error));
   }
   console.log("openspec_blueprint valid");
 }
 
-function validatedBlueprint(input: string): ParsedBlueprint {
+function validatedBlueprint(
+  input: string,
+  options: { cwd?: string } = {},
+): ParsedBlueprint {
   const blueprint = parseBlueprint(input);
-  const errors = blueprintValidationErrors(input, blueprint);
+  const errors = blueprintValidationErrors(input, blueprint, options);
 
   if (errors.length > 0) {
     throw new Error(
@@ -917,6 +987,7 @@ function validatedBlueprint(input: string): ParsedBlueprint {
 function blueprintValidationErrors(
   input: string,
   blueprint: ParsedBlueprint,
+  options: { cwd?: string } = {},
 ): string[] {
   const errors = legacyErrors(input);
   const taskIds = blueprint.tasks
@@ -949,6 +1020,18 @@ function blueprintValidationErrors(
     !isSafeAgentsPlanRef(blueprint.source_plan_ref)
   ) {
     errors.push("source_plan.ref must be under .agents/plans");
+  }
+
+  if (
+    blueprint.source_plan_ref &&
+    isSafeAgentsPlanRef(blueprint.source_plan_ref) &&
+    !existsSync(
+      sourcePlanPath(blueprint.source_plan_ref, options.cwd ?? process.cwd()),
+    )
+  ) {
+    errors.push(
+      "source_plan.ref must exist before reviewer evidence can be accepted",
+    );
   }
 
   if (
@@ -1067,6 +1150,23 @@ function blueprintValidationErrors(
     }
   }
 
+  for (const reviewer of blueprint.optional_reviewers) {
+    if (!blueprint.reviewers_used.includes(reviewer)) {
+      errors.push(
+        `reviewers_used must include selected optional reviewer ${reviewer}`,
+      );
+    }
+  }
+
+  errors.push(
+    ...sameMembersErrors(
+      blueprint.reviewers_used,
+      unique([...BASELINE_REVIEWERS, ...blueprint.optional_reviewers]),
+      "reviewers_used",
+      "baseline plus selected optional reviewers",
+    ),
+  );
+
   if (!blueprint.has_required_reviewers) {
     errors.push("review.required_reviewers is required");
   }
@@ -1096,6 +1196,20 @@ function blueprintValidationErrors(
       errors.push(`unknown reviewer: ${reviewer}`);
     }
   }
+
+  errors.push(
+    ...reviewerEvidenceValidationErrors({
+      label: "review.reviewer_evidence",
+      evidence: blueprint.reviewer_evidence,
+      baselineReviewers: blueprint.required_reviewers,
+      selectedDynamicReviewers: blueprint.optional_reviewers,
+      expectedArtifactFingerprint: sourcePlanFingerprint(
+        blueprint,
+        options.cwd ?? process.cwd(),
+      ),
+      expectedArtifactFingerprintLabel: "source_plan.ref content",
+    }),
+  );
 
   if (blueprint.findings.length === 0) {
     errors.push("review.findings must include at least one item");
@@ -1230,6 +1344,7 @@ function parseHandoff(input: string): ParsedHandoff {
     completion_updates: list(delivery, "completion_updates"),
     required_reviewers: list(review, "required_reviewers"),
     optional_reviewers: list(review, "optional_reviewers"),
+    reviewer_evidence: parseReviewerEvidence(review),
     blockers: list(section, "blockers"),
   };
 }
@@ -1261,11 +1376,224 @@ function parseBlueprint(input: string): ParsedBlueprint {
     required_reviewers: list(review, "required_reviewers"),
     optional_reviewers: list(review, "optional_reviewers"),
     reviewers_used: list(review, "reviewers_used"),
+    reviewer_evidence: parseReviewerEvidence(review),
     findings: list(review, "findings"),
     risks: list(section, "risks"),
     blockers: list(section, "blockers"),
     next_action: scalar(section, "next_action"),
   };
+}
+
+function parseReviewerEvidence(
+  reviewSection: string,
+): ReviewerEvidenceContract {
+  const evidence = extractSection(reviewSection, "reviewer_evidence");
+
+  return {
+    present: hasSection(reviewSection, "reviewer_evidence"),
+    keys: new Set(
+      REQUIRED_REVIEWER_EVIDENCE_KEYS.filter((key) => hasKey(evidence, key)),
+    ),
+    artifact_fingerprint: scalar(evidence, "artifact_fingerprint"),
+    completed_at: scalar(evidence, "completed_at"),
+    gate_outcome: scalar(evidence, "gate_outcome"),
+    baseline_reviewers: list(evidence, "baseline_reviewers"),
+    selected_dynamic_reviewers: list(evidence, "selected_dynamic_reviewers"),
+    per_reviewer_status: map(evidence, "per_reviewer_status"),
+    skipped_reviewers: list(evidence, "skipped_reviewers"),
+    skipped_rationale: list(evidence, "skipped_rationale"),
+    blocking_findings: list(evidence, "blocking_findings"),
+  };
+}
+
+function reviewerEvidenceValidationErrors({
+  label,
+  evidence,
+  baselineReviewers,
+  selectedDynamicReviewers,
+  expectedArtifactFingerprint,
+  expectedArtifactFingerprintLabel = "artifact.fingerprint",
+}: {
+  label: string;
+  evidence: ReviewerEvidenceContract;
+  baselineReviewers: string[];
+  selectedDynamicReviewers: string[];
+  expectedArtifactFingerprint?: string;
+  expectedArtifactFingerprintLabel?: string;
+}): string[] {
+  const errors: string[] = [];
+
+  if (!evidence.present) {
+    return [`${label} is required`];
+  }
+
+  requireValue(
+    evidence.artifact_fingerprint,
+    `${label}.artifact_fingerprint`,
+    errors,
+  );
+  requireValue(evidence.completed_at, `${label}.completed_at`, errors);
+  requireValue(evidence.gate_outcome, `${label}.gate_outcome`, errors);
+  for (const key of REQUIRED_REVIEWER_EVIDENCE_KEYS) {
+    if (!evidence.keys.has(key)) {
+      errors.push(`${label}.${key} is required`);
+    }
+  }
+
+  if (
+    expectedArtifactFingerprint &&
+    evidence.artifact_fingerprint &&
+    evidence.artifact_fingerprint !== expectedArtifactFingerprint
+  ) {
+    errors.push(
+      `${label}.artifact_fingerprint must match ${expectedArtifactFingerprintLabel}`,
+    );
+  }
+
+  if (
+    evidence.completed_at &&
+    (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(
+      evidence.completed_at,
+    ) ||
+      !isValidUtcTimestamp(evidence.completed_at))
+  ) {
+    errors.push(`${label}.completed_at must be an ISO-8601 UTC timestamp`);
+  }
+
+  if (
+    evidence.gate_outcome &&
+    !["passed", "blocked"].includes(evidence.gate_outcome)
+  ) {
+    errors.push(`${label}.gate_outcome must be passed or blocked`);
+  }
+
+  if (evidence.gate_outcome && evidence.gate_outcome !== "passed") {
+    errors.push(`${label}.gate_outcome must be passed for ready outputs`);
+  }
+
+  if (evidence.baseline_reviewers.length === 0) {
+    errors.push(`${label}.baseline_reviewers is required`);
+  }
+
+  errors.push(
+    ...sameMembersErrors(
+      evidence.baseline_reviewers,
+      baselineReviewers,
+      `${label}.baseline_reviewers`,
+      "review.required_reviewers",
+    ),
+  );
+  errors.push(
+    ...sameMembersErrors(
+      evidence.selected_dynamic_reviewers,
+      selectedDynamicReviewers,
+      `${label}.selected_dynamic_reviewers`,
+      "review.optional_reviewers",
+    ),
+  );
+
+  const requiredStatusReviewers = unique([
+    ...evidence.baseline_reviewers,
+    ...evidence.selected_dynamic_reviewers,
+  ]);
+  for (const reviewer of requiredStatusReviewers) {
+    const status = evidence.per_reviewer_status[reviewer];
+    if (!status) {
+      errors.push(`${label}.per_reviewer_status must include ${reviewer}`);
+    } else if (status !== "passed") {
+      errors.push(`${label}.per_reviewer_status.${reviewer} must be passed`);
+    }
+  }
+
+  for (const [reviewer, status] of Object.entries(
+    evidence.per_reviewer_status,
+  )) {
+    if (
+      !requiredStatusReviewers.includes(reviewer) &&
+      !evidence.skipped_reviewers.includes(reviewer)
+    ) {
+      errors.push(
+        `${label}.per_reviewer_status contains unlisted reviewer: ${reviewer}`,
+      );
+    }
+    if (!["passed", "failed", "blocked", "skipped"].includes(status)) {
+      errors.push(
+        `${label}.per_reviewer_status.${reviewer} must be passed, failed, blocked, or skipped`,
+      );
+    }
+    if (["failed", "blocked"].includes(status)) {
+      errors.push(
+        `${label}.per_reviewer_status.${reviewer} must not be ${status} for ready outputs`,
+      );
+    }
+    if (
+      status === "skipped" &&
+      !evidence.skipped_reviewers.includes(reviewer)
+    ) {
+      errors.push(
+        `${label}.per_reviewer_status.${reviewer} is skipped but ${reviewer} is not listed in skipped_reviewers`,
+      );
+    }
+  }
+
+  for (const reviewer of evidence.skipped_reviewers) {
+    if (!isKnownReviewer(reviewer)) {
+      errors.push(
+        `${label}.skipped_reviewers contains unknown reviewer: ${reviewer}`,
+      );
+    }
+    if (requiredStatusReviewers.includes(reviewer)) {
+      errors.push(
+        `${label}.skipped_reviewers cannot include required reviewer ${reviewer}`,
+      );
+    }
+  }
+
+  if (
+    evidence.skipped_reviewers.length > 0 &&
+    evidence.skipped_rationale.length < evidence.skipped_reviewers.length
+  ) {
+    errors.push(
+      `${label}.skipped_rationale must explain each skipped reviewer`,
+    );
+  }
+
+  if (evidence.blocking_findings.length > 0) {
+    errors.push(`${label}.blocking_findings must be empty for ready outputs`);
+  }
+
+  return errors;
+}
+
+function isValidUtcTimestamp(value: string): boolean {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return false;
+  }
+  const iso = date.toISOString();
+  return iso === value || iso.replace(".000Z", "Z") === value;
+}
+
+function sameMembersErrors(
+  actual: string[],
+  expected: string[],
+  actualLabel: string,
+  expectedLabel: string,
+): string[] {
+  const errors: string[] = [];
+  for (const item of expected) {
+    if (!actual.includes(item)) {
+      errors.push(`${actualLabel} must include ${item} from ${expectedLabel}`);
+    }
+  }
+  for (const item of actual) {
+    if (!expected.includes(item)) {
+      errors.push(
+        `${actualLabel} contains ${item} not listed in ${expectedLabel}`,
+      );
+    }
+  }
+  return errors;
 }
 
 function parseBlueprintTasks(input: string): BlueprintTask[] {
@@ -1381,6 +1709,25 @@ function legacyErrors(input: string): string[] {
 
 function fingerprint(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+function sourcePlanFingerprint(
+  blueprint: ParsedBlueprint,
+  cwd: string,
+): string | undefined {
+  if (
+    !blueprint.source_plan_ref ||
+    !isSafeAgentsPlanRef(blueprint.source_plan_ref)
+  ) {
+    return undefined;
+  }
+
+  const path = sourcePlanPath(blueprint.source_plan_ref, cwd);
+  return existsSync(path) ? fingerprint(path) : undefined;
+}
+
+function sourcePlanPath(sourcePlanRef: string, cwd: string): string {
+  return join(cwd, sourcePlanRef);
 }
 
 function isCommand(command: string | undefined): command is Command {

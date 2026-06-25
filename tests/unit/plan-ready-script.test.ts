@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -46,6 +47,28 @@ function withTempPlan(
   } finally {
     rmSync(directory, { force: true, recursive: true });
   }
+}
+
+function withTempBlueprintSourcePlan(
+  callback: (context: { cwd: string; fingerprint: string }) => void,
+): void {
+  const directory = mkdtempSync(join(tmpdir(), "plan-ready-blueprint-"));
+  try {
+    callback({
+      cwd: directory,
+      fingerprint: writeBlueprintSourcePlan(directory),
+    });
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+}
+
+function writeBlueprintSourcePlan(cwd: string): string {
+  const planPath = join(cwd, ".agents", "plans", "example.md");
+  const content = "# Blueprint Source Plan\n\nA reviewed multi-step plan.\n";
+  mkdirSync(join(cwd, ".agents", "plans"), { recursive: true });
+  writeFileSync(planPath, content, "utf8");
+  return createHash("sha256").update(content).digest("hex");
 }
 
 function withGitFixture(callback: (cwd: string) => void): void {
@@ -220,8 +243,38 @@ function runPlanReadyInRepo(
 }
 
 const reviewGateDiffHash = `sha256:${"1".repeat(64)}`;
+const completedAt = "2026-06-23T10:00:00Z";
+
+function reviewerEvidenceBlock(
+  fingerprint: string,
+  selectedDynamicReviewers: string[] = [],
+): string {
+  const reviewed = [...BASELINE_REVIEWERS, ...selectedDynamicReviewers];
+  return `    reviewer_evidence:
+      artifact_fingerprint: ${fingerprint}
+      completed_at: ${completedAt}
+      gate_outcome: passed
+      baseline_reviewers:
+${BASELINE_REVIEWERS.map((reviewer) => `        - ${reviewer}`).join("\n")}
+      selected_dynamic_reviewers:${selectedDynamicReviewers.length === 0 ? " []" : ""}
+${selectedDynamicReviewers.map((reviewer) => `        - ${reviewer}`).join("\n")}
+      per_reviewer_status:
+${reviewed.map((reviewer) => `        ${reviewer}: passed`).join("\n")}
+      skipped_reviewers: []
+      skipped_rationale: []
+      blocking_findings: []
+`;
+}
 
 function validHandoff(artifactRef: string, fingerprint: string): string {
+  return validHandoffWithOptionalReviewers(artifactRef, fingerprint);
+}
+
+function validHandoffWithOptionalReviewers(
+  artifactRef: string,
+  fingerprint: string,
+  optionalReviewers: string[] = [],
+): string {
   return `plan_delivery_handoff:
   status: ready
   route: atomic_plan
@@ -249,12 +302,22 @@ function validHandoff(artifactRef: string, fingerprint: string): string {
       - edge-cases-and-risks
       - simplification-and-scope-control
       - refactoring-opportunities
-    optional_reviewers: []
+    optional_reviewers:${optionalReviewers.length === 0 ? " []" : ""}
+${optionalReviewers.map((reviewer) => `      - ${reviewer}`).join("\n")}
+${reviewerEvidenceBlock(fingerprint, optionalReviewers)}
   blockers: []
 `;
 }
 
 function validBlueprint(): string {
+  return validBlueprintWithOptionalReviewers();
+}
+
+function validBlueprintWithOptionalReviewers(
+  optionalReviewers: string[] = [],
+  reviewerUsedExtras: string[] = optionalReviewers,
+  reviewerEvidenceFingerprint = "source-plan-fingerprint",
+): string {
   return `openspec_blueprint:
   status: ready_for_openspec
   source_plan:
@@ -291,12 +354,15 @@ function validBlueprint(): string {
       - edge-cases-and-risks
       - simplification-and-scope-control
       - refactoring-opportunities
-    optional_reviewers: []
+    optional_reviewers:${optionalReviewers.length === 0 ? " []" : ""}
+${optionalReviewers.map((reviewer) => `      - ${reviewer}`).join("\n")}
     reviewers_used:
       - implementation-readiness
       - edge-cases-and-risks
       - simplification-and-scope-control
       - refactoring-opportunities
+${reviewerUsedExtras.map((reviewer) => `      - ${reviewer}`).join("\n")}
+${reviewerEvidenceBlock(reviewerEvidenceFingerprint, optionalReviewers)}
     findings:
       - The breakdown is ready to translate into OpenSpec files.
   risks:
@@ -404,6 +470,67 @@ test("validate-handoff rejects optional reviewers in required reviewers", () => 
   });
 });
 
+test("validate-handoff requires reviewer evidence", () => {
+  withTempPlan(({ artifactRef, fingerprint }) => {
+    const handoff = validHandoff(artifactRef, fingerprint).replace(
+      reviewerEvidenceBlock(fingerprint),
+      "",
+    );
+    const result = runPlanReady("validate-handoff", handoff);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /review\.reviewer_evidence is required/);
+  });
+});
+
+test("validate-handoff requires explicit empty reviewer evidence fields", () => {
+  withTempPlan(({ artifactRef, fingerprint }) => {
+    const handoff = validHandoff(artifactRef, fingerprint).replace(
+      "      selected_dynamic_reviewers: []\n",
+      "",
+    );
+    const result = runPlanReady("validate-handoff", handoff);
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /review\.reviewer_evidence\.selected_dynamic_reviewers is required/,
+    );
+  });
+});
+
+test("validate-handoff rejects reviewer evidence with mismatched artifact fingerprint", () => {
+  withTempPlan(({ artifactRef, fingerprint }) => {
+    const handoff = validHandoff(artifactRef, fingerprint).replace(
+      `artifact_fingerprint: ${fingerprint}`,
+      "artifact_fingerprint: other-fingerprint",
+    );
+    const result = runPlanReady("validate-handoff", handoff);
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /review\.reviewer_evidence\.artifact_fingerprint must match artifact\.fingerprint/,
+    );
+  });
+});
+
+test("validate-handoff rejects impossible reviewer evidence timestamps", () => {
+  withTempPlan(({ artifactRef, fingerprint }) => {
+    const handoff = validHandoff(artifactRef, fingerprint).replace(
+      `completed_at: ${completedAt}`,
+      "completed_at: 2026-99-99T99:99:99Z",
+    );
+    const result = runPlanReady("validate-handoff", handoff);
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /review\.reviewer_evidence\.completed_at must be an ISO-8601 UTC timestamp/,
+    );
+  });
+});
+
 test("handoff-template emits the plan delivery contract", () => {
   const result = spawnSync(
     "pnpm",
@@ -427,6 +554,9 @@ test("handoff-template emits the plan delivery contract", () => {
   );
   assert.match(result.stdout, /plan_delivery_handoff:/);
   assert.match(result.stdout, /\.agents\/plans\/example\.md/);
+  assert.match(result.stdout, /reviewer_evidence:/);
+  assert.match(result.stdout, /per_reviewer_status:/);
+  assert.match(result.stdout, /gate_outcome: passed/);
   assert.doesNotMatch(result.stdout, /direct_publish/);
   assert.doesNotMatch(result.stdout, /reviewed_slices/);
   assert.doesNotMatch(result.stdout, /docs\/plans\/example\.md/);
@@ -495,16 +625,109 @@ test("blueprint-template emits the OpenSpec blueprint contract", () => {
   assert.match(result.stdout, /required_reviewers:/);
   assert.match(result.stdout, /optional_reviewers: \[\]/);
   assert.match(result.stdout, /reviewers_used:/);
+  assert.match(result.stdout, /reviewer_evidence:/);
+  assert.match(result.stdout, /selected_dynamic_reviewers: \[\]/);
   assert.match(result.stdout, /findings:/);
   assert.match(result.stdout, /next_action: create_openspec_change/);
   assert.doesNotMatch(result.stdout, /needs_openspec/);
 });
 
 test("validate-blueprint accepts a reviewed OpenSpec blueprint", () => {
-  const result = runPlanReady("validate-blueprint", validBlueprint());
+  withTempBlueprintSourcePlan(({ cwd, fingerprint }) => {
+    const result = runPlanReadyInRepo(
+      "validate-blueprint",
+      validBlueprintWithOptionalReviewers([], [], fingerprint),
+      cwd,
+    );
 
-  assert.equal(result.status, 0);
-  assert.match(result.stdout, /openspec_blueprint valid/);
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /openspec_blueprint valid/);
+  });
+});
+
+test("validate-blueprint rejects missing source plan reviewer evidence provenance", () => {
+  const result = runPlanReadyInRepo(
+    "validate-blueprint",
+    validBlueprint(),
+    tmpdir(),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /source_plan\.ref must exist before reviewer evidence can be accepted/,
+  );
+});
+
+test("validate-blueprint rejects stale source plan reviewer evidence fingerprints", () => {
+  withTempBlueprintSourcePlan(({ cwd, fingerprint }) => {
+    const blueprint = validBlueprint()
+      .replace("source-plan-fingerprint", fingerprint)
+      .replace(
+        `artifact_fingerprint: ${fingerprint}`,
+        "artifact_fingerprint: stale-source-plan",
+      );
+    const result = runPlanReadyInRepo("validate-blueprint", blueprint, cwd);
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /review\.reviewer_evidence\.artifact_fingerprint must match source_plan\.ref content/,
+    );
+  });
+});
+
+test("validate-blueprint requires selected dynamic reviewers in reviewer evidence", () => {
+  const blueprint = validBlueprintWithOptionalReviewers([
+    "docs-and-agent-alignment",
+  ]).replace(
+    "      selected_dynamic_reviewers:\n        - docs-and-agent-alignment",
+    "      selected_dynamic_reviewers: []",
+  );
+  const result = runPlanReady("validate-blueprint", blueprint);
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /review\.reviewer_evidence\.selected_dynamic_reviewers must include docs-and-agent-alignment/,
+  );
+});
+
+test("validate-blueprint rejects unselected dynamic reviewers in reviewer evidence", () => {
+  const blueprint = validBlueprint().replace(
+    "      selected_dynamic_reviewers: []",
+    "      selected_dynamic_reviewers:\n        - docs-and-agent-alignment",
+  );
+  const result = runPlanReady("validate-blueprint", blueprint);
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /review\.reviewer_evidence\.selected_dynamic_reviewers contains docs-and-agent-alignment not listed in review\.optional_reviewers/,
+  );
+});
+
+test("validate-blueprint rejects unknown skipped reviewers in reviewer evidence", () => {
+  const blueprint = validBlueprint()
+    .replace(
+      "      skipped_reviewers: []",
+      "      skipped_reviewers:\n        - made-up-reviewer",
+    )
+    .replace(
+      "        refactoring-opportunities: passed",
+      "        refactoring-opportunities: passed\n        made-up-reviewer: skipped",
+    )
+    .replace(
+      "      skipped_rationale: []",
+      "      skipped_rationale:\n        - made-up-reviewer was not applicable.",
+    );
+  const result = runPlanReady("validate-blueprint", blueprint);
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /review\.reviewer_evidence\.skipped_reviewers contains unknown reviewer: made-up-reviewer/,
+  );
 });
 
 test("validate-blueprint rejects lifecycle-only documentation tasks", () => {
@@ -615,8 +838,13 @@ test("validate-blueprint rejects missing objective proof", () => {
 });
 
 test("validate-blueprint accepts one setup-only task before objective proof", () => {
-  const blueprint = validBlueprint().replace(
-    `  tasks:
+  withTempBlueprintSourcePlan(({ cwd, fingerprint }) => {
+    const blueprint = validBlueprintWithOptionalReviewers(
+      [],
+      [],
+      fingerprint,
+    ).replace(
+      `  tasks:
     - id: "1.1"
       title: Add blueprint validation
       deliverable: Implement complex-plan blueprint schema checks.
@@ -626,7 +854,7 @@ test("validate-blueprint accepts one setup-only task before objective proof", ()
       verification:
         - pnpm test:unit
       dependencies: []`,
-    `  tasks:
+      `  tasks:
     - id: "1.1"
       title: Add blueprint schema support
       deliverable: Implement the schema fields needed by blueprint validation.
@@ -643,12 +871,13 @@ test("validate-blueprint accepts one setup-only task before objective proof", ()
       verification:
         - pnpm test:unit
       dependencies: ["1.1"]`,
-  );
+    );
 
-  const result = runPlanReady("validate-blueprint", blueprint);
+    const result = runPlanReadyInRepo("validate-blueprint", blueprint, cwd);
 
-  assert.equal(result.status, 0);
-  assert.match(result.stdout, /openspec_blueprint valid/);
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /openspec_blueprint valid/);
+  });
 });
 
 test("validate-blueprint rejects task 2 proof after a non-setup first task", () => {
@@ -782,17 +1011,20 @@ test("validate-blueprint does not let later verification rescue weak proof marke
 });
 
 test("validate-blueprint ignores later deferral notes after a valid proof marker", () => {
-  const result = runPlanReady(
-    "validate-blueprint",
-    validBlueprint().replace(
-      `        - "Proof location: run the plan-ready validate-blueprint CLI entrypoint and observe openspec_blueprint valid output."`,
-      `        - "Proof location: run the plan-ready validate-blueprint CLI entrypoint and observe openspec_blueprint valid output."
+  withTempBlueprintSourcePlan(({ cwd, fingerprint }) => {
+    const result = runPlanReadyInRepo(
+      "validate-blueprint",
+      validBlueprintWithOptionalReviewers([], [], fingerprint).replace(
+        `        - "Proof location: run the plan-ready validate-blueprint CLI entrypoint and observe openspec_blueprint valid output."`,
+        `        - "Proof location: run the plan-ready validate-blueprint CLI entrypoint and observe openspec_blueprint valid output."
         - Future task 3 can add broader provider coverage.`,
-    ),
-  );
+      ),
+      cwd,
+    );
 
-  assert.equal(result.status, 0);
-  assert.match(result.stdout, /openspec_blueprint valid/);
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /openspec_blueprint valid/);
+  });
 });
 
 test("validate-blueprint rejects setup-only proof markers with command output", () => {
@@ -809,29 +1041,33 @@ test("validate-blueprint rejects setup-only proof markers with command output", 
 });
 
 test("validate-blueprint accepts docs and validation tooling as feature work", () => {
-  const docsFeature = runPlanReady(
-    "validate-blueprint",
-    validBlueprint().replace(
-      `      title: Add blueprint validation
+  withTempBlueprintSourcePlan(({ cwd, fingerprint }) => {
+    const docsFeature = runPlanReadyInRepo(
+      "validate-blueprint",
+      validBlueprintWithOptionalReviewers([], [], fingerprint).replace(
+        `      title: Add blueprint validation
       deliverable: Implement complex-plan blueprint schema checks.`,
-      `      title: Build documentation generator
+        `      title: Build documentation generator
       deliverable: Implement a documentation generator feature for release notes.`,
-    ),
-  );
-  const validationFeature = runPlanReady(
-    "validate-blueprint",
-    validBlueprint().replace(
-      `      title: Add blueprint validation
+      ),
+      cwd,
+    );
+    const validationFeature = runPlanReadyInRepo(
+      "validate-blueprint",
+      validBlueprintWithOptionalReviewers([], [], fingerprint).replace(
+        `      title: Add blueprint validation
       deliverable: Implement complex-plan blueprint schema checks.`,
-      `      title: Add runtime validation tooling
+        `      title: Add runtime validation tooling
       deliverable: Implement runtime validation tooling for OpenSpec task-shape checks.`,
-    ),
-  );
+      ),
+      cwd,
+    );
 
-  assert.equal(docsFeature.status, 0);
-  assert.match(docsFeature.stdout, /openspec_blueprint valid/);
-  assert.equal(validationFeature.status, 0);
-  assert.match(validationFeature.stdout, /openspec_blueprint valid/);
+    assert.equal(docsFeature.status, 0);
+    assert.match(docsFeature.stdout, /openspec_blueprint valid/);
+    assert.equal(validationFeature.status, 0);
+    assert.match(validationFeature.stdout, /openspec_blueprint valid/);
+  });
 });
 
 test("review-gate-input maps a validated handoff to active gate input", () => {
@@ -868,9 +1104,10 @@ test("review-gate-input maps a validated handoff to active gate input", () => {
 
 test("review-gate-input promotes handoff optional reviewers", () => {
   withTempPlan(({ artifactRef, fingerprint }) => {
-    const handoff = validHandoff(artifactRef, fingerprint).replace(
-      "    optional_reviewers: []",
-      "    optional_reviewers:\n      - docs-and-agent-alignment",
+    const handoff = validHandoffWithOptionalReviewers(
+      artifactRef,
+      fingerprint,
+      ["docs-and-agent-alignment"],
     );
     const result = runPlanReady("review-gate-input", handoff, [
       "--diff-hash",
@@ -944,62 +1181,93 @@ test("review-gate-input rejects unsupported input contracts", () => {
 });
 
 test("review-gate-input maps a validated blueprint to active gate input", () => {
-  const result = runPlanReady("review-gate-input", validBlueprint(), [
-    "--diff-hash",
-    reviewGateDiffHash,
-    "--source-ref",
-    "blueprint.yaml",
-  ]);
-  const output = JSON.parse(result.stdout);
+  withTempBlueprintSourcePlan(({ cwd, fingerprint }) => {
+    const result = runPlanReadyInRepo(
+      "review-gate-input",
+      validBlueprintWithOptionalReviewers([], [], fingerprint),
+      cwd,
+      ["--diff-hash", reviewGateDiffHash, "--source-ref", "blueprint.yaml"],
+    );
+    const output = JSON.parse(result.stdout);
 
-  assert.equal(result.status, 0);
-  assert.equal(output.workflow, "plan-ready");
-  assert.equal(output.unit.id, "add-plan-blueprints");
-  assert.equal(output.unit.title, "Add PlanReady OpenSpec blueprints");
-  assert.equal(output.sourceProvenance.kind, "openspec_blueprint");
-  assert.equal(output.sourceProvenance.ref, ".agents/plans/example.md");
-  assert.equal(output.sourceProvenance.phase, "plan-ready");
-  assert.deepEqual(output.sourceProvenance.evidence, ["blueprint.yaml"]);
-  assert.deepEqual(output.requiredReviewPasses, [
-    "implementation-readiness",
-    "edge-cases-and-risks",
-    "simplification-and-scope-control",
-    "refactoring-opportunities",
-  ]);
-  assert.equal(
-    output.results["edge-cases-and-risks"].diffHash,
-    reviewGateDiffHash,
-  );
-  assert.equal(output.results["edge-cases-and-risks"].status, "passed");
-  assert.deepEqual(output.blockingFindings, []);
+    assert.equal(result.status, 0);
+    assert.equal(output.workflow, "plan-ready");
+    assert.equal(output.unit.id, "add-plan-blueprints");
+    assert.equal(output.unit.title, "Add PlanReady OpenSpec blueprints");
+    assert.equal(output.sourceProvenance.kind, "openspec_blueprint");
+    assert.equal(output.sourceProvenance.ref, ".agents/plans/example.md");
+    assert.equal(output.sourceProvenance.phase, "plan-ready");
+    assert.deepEqual(output.sourceProvenance.evidence, ["blueprint.yaml"]);
+    assert.deepEqual(output.requiredReviewPasses, [
+      "implementation-readiness",
+      "edge-cases-and-risks",
+      "simplification-and-scope-control",
+      "refactoring-opportunities",
+    ]);
+    assert.equal(
+      output.results["edge-cases-and-risks"].diffHash,
+      reviewGateDiffHash,
+    );
+    assert.equal(output.results["edge-cases-and-risks"].status, "passed");
+    assert.deepEqual(output.blockingFindings, []);
+  });
 });
 
 test("review-gate-input promotes only blueprint selected optional reviewers", () => {
-  const blueprint = validBlueprint()
-    .replace(
-      "    optional_reviewers: []\n    reviewers_used:",
-      "    optional_reviewers:\n      - docs-and-agent-alignment\n    reviewers_used:",
-    )
-    .replace(
-      "      - refactoring-opportunities\n    findings:",
-      "      - refactoring-opportunities\n      - ax-and-skill-compatibility\n    findings:",
+  withTempBlueprintSourcePlan(({ cwd, fingerprint }) => {
+    const blueprint = validBlueprintWithOptionalReviewers(
+      ["docs-and-agent-alignment"],
+      ["docs-and-agent-alignment"],
+      fingerprint,
     );
-  const result = runPlanReady("review-gate-input", blueprint, [
-    "--diff-hash",
-    reviewGateDiffHash,
-  ]);
-  const output = JSON.parse(result.stdout);
+    const result = runPlanReadyInRepo("review-gate-input", blueprint, cwd, [
+      "--diff-hash",
+      reviewGateDiffHash,
+    ]);
+    const output = JSON.parse(result.stdout);
 
-  assert.equal(result.status, 0);
-  assert.deepEqual(output.requiredReviewPasses, [
-    "implementation-readiness",
-    "edge-cases-and-risks",
-    "simplification-and-scope-control",
-    "refactoring-opportunities",
-    "docs-and-agent-alignment",
-  ]);
-  assert.equal(output.results["docs-and-agent-alignment"].status, "passed");
-  assert.equal(output.results["ax-and-skill-compatibility"], undefined);
+    assert.equal(result.status, 0);
+    assert.deepEqual(output.requiredReviewPasses, [
+      "implementation-readiness",
+      "edge-cases-and-risks",
+      "simplification-and-scope-control",
+      "refactoring-opportunities",
+      "docs-and-agent-alignment",
+    ]);
+    assert.equal(output.results["docs-and-agent-alignment"].status, "passed");
+    assert.equal(output.results["ax-and-skill-compatibility"], undefined);
+  });
+});
+
+test("validate-blueprint rejects reviewers_used outside selected reviewers", () => {
+  withTempBlueprintSourcePlan(({ cwd, fingerprint }) => {
+    const blueprint = validBlueprintWithOptionalReviewers(
+      ["docs-and-agent-alignment"],
+      ["docs-and-agent-alignment", "ax-and-skill-compatibility"],
+      fingerprint,
+    );
+    const result = runPlanReadyInRepo("validate-blueprint", blueprint, cwd);
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /reviewers_used contains ax-and-skill-compatibility not listed in baseline plus selected optional reviewers/,
+    );
+  });
+});
+
+test("validate-blueprint requires reviewers_used to include selected optional reviewers", () => {
+  const blueprint = validBlueprintWithOptionalReviewers(
+    ["docs-and-agent-alignment"],
+    [],
+  );
+  const result = runPlanReady("validate-blueprint", blueprint);
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /reviewers_used must include selected optional reviewer docs-and-agent-alignment/,
+  );
 });
 
 test("review-gate-input rejects partial blueprints before mapping", () => {
@@ -1070,6 +1338,7 @@ test("activate-review-gate writes a validated active handoff gate", () => {
 
 test("activate-review-gate writes a validated active blueprint gate", () => {
   withGitFixture((cwd) => {
+    const fingerprint = writeBlueprintSourcePlan(cwd);
     writeFileSync(join(cwd, "file.txt"), "blueprint\n", "utf8");
     git(cwd, ["add", "file.txt"]);
 
@@ -1077,7 +1346,7 @@ test("activate-review-gate writes a validated active blueprint gate", () => {
     withReviewerResultsFile(cwd, BASELINE_REVIEWERS, (resultsPath) => {
       result = runPlanReadyInRepo(
         "activate-review-gate",
-        validBlueprint(),
+        validBlueprintWithOptionalReviewers([], [], fingerprint),
         cwd,
         ["--review-results-file", resultsPath],
       );
@@ -1104,23 +1373,19 @@ test("activate-review-gate writes a validated active blueprint gate", () => {
 
 test("activate-review-gate promotes selected optional reviewers in written gate", () => {
   withGitFixture((cwd) => {
+    const fingerprint = writeBlueprintSourcePlan(cwd);
     writeFileSync(join(cwd, "file.txt"), "optional\n", "utf8");
     git(cwd, ["add", "file.txt"]);
-    const blueprint = validBlueprint()
-      .replace(
-        "    optional_reviewers: []\n    reviewers_used:",
-        "    optional_reviewers:\n      - docs-and-agent-alignment\n    reviewers_used:",
-      )
-      .replace(
-        "      - refactoring-opportunities\n    findings:",
-        "      - refactoring-opportunities\n      - docs-and-agent-alignment\n      - ax-and-skill-compatibility\n    findings:",
-      );
+    const blueprint = validBlueprintWithOptionalReviewers(
+      ["docs-and-agent-alignment"],
+      ["docs-and-agent-alignment"],
+      fingerprint,
+    );
     const resultsPath = writeReviewerResultsFile(
       cwd,
       reviewerResultRecords(cwd, [
         ...BASELINE_REVIEWERS,
         "docs-and-agent-alignment",
-        "ax-and-skill-compatibility",
       ]),
     );
 
@@ -1143,7 +1408,6 @@ test("activate-review-gate promotes selected optional reviewers in written gate"
       "docs-and-agent-alignment",
     ]);
     assert.equal(state.results["docs-and-agent-alignment"].status, "passed");
-    assert.equal(state.results["ax-and-skill-compatibility"].status, "passed");
     assert.equal(
       state.requiredReviewPasses.includes("ax-and-skill-compatibility"),
       false,
