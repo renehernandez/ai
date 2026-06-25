@@ -131,7 +131,7 @@
   `pnpm exec node --import tsx --test tests/integration/ax-cli.test.ts`,
   `pnpm exec node --import tsx --test tests/unit/agent-instructions.test.ts`,
   and `pnpm exec node --import tsx --test tests/unit/skill-validate.test.ts`.
-- [ ] 8.2 Run `pnpm exec tsx scripts/skill-validate.ts`.
+- [x] 8.2 Run `pnpm exec tsx scripts/skill-validate.ts`.
 - [ ] 8.3 Run `pnpm run test:unit`, `pnpm run test:integration`, and
   `pnpm test`.
 - [ ] 8.4 Discover configured runtime profiles from `ax.config.json`, then run
