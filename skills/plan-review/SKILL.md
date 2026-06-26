@@ -200,7 +200,7 @@ and next action.
    private thread metadata in hosted descriptions. Use summaries, hashes, note
    IDs, discussion IDs, or stable correlation IDs when support-artifact evidence
    is relevant.
-11. Run the hosted-description gate before requesting Nitro or reporting
+12. Run the hosted-description gate before requesting Nitro or reporting
    readiness. Use the selected description policy owner
    (`change-request-create`, `glab-mr-create`, `github-pr-create`, or an
    equivalent provider adapter in harnesses where the named skill is
@@ -218,10 +218,10 @@ and next action.
    only when the existing body remains accurate for the current head and the
    final evidence records a metadata-only materiality decision plus reuse
    rationale.
-12. Run the artifact-host inspection adapter (`gitlab-adapter-review` or
+13. Run the artifact-host inspection adapter (`gitlab-adapter-review` or
    `github-adapter-review`) only for host metadata, discussions, and CI/review
    state. Do not run implementation code review against a planning-only diff.
-13. Wait for routed automated feedback on the latest head:
+14. Wait for routed automated feedback on the latest head:
     - Fullscript GitLab/Nitro: use `nitro-review-feedback` first. If latest-head
       Nitro feedback is missing or stale after create/update, post the standard
       Nitro review request for the current head, then wait again.
@@ -229,14 +229,14 @@ and next action.
       substitute Codex or another reviewer for this first cut.
     - Developer review: keep the PR/MR open and report pending human review; do
       not fabricate approval.
-14. Apply only plan/documentation feedback. If feedback asks for implementation,
+15. Apply only plan/documentation feedback. If feedback asks for implementation,
     record it as a follow-up or blocker; do not start coding.
-15. If the branch head changes after feedback fixes, rerun artifact validation
+16. If the branch head changes after feedback fixes, rerun artifact validation
     and rerun the final personal publication checkpoint for the new branch diff
     and exact HEAD SHA before any push or hosted artifact mutation. Then push,
     refresh the hosted-description gate when the change affects reviewer
     understanding, and wait for latest-head automated feedback again.
-16. Before finishing, enumerate all Nitro-authored planning comments and
+17. Before finishing, enumerate all Nitro-authored planning comments and
     discussions on the planning PR/MR across every review round. Record each
     note ID, discussion ID when present, whether the discussion is resolvable
     and currently resolved, and disposition: `fixed_in_planning`,
@@ -244,9 +244,9 @@ and next action.
     planning feedback blocks implementation sequencing unless it is explicitly
     deferred to a specific implementation task or marked non-actionable with
     rationale.
-17. Generate `scripts/plan-review.ts gate-template`, fill it, and validate it
+18. Generate `scripts/plan-review.ts gate-template`, fill it, and validate it
     with `validate-ledger` as internal evidence.
-18. Emit `planning_review` with `scripts/plan-review.ts
+19. Emit `planning_review` with `scripts/plan-review.ts
     planning-review-template`, fill it with the hosted review evidence and a
     passed `nitro_feedback_gate`, passed `description_policy`, and
     `planning_feedback_disposition`, then validate it with:
@@ -257,7 +257,7 @@ and next action.
 
     The expected values must come from the latest host inspection or live
     branch/head inspection, not from the handoff YAML being validated.
-19. Finish only when the planning MR has latest-head Nitro feedback completed
+20. Finish only when the planning MR has latest-head Nitro feedback completed
     cleanly, every prior Nitro planning item has explicit disposition, and the
     reviewed head plus current hosted description readback are recorded as the
     implementation stack base.
