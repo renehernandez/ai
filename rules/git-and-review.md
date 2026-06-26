@@ -41,7 +41,7 @@ These rules cover Git, GitHub, GitLab, Linear, review routing, and external comm
 - Always ask before committing or pushing to default branches such as `main` or `master`.
 - In this `ai` repo, completed work should be delivered through a GitLab `origin` merge request targeting `main` with Nitro review by default. Do not commit directly to `main` or push `main` unless the user explicitly asks for direct publication.
 - For this repo, treat GitLab `origin` as the primary hosted-review and publishing remote. The `github` remote remains a mirror path; use it only when the user explicitly asks or GitLab is unavailable.
-- A hosted delivery for this repo is complete only after the GitLab MR exists, CI or no-pipeline state is inspected, Nitro review is requested with `/request_review @nitro`, and latest-head Nitro feedback is clean or fully resolved.
+- A hosted delivery for this repo is complete only after the GitLab MR exists, CI or no-pipeline state is inspected, Nitro review is requested in a new top-level MR note containing only `/request_review @nitro`, and latest-head Nitro feedback is clean or fully resolved.
 - For feature work, run the pre-commit quality gate, commit the feature branch, push it, create or update the artifact-host PR/MR, monitor CI, and fix branch-caused failures.
 - For host-neutral work, choose the hosted-review provider from project
   instructions, existing artifact URLs, or `change-request-create`; pause when
@@ -83,8 +83,9 @@ These rules cover Git, GitHub, GitLab, Linear, review routing, and external comm
 - When the user asks to review a merge request, such as `review MR !123` or a `git.fullscript.io` merge request URL, use the GitLab review skill or adapter in the current session.
 - When the user asks to review a GitHub pull request, such as `review PR #123` or a `github.com/.../pull/123` URL, use the GitHub review skill or adapter in the current session.
 - Do not use the `glab-cli` skill as the review rubric for MR reviews; it may still be used for authenticated GitLab data retrieval when the review skill requires GitLab CLI access.
-- When requesting a review or re-review from a reviewer, use a GitLab slash command comment: `glab mr note <MR_IID> -m "/request_review @<reviewer>"`.
-- Never use `glab mr update --reviewer` for review requests.
+- When requesting or re-requesting GitLab MR review from one or more reviewers, create a new top-level MR note containing only the slash command: `glab mr note <MR_IID> -m "/request_review @alice @bob"`.
+- Use one slash-command note for all reviewers in the request. A single reviewer is also valid, such as `glab mr note <MR_IID> -m "/request_review @alice"`. Do not split the same request across multiple notes unless a later follow-up needs a separate re-review request.
+- Do not request GitLab MR review by editing an existing note, replying in a discussion, changing the MR description, using `glab mr update --reviewer`, or mutating reviewers through the GitLab API.
 
 ## GitLab CLI
 

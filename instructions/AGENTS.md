@@ -47,6 +47,10 @@ The linked rule files are normative and preserve the detailed policies.
 - Nitro review applies only to Fullscript GitLab merge requests in projects
   where Nitro is available; do not request Nitro for GitHub PRs or non-Fullscript
   repositories.
+- GitLab review and re-review requests must be posted as a new top-level MR
+  note containing only `/request_review @alice @bob`; use one note for all
+  reviewers in the request. A single reviewer note such as
+  `/request_review @alice` is also valid.
 - Review-first plan workflows use the project-selected hosted-review route with
   stacked delivery when required. A `plan-orchestrator` run may finish only with
   `stack_ready` for the full reviewed stack or `delivery_blocked` with evidence;
