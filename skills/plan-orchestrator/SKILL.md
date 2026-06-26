@@ -39,6 +39,12 @@ All work goes through planning review before implementation:
    time. A delivery unit normally maps to one implementation PR/MR; nested work
    items inside that unit become commits in that same PR/MR.
 
+`plan-orchestrator` validates phase evidence freshness before advancing but
+does not repair it inline. Missing or stale readiness evidence routes back to
+`plan-ready`; missing or stale planning commit evidence routes back to
+`plan-review`; missing or stale delivery evidence routes back to
+`plan-unit-delivery`.
+
 Intermediate outputs such as `plan_delivery_handoff`, `openspec_blueprint`,
 `planning_review`, or one delivered delivery-unit MR are not terminal success
 for `plan-orchestrator`; continue until `stack_ready` or report
@@ -115,6 +121,8 @@ The resume state must account for:
 - stack-tip `tasks.md` fingerprint;
 - concrete stack-tip `tasks.md` content and delivery-unit-to-artifact evidence
   for checked units, including completed nested work-item IDs;
+- phase evidence freshness for readiness, planning commit, and delivery
+  evidence, with stale or missing evidence routed back to the owning phase;
 - no lifecycle-only, validation-only, proof-only, or manual-looking proof task
   shapes in stack-tip `tasks.md`; if validation reports `needs_spec_redesign`,
   stop and ask the user whether to redo the spec, brainstorm, narrow scope, or
@@ -169,6 +177,9 @@ validate-stack-ready`.
 | OpenSpec validation failure | Return `openspec_proposal_blocked`. |
 | Lifecycle-only OpenSpec task shape | Return `needs_spec_redesign` and ask how to proceed. |
 | Pending planning review | Return `planning_review_blocked`. |
+| Missing or stale readiness evidence | Return or resume as `delivery_blocked` routed to `plan-ready`. |
+| Missing or stale planning commit evidence | Return or resume as `delivery_blocked` routed to `plan-review`. |
+| Missing or stale delivery evidence | Return or resume as `delivery_blocked` routed to `plan-unit-delivery`. |
 | Unsupported review or stack host | Return `delivery_blocked` with routing evidence. |
 
 ## Output Rule

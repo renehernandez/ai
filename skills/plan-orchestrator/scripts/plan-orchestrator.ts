@@ -216,6 +216,25 @@ orchestrator_resume:
 
       - [x] 1.1 Delivered task
       - [ ] 1.2 Undelivered future task
+  phase_evidence:
+    readiness:
+      owner: plan-ready
+      status: fresh
+      artifact_fingerprint: <plan-ready reviewer evidence artifact fingerprint>
+      expected_artifact_fingerprint: <current planning artifact fingerprint>
+      route_to:
+    planning_commit:
+      owner: plan-review
+      status: fresh
+      reviewed_head: <planning MR latest head sha>
+      expected_head_sha: <planning stack entry head sha>
+      route_to:
+    delivery:
+      owner: plan-unit-delivery
+      status: fresh
+      task_state_fingerprint: <delivery evidence task-state fingerprint>
+      expected_task_state_fingerprint: <current stack-tip task_state.fingerprint>
+      route_to:
   unit_artifacts:
     - unit_id: "1"
       artifact: <implementation MR URL for delivery unit 1>
@@ -294,9 +313,11 @@ function validateResume(input: string): void {
   const stackArtifacts = allScalars(section, "artifact");
   const roles = allScalars(section, "role");
   const nitroStates = allScalars(section, "nitro_gate_outcome");
-  const implementationEntries = implementationStackEntries(section).filter(
+  const stackEntries = implementationStackEntries(section);
+  const implementationEntries = stackEntries.filter(
     (entry) => entry.role === "implementation",
   );
+  const planningEntry = stackEntries.find((entry) => entry.role === "planning");
   const restackEvidence = list(section, "restack_evidence");
   const blockers = list(section, "blockers");
 
@@ -383,6 +404,15 @@ function validateResume(input: string): void {
   if (restackEvidence.length === 0) {
     errors.push("orchestrator_resume.restack_evidence is required");
   }
+  errors.push(
+    ...phaseEvidenceErrors(section, {
+      requireFresh: status === "resume_ready",
+      planningHeadSha: planningEntry?.headSha,
+      taskStateFingerprint:
+        scalar(taskState, "fingerprint") ??
+        scalar(section, "task_state_fingerprint"),
+    }),
+  );
 
   if (status === "resume_ready") {
     if (planningReviewState !== "reviewed") {
@@ -816,6 +846,7 @@ function artifactEvidenceEntries(
 
 function implementationStackEntries(input: string): Array<{
   artifact: string;
+  headSha?: string;
   role?: string;
   predecessorArtifact?: string;
   deliveryUnitDeltaValidated?: string;
@@ -824,6 +855,7 @@ function implementationStackEntries(input: string): Array<{
   const stack = extractSection(input, "implementation_stack");
   const entries: Array<{
     artifact: string;
+    headSha?: string;
     role?: string;
     predecessorArtifact?: string;
     deliveryUnitDeltaValidated?: string;
@@ -832,6 +864,7 @@ function implementationStackEntries(input: string): Array<{
   let current:
     | {
         artifact: string;
+        headSha?: string;
         role?: string;
         predecessorArtifact?: string;
         deliveryUnitDeltaValidated?: string;
@@ -856,6 +889,12 @@ function implementationStackEntries(input: string): Array<{
     const role = line.match(/^\s*role:\s*(.+?)\s*$/);
     if (role) {
       current.role = cleanInlineScalar(role[1]);
+      continue;
+    }
+
+    const headSha = line.match(/^\s*head_sha:\s*(.+?)\s*$/);
+    if (headSha) {
+      current.headSha = cleanInlineScalar(headSha[1]);
       continue;
     }
 
@@ -896,4 +935,161 @@ function implementationStackEntries(input: string): Array<{
 
 function cleanInlineScalar(value: string): string {
   return value.trim().replace(/^['"]|['"]$/g, "");
+}
+
+function phaseEvidenceErrors(
+  resumeSection: string,
+  context: {
+    requireFresh: boolean;
+    planningHeadSha?: string;
+    taskStateFingerprint?: string;
+  },
+): string[] {
+  const phaseEvidence = directNestedSection(resumeSection, "phase_evidence");
+  if (!phaseEvidence) {
+    return [
+      "orchestrator_resume.phase_evidence is required; route missing phase evidence to the owning phase",
+    ];
+  }
+
+  return [
+    ...singlePhaseEvidenceErrors(phaseEvidence, {
+      name: "readiness",
+      owner: "plan-ready",
+      requireFresh: context.requireFresh,
+      evidenceKey: "artifact_fingerprint",
+      expectedKey: "expected_artifact_fingerprint",
+    }),
+    ...singlePhaseEvidenceErrors(phaseEvidence, {
+      name: "planning_commit",
+      owner: "plan-review",
+      requireFresh: context.requireFresh,
+      evidenceKey: "reviewed_head",
+      expectedKey: "expected_head_sha",
+      expectedValue: context.planningHeadSha,
+    }),
+    ...singlePhaseEvidenceErrors(phaseEvidence, {
+      name: "delivery",
+      owner: "plan-unit-delivery",
+      requireFresh: context.requireFresh,
+      evidenceKey: "task_state_fingerprint",
+      expectedKey: "expected_task_state_fingerprint",
+      expectedValue: context.taskStateFingerprint,
+    }),
+  ];
+}
+
+function singlePhaseEvidenceErrors(
+  phaseEvidence: string,
+  options: {
+    name: string;
+    owner: string;
+    requireFresh: boolean;
+    evidenceKey: string;
+    expectedKey: string;
+    expectedValue?: string;
+  },
+): string[] {
+  const phase = directNestedSection(phaseEvidence, options.name);
+  if (!phase) {
+    return [
+      `orchestrator_resume.phase_evidence.${options.name} is missing; route_to ${options.owner}`,
+    ];
+  }
+
+  const errors: string[] = [];
+  const owner = scalar(phase, "owner");
+  const status = scalar(phase, "status");
+  const routeTo = scalar(phase, "route_to");
+  const evidenceValue = scalar(phase, options.evidenceKey);
+  const declaredExpectedValue = scalar(phase, options.expectedKey);
+  const comparisonValue = options.expectedValue ?? declaredExpectedValue;
+
+  if (owner !== options.owner) {
+    errors.push(
+      `orchestrator_resume.phase_evidence.${options.name}.owner must be ${options.owner}`,
+    );
+  }
+  if (!status || !["fresh", "missing", "stale"].includes(status)) {
+    errors.push(
+      `orchestrator_resume.phase_evidence.${options.name}.status must be fresh, missing, or stale`,
+    );
+  }
+  if (status !== "fresh" && routeTo !== options.owner) {
+    errors.push(
+      `orchestrator_resume.phase_evidence.${options.name} must route_to ${options.owner} when evidence is ${status ?? "missing"}`,
+    );
+  }
+  if (options.requireFresh && status !== "fresh") {
+    errors.push(
+      `orchestrator_resume.phase_evidence.${options.name} must be fresh before resume_ready; route_to ${options.owner}`,
+    );
+  }
+  if (status === "fresh" && routeTo) {
+    errors.push(
+      `orchestrator_resume.phase_evidence.${options.name}.route_to must be empty when evidence is fresh`,
+    );
+  }
+  if (status === "fresh" && !evidenceValue) {
+    errors.push(
+      `orchestrator_resume.phase_evidence.${options.name}.${options.evidenceKey} is required when evidence is fresh`,
+    );
+  }
+  if (status === "fresh" && !declaredExpectedValue) {
+    errors.push(
+      `orchestrator_resume.phase_evidence.${options.name}.${options.expectedKey} is required when evidence is fresh`,
+    );
+  }
+  if (
+    status === "fresh" &&
+    options.expectedValue &&
+    declaredExpectedValue &&
+    declaredExpectedValue !== options.expectedValue
+  ) {
+    errors.push(
+      `orchestrator_resume.phase_evidence.${options.name} is stale; route_to ${options.owner}`,
+    );
+  }
+  if (
+    status === "fresh" &&
+    evidenceValue &&
+    comparisonValue &&
+    evidenceValue !== comparisonValue
+  ) {
+    errors.push(
+      `orchestrator_resume.phase_evidence.${options.name} is stale; route_to ${options.owner}`,
+    );
+  }
+
+  return errors;
+}
+
+function directNestedSection(
+  input: string,
+  sectionName: string,
+): string | null {
+  const lines = input.split(/\r?\n/);
+  const start = lines.findIndex((line) => line.trim() === `${sectionName}:`);
+  if (start === -1) {
+    return null;
+  }
+
+  const sectionIndent = lines[start].match(/^(\s*)/)?.[1].length ?? 0;
+  const childIndent = sectionIndent + 2;
+  const sectionLines: string[] = [];
+  for (const line of lines.slice(start + 1)) {
+    if (line.trim() === "") {
+      sectionLines.push("");
+      continue;
+    }
+
+    const indent = line.match(/^(\s*)/)?.[1].length ?? 0;
+    if (indent <= sectionIndent) {
+      break;
+    }
+
+    sectionLines.push(line.slice(Math.min(indent, childIndent)));
+  }
+
+  return sectionLines.join("\n");
 }

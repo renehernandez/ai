@@ -90,7 +90,7 @@
 
 ## 5. Orchestrator Evidence Boundary
 
-- [ ] 5.1 Update `plan-orchestrator` docs, prompts, validators, and tests so it
+- [x] 5.1 Update `plan-orchestrator` docs, prompts, validators, and tests so it
   validates phase evidence freshness and routes stale or missing evidence back
   to the owning phase.
 - [ ] 5.2 Prove `plan-orchestrator` does not write review-gate state.
