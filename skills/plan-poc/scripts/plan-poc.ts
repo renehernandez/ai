@@ -11,6 +11,7 @@ export type PlanPocArtifactInput = {
   currentPocUnitId?: string;
   feedbackPushedHeads?: PlanPocFeedbackPushedHeadInput[];
   feedbackCheckpoints?: PlanPocFeedbackCheckpointInput[];
+  learningSummary?: PlanPocLearningSummaryInput;
 };
 
 export type PlanPocUnitStatus = "pending" | "current" | "completed";
@@ -35,6 +36,26 @@ export type PlanPocFeedbackCheckpointInput = {
   reason: PlanPocFeedbackReason;
   headSha: string;
   status?: "required" | "complete";
+};
+
+export type PlanPocClosureDecision = "good_enough" | "abandoned";
+
+export type PlanPocLearningSummaryInput = {
+  decision: PlanPocClosureDecision;
+  deliverySource: "revised_openspec";
+  pocCommitsReused: false;
+  specCorrections: string[];
+  implementationNotes: string[];
+  reviewerDispositions: string[];
+  unresolvedLearnings: string[];
+  followUpDecisions: string[];
+};
+
+export type PlanPocLearningSummary = PlanPocLearningSummaryInput & {
+  kind: "poc_learning_summary";
+  artifactClosedUnmerged: true;
+  private: true;
+  committedToRepo: false;
 };
 
 export type PlanPocLoopState = {
@@ -80,6 +101,7 @@ export type PlanPocArtifactState = {
     pocCommitsReused: false;
   };
   pocLoop?: PlanPocLoopState;
+  pocLearningSummary?: PlanPocLearningSummary;
   body: string;
 };
 
@@ -116,6 +138,7 @@ export function buildPlanPocArtifactState(
 
   const title = normalizePocTitle(input.title, changeId);
   const pocLoop = buildPocLoopState(input);
+  const pocLearningSummary = buildLearningSummary(input.learningSummary);
   const bodyParts = [
     "## POC Review",
     "",
@@ -142,6 +165,17 @@ export function buildPlanPocArtifactState(
       "POC task state is contextual and non-authoritative.",
       "Latest-head routed feedback is required after material POC pushes and feedback-fix pushes.",
       "Multiple POC units may complete in the same draft artifact while reviewer checkpoints remain tied to each pushed head.",
+    );
+  }
+
+  if (pocLearningSummary) {
+    bodyParts.push(
+      "",
+      "## POC Closure",
+      "",
+      "Close the draft artifact unmerged before final delivery.",
+      "Emit a private poc_learning_summary for later OpenSpec revision.",
+      "Do not commit the learning summary to the repo by default.",
     );
   }
 
@@ -175,6 +209,7 @@ export function buildPlanPocArtifactState(
       pocCommitsReused: false,
     },
     ...(pocLoop ? { pocLoop } : {}),
+    ...(pocLearningSummary ? { pocLearningSummary } : {}),
     body,
   };
 }
@@ -242,6 +277,92 @@ export function validatePlanPocArtifactState(
 
   if (state.pocLoop) {
     errors.push(...validatePocLoopState(state.pocLoop, state.body));
+  }
+
+  if (state.pocLearningSummary) {
+    errors.push(
+      ...validateLearningSummary(state.pocLearningSummary, state.body),
+    );
+  }
+
+  return errors;
+}
+
+function buildLearningSummary(
+  input: PlanPocLearningSummaryInput | undefined,
+): PlanPocLearningSummary | undefined {
+  if (!input) {
+    return undefined;
+  }
+
+  return {
+    kind: "poc_learning_summary",
+    decision: input.decision,
+    artifactClosedUnmerged: true,
+    private: true,
+    committedToRepo: false,
+    deliverySource: input.deliverySource,
+    pocCommitsReused: input.pocCommitsReused,
+    specCorrections: [...input.specCorrections],
+    implementationNotes: [...input.implementationNotes],
+    reviewerDispositions: [...input.reviewerDispositions],
+    unresolvedLearnings: [...input.unresolvedLearnings],
+    followUpDecisions: [...input.followUpDecisions],
+  };
+}
+
+function validateLearningSummary(
+  summary: PlanPocLearningSummary,
+  body: string,
+): string[] {
+  const errors: string[] = [];
+
+  if (summary.kind !== "poc_learning_summary") {
+    errors.push("POC learning summary kind must be poc_learning_summary");
+  }
+
+  if (!["good_enough", "abandoned"].includes(summary.decision)) {
+    errors.push(
+      "POC learning summary decision must be good_enough or abandoned",
+    );
+  }
+
+  if (summary.artifactClosedUnmerged !== true) {
+    errors.push("POC learning summary must close the draft artifact unmerged");
+  }
+
+  if (summary.private !== true || summary.committedToRepo !== false) {
+    errors.push("POC learning summary must remain private by default");
+  }
+
+  if (summary.deliverySource !== "revised_openspec") {
+    errors.push(
+      "POC learning summary delivery_source must be revised_openspec",
+    );
+  }
+
+  if (summary.pocCommitsReused !== false) {
+    errors.push("POC learning summary poc_commits_reused must be false");
+  }
+
+  for (const field of [
+    "specCorrections",
+    "implementationNotes",
+    "reviewerDispositions",
+    "unresolvedLearnings",
+    "followUpDecisions",
+  ] satisfies Array<keyof PlanPocLearningSummary>) {
+    if (!Array.isArray(summary[field])) {
+      errors.push(`POC learning summary ${field} must be an array`);
+    }
+  }
+
+  if (!includes(body, "Close the draft artifact unmerged")) {
+    errors.push("POC artifact body must describe unmerged POC closure");
+  }
+
+  if (!includes(body, "private poc_learning_summary")) {
+    errors.push("POC artifact body must describe private learning summary");
   }
 
   return errors;
