@@ -72,7 +72,7 @@
 
 ## 4. Implementation Commit Boundary
 
-- [ ] 4.1 Update `plan-unit-delivery` reviewer launch and report contracts so
+- [x] 4.1 Update `plan-unit-delivery` reviewer launch and report contracts so
   implementation commits require fresh explicit reviewer evidence for the
   current staged implementation diff.
 - [ ] 4.2 Preserve explicit `not_applicable` reviewer evidence without counting

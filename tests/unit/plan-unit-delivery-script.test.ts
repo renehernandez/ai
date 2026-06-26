@@ -191,6 +191,7 @@ const validHandoff = `plan_delivery_handoff:
 
 const launchedReport = `reviewer_launch:
   status: launched
+  staged_diff_hash: ${reviewGateDiffHash}
   launched_reviewers:
     - implementation-review
     - implementation-scrutiny
@@ -536,6 +537,26 @@ test("review-gate-input rejects mismatched launch and report evidence", () => {
   assert.equal(result.stdout, "");
 });
 
+test("review-gate-input rejects stale reviewer launch evidence", () => {
+  const staleDiffHash =
+    "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+  const result = runPlanUnitDelivery(
+    "review-gate-input",
+    `${validHandoff}\n${launchedReport.replace(
+      reviewGateDiffHash,
+      staleDiffHash,
+    )}\n${reviewerReport.replace(reviewGateDiffHash, staleDiffHash)}`,
+    ["--diff-hash", reviewGateDiffHash],
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /reviewer_launch\.staged_diff_hash is stale for current staged diff/,
+  );
+  assert.equal(result.stdout, "");
+});
+
 test("review-gate-input rejects stale reviewer report evidence", () => {
   const result = runPlanUnitDelivery(
     "review-gate-input",
@@ -641,6 +662,8 @@ test("reviewer-template emits a readable summary before YAML", () => {
       result.stdout.indexOf("reviewer_launch:"),
   );
   assert.match(result.stdout, /reviewer_report:/);
+  assert.match(result.stdout, /staged_diff_hash:/);
+  assert.match(result.stdout, /reviewed_diff_hash:/);
 });
 
 test("refactoring-template emits a readable summary before YAML", () => {
@@ -840,6 +863,17 @@ test("validate-launch-report requires AI readiness accounting", () => {
   const valid = runPlanUnitDelivery("validate-launch-report", launchedReport);
 
   assert.equal(valid.status, 0);
+
+  const missingDiffHash = runPlanUnitDelivery(
+    "validate-launch-report",
+    launchedReport.replace(`  staged_diff_hash: ${reviewGateDiffHash}\n`, ""),
+  );
+
+  assert.notEqual(missingDiffHash.status, 0);
+  assert.match(
+    missingDiffHash.stderr,
+    /reviewer_launch\.staged_diff_hash is required/,
+  );
 
   const invalid = runPlanUnitDelivery(
     "validate-launch-report",
