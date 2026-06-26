@@ -46,6 +46,15 @@ These rules govern when to diagnose, when to edit, and how to route implementati
   branch-caused review or CI feedback through to closure. Select the
   hosted-review provider before pushing, and push only to that provider's remote
   or URL when a configured remote fans out to multiple hosts.
+- Before any agent-authored work is published by pushing, creating or updating a
+  PR/MR, or direct publication, run the final personal publication checkpoint
+  against the branch diff and exact HEAD SHA. Record target base, diff scope,
+  HEAD SHA, reviewer outcome, and any blocking findings in private thread or
+  support evidence unless the project workflow already requires reviewer-facing
+  evidence. If the checkpoint is missing, stale, tied to a different HEAD, or
+  reports unresolved blockers, pause before publishing. This checkpoint is a
+  personal workflow boundary and does not replace hosted review, CI, Nitro,
+  MR/PR approval, or project gates.
 - Pause instead of publishing when the diff contains secrets, unrelated user
   changes, generated noise, unresolved product or safety decisions, or ambiguous
   hosted-review provider routing. If verification is blocked by external state

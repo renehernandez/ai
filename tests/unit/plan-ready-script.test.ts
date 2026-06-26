@@ -1240,7 +1240,7 @@ test("activate-review-gate rejects legacy activation and writes no state", () =>
       );
       assert.match(
         output.blockers.join("\n"),
-        /plan-review owns readiness-to-planning-commit gate binding/,
+        /plan-review owns readiness evidence and publication checkpoint handling/,
       );
       assert.equal(
         existsSync(join(cwd, ".git", "ax", "review-gate.json")),

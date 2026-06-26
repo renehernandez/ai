@@ -88,13 +88,13 @@ when `readiness_reviewer_evidence` is present, every baseline and selected
 dynamic reviewer has a passing status, and no readiness blocking findings
 remain.
 
-For `artifact_type: openspec`, `commit-planning` also requires
-`blueprint_provenance`. Missing, stale, or mismatched blueprint provenance
-blocks before the local review gate is armed; rerun readiness reviewers on the
-materialized OpenSpec diff when provenance cannot be proven. If the source plan
-still exists, its current file hash must match the copied reviewer evidence; if
-the source plan was cleaned up, include `cleanup-source-plan` evidence for the
-same source ref and change id.
+For `artifact_type: openspec`, the planning commit or any optional
+`commit-planning` use also requires `blueprint_provenance`. Missing, stale, or
+mismatched blueprint provenance blocks before publishing planning review; rerun
+readiness reviewers on the materialized OpenSpec diff when provenance cannot be
+proven. If the source plan still exists, its current file hash must match the
+copied reviewer evidence; if the source plan was cleaned up, include
+`cleanup-source-plan` evidence for the same source ref and change id.
 
 ## Progress Output
 
@@ -173,23 +173,22 @@ and next action.
 7. For `artifact_type: openspec`, confirm `blueprint_provenance` links the
    source plan, change id, artifact fingerprint, generated paths, and strict
    OpenSpec validation evidence to the materialized OpenSpec diff.
-8. Bind the validated readiness reviewer evidence to the current staged
-   planning diff with `scripts/plan-review.ts review-gate-input --diff-hash
-   <current-staged-diff-hash> --file <plan-review-request>`. This prepares the
-   shared review-gate input for the planning commit boundary; do not recompute
-   reviewer lists.
-9. Commit the planning-only branch with
-   `scripts/plan-review.ts commit-planning --file <plan-review-request> --message
-   "<message>"`. This command writes the active local review gate from the
-   validated readiness evidence and delegates to the required-gate commit
-   helper. For OpenSpec artifacts it first validates blueprint
-   provenance, requires staged paths under the generated OpenSpec artifact,
-   runs `openspec validate <change-id> --strict --no-interactive`, and blocks
-   before writing gate state when proof fails; do not use ordinary commit mode
-   for plan-review-owned planning commits.
-   This local review gate blocks the planning commit only. It does not satisfy
-   hosted planning review, Nitro feedback, MR approval, CI or no-pipeline
-   inspection, or the `planning_review` handoff required before sequencing.
+8. Commit the planning-only branch through the repo-required commit wrapper. Do
+   not activate the local review gate or use the required-gate commit helper by
+   default. If the user or active workflow explicitly asks for a required local
+   commit gate, `scripts/plan-review.ts review-gate-input` and
+   `scripts/plan-review.ts commit-planning` remain the opt-in compatibility
+   path; do not recompute reviewer lists. This local commit boundary does not
+   satisfy hosted planning review, Nitro feedback, MR approval, CI or
+   no-pipeline inspection, or the `planning_review` handoff required before
+   sequencing.
+9. Before pushing or creating/updating the planning PR/MR, run the final
+   personal publication checkpoint against the planning branch diff and exact
+   HEAD SHA. Record target base, diff scope, HEAD SHA, readiness reviewer
+   outcome, and blocking findings in private support/thread evidence unless the
+   hosted-review workflow asks for reviewer-facing evidence. Do not publish if
+   the checkpoint is missing, stale, tied to another HEAD, or has unresolved
+   blockers.
 10. Push the planning-only branch when the hosted-review creation path requires a
    clean pushed branch. Do not include implementation changes in the commit.
 11. Create or update the routed draft PR/MR with a title and description that
@@ -204,7 +203,7 @@ and next action.
    private thread metadata in hosted descriptions. Use summaries, hashes, note
    IDs, discussion IDs, or stable correlation IDs when support-artifact evidence
    is relevant.
-11. Run the hosted-description gate before requesting Nitro or reporting
+12. Run the hosted-description gate before requesting Nitro or reporting
    readiness. Use the selected description policy owner
    (`change-request-create`, `glab-mr-create`, `github-pr-create`, or an
    equivalent provider adapter in harnesses where the named skill is
@@ -222,10 +221,10 @@ and next action.
    only when the existing body remains accurate for the current head and the
    final evidence records a metadata-only materiality decision plus reuse
    rationale.
-12. Run the artifact-host inspection adapter (`gitlab-adapter-review` or
+13. Run the artifact-host inspection adapter (`gitlab-adapter-review` or
    `github-adapter-review`) only for host metadata, discussions, and CI/review
    state. Do not run implementation code review against a planning-only diff.
-13. Wait for routed automated feedback on the latest head:
+14. Wait for routed automated feedback on the latest head:
     - Fullscript GitLab/Nitro: use `nitro-review-feedback` first. If latest-head
       Nitro feedback is missing or stale after create/update, post the standard
       Nitro review request for the current head, then wait again.
@@ -233,16 +232,18 @@ and next action.
       substitute Codex or another reviewer for this first cut.
     - Developer review: keep the PR/MR open and report pending human review; do
       not fabricate approval.
+15. Apply only plan/documentation feedback. If feedback asks for implementation,
     Hosted review gates block implementation sequencing. A clean local planning
     commit is necessary evidence for the planning branch, but sequencing starts
     only after the hosted `planning_review` handoff records latest-head Nitro
     closure and actionable feedback disposition.
-14. Apply only plan/documentation feedback. If feedback asks for implementation,
-    record it as a follow-up or blocker; do not start coding.
-15. If the branch head changes after feedback fixes, rerun artifact validation,
-    push, refresh the hosted-description gate when the change affects reviewer
+   record it as a follow-up or blocker; do not start coding.
+16. If the branch head changes after feedback fixes, rerun artifact validation
+    and rerun the final personal publication checkpoint for the new branch diff
+    and exact HEAD SHA before any push or hosted artifact mutation. Then push,
+    refresh the hosted-description gate when the change affects reviewer
     understanding, and wait for latest-head automated feedback again.
-16. Before finishing, enumerate all Nitro-authored planning comments and
+17. Before finishing, enumerate all Nitro-authored planning comments and
     discussions on the planning PR/MR across every review round. Record each
     note ID, discussion ID when present, whether the discussion is resolvable
     and currently resolved, and disposition: `fixed_in_planning`,
@@ -250,9 +251,9 @@ and next action.
     planning feedback blocks implementation sequencing unless it is explicitly
     deferred to a specific implementation task or marked non-actionable with
     rationale.
-17. Generate `scripts/plan-review.ts gate-template`, fill it, and validate it
+18. Generate `scripts/plan-review.ts gate-template`, fill it, and validate it
     with `validate-ledger` as internal evidence.
-18. Emit `planning_review` with `scripts/plan-review.ts
+19. Emit `planning_review` with `scripts/plan-review.ts
     planning-review-template`, fill it with the hosted review evidence and a
     passed `nitro_feedback_gate`, passed `description_policy`, and
     `planning_feedback_disposition`, then validate it with:
@@ -263,7 +264,7 @@ and next action.
 
     The expected values must come from the latest host inspection or live
     branch/head inspection, not from the handoff YAML being validated.
-19. Finish only when the planning MR has latest-head Nitro feedback completed
+20. Finish only when the planning MR has latest-head Nitro feedback completed
     cleanly, every prior Nitro planning item has explicit disposition, and the
     reviewed head plus current hosted description readback are recorded as the
     implementation stack base.

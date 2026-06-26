@@ -2078,7 +2078,7 @@ test("ax commit ordinary mode fails when an active review gate exists", () => {
     );
     assert.match(
       result.stderr,
-      /next: retry with ax commit --require-review-gate for workflow plan-unit-delivery/,
+      /next: use ax commit --require-review-gate only if the current user request or active workflow explicitly requires the plan-unit-delivery per-commit gate; otherwise stop and recover the stale active gate before ordinary commit\./,
     );
     assert.equal(runGit(["status", "--short"], { cwd }), "A  file.txt");
   } finally {
@@ -2119,7 +2119,7 @@ test("ax commit ordinary mode reports required-gate guidance for stale active ga
     assert.match(result.stderr, /Review gate staged diff hash is stale/);
     assert.match(
       result.stderr,
-      /next: refresh required local reviews for workflow plan-unit-delivery, then retry with ax commit --require-review-gate/,
+      /next: refresh required local reviews for workflow plan-unit-delivery only when that per-commit gate was explicitly required; otherwise stop and recover the stale active gate before ordinary commit\./,
     );
     assert.match(
       result.stderr,
@@ -2149,7 +2149,7 @@ test("ax commit ordinary mode reports repair guidance for invalid active gates",
     assert.match(result.stderr, /Active review gate requires stagedDiffHash/);
     assert.match(
       result.stderr,
-      /next: repair the active review gate for workflow plan-unit-delivery, or clear it and rerun required local reviews, then retry with ax commit --require-review-gate/,
+      /next: repair the active review gate for workflow plan-unit-delivery only when that per-commit gate was explicitly required; otherwise stop and recover the stale active gate before ordinary commit\./,
     );
     assert.match(
       result.stderr,
@@ -2193,7 +2193,7 @@ test("ax commit ordinary mode reports blocking-finding guidance for active gates
     assert.match(result.stderr, /unresolved blocking findings/);
     assert.match(
       result.stderr,
-      /next: resolve blocking review findings for workflow plan-unit-delivery, then retry with ax commit --require-review-gate/,
+      /next: resolve blocking review findings for workflow plan-unit-delivery only when that per-commit gate was explicitly required; otherwise stop and recover the stale active gate before ordinary commit\./,
     );
     assert.match(
       result.stderr,

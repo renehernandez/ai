@@ -338,9 +338,9 @@ timestamp, and gate outcome. Downstream skills must consume this evidence
 explicitly instead of recomputing reviewer lists.
 
 Do not activate or write local review-gate state from `plan-ready`. The legacy
-`activate-review-gate` command must route callers to `plan-review`; `plan-review`
-owns binding readiness evidence to the staged planning diff and committing
-through the local required gate.
+`activate-review-gate` command must route callers to `plan-review`. `plan-review`
+owns carrying readiness evidence into the planning review path and publication
+checkpoint; required local commit gates remain an explicit opt-in path.
 
 Legacy `slice_plan_review`, `reviewed_slices`,
 `plan_ready_handoff`, `plan_followthrough_slice_handoff`, and
@@ -386,7 +386,7 @@ Linear comments by default.
 | Omitting expected implementation shape from a multi-deliverable blueprint | Add delivery-unit count, work-item counts, split smells, merge smells, and justification notes before returning ready |
 | Skipping baseline reviewers | Run all baseline reviewers before ready |
 | Returning YAML without a readable thread summary | Add `## Readable Summary` before the YAML |
-| Activating a local review gate in PlanReady | Route to `plan-review` with readiness reviewer evidence |
+| Activating a local review gate in PlanReady | Route to `plan-review` with readiness reviewer evidence; required commit gates are opt-in |
 
 ## Test Evidence
 
