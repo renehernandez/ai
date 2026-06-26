@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   chmodSync,
   mkdtempSync,
@@ -234,13 +235,9 @@ function runGit(cwd: string, args: string[]): void {
 }
 
 function withoutGitRepositoryEnv(): NodeJS.ProcessEnv {
-  const env = { ...process.env };
-  delete env.GIT_DIR;
-  delete env.GIT_WORK_TREE;
-  delete env.GIT_INDEX_FILE;
-  delete env.GIT_OBJECT_DIRECTORY;
-  delete env.GIT_ALTERNATE_OBJECT_DIRECTORIES;
-  return env;
+  return Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
+  );
 }
 
 const reviewGateDiffHash =
@@ -658,6 +655,65 @@ test("review-gate-input preserves skipped reviewers as evidence only", () => {
   assert.ok(!output.requiredReviewPasses.includes("security-review"));
   assert.equal(output.results["ai-readiness-upkeep"], undefined);
   assert.equal(output.results["security-review"], undefined);
+});
+
+test("activate-review-gate writes identity for required-gate commits", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-unit-delivery-gate-"));
+  const env = withoutGitRepositoryEnv();
+  try {
+    assert.equal(spawnSync("git", ["init"], { cwd: directory, env }).status, 0);
+    writeFileSync(join(directory, "unit.txt"), "runtime routing\n", "utf8");
+    assert.equal(
+      spawnSync("git", ["add", "unit.txt"], { cwd: directory, env }).status,
+      0,
+    );
+    const diff = spawnSync("git", ["diff", "--cached", "--binary"], {
+      cwd: directory,
+      env,
+    });
+    assert.equal(diff.status, 0);
+    const diffHash = `sha256:${createHash("sha256").update(diff.stdout).digest("hex")}`;
+    const content = [
+      validHandoff,
+      launchedReport.replaceAll(reviewGateDiffHash, diffHash),
+      reviewerReport.replaceAll(reviewGateDiffHash, diffHash),
+    ].join("\n");
+
+    let result: ReturnType<typeof spawnSync> | undefined;
+    withTempFile(content, (path) => {
+      result = spawnSync(
+        "pnpm",
+        [
+          "exec",
+          "tsx",
+          "skills/plan-unit-delivery/scripts/plan-unit-delivery.ts",
+          "activate-review-gate",
+          "--file",
+          path,
+          "--cwd",
+          directory,
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8",
+        },
+      );
+    });
+
+    assert.ok(result);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const output = JSON.parse(result.stdout);
+    const state = JSON.parse(readFileSync(output.state_path, "utf8"));
+
+    assert.equal(state.identity.workflow, "plan-unit-delivery");
+    assert.equal(state.identity.unitId, "1");
+    assert.equal(state.identity.stagedDiffHash, diffHash);
+    assert.equal(typeof state.identity.gitCommonDir, "string");
+    assert.equal(typeof state.identity.gitDir, "string");
+    assert.equal(typeof state.identity.worktreeRoot, "string");
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
 });
 
 test("review-gate-input requires a diff hash value", () => {

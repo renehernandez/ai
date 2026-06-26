@@ -21,6 +21,13 @@ test("builds a draft-only POC artifact with OpenSpec comparison context", () => 
   assert.equal(state.intendedToMerge, false);
   assert.equal(state.includesOpenSpecFiles, true);
   assert.equal(state.includesImplementationDiff, true);
+  assert.deepEqual(state.runtimeRoute, {
+    lane: "poc_rehearsal",
+    optInOnly: true,
+    mergeableDelivery: false,
+    stackReadyEligible: false,
+    finalImplementationEntry: "revised_openspec_plan_orchestrator",
+  });
   assert.equal(state.finalDelivery.deliverySource, "revised_openspec");
   assert.equal(state.finalDelivery.pocCommitsReused, false);
   assert.deepEqual(validatePlanPocArtifactState(state), []);
@@ -29,6 +36,7 @@ test("builds a draft-only POC artifact with OpenSpec comparison context", () => 
   assert.match(state.body, /Strict OpenSpec validation and task-shape audit/);
   assert.match(state.body, /OpenSpec files are included as comparison context/);
   assert.match(state.body, /POC commits must not be reused/);
+  assert.match(state.body, /re-enter plan-orchestrator/);
 });
 
 test("rejects mergeable or final-delivery POC artifact drift", () => {
@@ -48,6 +56,13 @@ test("rejects mergeable or final-delivery POC artifact drift", () => {
       performedBy: "nobody",
     },
     intendedToMerge: true,
+    runtimeRoute: {
+      lane: "stacked_delivery",
+      optInOnly: false,
+      mergeableDelivery: true,
+      stackReadyEligible: true,
+      finalImplementationEntry: "poc_branch",
+    },
     finalDelivery: {
       deliverySource: "poc_commits",
       pocCommitsReused: true,
@@ -62,6 +77,10 @@ test("rejects mergeable or final-delivery POC artifact drift", () => {
     "POC artifact must be marked as review-only",
     "POC artifact must state that it is not intended to merge",
     "POC artifact body must describe OpenSpec comparison context",
+    "POC runtime route must stay opt-in poc_rehearsal",
+    "POC runtime route must not be normal mergeable stack delivery",
+    "POC final implementation must re-enter plan-orchestrator from revised OpenSpec",
+    "POC artifact body must route final implementation through plan-orchestrator",
     "final delivery source must be revised_openspec",
     "POC commits must not be reused for final delivery",
     "POC artifact body must reject POC commit reuse",
@@ -1101,5 +1120,10 @@ test("plan-poc helper CLI reports draft-only POC output for a sample OpenSpec ch
   assert.equal(output.title, "POC: add-plan-poc-review-rehearsal");
   assert.equal(output.includesOpenSpecFiles, true);
   assert.equal(output.intendedToMerge, false);
+  assert.equal(output.runtimeRoute.stackReadyEligible, false);
+  assert.equal(
+    output.runtimeRoute.finalImplementationEntry,
+    "revised_openspec_plan_orchestrator",
+  );
   assert.equal(output.finalDelivery.pocCommitsReused, false);
 });

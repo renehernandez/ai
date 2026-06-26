@@ -76,6 +76,13 @@ Before sequencing, verify that the planning review and implementation stack can
 use Nitro-reviewed Fullscript GitLab merge requests. Unsupported review or stack
 hosts are not a fallback path; report `delivery_blocked` with routing evidence.
 
+Review-only POC artifacts are not implementation stack inputs. If a prior
+`plan-poc` rehearsal exists, use it only as background for revising the
+OpenSpec before planning review or delivery; do not consume the POC branch,
+POC commits, contextual POC task state, or draft POC artifact as
+`planning_review`, stack base evidence, implementation artifact evidence, or
+`stack_ready` evidence.
+
 ## OpenSpec Proposal Flow
 
 For `openspec_blueprint` outputs:
