@@ -955,18 +955,18 @@ function ordinaryCommitBlockedNextAction(
   workflow: string,
 ): string {
   if (validation.ok) {
-    return `next: retry with ax commit ${REQUIRE_REVIEW_GATE_FLAG} for workflow ${workflow}`;
+    return `next: use ax commit ${REQUIRE_REVIEW_GATE_FLAG} only if the current user request or active workflow explicitly requires the ${workflow} per-commit gate; otherwise stop and recover the stale active gate before ordinary commit.`;
   }
   if (validation.blockingFindings.length > 0) {
-    return `next: resolve blocking review findings for workflow ${workflow}, then retry with ax commit ${REQUIRE_REVIEW_GATE_FLAG}`;
+    return `next: resolve blocking review findings for workflow ${workflow} only when that per-commit gate was explicitly required; otherwise stop and recover the stale active gate before ordinary commit.`;
   }
   if (
     validation.staleReviewPasses.length > 0 ||
     validation.missingReviewPasses.length > 0
   ) {
-    return `next: refresh required local reviews for workflow ${workflow}, then retry with ax commit ${REQUIRE_REVIEW_GATE_FLAG}`;
+    return `next: refresh required local reviews for workflow ${workflow} only when that per-commit gate was explicitly required; otherwise stop and recover the stale active gate before ordinary commit.`;
   }
-  return `next: repair the active review gate for workflow ${workflow}, or clear it and rerun required local reviews, then retry with ax commit ${REQUIRE_REVIEW_GATE_FLAG}`;
+  return `next: repair the active review gate for workflow ${workflow} only when that per-commit gate was explicitly required; otherwise stop and recover the stale active gate before ordinary commit.`;
 }
 
 function currentGitCommit(cwd: string): string {

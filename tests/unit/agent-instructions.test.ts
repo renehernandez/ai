@@ -40,12 +40,14 @@ for (const file of ["AGENTS.md", "instructions/AGENTS.md"] as const) {
 }
 
 for (const file of ["AGENTS.md", "instructions/AGENTS.md"] as const) {
-  test(`${file} routes agent commits through ax commit`, () => {
+  test(`${file} routes agent commits through ax commit and gates publication`, () => {
     const text = readFileSync(file, "utf-8");
 
     assert.match(text, /ax commit/);
-    assert.match(text, /local review gate/);
+    assert.match(text, /--require-review-gate/);
     assert.match(text, /instead of raw `git commit`/);
+    assert.match(text, /final\s+personal\s+publication\s+checkpoint/);
+    assert.match(text, /exact\s+HEAD SHA/);
     assert.match(text, /user's manual terminal/);
   });
 }
@@ -228,6 +230,104 @@ test("implementation rules define accepted implementation followthrough", () => 
   assert.match(text, /remote fans out to multiple\s+hosts/);
   assert.match(text, /inspect CI or\s+no-pipeline state/);
   assert.match(text, /ambiguous\s+hosted-review provider routing/);
+});
+
+for (const file of [
+  "AGENTS.md",
+  "instructions/AGENTS.md",
+  "rules/investigation-and-implementation.md",
+  "skills/ax-cli/SKILL.md",
+  "skills/change-request-create/SKILL.md",
+  "skills/glab-mr-create/SKILL.md",
+  "skills/github-pr-create/SKILL.md",
+  "skills/plan-review/SKILL.md",
+  "skills/plan-review/agents/openai.yaml",
+  "skills/plan-unit-delivery/SKILL.md",
+  "skills/plan-unit-delivery/agents/openai.yaml",
+] as const) {
+  test(`${file} gates agent publication with the final personal checkpoint`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /final\s+personal\s+publication\s+checkpoint/);
+    assert.match(text, /exact\s+HEAD SHA/);
+    assert.match(text, /push|pushing|PR\/MR|publication/);
+    assert.match(text, /missing, stale|stale, tied/);
+    assert.match(text, /unresolved blockers|blocking findings/);
+  });
+}
+
+for (const file of [
+  "AGENTS.md",
+  "instructions/AGENTS.md",
+  "skills/ax-cli/SKILL.md",
+  "skills/plan-review/SKILL.md",
+  "skills/plan-review/agents/openai.yaml",
+  "skills/plan-unit-delivery/SKILL.md",
+  "skills/plan-unit-delivery/agents/openai.yaml",
+] as const) {
+  test(`${file} keeps required local commit gates opt-in`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /--require-review-gate|required-gate commit helper/);
+    assert.match(text, /opt-in|by default/);
+    assert.match(text, /explicitly\s+(requires|requested|asks)/);
+  });
+}
+
+for (const file of [
+  "skills/plan-review/SKILL.md",
+  "skills/plan-review/agents/openai.yaml",
+  "skills/plan-unit-delivery/SKILL.md",
+  "skills/plan-unit-delivery/agents/openai.yaml",
+] as const) {
+  test(`${file} commits through the repo-required wrapper without teaching AX syntax`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /repo-required commit wrapper/);
+    assert.doesNotMatch(text, /ax commit/);
+  });
+}
+
+for (const file of [
+  "skills/plan-unit-delivery/SKILL.md",
+  "skills/plan-unit-delivery/agents/openai.yaml",
+] as const) {
+  test(`${file} includes direct publication in checkpoint triggers`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /direct\s+publication/);
+  });
+}
+
+test("plan-review reruns the publication checkpoint after feedback-fix head changes", () => {
+  const text = readFileSync("skills/plan-review/SKILL.md", "utf-8");
+
+  assert.match(text, /branch head changes after feedback fixes/);
+  assert.match(text, /rerun the final personal publication checkpoint/);
+  assert.match(text, /new branch diff\s+and exact HEAD SHA/);
+  assert.match(text, /before any push or hosted artifact mutation/);
+});
+
+test("ax-cli defines concrete private publication checkpoint evidence", () => {
+  const text = readFileSync("skills/ax-cli/SKILL.md", "utf-8");
+
+  assert.match(text, /personal_publication_checkpoint:/);
+  assert.match(text, /target_base:/);
+  assert.match(text, /diff_scope:/);
+  assert.match(text, /head_sha:/);
+  assert.match(text, /reviewer_outcome:/);
+  assert.match(text, /blocking_findings:/);
+  assert.match(text, /evidence_visibility:/);
+});
+
+test("ax-cli documents stale active gate recovery without defaulting to reruns", () => {
+  const text = readFileSync("skills/ax-cli/SKILL.md", "utf-8");
+
+  assert.match(text, /active workflow-required review gate/);
+  assert.match(text, /did not explicitly require/);
+  assert.match(text, /do\s+not reflexively rerun all local reviewers/);
+  assert.match(text, /stale workflow state/);
+  assert.match(text, /ax review-gate status/);
 });
 
 for (const file of ["AGENTS.md", "instructions/AGENTS.md"] as const) {

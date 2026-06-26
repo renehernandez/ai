@@ -38,6 +38,17 @@ Do not guess from the first remote by position when multiple hosts remain
 plausible. Do not configure `change-request-create` as an
 `artifact.create_adapter`; delegate to `github-pr-create` or `glab-mr-create`.
 
+## Publication Checkpoint
+
+When creating or updating a hosted change request would publish local
+agent-authored work, first require a current final personal publication
+checkpoint for the branch diff and exact HEAD SHA. The checkpoint must name the
+target base, diff scope, HEAD SHA, reviewer outcome, and blocking findings.
+Pause before pushing or mutating the hosted artifact when the checkpoint is
+missing, stale, tied to another HEAD, or has unresolved blockers. Keep this
+evidence private unless the selected project workflow already requires
+reviewer-facing evidence.
+
 ## Description Policy
 
 Write the hosted description for reviewers, not for the author workflow. It

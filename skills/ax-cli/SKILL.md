@@ -43,7 +43,7 @@ OpenSpec setup.
 | AGENTS.md/rules instructions | `instructions` |
 | Hooks | `hooks` |
 | Repo-local OpenSpec scaffolding | `openspec` |
-| Commit through the local review gate | `commit` |
+| Commit through the AX wrapper | `commit` |
 | Inspect or validate local review-gate state | `review-gate` |
 | Private plan workflow support artifacts | `plans artifact` |
 | Drift check without file mutation | `status` or `validate` before `install`/`update` |
@@ -83,12 +83,13 @@ ax review-gate validate-commit
 ax commit -m "Commit message"
 ```
 
-`ax commit` validates the local review gate for the current staged diff before
-delegating to Git. When no active review gate exists, validation allows the
-commit with a note. When a gate is active, required review-pass evidence must
-match the staged diff.
+Ordinary personal workflow iteration uses `ax commit -m`. `ax commit` checks
+local review-gate state before delegating to Git. When no active review gate
+exists, validation allows the commit with a note. When a gate is active,
+required review-pass evidence must match the staged diff.
 
-Workflow-owned commits with a required local review gate must use:
+Use required-gate mode only when the user or active workflow explicitly
+requires a per-commit gate:
 
 ```bash
 ax commit --require-review-gate -m "Commit message"
@@ -106,6 +107,47 @@ state, activate a fresh gate, and retry the workflow step.
 V1 supports normal staged commits with `-m` or `--message`. It rejects
 commit-shape-mutating or bypass modes such as `--amend`, `-a`, `--all`,
 `--include`, `--only`, pathspec commits, and `--no-verify`.
+
+## Personal Publication Checkpoint
+
+The blocking default for agent-authored personal workflow work is publication,
+not every commit. Before an agent publishes by pushing, creating or updating a
+PR/MR, or direct publication, run one final personal publication checkpoint for
+the branch diff and exact HEAD SHA.
+
+The checkpoint must record:
+
+- target base and branch diff scope;
+- exact HEAD SHA being published;
+- reviewer outcome and any blocking findings;
+- whether evidence is private thread/support evidence or part of an existing
+  reviewer-facing project workflow.
+
+Use this minimal private evidence shape in the thread or private support
+storage:
+
+```yaml
+personal_publication_checkpoint:
+  status: passed
+  target_base: <base-ref-or-sha>
+  diff_scope: <branch-diff-reviewed>
+  head_sha: <exact-head-sha>
+  reviewer_outcome: passed
+  blocking_findings: []
+  evidence_visibility: private
+```
+
+Do not publish when the checkpoint is missing, stale, tied to a different HEAD,
+or has unresolved blockers. Keep checkpoint evidence private unless the
+project-selected hosted-review workflow already asks for reviewer-facing
+evidence. Hosted review, CI, Nitro, approvals, and project gates remain
+separate and still run after publication.
+
+If ordinary `ax commit` is blocked by an active workflow-required review gate
+that the current user request or active workflow did not explicitly require, do
+not reflexively rerun all local reviewers or switch to required-gate mode. Treat
+the active gate as stale workflow state, inspect `ax review-gate status`, and
+recover that state before continuing ordinary iteration.
 
 ## Private Plan Support Artifacts
 
@@ -254,11 +296,12 @@ command before finishing.
 - GREEN: with this skill loaded, shared-skill refresh pressure updated and
   validated both runtime profiles before treating the source change as live.
 - RED: baseline commit pressure treated `git commit -m` as the obvious agent
-  path and did not inspect local review-gate state before committing.
-- GREEN: with this skill loaded, commit pressure used `ax review-gate status`
-  or `ax review-gate validate-commit` for diagnostics, used
-  `ax commit --require-review-gate -m` for workflow-owned commits, and rejected
-  bypass or shape-changing flags.
+  path and had no final review boundary before publication.
+- GREEN: with this skill loaded, commit pressure used ordinary `ax commit -m`
+  for iteration, preserved `ax commit --require-review-gate -m` as an explicit
+  opt-in mode, rejected bypass or shape-changing flags, and blocked publication
+  until a final personal publication checkpoint matched the branch diff and
+  exact HEAD SHA.
 - GREEN: with this skill loaded, plan workflow support artifacts use
   `ax plans artifact record|list` for private file-backed recovery while
   avoiding committed `.agents/plans/**` sidecars and hosted local-path leaks.

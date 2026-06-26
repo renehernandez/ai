@@ -611,7 +611,7 @@ function activateReviewGate(args: string[]): void {
         status: "blocked",
         gate_outcome: "blocked",
         blockers: [
-          "plan-ready activate-review-gate is legacy; run plan-review with plan_review_request readiness_reviewer_evidence so plan-review owns readiness-to-planning-commit gate binding",
+          "plan-ready activate-review-gate is legacy; run plan-review with plan_review_request readiness_reviewer_evidence so plan-review owns readiness evidence and publication checkpoint handling",
         ],
         route_to: "plan-review",
         state_path: null,

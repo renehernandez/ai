@@ -1,6 +1,6 @@
 ---
 name: plan-unit-delivery
-description: Use when one validated plan_delivery_handoff approved unit should be implemented through local verification, review gates, Nitro feedback, CI, and stacked PR/MR delivery.
+description: Use when one validated plan_delivery_handoff approved unit should be implemented through local verification, final publication checkpoint, Nitro feedback, CI, and stacked PR/MR delivery.
 ---
 
 # Plan Unit Delivery
@@ -79,31 +79,26 @@ path.
 9. Reconcile reviewer outcomes.
 10. Validate `reviewer_launch` and `reviewer_report`; the report must include
     the staged diff hash reviewed by the implementation reviewers.
-11. Before any material implementation commit, activate the local review gate
-    for the staged diff:
-
-    ```bash
-    scripts/plan-unit-delivery.ts activate-review-gate --file <delivery-evidence> --source-ref <handoff-or-report-ref>
-    ```
-
-    If activation is blocked, gate writing fails, validation fails, reviewer
-    evidence is missing or stale, or blocking findings remain, do not run
-    the commit helper; resolve the blocker and rerun reviewers or activation.
-
-    Workflow-owned implementation commits must use the required-gate commit
-    helper exposed by the local AX runtime. If Git creates the commit but the
-    helper reports that the review gate was not consumed or failed to consume,
-    treat the created head as not locally reviewed for this workflow. Inspect
-    the commit, rerun required local reviewers for the current gate state,
-    activate a fresh gate, and retry the workflow step before pushing or
-    requesting hosted review.
-12. Run review-feedback routing.
-13. Open or update one routed implementation PR/MR stacked on the expected
+11. Commit material implementation changes through the repo-required commit wrapper
+    after local verification and reviewer reconciliation. Do not activate the
+    local review gate or use the required-gate commit helper by default.
+    Required local commit gates remain opt-in only when the user or active
+    workflow explicitly requires them.
+12. Before any push, implementation PR/MR creation or update, direct
+    publication, hosted review request, or Nitro request, run the final personal
+    publication checkpoint against the branch diff and exact HEAD SHA. Record
+    target base, diff scope, HEAD SHA, implementation reviewer outcome, and
+    blocking findings in private support/thread evidence unless the hosted
+    workflow asks for reviewer-facing evidence. If the checkpoint is missing,
+    stale, tied to another HEAD, or has unresolved blockers, stop before
+    publication and rerun the needed reviewers or fixes.
+13. Run review-feedback routing.
+14. Open or update one routed implementation PR/MR stacked on the expected
     stack tip from the handoff.
-14. Prove the implementation artifact is separate from the planning-review
+15. Prove the implementation artifact is separate from the planning-review
     PR/MR. If the same hosted artifact would be reused, block and split the
     implementation to a separate PR/MR.
-15. Run the hosted-description gate through the selected description policy
+16. Run the hosted-description gate through the selected description policy
     owner (`change-request-create`, `glab-mr-create`, `github-pr-create`, or an
     equivalent provider adapter in harnesses where the named skill is
     unavailable). For existing PRs/MRs, read the current hosted body before
@@ -121,18 +116,18 @@ path.
     with recovery evidence. Metadata-only reuse is allowed only when the
     existing body remains accurate for the current head and the ledger records a
     metadata-only materiality decision plus reuse rationale.
-16. Run artifact-host review.
-17. Monitor artifact-host pipelines for the latest head until they pass, fail,
+17. Run artifact-host review.
+18. Monitor artifact-host pipelines for the latest head until they pass, fail,
     block, or are unavailable with evidence. Include child or downstream
     pipeline state when the host exposes it.
-18. Request Nitro feedback after MR creation and after every material
+19. Request Nitro feedback after MR creation and after every material
     head-changing push, including feedback fixes, restacks, conflict fixes,
     pipeline fixes, user edits, rebases, and plan or documentation feedback
     fixes. Refresh the hosted-description gate before the request whenever the
     change affects reviewer understanding.
-19. Wait for the shared latest-head `nitro_feedback_gate` to pass. A requested,
+20. Wait for the shared latest-head `nitro_feedback_gate` to pass. A requested,
     pending, stale, unavailable, or findings gate is blocking.
-20. Finish only when the unit implementation MR is stack-ready with passed
+21. Finish only when the unit implementation MR is stack-ready with passed
     description-policy and Nitro gates, or blocked with evidence.
 
 Block with `implementation_scope_escape` when the selected unit requires
@@ -188,7 +183,7 @@ checkbox delta exists.
 | Finishing without proving the delivery-unit delta | Run `validate-task-delta --unit` against base and unit `tasks.md` |
 | Fabricating delivery-unit delta proof for an atomic plan | Mark `delivery_unit_delta` not applicable with `selected_unit_id: atomic` |
 | Recording delta proof only in chat prose | Put the command and `delivery_unit_delta_valid` output in `delivery_gate_ledger.delivery_unit_delta` |
-| Committing before activating the local review gate | Run `activate-review-gate` for the staged diff before the required-gate commit helper |
+| Publishing before the final personal publication checkpoint | Run the checkpoint for the branch diff and exact HEAD SHA before push, PR/MR mutation, direct publication, hosted review, or Nitro |
 | Reusing reviewer reports after staging new changes | Rerun reviewers and update `reviewer_report.reviewed_diff_hash` |
 | Treating delivery gate evidence as durable state | Keep sequence state in OpenSpec |
 | Treating an open PR/MR as done before pipelines settle | Keep monitoring latest-head pipelines |

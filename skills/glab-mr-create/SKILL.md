@@ -47,20 +47,26 @@ first so routing and full description policy stay in one place.
    ```
    If an MR exists, return it and ask whether to update it instead of creating another.
 
-4. Push the branch if needed:
+4. For local agent-authored work, confirm the final personal publication
+   checkpoint is current for the branch diff and exact HEAD SHA before pushing
+   or mutating an MR. Pause if the checkpoint is missing, stale, tied to another
+   HEAD, or has unresolved blockers. Keep checkpoint evidence private unless
+   the project workflow already requires reviewer-facing evidence.
+
+5. Push the branch if needed:
    ```bash
    git rev-parse --abbrev-ref --symbolic-full-name @{u}
    git push -u origin HEAD
    ```
    If there is no upstream, push with `-u`. If multiple GitLab remotes exist, verify the intended artifact remote before pushing.
 
-5. Analyze changes for title/body context:
+6. Analyze changes for title/body context:
    ```bash
    git log <target>...HEAD --oneline --no-merges
    git diff <target>...HEAD --stat
    ```
 
-6. Build the MR body. Prefer project templates when available.
+7. Build the MR body. Prefer project templates when available.
 
    Keep the body reviewer-facing. For neutral or mixed-host requests, apply
    `change-request-create` before this adapter. For direct GitLab use:
