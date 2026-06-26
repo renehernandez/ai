@@ -25,6 +25,7 @@ import type {
 } from "./lib/review-gate.ts";
 import {
   hasStagedDiff,
+  reviewGateStatePath,
   stagedDiffHash,
   validateReviewGateForCommit,
   writeActiveReviewGate,
@@ -138,6 +139,7 @@ type Command =
   | "refactoring-template"
   | "gate-template"
   | "activate-review-gate"
+  | "commit-implementation"
   | "validate-ledger"
   | "validate-task-delta";
 
@@ -195,7 +197,7 @@ function main(): void {
 
   if (!isCommand(command)) {
     fail(
-      "Usage: plan-unit-delivery.ts <detect|validate-handoff|review-gate-input|activate-review-gate|reviewer-template|validate-launch-report|validate-review-report|refactoring-template|gate-template|validate-ledger|validate-task-delta> [--file path|--source-ref ref|--cwd path|--base path --head path --unit id|--task id] [--expected-head-sha sha] [--expected-artifact url]",
+      "Usage: plan-unit-delivery.ts <detect|validate-handoff|review-gate-input|activate-review-gate|commit-implementation|reviewer-template|validate-launch-report|validate-review-report|refactoring-template|gate-template|validate-ledger|validate-task-delta> [--file path|--source-ref ref|--cwd path|--base path --head path --unit id|--task id] [--expected-head-sha sha] [--expected-artifact url] [--message text]",
     );
   }
 
@@ -231,6 +233,11 @@ function main(): void {
 
   if (command === "activate-review-gate") {
     activateReviewGate(args);
+    return;
+  }
+
+  if (command === "commit-implementation") {
+    commitImplementation(args);
     return;
   }
 
@@ -687,9 +694,11 @@ function activateReviewGate(args: string[]): void {
 
   try {
     if (!hasStagedDiff(cwd)) {
-      emitBlockedReviewGate([
-        "plan-unit-delivery review gate requires a staged diff",
-      ]);
+      emitBlockedReviewGate(
+        ["plan-unit-delivery review gate requires a staged diff"],
+        undefined,
+        cwd,
+      );
     }
     diffHash = stagedDiffHash(cwd);
 
@@ -728,6 +737,79 @@ function activateReviewGate(args: string[]): void {
   }
 }
 
+function commitImplementation(args: string[]): void {
+  const cwd = optionValue(args, "--cwd") ?? process.cwd();
+  const message = optionValue(args, "--message") ?? optionValue(args, "-m");
+  if (!message) {
+    fail("commit-implementation requires --message <message>");
+  }
+
+  const input = readInput(args);
+  let reviewGateInput: ActiveReviewGateInput;
+  let diffHash = "";
+
+  try {
+    if (!hasStagedDiff(cwd)) {
+      emitBlockedReviewGate(
+        ["plan-unit-delivery implementation commit requires a staged diff"],
+        undefined,
+        cwd,
+      );
+    }
+    diffHash = stagedDiffHash(cwd);
+
+    const evidenceRef =
+      optionValue(args, "--source-ref") ?? optionValue(args, "--file");
+    reviewGateInput = buildPlanUnitDeliveryReviewGateInput(input, {
+      diffHash,
+      evidenceRef,
+    });
+  } catch (error) {
+    emitBlockedReviewGate([errorMessage(error)], undefined, cwd, diffHash);
+  }
+
+  let writeResult: ReviewGateWriteResult;
+  let validation: ReviewGateValidation;
+  try {
+    writeResult = writeActiveReviewGate(reviewGateInput, cwd);
+    validation = validateReviewGateForCommit(cwd);
+    if (!validation.ok) {
+      emitBlockedReviewGate(validation.errors, validation, cwd, diffHash);
+    }
+  } catch (error) {
+    emitBlockedReviewGate([errorMessage(error)], undefined, cwd, diffHash);
+  }
+
+  const commitCommand = implementationCommitCommand(message);
+  const result = spawnSync(commitCommand.command, commitCommand.args, {
+    cwd,
+    encoding: "utf8",
+  });
+  if (result.stderr) {
+    process.stderr.write(result.stderr);
+  }
+  if (result.error) {
+    fail(result.error.message);
+  }
+  if (result.status !== 0) {
+    process.exit(result.status ?? 1);
+  }
+
+  console.log(
+    JSON.stringify(
+      {
+        status: "implementation_commit_committed",
+        gate_outcome: "passed",
+        state_path: writeResult.statePath,
+        staged_diff_hash: validation.stagedDiffHash,
+        required_review_passes: validation.requiredReviewPasses,
+      },
+      null,
+      2,
+    ),
+  );
+}
+
 function emitBlockedReviewGate(
   blockers: string[],
   validation?: ReviewGateValidation,
@@ -761,7 +843,10 @@ function emitBlockedReviewGate(
         status: "blocked",
         gate_outcome: "blocked",
         blockers,
-        state_path: validation?.statePath ?? blockedGate?.statePath,
+        state_path:
+          validation?.statePath ??
+          blockedGate?.statePath ??
+          (cwd ? reviewGateStatePath(cwd) : undefined),
         staged_diff_hash: validation?.stagedDiffHash ?? diffHash,
       },
       null,
@@ -1795,6 +1880,7 @@ function isCommand(command: string | undefined): command is Command {
     "validate-review-report",
     "refactoring-template",
     "gate-template",
+    "commit-implementation",
     "validate-ledger",
     "validate-task-delta",
   ].includes(command ?? "");
@@ -1807,6 +1893,16 @@ function optionValue(args: string[], name: string): string | undefined {
   }
   const value = args[index + 1];
   return value && !value.startsWith("-") ? value : undefined;
+}
+
+function implementationCommitCommand(message: string): {
+  command: string;
+  args: string[];
+} {
+  return {
+    command: "pnpm",
+    args: ["ax", "commit", "--require-review-gate", "-m", message],
+  };
 }
 
 function errorMessage(error: unknown): string {
