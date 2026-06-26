@@ -65,3 +65,17 @@ head and route reviewer feedback against that latest head before moving to the
 next POC unit. Current and completed POC units must keep checkpoints tied to
 each pushed head they reviewed; pending units stay contextual until they are
 implemented.
+
+## Closure And Learning Summary
+
+When Rene decides the POC is good enough, close the draft artifact unmerged and
+emit private `poc_learning_summary` evidence for later OpenSpec revision. The
+summary is not committed to the repo by default. It records the final delivery
+boundary with `delivery_source: revised_openspec` and
+`poc_commits_reused: false`, plus spec corrections, implementation notes,
+reviewer dispositions, unresolved learnings, and follow-up decisions.
+
+If Rene abandons or cancels the POC before it is good enough, close the draft
+artifact unmerged and do not start final implementation from the POC. Emit the
+same private learning summary with the abandonment decision unless Rene
+explicitly declines learning capture.

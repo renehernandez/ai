@@ -13,9 +13,9 @@
 
 ## 3. Learning Summary And Closure
 
-- [ ] 3.1 Add the `poc_learning_summary` contract with delivery-source and commit-reuse fields.
-- [ ] 3.2 Add unmerged draft artifact closure guidance and summary emission rules.
-- [ ] 3.3 Add coverage that rejects missing `delivery_source: revised_openspec` or `poc_commits_reused: false`.
+- [x] 3.1 Add the `poc_learning_summary` contract with delivery-source and commit-reuse fields.
+- [x] 3.2 Add unmerged draft artifact closure guidance and summary emission rules.
+- [x] 3.3 Add coverage that rejects missing `delivery_source: revised_openspec` or `poc_commits_reused: false`.
 
 ## 4. Runtime Alignment And Regression Coverage
 

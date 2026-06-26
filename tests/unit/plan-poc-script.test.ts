@@ -102,6 +102,112 @@ test("blank custom titles fall back to the OpenSpec change id", () => {
   assert.deepEqual(validatePlanPocArtifactState(state), []);
 });
 
+test("builds a private POC learning summary for unmerged closure", () => {
+  const state = buildPlanPocArtifactState({
+    changeId: "add-plan-poc-review-rehearsal",
+    changeRef: "openspec/changes/add-plan-poc-review-rehearsal",
+    host: "gitlab_mr",
+    learningSummary: {
+      decision: "good_enough",
+      deliverySource: "revised_openspec",
+      pocCommitsReused: false,
+      specCorrections: ["Revise checkpoint language around routed feedback."],
+      implementationNotes: ["Use pushed-head records to bind review gates."],
+      reviewerDispositions: ["Nitro feedback addressed in revised spec."],
+      unresolvedLearnings: ["Decide whether personal projects need a route."],
+      followUpDecisions: ["Reimplement final delivery from revised OpenSpec."],
+    },
+  });
+
+  assert.equal(state.pocLearningSummary?.kind, "poc_learning_summary");
+  assert.equal(state.pocLearningSummary?.decision, "good_enough");
+  assert.equal(state.pocLearningSummary?.artifactClosedUnmerged, true);
+  assert.equal(state.pocLearningSummary?.private, true);
+  assert.equal(state.pocLearningSummary?.committedToRepo, false);
+  assert.equal(state.pocLearningSummary?.deliverySource, "revised_openspec");
+  assert.equal(state.pocLearningSummary?.pocCommitsReused, false);
+  assert.match(state.body, /Close the draft artifact unmerged/);
+  assert.match(state.body, /private poc_learning_summary/);
+  assert.deepEqual(validatePlanPocArtifactState(state), []);
+});
+
+test("builds abandoned POC learning summaries without enabling final delivery", () => {
+  const state = buildPlanPocArtifactState({
+    changeId: "add-plan-poc-review-rehearsal",
+    changeRef: "openspec/changes/add-plan-poc-review-rehearsal",
+    host: "gitlab_mr",
+    learningSummary: {
+      decision: "abandoned",
+      deliverySource: "revised_openspec",
+      pocCommitsReused: false,
+      specCorrections: [],
+      implementationNotes: [],
+      reviewerDispositions: [],
+      unresolvedLearnings: ["POC route unavailable for this host."],
+      followUpDecisions: ["Do not start final implementation from the POC."],
+    },
+  });
+
+  assert.equal(state.pocLearningSummary?.decision, "abandoned");
+  assert.equal(state.finalDelivery.deliverySource, "revised_openspec");
+  assert.equal(state.finalDelivery.pocCommitsReused, false);
+  assert.deepEqual(validatePlanPocArtifactState(state), []);
+});
+
+test("rejects learning summary final-delivery boundary drift", () => {
+  const state = buildPlanPocArtifactState({
+    changeId: "add-plan-poc-review-rehearsal",
+    changeRef: "openspec/changes/add-plan-poc-review-rehearsal",
+    host: "gitlab_mr",
+    learningSummary: {
+      decision: "good_enough",
+      deliverySource: "revised_openspec",
+      pocCommitsReused: false,
+      specCorrections: [],
+      implementationNotes: [],
+      reviewerDispositions: [],
+      unresolvedLearnings: [],
+      followUpDecisions: [],
+    },
+  });
+
+  const drifted = {
+    ...state,
+    pocLearningSummary: {
+      ...state.pocLearningSummary,
+      kind: "not_learning",
+      decision: "merge_it",
+      artifactClosedUnmerged: false,
+      private: false,
+      committedToRepo: true,
+      deliverySource: "poc_commits",
+      pocCommitsReused: true,
+      specCorrections: "none",
+    },
+    body: state.body
+      .replace(
+        "Close the draft artifact unmerged before final delivery.",
+        "POC closure omitted.",
+      )
+      .replace(
+        "Emit a private poc_learning_summary for later OpenSpec revision.",
+        "Learning summary omitted.",
+      ),
+  };
+
+  assert.deepEqual(validatePlanPocArtifactState(drifted as typeof state), [
+    "POC learning summary kind must be poc_learning_summary",
+    "POC learning summary decision must be good_enough or abandoned",
+    "POC learning summary must close the draft artifact unmerged",
+    "POC learning summary must remain private by default",
+    "POC learning summary delivery_source must be revised_openspec",
+    "POC learning summary poc_commits_reused must be false",
+    "POC learning summary specCorrections must be an array",
+    "POC artifact body must describe unmerged POC closure",
+    "POC artifact body must describe private learning summary",
+  ]);
+});
+
 test("tracks two POC units in one draft artifact with latest-head checkpoints", () => {
   const state = buildPlanPocArtifactState({
     changeId: "add-plan-poc-review-rehearsal",
