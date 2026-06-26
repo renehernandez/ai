@@ -143,6 +143,6 @@
   recording the required `pnpm ax validate --all-profiles` and
   `pnpm ax status --all-profiles` results in the delivery ledger or final stack
   evidence.
-- [ ] 8.6 Add hook validation completion evidence with
+- [x] 8.6 Add hook validation completion evidence with
   `pnpm ax hooks validate` only when hook source or hook registration behavior
   changes in the implementation stack.
