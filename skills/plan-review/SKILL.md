@@ -52,6 +52,24 @@ plan_review_request:
     skipped_reviewers: []
     skipped_rationale: []
     blocking_findings: []
+  blueprint_provenance:
+    source: openspec_blueprint
+    source_plan:
+      ref: .agents/plans/example-change.md
+      change_id: example-change
+      artifact_fingerprint: <plan-ready reviewer evidence fingerprint>
+    generated_change:
+      change_id: example-change
+      ref: openspec/changes/example-change
+      generated_paths:
+        - openspec/changes/example-change/proposal.md
+        - openspec/changes/example-change/tasks.md
+        - openspec/changes/example-change/specs/<spec>/spec.md
+    validation_evidence:
+      - openspec validate example-change --strict --no-interactive
+      - managed OpenSpec runtime validation passed
+    cleanup_evidence:
+      - scripts/plan-orchestrator.ts cleanup-source-plan --source-plan .agents/plans/example-change.md --expected-source-plan .agents/plans/example-change.md --expected-change-id example-change --change-id example-change
   unresolved_blockers: []
 ```
 
@@ -69,6 +87,14 @@ unresolved blockers, stop and ask for `plan-ready` or a valid
 when `readiness_reviewer_evidence` is present, every baseline and selected
 dynamic reviewer has a passing status, and no readiness blocking findings
 remain.
+
+For `artifact_type: openspec`, `commit-planning` also requires
+`blueprint_provenance`. Missing, stale, or mismatched blueprint provenance
+blocks before the local review gate is armed; rerun readiness reviewers on the
+materialized OpenSpec diff when provenance cannot be proven. If the source plan
+still exists, its current file hash must match the copied reviewer evidence; if
+the source plan was cleaned up, include `cleanup-source-plan` evidence for the
+same source ref and change id.
 
 ## Progress Output
 
@@ -144,20 +170,26 @@ and next action.
    rationale.
 6. Run `review-feedback-routing` before PR/MR creation. Detect artifact host
    from remotes and route reviewer feedback separately from artifact creation.
-7. Bind the validated readiness reviewer evidence to the current staged
+7. For `artifact_type: openspec`, confirm `blueprint_provenance` links the
+   source plan, change id, artifact fingerprint, generated paths, and strict
+   OpenSpec validation evidence to the materialized OpenSpec diff.
+8. Bind the validated readiness reviewer evidence to the current staged
    planning diff with `scripts/plan-review.ts review-gate-input --diff-hash
    <current-staged-diff-hash> --file <plan-review-request>`. This prepares the
    shared review-gate input for the planning commit boundary; do not recompute
    reviewer lists.
-8. Commit the planning-only branch with
+9. Commit the planning-only branch with
    `scripts/plan-review.ts commit-planning --file <plan-review-request> --message
    "<message>"`. This command writes the active local review gate from the
    validated readiness evidence and delegates to the required-gate commit
-   helper; do not use ordinary commit mode for plan-review-owned planning
-   commits.
-9. Push the planning-only branch when the hosted-review creation path requires a
+   helper. For OpenSpec artifacts it first validates blueprint
+   provenance, requires staged paths under the generated OpenSpec artifact,
+   runs `openspec validate <change-id> --strict --no-interactive`, and blocks
+   before writing gate state when proof fails; do not use ordinary commit mode
+   for plan-review-owned planning commits.
+10. Push the planning-only branch when the hosted-review creation path requires a
    clean pushed branch. Do not include implementation changes in the commit.
-10. Create or update the routed draft PR/MR with a title and description that
+11. Create or update the routed draft PR/MR with a title and description that
    makes the planning-only state explicit:
    - state that implementation has not started;
    - name the plan/OpenSpec artifact;
