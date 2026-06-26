@@ -48,6 +48,10 @@ Do not put review routing in CLI runtime config JSON. That config is for CLI mec
 7. When Nitro is required, use `nitro-review-feedback` to validate the route
    and final feedback before allowing a planning or delivery gate to pass.
 
+Local reviewer evidence is source provenance for the commit boundary only. It
+must not satisfy artifact-host inspection, MR approval, CI or no-pipeline
+inspection, `planning_review`, or `nitro_feedback_gate` requirements.
+
 If `origin`, `upstream`, or a supplied PR/MR URL point to different artifact hosts, prefer the host for the artifact being created or reviewed. If that is still ambiguous, ask one blocking question. Never fail open to the first route.
 
 For the first stacked-delivery cut, required Nitro feedback is supported only

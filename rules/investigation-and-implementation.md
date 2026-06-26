@@ -25,6 +25,14 @@ These rules govern when to diagnose, when to edit, and how to route implementati
 - Skills and workflows may delegate to available local, cloud, or custom subagents when they define a bounded implementation, exploration, or verification lane.
 - Do not refer to retired agent names or require a subagent that is not available in the current harness.
 - For implementation work that needs planning, review-first delivery, stacked PRs/MRs, or multi-step coordination, use `plan-orchestrator` and its related plan workflow skills.
+- `plan-poc` is an explicit review-only OpenSpec rehearsal lane, not normal
+  implementation delivery. Use it only when Rene asks for a POC, proof of
+  concept, implementation rehearsal, or `plan-poc` run. A POC artifact stays
+  draft, is closed unmerged, and feeds a private learning summary for later
+  OpenSpec revision. Final implementation must re-enter the normal
+  `plan-orchestrator` path from the revised OpenSpec; do not promote POC
+  commits, contextual POC task state, or the draft POC artifact into a
+  mergeable delivery stack.
 - Accepted implementation work includes direct user requests to implement, fix,
   build, apply a plan, or deliver review-feedback changes, plus approved plan
   workflow delivery units. It excludes brainstorming, planning, OpenSpec

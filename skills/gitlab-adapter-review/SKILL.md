@@ -37,6 +37,10 @@ Use `diff-review` directly for local-only diffs. Use `github-adapter-review` for
    - pipeline/check state and links
    - child or downstream pipeline state when available
 
+   Local reviewer evidence, readiness evidence, and local review-gate state are
+   not artifact-host context. Keep them out of this gate except as private
+   source provenance named by the calling workflow.
+
 3. Checkout or verify the source branch before reading files:
    ```bash
    git status --short --branch

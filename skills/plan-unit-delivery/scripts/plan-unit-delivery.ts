@@ -25,6 +25,7 @@ import type {
 } from "./lib/review-gate.ts";
 import {
   hasStagedDiff,
+  reviewGateStatePath,
   stagedDiffHash,
   validateReviewGateForCommit,
   writeActiveReviewGate,
@@ -127,6 +128,8 @@ const REVIEW_OUTCOME_STATUSES = [
   "not_applicable",
 ] as const;
 const REVIEWED_DIFF_HASH_PATTERN = /^sha256:[a-f0-9]{64}$/;
+const LOCAL_REVIEW_EVIDENCE_PATTERN =
+  /\b(local[_ -]review(?:er)?(?:[_ -]?gate)?|reviewer[_-]passes|reviewer[_ -]?report|review[_ -]?gate|implementation[_-]review|implementation[_-]scrutiny|code[_-]quality[_-]review|code[_-]simplifier|deslop|docs[_-]alignment(?:[_-]review)?|ai[_-]readiness[_-]upkeep|security[_-]review)\b/i;
 const PLAN_UNIT_DELIVERY_REVIEW_PHASE = "plan-unit-delivery";
 type Command =
   | "detect"
@@ -138,6 +141,7 @@ type Command =
   | "refactoring-template"
   | "gate-template"
   | "activate-review-gate"
+  | "commit-implementation"
   | "validate-ledger"
   | "validate-task-delta";
 
@@ -166,6 +170,7 @@ type ParsedHandoff = {
 };
 
 type ParsedReviewerLaunch = {
+  stagedDiffHash?: string;
   launchedReviewers: string[];
   skippedReviewerNames: Set<string>;
 };
@@ -194,7 +199,7 @@ function main(): void {
 
   if (!isCommand(command)) {
     fail(
-      "Usage: plan-unit-delivery.ts <detect|validate-handoff|review-gate-input|activate-review-gate|reviewer-template|validate-launch-report|validate-review-report|refactoring-template|gate-template|validate-ledger|validate-task-delta> [--file path|--source-ref ref|--cwd path|--base path --head path --unit id|--task id] [--expected-head-sha sha] [--expected-artifact url]",
+      "Usage: plan-unit-delivery.ts <detect|validate-handoff|review-gate-input|activate-review-gate|commit-implementation|reviewer-template|validate-launch-report|validate-review-report|refactoring-template|gate-template|validate-ledger|validate-task-delta> [--file path|--source-ref ref|--cwd path|--base path --head path --unit id|--task id] [--expected-head-sha sha] [--expected-artifact url] [--message text]",
     );
   }
 
@@ -230,6 +235,11 @@ function main(): void {
 
   if (command === "activate-review-gate") {
     activateReviewGate(args);
+    return;
+  }
+
+  if (command === "commit-implementation") {
+    commitImplementation(args);
     return;
   }
 
@@ -361,6 +371,7 @@ function printReviewerTemplate(): void {
 \`\`\`yaml
 reviewer_launch:
   status: launched
+  staged_diff_hash: <staged diff hash given to the reviewer passes>
   launched_reviewers:
     - implementation-review
     - implementation-scrutiny
@@ -406,6 +417,7 @@ review_execution_rules:
   - Omit model overrides unless the user explicitly asks for one.
   - Print and validate reviewer_launch before waiting for review outcomes.
   - Validate reviewer_report before PR/MR creation or final delivery.
+  - Set reviewer_launch.staged_diff_hash to the staged diff hash given to the reviewer passes.
   - Set reviewer_report.reviewed_diff_hash to the staged diff hash reviewed by the reviewer passes.
 \`\`\`
 `);
@@ -684,9 +696,11 @@ function activateReviewGate(args: string[]): void {
 
   try {
     if (!hasStagedDiff(cwd)) {
-      emitBlockedReviewGate([
-        "plan-unit-delivery review gate requires a staged diff",
-      ]);
+      emitBlockedReviewGate(
+        ["plan-unit-delivery review gate requires a staged diff"],
+        undefined,
+        cwd,
+      );
     }
     diffHash = stagedDiffHash(cwd);
 
@@ -725,6 +739,79 @@ function activateReviewGate(args: string[]): void {
   }
 }
 
+function commitImplementation(args: string[]): void {
+  const cwd = optionValue(args, "--cwd") ?? process.cwd();
+  const message = optionValue(args, "--message") ?? optionValue(args, "-m");
+  if (!message) {
+    fail("commit-implementation requires --message <message>");
+  }
+
+  const input = readInput(args);
+  let reviewGateInput: ActiveReviewGateInput;
+  let diffHash = "";
+
+  try {
+    if (!hasStagedDiff(cwd)) {
+      emitBlockedReviewGate(
+        ["plan-unit-delivery implementation commit requires a staged diff"],
+        undefined,
+        cwd,
+      );
+    }
+    diffHash = stagedDiffHash(cwd);
+
+    const evidenceRef =
+      optionValue(args, "--source-ref") ?? optionValue(args, "--file");
+    reviewGateInput = buildPlanUnitDeliveryReviewGateInput(input, {
+      diffHash,
+      evidenceRef,
+    });
+  } catch (error) {
+    emitBlockedReviewGate([errorMessage(error)], undefined, cwd, diffHash);
+  }
+
+  let writeResult: ReviewGateWriteResult;
+  let validation: ReviewGateValidation;
+  try {
+    writeResult = writeActiveReviewGate(reviewGateInput, cwd);
+    validation = validateReviewGateForCommit(cwd);
+    if (!validation.ok) {
+      emitBlockedReviewGate(validation.errors, validation, cwd, diffHash);
+    }
+  } catch (error) {
+    emitBlockedReviewGate([errorMessage(error)], undefined, cwd, diffHash);
+  }
+
+  const commitCommand = implementationCommitCommand(message);
+  const result = spawnSync(commitCommand.command, commitCommand.args, {
+    cwd,
+    encoding: "utf8",
+  });
+  if (result.stderr) {
+    process.stderr.write(result.stderr);
+  }
+  if (result.error) {
+    fail(result.error.message);
+  }
+  if (result.status !== 0) {
+    process.exit(result.status ?? 1);
+  }
+
+  console.log(
+    JSON.stringify(
+      {
+        status: "implementation_commit_committed",
+        gate_outcome: "passed",
+        state_path: writeResult.statePath,
+        staged_diff_hash: validation.stagedDiffHash,
+        required_review_passes: validation.requiredReviewPasses,
+      },
+      null,
+      2,
+    ),
+  );
+}
+
 function emitBlockedReviewGate(
   blockers: string[],
   validation?: ReviewGateValidation,
@@ -758,7 +845,10 @@ function emitBlockedReviewGate(
         status: "blocked",
         gate_outcome: "blocked",
         blockers,
-        state_path: validation?.statePath ?? blockedGate?.statePath,
+        state_path:
+          validation?.statePath ??
+          blockedGate?.statePath ??
+          (cwd ? reviewGateStatePath(cwd) : undefined),
         staged_diff_hash: validation?.stagedDiffHash ?? diffHash,
       },
       null,
@@ -809,8 +899,9 @@ function buildPlanUnitDeliveryReviewGateInput(
   const handoff = validatedHandoff(input);
   const launch = validatedLaunchReport(input);
   const report = validatedReviewReport(input);
-  assertReviewerLaunchReportConsistent(launch, report);
+  assertReviewerLaunchFresh(launch, options.diffHash);
   assertReviewerReportFresh(report, options.diffHash);
+  assertReviewerLaunchReportConsistent(launch, report);
 
   const requiredReviewPasses = unique(report.launchedReviewers);
   const { results, blockingFindings } = reviewerReportGateResults(
@@ -847,6 +938,17 @@ function assertReviewerReportFresh(
   if (report.reviewedDiffHash !== diffHash) {
     throw new Error(
       `reviewer_report.reviewed_diff_hash is stale for current staged diff: expected ${diffHash}, got ${report.reviewedDiffHash ?? "<missing>"}`,
+    );
+  }
+}
+
+function assertReviewerLaunchFresh(
+  launch: ParsedReviewerLaunch,
+  diffHash: string,
+): void {
+  if (launch.stagedDiffHash !== diffHash) {
+    throw new Error(
+      `reviewer_launch.staged_diff_hash is stale for current staged diff: expected ${diffHash}, got ${launch.stagedDiffHash ?? "<missing>"}`,
     );
   }
 }
@@ -1237,6 +1339,31 @@ function validateDeliveryGateSemantics(
     );
   }
 
+  rejectLocalReviewEvidenceForHostedGate(
+    section,
+    "review_feedback_routing",
+    "routing or unsupported-host evidence",
+    errors,
+  );
+  rejectLocalReviewEvidenceForHostedGate(
+    section,
+    "artifact_host_review",
+    "artifact-host MR/PR review or approval evidence",
+    errors,
+  );
+  rejectLocalReviewEvidenceForHostedGate(
+    section,
+    "pipeline_monitoring",
+    "CI, pipeline, no-pipeline, or unavailable-pipeline evidence",
+    errors,
+  );
+  rejectLocalReviewEvidenceForHostedGate(
+    section,
+    "automatic_review_feedback_wait",
+    "latest-head Nitro feedback wait evidence",
+    errors,
+  );
+
   const artifactBoundaryGate = findSection(section, "unit_artifact_boundary");
   const artifactBoundaryEvidence = artifactBoundaryGate
     ? scalar(artifactBoundaryGate, "evidence")
@@ -1299,6 +1426,25 @@ function optionalArg(args: string[], name: string): string | undefined {
   }
 
   return value;
+}
+
+function rejectLocalReviewEvidenceForHostedGate(
+  ledgerSection: string,
+  gate: (typeof LEDGER_GATES)[number],
+  expectedEvidence: string,
+  errors: string[],
+): void {
+  const gateSection = findSection(ledgerSection, gate);
+  const evidence = gateSection ? scalar(gateSection, "evidence") : undefined;
+  if (!evidence) {
+    return;
+  }
+
+  if (LOCAL_REVIEW_EVIDENCE_PATTERN.test(evidence)) {
+    errors.push(
+      `${gate}.evidence must cite ${expectedEvidence}; local review gate evidence cannot satisfy hosted gates`,
+    );
+  }
 }
 
 function scalarOrBlock(input: string, key: string): string | undefined {
@@ -1401,6 +1547,7 @@ function validatedLaunchReport(input: string): ParsedReviewerLaunch {
   const section = extractSection(body, "reviewer_launch");
   const errors: string[] = [];
   const status = scalar(section, "status");
+  const stagedDiffHash = scalar(section, "staged_diff_hash");
   const launchedReviewers = list(section, "launched_reviewers");
   const skippedReviewers = list(section, "skipped_reviewers");
   const reviewPassIds = list(section, "review_pass_ids");
@@ -1415,6 +1562,12 @@ function validatedLaunchReport(input: string): ParsedReviewerLaunch {
 
   if (status !== "launched") {
     errors.push("reviewer_launch.status must be launched");
+  }
+
+  if (!stagedDiffHash) {
+    errors.push("reviewer_launch.staged_diff_hash is required");
+  } else if (!REVIEWED_DIFF_HASH_PATTERN.test(stagedDiffHash)) {
+    errors.push("reviewer_launch.staged_diff_hash must be a sha256 diff hash");
   }
 
   requireRequiredReviewers(launchedReviewers, errors);
@@ -1469,6 +1622,7 @@ function validatedLaunchReport(input: string): ParsedReviewerLaunch {
   }
 
   return {
+    stagedDiffHash,
     launchedReviewers,
     skippedReviewerNames,
   };
@@ -1772,6 +1926,7 @@ function isCommand(command: string | undefined): command is Command {
     "validate-review-report",
     "refactoring-template",
     "gate-template",
+    "commit-implementation",
     "validate-ledger",
     "validate-task-delta",
   ].includes(command ?? "");
@@ -1784,6 +1939,16 @@ function optionValue(args: string[], name: string): string | undefined {
   }
   const value = args[index + 1];
   return value && !value.startsWith("-") ? value : undefined;
+}
+
+function implementationCommitCommand(message: string): {
+  command: string;
+  args: string[];
+} {
+  return {
+    command: "pnpm",
+    args: ["ax", "commit", "--require-review-gate", "-m", message],
+  };
 }
 
 function errorMessage(error: unknown): string {

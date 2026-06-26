@@ -28,6 +28,8 @@ const NITRO_STATUSES = [
   "unavailable",
   "stale",
 ] as const;
+const LOCAL_REVIEW_EVIDENCE_PATTERN =
+  /\b(local[_ -]review(?:er)?(?:[_ -]?gate)?|reviewer[_-]passes|reviewer[_ -]?report|review[_ -]?gate|implementation[_-]review|implementation[_-]scrutiny|code[_-]quality[_-]review|code[_-]simplifier|deslop|docs[_-]alignment(?:[_-]review)?|ai[_-]readiness[_-]upkeep|security[_-]review)\b/i;
 
 type Command =
   | "template"
@@ -151,6 +153,14 @@ export function nitroFeedbackGateErrors(input: string): string[] {
   if (gate.requestEvidence.length === 0) {
     errors.push("request.evidence is required");
   }
+  if (
+    gate.requestEvidence.length > 0 &&
+    !gate.requestEvidence.some((item) =>
+      /\/request_review\s+@nitro\b/i.test(item),
+    )
+  ) {
+    errors.push("request.evidence must include /request_review @nitro");
+  }
   if (gate.startStatus !== "blocked" && gate.startEvidence.length === 0) {
     errors.push("start.evidence is required unless start.status is blocked");
   }
@@ -162,6 +172,13 @@ export function nitroFeedbackGateErrors(input: string): string[] {
       "completion.evidence is required unless completion.status is pending",
     );
   }
+  rejectLocalReviewEvidence(gate.requestEvidence, "request.evidence", errors);
+  rejectLocalReviewEvidence(gate.startEvidence, "start.evidence", errors);
+  rejectLocalReviewEvidence(
+    gate.completionEvidence,
+    "completion.evidence",
+    errors,
+  );
 
   validateGateOutcome(gate, errors);
 
@@ -179,6 +196,20 @@ function validateGate(input: string): void {
   }
 
   console.log("nitro_feedback_gate valid");
+}
+
+function rejectLocalReviewEvidence(
+  evidence: string[],
+  label: string,
+  errors: string[],
+): void {
+  for (const item of evidence) {
+    if (LOCAL_REVIEW_EVIDENCE_PATTERN.test(item)) {
+      errors.push(
+        `${label} must cite Nitro hosted review evidence; local review gate evidence cannot satisfy nitro_feedback_gate`,
+      );
+    }
+  }
 }
 
 function normalizeFeedback(input: string): void {
@@ -319,7 +350,7 @@ function normalizedGateForStatus(
     required: true
     requested_after_latest_push: true
     evidence:
-      - Nitro review requested for latest head
+      - /request_review @nitro posted for latest head
   start:
     status: ${startStatus}
     timeout_minutes: 10

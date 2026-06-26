@@ -14,6 +14,7 @@ const packagedSkillScriptDirs = [
   "skills/plan-orchestrator/scripts",
   "skills/plan-unit-sequencer/scripts",
   "skills/plan-unit-delivery/scripts",
+  "skills/plan-poc/scripts",
   "skills/nitro-review-feedback/scripts",
 ];
 

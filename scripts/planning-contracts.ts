@@ -106,6 +106,8 @@ const PLANNING_FEEDBACK_DISPOSITIONS = [
   "non_actionable",
   "blocked",
 ] as const;
+const LOCAL_REVIEW_EVIDENCE_PATTERN =
+  /\b(local[_ -]review(?:er)?(?:[_ -]?gate)?|reviewer[_-]passes|reviewer[_ -]?report|review[_ -]?gate|implementation[_-]review|implementation[_-]scrutiny|code[_-]quality[_-]review|code[_-]simplifier|deslop|docs[_-]alignment(?:[_-]review)?|ai[_-]readiness[_-]upkeep|security[_-]review)\b/i;
 
 const DESCRIPTION_POLICY_READBACK_OUTCOMES = [
   "clean",
@@ -143,11 +145,12 @@ export function findSection(input: string, sectionName: string): string | null {
   }
 
   const sectionIndent = lines[start].match(/^(\s*)/)?.[1].length ?? 0;
-  const sectionLines: string[] = [];
+  const childIndent = sectionIndent + 2;
+  const values: string[] = [];
 
   for (const line of lines.slice(start + 1)) {
     if (line.trim() === "") {
-      sectionLines.push("");
+      values.push("");
       continue;
     }
 
@@ -156,10 +159,12 @@ export function findSection(input: string, sectionName: string): string | null {
       break;
     }
 
-    sectionLines.push(line.slice(Math.min(indent, sectionIndent + 2)));
+    values.push(
+      line.startsWith(" ".repeat(childIndent)) ? line.slice(childIndent) : line,
+    );
   }
 
-  return sectionLines.join("\n");
+  return values.join("\n");
 }
 
 export function hasSection(input: string, sectionName: string): boolean {
@@ -426,6 +431,16 @@ export function validatePlanningReviewContract(
   if (review.review_evidence.length === 0) {
     errors.push("planning_review.review.evidence is required");
   }
+  rejectLocalReviewEvidenceForHostedPlanningField(
+    review.stack_base_evidence,
+    "planning_review.stack_base_evidence",
+    errors,
+  );
+  rejectLocalReviewEvidenceListForHostedPlanningField(
+    review.review_evidence,
+    "planning_review.review.evidence",
+    errors,
+  );
 
   validatePlanningFeedbackDisposition(review, errors);
 
@@ -662,6 +677,21 @@ export function validateDescriptionPolicy(
   }
 }
 
+function rejectLocalReviewEvidenceForHostedPlanningField(
+  evidence: string | undefined,
+  label: string,
+  errors: string[],
+): void {
+  if (!evidence) {
+    return;
+  }
+  if (LOCAL_REVIEW_EVIDENCE_PATTERN.test(evidence)) {
+    errors.push(
+      `${label} must cite hosted planning review evidence; local review gate evidence cannot satisfy planning_review`,
+    );
+  }
+}
+
 function validateBooleanOrCreatedNotApplicable(
   value: string | undefined,
   label: string,
@@ -677,6 +707,16 @@ function validateBooleanOrCreatedNotApplicable(
   }
 
   errors.push(`${label} must be true unless update_mode is created`);
+}
+
+function rejectLocalReviewEvidenceListForHostedPlanningField(
+  evidence: string[],
+  label: string,
+  errors: string[],
+): void {
+  for (const item of evidence) {
+    rejectLocalReviewEvidenceForHostedPlanningField(item, label, errors);
+  }
 }
 
 function validatePlanningFeedbackDisposition(
@@ -701,6 +741,11 @@ function validatePlanningFeedbackDisposition(
       "planning_review.planning_feedback_disposition.evidence is required",
     );
   }
+  rejectLocalReviewEvidenceListForHostedPlanningField(
+    review.planning_feedback_evidence,
+    "planning_review.planning_feedback_disposition.evidence",
+    errors,
+  );
   if (review.planning_feedback_items.length === 0) {
     errors.push(
       "planning_review.planning_feedback_disposition.items must enumerate Nitro planning feedback or record an explicit none item",
@@ -712,6 +757,11 @@ function validatePlanningFeedbackDisposition(
     requireValue(item.note_id, `${label}.note_id`, errors);
     requireValue(item.disposition, `${label}.disposition`, errors);
     requireValue(item.evidence, `${label}.evidence`, errors);
+    rejectLocalReviewEvidenceForHostedPlanningField(
+      item.evidence,
+      `${label}.evidence`,
+      errors,
+    );
 
     if (
       item.disposition &&

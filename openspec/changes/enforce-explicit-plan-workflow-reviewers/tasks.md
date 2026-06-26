@@ -63,68 +63,68 @@
   artifact fingerprint, generated paths, and strict OpenSpec validation; rerun
   readiness reviewers on the materialized OpenSpec diff when provenance cannot
   be proven.
-- [ ] 3.7 Add `plan-review` tests for missing, stale, malformed, blocking,
+- [x] 3.7 Add `plan-review` tests for missing, stale, malformed, blocking,
   wrong-fingerprint, and materialized-provenance evidence failures at the
   planning commit boundary.
-- [ ] 3.8 Add migration tests proving `plan-ready` normal workflows no longer
+- [x] 3.8 Add migration tests proving `plan-ready` normal workflows no longer
   write readiness review-gate state and `plan-review` writes it only at the
   planning commit boundary, including a rejected legacy activation-path test.
 
 ## 4. Implementation Commit Boundary
 
-- [ ] 4.1 Update `plan-unit-delivery` reviewer launch and report contracts so
+- [x] 4.1 Update `plan-unit-delivery` reviewer launch and report contracts so
   implementation commits require fresh explicit reviewer evidence for the
   current staged implementation diff.
-- [ ] 4.2 Preserve explicit `not_applicable` reviewer evidence without counting
+- [x] 4.2 Preserve explicit `not_applicable` reviewer evidence without counting
   skipped reviewers as required gate passes.
-- [ ] 4.3 Ensure any direct blocked-gate fallback does not become a second
+- [x] 4.3 Ensure any direct blocked-gate fallback does not become a second
   review-gate state implementation outside shared review-gate APIs.
-- [ ] 4.4 Invoke required-gate `ax commit` for every head-changing
+- [x] 4.4 Invoke required-gate `ax commit` for every head-changing
   implementation-unit commit owned by `plan-unit-delivery`, including
   implementation edits, tests, task-state updates, review-feedback fixes,
   pipeline fixes, conflict fixes, and restack fixes.
-- [ ] 4.5 Add `plan-unit-delivery` tests for required reviewer extraction,
+- [x] 4.5 Add `plan-unit-delivery` tests for required reviewer extraction,
   skipped reviewers, blocking outcomes, missing outcomes, stale evidence,
   missing subagents, linked worktrees, required-gate invocation, and multiple
   implementation-unit commits requiring fresh gates.
 
 ## 5. Orchestrator Evidence Boundary
 
-- [ ] 5.1 Update `plan-orchestrator` docs, prompts, validators, and tests so it
+- [x] 5.1 Update `plan-orchestrator` docs, prompts, validators, and tests so it
   validates phase evidence freshness and routes stale or missing evidence back
   to the owning phase.
-- [ ] 5.2 Prove `plan-orchestrator` does not write review-gate state.
-- [ ] 5.3 Prove `plan-orchestrator` does not invent or recompute reviewer lists.
-- [ ] 5.4 Add tests for missing readiness evidence routing to `plan-ready` and
+- [x] 5.2 Prove `plan-orchestrator` does not write review-gate state.
+- [x] 5.3 Prove `plan-orchestrator` does not invent or recompute reviewer lists.
+- [x] 5.4 Add tests for missing readiness evidence routing to `plan-ready` and
   missing planning or delivery evidence routing to the owning phase.
 
 ## 6. Local Gate And Hosted Gate Separation
 
-- [ ] 6.1 Add validation or tests proving local reviewer gate evidence cannot
+- [x] 6.1 Add validation or tests proving local reviewer gate evidence cannot
   satisfy `planning_review`, `nitro_feedback_gate`, MR approval,
   CI/no-pipeline inspection, or unsupported-host routing.
-- [ ] 6.2 Keep `/request_review @nitro`, latest-head Nitro feedback, and
+- [x] 6.2 Keep `/request_review @nitro`, latest-head Nitro feedback, and
   actionable-feedback resolution as separate hosted-review requirements after
   local commit gates pass.
-- [ ] 6.3 Document that local review gates block commits and hosted Nitro gates
+- [x] 6.3 Document that local review gates block commits and hosted Nitro gates
   block stack advancement or delivery completion.
 
 ## 7. Instructions, Prompts, And Runtime Alignment
 
-- [ ] 7.1 Update root `AGENTS.md`, `instructions/AGENTS.md`, and linked rule
+- [x] 7.1 Update root `AGENTS.md`, `instructions/AGENTS.md`, and linked rule
   files such as `rules/git-and-review.md` so agents use `ax commit`, workflow
   skills use required-gate mode for workflow-owned commits, and raw
   `git commit` remains Rene's manual escape hatch.
-- [ ] 7.2 Update `skills/ax-cli`, affected plan workflow skills, and adapter
+- [x] 7.2 Update `skills/ax-cli`, affected plan workflow skills, and adapter
   prompts for explicit reviewer evidence and required-gate commit behavior.
-- [ ] 7.3 Add or update instruction and skill validation tests for the new
+- [x] 7.3 Add or update instruction and skill validation tests for the new
   guidance.
-- [ ] 7.4 Run `writing-skills` review for changed shared skills, prompts, and
+- [x] 7.4 Run `writing-skills` review for changed shared skills, prompts, and
   agent behavior.
 
 ## 8. Verification And Runtime Refresh
 
-- [ ] 8.1 Run focused tests:
+- [x] 8.1 Run focused tests:
   `pnpm exec node --import tsx --test tests/unit/review-gate.test.ts`,
   `pnpm exec node --import tsx --test tests/unit/plan-ready-script.test.ts`,
   `pnpm exec node --import tsx --test tests/unit/plan-review-script.test.ts`,
@@ -134,15 +134,15 @@
   `pnpm exec node --import tsx --test tests/integration/ax-cli.test.ts`,
   `pnpm exec node --import tsx --test tests/unit/agent-instructions.test.ts`,
   and `pnpm exec node --import tsx --test tests/unit/skill-validate.test.ts`.
-- [ ] 8.2 Run `pnpm exec tsx scripts/skill-validate.ts`.
-- [ ] 8.3 Run `pnpm run test:unit`, `pnpm run test:integration`, and
+- [x] 8.2 Run `pnpm exec tsx scripts/skill-validate.ts`.
+- [x] 8.3 Run `pnpm run test:unit`, `pnpm run test:integration`, and
   `pnpm test`.
-- [ ] 8.4 Discover configured runtime profiles from `ax.config.json`, then run
+- [x] 8.4 Discover configured runtime profiles from `ax.config.json`, then run
   `pnpm ax update --all-profiles`.
-- [ ] 8.5 Add runtime-refresh completion evidence for installed surfaces by
+- [x] 8.5 Add runtime-refresh completion evidence for installed surfaces by
   recording the required `pnpm ax validate --all-profiles` and
   `pnpm ax status --all-profiles` results in the delivery ledger or final stack
   evidence.
-- [ ] 8.6 Add hook validation completion evidence with
+- [x] 8.6 Add hook validation completion evidence with
   `pnpm ax hooks validate` only when hook source or hook registration behavior
   changes in the implementation stack.

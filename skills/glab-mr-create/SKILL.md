@@ -79,6 +79,8 @@ first so routing and full description policy stay in one place.
      artifacts, or private thread metadata. Use summaries, hashes, thread
      references, note IDs, discussion IDs, or stable correlation IDs when
      support-artifact evidence matters.
+   - Omit raw local reviewer evidence, local review-gate state, and private plan
+     support artifacts; do not present them as hosted review or Nitro evidence.
    - Link directly to reviewer-needed issues, related MRs, or upstream resources.
 
    Fallback body:
@@ -139,6 +141,7 @@ first so routing and full description policy stay in one place.
 | Guessing target branch | Read remote HEAD, branch config, or project docs |
 | Leaking local process into the MR body | Keep reviewer evidence self-contained and omit local-only artifacts |
 | Exposing private plan-support paths | Use summaries, hashes, thread references, note IDs, discussion IDs, or stable correlation IDs |
+| Treating local review-gate evidence as hosted review | Use host metadata, CI/no-pipeline inspection, and Nitro feedback for hosted status |
 | Naming upstream resources without links | Include actual URLs for reviewer-needed references |
 | Handling a neutral PR/MR request here | Use `change-request-create` before provider mutation |
 
@@ -151,7 +154,8 @@ first so routing and full description policy stay in one place.
 - Process-heavy change with local plans, pressure tests, internal review gates,
   or private plan support artifacts: pass only if the MR body includes
   self-contained reviewer evidence, omits references to excluded local
-  artifacts, and links directly to reviewer-needed upstream resources.
+  artifacts, does not treat local gates as hosted review, and links directly to
+  reviewer-needed upstream resources.
 
 ## Test Evidence
 

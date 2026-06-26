@@ -178,7 +178,10 @@ and next action.
    default. If the user or active workflow explicitly asks for a required local
    commit gate, `scripts/plan-review.ts review-gate-input` and
    `scripts/plan-review.ts commit-planning` remain the opt-in compatibility
-   path; do not recompute reviewer lists.
+   path; do not recompute reviewer lists. This local commit boundary does not
+   satisfy hosted planning review, Nitro feedback, MR approval, CI or
+   no-pipeline inspection, or the `planning_review` handoff required before
+   sequencing.
 9. Before pushing or creating/updating the planning PR/MR, run the final
    personal publication checkpoint against the planning branch diff and exact
    HEAD SHA. Record target base, diff scope, HEAD SHA, readiness reviewer
@@ -230,7 +233,11 @@ and next action.
     - Developer review: keep the PR/MR open and report pending human review; do
       not fabricate approval.
 15. Apply only plan/documentation feedback. If feedback asks for implementation,
-    record it as a follow-up or blocker; do not start coding.
+    Hosted review gates block implementation sequencing. A clean local planning
+    commit is necessary evidence for the planning branch, but sequencing starts
+    only after the hosted `planning_review` handoff records latest-head Nitro
+    closure and actionable feedback disposition.
+   record it as a follow-up or blocker; do not start coding.
 16. If the branch head changes after feedback fixes, rerun artifact validation
     and rerun the final personal publication checkpoint for the new branch diff
     and exact HEAD SHA before any push or hosted artifact mutation. Then push,

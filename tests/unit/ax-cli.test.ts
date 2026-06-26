@@ -19,6 +19,7 @@ import test from "node:test";
 import type { Command } from "commander";
 
 import {
+  acceptsDurableManagedShimSourceForDisposableRuntime,
   claudeStartupHookStatus,
   codexStartupHookStatus,
   collectOpenSpecProjectSignals,
@@ -276,6 +277,61 @@ test("Runtime invocation context uses AX executable path env var", () => {
         originalAgentRuntimeExecutablePath;
     }
   }
+});
+
+test("disposable runtime status accepts durable managed shim source from the same repository", () => {
+  withTempDir((directory) => {
+    const durableShimSource = join(directory, "durable", "ai");
+    mkdirSync(durableShimSource, { recursive: true });
+    git(durableShimSource, ["init"]);
+    git(durableShimSource, ["config", "user.email", "agent@example.com"]);
+    git(durableShimSource, ["config", "user.name", "Agent Runtime"]);
+    writeFileSync(join(durableShimSource, "README.md"), "test\n", "utf-8");
+    git(durableShimSource, ["add", "README.md"]);
+    git(durableShimSource, ["commit", "-m", "Initial commit"]);
+
+    const disposableRuntimeSource = join(
+      directory,
+      ".codex",
+      "worktrees",
+      "delivery",
+      "ai",
+    );
+    git(durableShimSource, ["worktree", "add", disposableRuntimeSource]);
+
+    const unrelatedDurableSource = join(directory, "other", "ai");
+    mkdirSync(unrelatedDurableSource, { recursive: true });
+    git(unrelatedDurableSource, ["init"]);
+
+    assert.equal(
+      acceptsDurableManagedShimSourceForDisposableRuntime(
+        disposableRuntimeSource,
+        durableShimSource,
+      ),
+      true,
+    );
+    assert.equal(
+      acceptsDurableManagedShimSourceForDisposableRuntime(
+        disposableRuntimeSource,
+        disposableRuntimeSource,
+      ),
+      false,
+    );
+    assert.equal(
+      acceptsDurableManagedShimSourceForDisposableRuntime(
+        disposableRuntimeSource,
+        unrelatedDurableSource,
+      ),
+      false,
+    );
+    assert.equal(
+      acceptsDurableManagedShimSourceForDisposableRuntime(
+        durableShimSource,
+        disposableRuntimeSource,
+      ),
+      false,
+    );
+  });
 });
 
 test("runtime config does not use reusable scripts for skill portability", () => {

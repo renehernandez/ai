@@ -1,4 +1,4 @@
 interface:
   display_name: "AX CLI"
   short_description: "Use the ax CLI correctly"
-  default_prompt: "Use $ax-cli to choose and validate the right ax command."
+  default_prompt: "Use $ax-cli to choose and validate the right ax command. Agents commit through ax commit instead of raw git commit. For ordinary non-workflow commits, inspect review-gate state when relevant and use ax commit -m <message>. For workflow-owned commits that require explicit reviewer evidence, use ax commit --require-review-gate -m <message> or the owning workflow helper that delegates to it. If required-gate mode reports missing, stale, blocking, invalid, or unconsumed review-gate state, stop before push or hosted review, repair the evidence, and rerun the owning workflow step. Do not use commit-shape-mutating flags, pathspec commits, --amend, -a, --all, --include, --only, or --no-verify."

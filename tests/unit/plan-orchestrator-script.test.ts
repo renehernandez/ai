@@ -80,6 +80,22 @@ function runPlanOrchestrator(
   };
 }
 
+function runPlanOrchestratorInCwd(
+  command: string,
+  content: string,
+  cwd: string,
+): { status: number | null; stderr: string; stdout: string } {
+  let result:
+    | { status: number | null; stderr: string; stdout: string }
+    | undefined;
+  withTempFile(content, (path) => {
+    result = runPlanOrchestratorArgs([command, "--file", path], cwd);
+  });
+
+  assert.ok(result);
+  return result;
+}
+
 function runPlanOrchestratorCommand(command: string): {
   status: number | null;
   stderr: string;
@@ -251,6 +267,25 @@ const resumeReport = `orchestrator_resume:
 
       - [x] 1.1 First deliverable
       - [ ] 1.2 Future deliverable
+  phase_evidence:
+    readiness:
+      owner: plan-ready
+      status: fresh
+      artifact_fingerprint: feedface
+      expected_artifact_fingerprint: feedface
+      route_to:
+    planning_commit:
+      owner: plan-review
+      status: fresh
+      reviewed_head: def456
+      expected_head_sha: def456
+      route_to:
+    delivery:
+      owner: plan-unit-delivery
+      status: fresh
+      task_state_fingerprint: feedface
+      expected_task_state_fingerprint: feedface
+      route_to:
   unit_artifacts:
     - unit_id: "1"
       artifact: https://git.fullscript.io/group/project/-/merge_requests/2
@@ -339,6 +374,45 @@ test("plan-review-request-template emits a readable summary before YAML", () => 
   assert.match(result.stdout, /cleanup_evidence:/);
 });
 
+test("plan-review-request-template copies reviewer evidence without embedding reviewer policy", () => {
+  const result = runPlanOrchestratorCommand("plan-review-request-template");
+  const source = readFileSync(planOrchestratorScript, "utf8");
+  const ownerReviewerPolicyNames = [
+    "implementation-readiness",
+    "edge-cases-and-risks",
+    "simplification-and-scope-control",
+    "refactoring-opportunities",
+    "security-and-auth",
+    "data-migration-and-backfill",
+    "ci-and-release-impact",
+    "frontend-ux-accessibility",
+    "infra-and-cloud",
+    "docs-and-agent-alignment",
+    "performance-and-scale",
+    "ax-and-skill-compatibility",
+    "implementation-review",
+    "implementation-scrutiny",
+    "code-quality-review",
+    "code-simplifier",
+    "deslop",
+    "ai-readiness-upkeep",
+    "docs-alignment-review",
+    "security-review",
+  ];
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /copy each plan-ready baseline reviewer/);
+  assert.match(result.stdout, /copy each selected plan-ready dynamic reviewer/);
+  assert.match(result.stdout, /copy every plan-ready per-reviewer status/);
+  assert.doesNotMatch(
+    source,
+    /const (BASELINE_REVIEWERS|OPTIONAL_REVIEWERS|REVIEW_PASSES)/,
+  );
+  for (const reviewer of ownerReviewerPolicyNames) {
+    assert.equal(source.includes(reviewer), false, reviewer);
+  }
+});
+
 test("resume-template emits a readable summary before YAML", () => {
   const result = runPlanOrchestratorCommand("resume-template");
 
@@ -350,6 +424,10 @@ test("resume-template emits a readable summary before YAML", () => {
   );
   assert.match(result.stdout, /status: resume_ready \| delivery_blocked/);
   assert.doesNotMatch(result.stdout, /status: inspected/);
+  assert.match(result.stdout, /phase_evidence:/);
+  assert.match(result.stdout, /readiness:/);
+  assert.match(result.stdout, /planning_commit:/);
+  assert.match(result.stdout, /delivery:/);
 });
 
 test("stack-ready-template emits a readable summary before YAML", () => {
@@ -659,6 +737,140 @@ test("validate-planning-review blocks unsupported review hosts", () => {
 
 test("validate-resume accepts inspected stack state", () => {
   const result = runPlanOrchestrator("validate-resume", resumeReport);
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /orchestrator_resume valid/);
+});
+
+test("validation commands do not write review-gate state", () => {
+  withTempOpenSpecRepo((directory) => {
+    const reviewGateState = join(directory, ".git", "ax", "review-gate.json");
+    const validations = [
+      ["validate-planning-review", planningReview],
+      ["validate-resume", resumeReport],
+      ["validate-stack-ready", stackReady],
+    ] as const;
+
+    for (const [command, input] of validations) {
+      const result = runPlanOrchestratorInCwd(command, input, directory);
+
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.equal(existsSync(reviewGateState), false);
+    }
+  });
+});
+
+test("validate-resume routes stale readiness evidence to plan-ready", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport.replace(
+      "      artifact_fingerprint: feedface\n      expected_artifact_fingerprint: feedface",
+      "      artifact_fingerprint: stale\n      expected_artifact_fingerprint: feedface",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /phase_evidence\.readiness is stale; route_to plan-ready/,
+  );
+});
+
+test("validate-resume routes stale planning commit evidence to plan-review", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport.replace(
+      "      reviewed_head: def456\n      expected_head_sha: def456",
+      "      reviewed_head: stale\n      expected_head_sha: def456",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /phase_evidence\.planning_commit is stale; route_to plan-review/,
+  );
+});
+
+test("validate-resume routes stale delivery evidence to plan-unit-delivery", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport.replace(
+      "      task_state_fingerprint: feedface\n      expected_task_state_fingerprint: feedface",
+      "      task_state_fingerprint: stale\n      expected_task_state_fingerprint: feedface",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /phase_evidence\.delivery is stale; route_to plan-unit-delivery/,
+  );
+});
+
+test("validate-resume routes missing readiness evidence to plan-ready", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport.replace(
+      "    readiness:\n      owner: plan-ready\n      status: fresh\n      artifact_fingerprint: feedface\n      expected_artifact_fingerprint: feedface\n      route_to:\n",
+      "",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /phase_evidence\.readiness is missing; route_to plan-ready/,
+  );
+});
+
+test("validate-resume routes missing planning commit evidence to plan-review", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport.replace(
+      "    planning_commit:\n      owner: plan-review\n      status: fresh\n      reviewed_head: def456\n      expected_head_sha: def456\n      route_to:\n",
+      "",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /phase_evidence\.planning_commit is missing; route_to plan-review/,
+  );
+});
+
+test("validate-resume routes missing delivery evidence to plan-unit-delivery", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport.replace(
+      "    delivery:\n      owner: plan-unit-delivery\n      status: fresh\n      task_state_fingerprint: feedface\n      expected_task_state_fingerprint: feedface\n      route_to:\n",
+      "",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /phase_evidence\.delivery is missing; route_to plan-unit-delivery/,
+  );
+});
+
+test("validate-resume accepts blocked stale phase evidence with owning route", () => {
+  const result = runPlanOrchestrator(
+    "validate-resume",
+    resumeReport
+      .replace("status: resume_ready", "status: delivery_blocked")
+      .replace(
+        "      status: fresh\n      artifact_fingerprint: feedface",
+        "      status: stale\n      artifact_fingerprint: stale",
+      )
+      .replace(
+        "      route_to:\n    planning_commit:",
+        "      route_to: plan-ready\n    planning_commit:",
+      )
+      .replace("  blockers: []", "  blockers:\n    - rerun plan-ready"),
+  );
 
   assert.equal(result.status, 0);
   assert.match(result.stdout, /orchestrator_resume valid/);

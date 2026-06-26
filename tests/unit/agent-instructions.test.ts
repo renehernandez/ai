@@ -71,6 +71,24 @@ for (const file of ["AGENTS.md", "instructions/AGENTS.md"] as const) {
 for (const file of [
   "AGENTS.md",
   "instructions/AGENTS.md",
+  "rules/git-and-review.md",
+] as const) {
+  test(`${file} requires plan workflow commit helpers to use required-gate mode`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /Plan workflow skills/);
+    assert.match(text, /required-gate commit helpers/);
+    assert.match(text, /ax commit --require-review-gate/);
+    assert.match(
+      text,
+      /raw `git commit` remains Rene's manual terminal escape hatch/,
+    );
+  });
+}
+
+for (const file of [
+  "AGENTS.md",
+  "instructions/AGENTS.md",
   "skills/plan-orchestrator/SKILL.md",
 ] as const) {
   test(`${file} pins plan-orchestrator terminal states`, () => {
@@ -191,6 +209,60 @@ test("plan workflow agent prompts use delivery-unit MR contracts", () => {
   assert.match(deliveryPrompt, /one commit per nested work item/i);
   assert.match(deliveryPrompt, /validate-task-delta.*--unit/);
 });
+
+test("plan-poc runtime surfaces keep rehearsal separate from mergeable delivery", () => {
+  const files = [
+    "skills/plan-poc/SKILL.md",
+    "skills/plan-poc/agents/openai.yaml",
+    "rules/investigation-and-implementation.md",
+  ] as const;
+
+  for (const file of files) {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /plan-poc|Plan POC/);
+    assert.match(text, /opt-in|explicit/i);
+    assert.match(text, /review-only|rehearsal/i);
+    assert.match(text, /draft/i);
+    assert.match(text, /close[d]? unmerged|not intended to merge/i);
+    assert.match(text, /private.*learning summary|poc_learning_summary/i);
+    assert.match(text, /revised OpenSpec/i);
+    assert.match(text, /POC\s+commits/i);
+    assert.match(text, /plan-orchestrator/i);
+  }
+
+  const planPocPrompt = readFileSync(
+    "skills/plan-poc/agents/openai.yaml",
+    "utf-8",
+  );
+
+  assert.match(planPocPrompt, /Do not emit planning_review/);
+  assert.match(planPocPrompt, /plan_delivery_handoff/);
+  assert.match(planPocPrompt, /delivery_gate_ledger/);
+  assert.match(planPocPrompt, /stack_ready/);
+  assert.match(planPocPrompt, /normal mergeable implementation delivery/);
+  assert.match(planPocPrompt, /outside the repo by default/);
+});
+
+for (const file of [
+  "skills/plan-orchestrator/SKILL.md",
+  "skills/plan-orchestrator/agents/openai.yaml",
+] as const) {
+  test(`${file} rejects plan-poc artifacts as stack-ready evidence`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /plan-poc/);
+    assert.match(text, /background for revising the\s+OpenSpec/i);
+    assert.match(text, /POC branch/i);
+    assert.match(text, /POC commits/i);
+    assert.match(text, /contextual POC task state/i);
+    assert.match(text, /draft POC artifact/i);
+    assert.match(text, /planning_review/);
+    assert.match(text, /stack base evidence/i);
+    assert.match(text, /implementation artifact evidence/i);
+    assert.match(text, /stack_ready/);
+  });
+}
 
 test("implementation rules keep local workflow artifacts out of work-project repos", () => {
   const text = readFileSync(
@@ -563,5 +635,119 @@ for (const file of [
     assert.match(text, /note IDs/);
     assert.match(text, /discussion IDs/);
     assert.match(text, /stable\s+correlation IDs/);
+  });
+}
+
+for (const file of [
+  "skills/plan-review/SKILL.md",
+  "skills/plan-unit-delivery/SKILL.md",
+  "skills/plan-unit-sequencer/SKILL.md",
+] as const) {
+  test(`${file} separates local commit gates from hosted advancement gates`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /local review gate/i);
+    assert.match(text, /commit(?:-boundary| boundary|s?\b)/i);
+    assert.match(text, /hosted/i);
+    assert.match(text, /Nitro/i);
+    assert.match(text, /stack advancement|implementation sequencing|advance/i);
+    assert.match(text, /actionable feedback|actionable-feedback/i);
+  });
+}
+
+test("ax-cli prompt documents required-gate workflow commit behavior", () => {
+  const text = readFileSync("skills/ax-cli/agents/openai.yaml", "utf-8");
+
+  assert.match(text, /ax commit/);
+  assert.match(text, /raw git commit/);
+  assert.match(text, /workflow-owned commits/);
+  assert.match(text, /explicit reviewer evidence/);
+  assert.match(text, /ax commit --require-review-gate/);
+  assert.match(text, /owning workflow helper/);
+  assert.match(text, /stop before push or hosted review/);
+  assert.match(text, /--no-verify/);
+});
+
+for (const file of [
+  "skills/plan-orchestrator/SKILL.md",
+  "skills/plan-orchestrator/agents/openai.yaml",
+] as const) {
+  test(`${file} preserves phase-owned reviewer evidence and commit ownership`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /reviewer lists/);
+    assert.match(text, /reviewer evidence/);
+    assert.match(text, /owning phase/);
+    assert.match(text, /do not recompute|must not recompute/);
+    assert.match(text, /local review-gate state/);
+    assert.match(text, /plan-review/);
+    assert.match(text, /plan-unit-delivery/);
+  });
+}
+
+test("plan-unit-sequencer prompt keeps local gates out of stack advancement", () => {
+  const text = readFileSync(
+    "skills/plan-unit-sequencer/agents/openai.yaml",
+    "utf-8",
+  );
+
+  assert.match(text, /local reviewer gates/);
+  assert.match(text, /commit-boundary proof/);
+  assert.match(text, /MR approval/);
+  assert.match(text, /CI\/no-pipeline inspection/);
+  assert.match(text, /Nitro feedback/);
+  assert.match(text, /stack advancement evidence/);
+  assert.match(text, /latest-head Nitro review/);
+});
+
+const hostedReviewEvidenceFiles = [
+  {
+    file: "skills/review-feedback-routing/SKILL.md",
+    patterns: [
+      /Local reviewer evidence/,
+      /source provenance/,
+      /artifact-host inspection/,
+      /CI or no-pipeline/,
+      /nitro_feedback_gate/,
+    ],
+  },
+  {
+    file: "skills/gitlab-adapter-review/SKILL.md",
+    patterns: [
+      /Local reviewer evidence/,
+      /local review-gate state/,
+      /not artifact-host context/,
+      /pipeline\/check state/,
+    ],
+  },
+  {
+    file: "skills/change-request-create/SKILL.md",
+    patterns: [
+      /local reviewer evidence/,
+      /local\s+review-gate state/,
+      /hosted review/,
+      /CI/,
+      /Nitro evidence/,
+    ],
+  },
+  {
+    file: "skills/glab-mr-create/SKILL.md",
+    patterns: [
+      /local reviewer evidence|local review-gate evidence/,
+      /local review-gate state/,
+      /hosted review/,
+      /CI\/no-pipeline inspection/,
+      /Nitro evidence/,
+    ],
+  },
+] as const;
+
+for (const { file, patterns } of hostedReviewEvidenceFiles) {
+  test(`${file} rejects local review-gate evidence as hosted review evidence`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    for (const pattern of patterns) {
+      assert.match(text, pattern);
+    }
   });
 }

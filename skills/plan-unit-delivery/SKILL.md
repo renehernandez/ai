@@ -77,13 +77,18 @@ path.
 7. For OpenSpec delivery units, validate the unit delta against the unit base.
 8. Launch implementation reviewers through internal subagents.
 9. Reconcile reviewer outcomes.
-10. Validate `reviewer_launch` and `reviewer_report`; the report must include
-    the staged diff hash reviewed by the implementation reviewers.
+10. Validate `reviewer_launch` and `reviewer_report`; the launch must include
+    the staged diff hash given to implementation reviewers, and the report must
+    include the same staged diff hash reviewed by the reviewers.
+    `not_applicable` skipped reviewers must remain explicit evidence in
+    source provenance, but must not become required local gate passes.
 11. Commit material implementation changes through the repo-required commit wrapper
     after local verification and reviewer reconciliation. Do not activate the
     local review gate or use the required-gate commit helper by default.
-    Required local commit gates remain opt-in only when the user or active
-    workflow explicitly requires them.
+    Required local commit gates and the `commit-implementation` helper remain
+    opt-in only when the user or active workflow explicitly requires them. If the
+    helper is used and reports that the review gate was not consumed or failed to
+    consume, treat the created head as not locally reviewed for this workflow.
 12. Before any push, implementation PR/MR creation or update, direct
     publication, hosted review request, or Nitro request, run the final personal
     publication checkpoint against the branch diff and exact HEAD SHA. Record
@@ -92,7 +97,11 @@ path.
     workflow asks for reviewer-facing evidence. If the checkpoint is missing,
     stale, tied to another HEAD, or has unresolved blockers, stop before
     publication and rerun the needed reviewers or fixes.
-13. Run review-feedback routing.
+13. Run review-feedback routing. Hosted gates remain required after publication:
+    artifact creation, artifact-host inspection, CI or no-pipeline inspection,
+    explicit `/request_review @nitro`, latest-head Nitro feedback, and
+    actionable-feedback resolution still block stack advancement and delivery
+    completion.
 14. Open or update one routed implementation PR/MR stacked on the expected
     stack tip from the handoff.
 15. Prove the implementation artifact is separate from the planning-review
@@ -184,7 +193,8 @@ checkbox delta exists.
 | Fabricating delivery-unit delta proof for an atomic plan | Mark `delivery_unit_delta` not applicable with `selected_unit_id: atomic` |
 | Recording delta proof only in chat prose | Put the command and `delivery_unit_delta_valid` output in `delivery_gate_ledger.delivery_unit_delta` |
 | Publishing before the final personal publication checkpoint | Run the checkpoint for the branch diff and exact HEAD SHA before push, PR/MR mutation, direct publication, hosted review, or Nitro |
-| Reusing reviewer reports after staging new changes | Rerun reviewers and update `reviewer_report.reviewed_diff_hash` |
+| Reusing reviewer evidence after staging new changes | Rerun reviewers and update both `reviewer_launch.staged_diff_hash` and `reviewer_report.reviewed_diff_hash` |
+| Treating a passed local review gate as hosted approval | Continue through artifact creation, artifact-host inspection, CI or no-pipeline inspection, explicit `/request_review @nitro`, latest-head Nitro feedback, and actionable-feedback resolution |
 | Treating delivery gate evidence as durable state | Keep sequence state in OpenSpec |
 | Treating an open PR/MR as done before pipelines settle | Keep monitoring latest-head pipelines |
 | Assuming Nitro feedback is absent immediately after push | Request Nitro for the latest head, wait up to 10 minutes for review start, then wait for completion |
