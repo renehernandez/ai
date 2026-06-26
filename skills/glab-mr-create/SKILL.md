@@ -8,7 +8,7 @@ allowed-tools: Bash(glab mr:*), Bash(git:*)
 
 Create GitLab merge requests with `glab` after verifying branch, remote, and duplicate-MR state. Prefer draft MRs unless the user explicitly asks for a ready MR.
 
-This is the default MR creation workflow for repos hosted in the Fullscript Lab GitLab instance. Apply repo-local templates, labels, reviewers, and merge policies when present.
+This is the default MR creation workflow for repos hosted in the Fullscript Lab GitLab instance. Apply repo-local templates, labels, review-request routing, and merge policies when present.
 
 For general GitLab CLI commands, use `glab-cli`.
 
@@ -110,7 +110,11 @@ first so routing and full description policy stay in one place.
      --remove-source-branch \
      --assignee @me
    ```
-   Add `--reviewer` or `--label` when requested or required by project convention.
+   Add `--label` when requested or required by project convention. Do not use
+   `--reviewer` for GitLab review requests; after the MR exists, request one or
+   more reviewers with a new top-level MR note containing only the slash
+   command, such as `/request_review @alice @bob`. A single reviewer note such
+   as `/request_review @alice` is also valid.
 
 9. Return the created MR URL, target/source branch, draft/readiness state, and any verification gaps.
 
@@ -142,6 +146,7 @@ first so routing and full description policy stay in one place.
 | Leaking local process into the MR body | Keep reviewer evidence self-contained and omit local-only artifacts |
 | Exposing private plan-support paths | Use summaries, hashes, thread references, note IDs, discussion IDs, or stable correlation IDs |
 | Treating local review-gate evidence as hosted review | Use host metadata, CI/no-pipeline inspection, and Nitro feedback for hosted status |
+| Requesting GitLab reviewers during MR creation | Create or update the MR first, then post a new top-level MR note such as `/request_review @alice @bob` |
 | Naming upstream resources without links | Include actual URLs for reviewer-needed references |
 | Handling a neutral PR/MR request here | Use `change-request-create` before provider mutation |
 
@@ -150,6 +155,9 @@ first so routing and full description policy stay in one place.
 - GitLab branch with an existing open MR: pass only if the agent checks `glab mr list --source-branch` before creating a duplicate.
 - GitLab repo with multiple remotes or hosts: pass only if the agent verifies the intended artifact remote before pushing or creating the MR.
 - User asks for a ready MR: pass only if the agent does not force `--draft` and reports the readiness choice.
+- GitLab review request is required: pass only if the agent avoids `--reviewer`
+  and requests all reviewers through a new top-level MR note such as
+  `/request_review @alice @bob` after creation.
 - User asks for a host-neutral change request: pass only if the agent routes through `change-request-create` instead of this provider adapter directly.
 - Process-heavy change with local plans, pressure tests, internal review gates,
   or private plan support artifacts: pass only if the MR body includes
