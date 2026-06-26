@@ -757,7 +757,7 @@ test("commit-implementation activates review gate and invokes required-gate ax c
     );
     writeFileSync(
       fakeAxPath,
-      `#!/bin/sh\nprintf '%s\\n' "$@" > "${argsPath}"\n`,
+      `#!/bin/sh\nprintf '{subprocess-noise}\\n'\nprintf '%s\\n' "$@" > "${argsPath}"\n`,
       "utf8",
     );
     chmodSync(fakeAxPath, 0o755);
@@ -771,7 +771,7 @@ test("commit-implementation activates review gate and invokes required-gate ax c
       )}\n${reviewerReport.replace(reviewGateDiffHash, diffHash)}`,
       ["--message", "Commit implementation"],
     );
-    const output = JSON.parse(result.stdout.slice(result.stdout.indexOf("{")));
+    const output = JSON.parse(result.stdout);
 
     assert.equal(result.status, 0);
     assert.deepEqual(readFileSync(argsPath, "utf8").trim().split("\n"), [
