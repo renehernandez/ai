@@ -108,6 +108,12 @@ unit `1` has every deliverable work item in unit `1` checked. The target branch
 remains the source of truth for landed work; the stack tip branch is the source
 of truth for unmerged stacked work.
 
+Local review gates are commit-boundary gates. They prove the selected unit was
+reviewed before its workflow-owned commit, but they do not advance the stack.
+Plan Unit Sequencer advances only on hosted evidence: the current PR/MR,
+pipeline or no-pipeline inspection, latest-head Nitro feedback, and resolved
+actionable feedback.
+
 For `complete_change`, report `stack_ready` only after the final stack tip has
 no unchecked deliverable work items, every stack artifact has a passed latest-head
 Nitro gate, and stack integrity evidence is present. Do not imply target-branch
