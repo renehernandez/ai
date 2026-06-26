@@ -69,6 +69,24 @@ for (const file of ["AGENTS.md", "instructions/AGENTS.md"] as const) {
 for (const file of [
   "AGENTS.md",
   "instructions/AGENTS.md",
+  "rules/git-and-review.md",
+] as const) {
+  test(`${file} requires plan workflow commit helpers to use required-gate mode`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /Plan workflow skills/);
+    assert.match(text, /required-gate commit helpers/);
+    assert.match(text, /ax commit --require-review-gate/);
+    assert.match(
+      text,
+      /raw `git commit` remains Rene's manual terminal escape hatch/,
+    );
+  });
+}
+
+for (const file of [
+  "AGENTS.md",
+  "instructions/AGENTS.md",
   "skills/plan-orchestrator/SKILL.md",
 ] as const) {
   test(`${file} pins plan-orchestrator terminal states`, () => {
