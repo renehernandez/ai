@@ -1131,7 +1131,10 @@ function parseBlueprintProvenance(requestSection: string): BlueprintProvenance {
 function parseReadinessReviewerEvidence(
   requestSection: string,
 ): ReadinessReviewerEvidence {
-  const section = findSection(requestSection, "readiness_reviewer_evidence");
+  const section = findChildSection(
+    requestSection,
+    "readiness_reviewer_evidence",
+  );
   const body = section ?? "";
 
   return {

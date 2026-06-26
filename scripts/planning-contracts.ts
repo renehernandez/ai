@@ -143,11 +143,12 @@ export function findSection(input: string, sectionName: string): string | null {
   }
 
   const sectionIndent = lines[start].match(/^(\s*)/)?.[1].length ?? 0;
-  const sectionLines: string[] = [];
+  const childIndent = sectionIndent + 2;
+  const values: string[] = [];
 
   for (const line of lines.slice(start + 1)) {
     if (line.trim() === "") {
-      sectionLines.push("");
+      values.push("");
       continue;
     }
 
@@ -156,10 +157,12 @@ export function findSection(input: string, sectionName: string): string | null {
       break;
     }
 
-    sectionLines.push(line.slice(Math.min(indent, sectionIndent + 2)));
+    values.push(
+      line.startsWith(" ".repeat(childIndent)) ? line.slice(childIndent) : line,
+    );
   }
 
-  return sectionLines.join("\n");
+  return values.join("\n");
 }
 
 export function hasSection(input: string, sectionName: string): boolean {
