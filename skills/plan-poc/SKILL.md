@@ -51,3 +51,17 @@ state. It checks the OpenSpec reference shape, but it does not replace strict
 OpenSpec validation or task-shape audit. Later workflow steps may attach
 host-specific creation, feedback routing, closure, and learning-summary behavior
 to the same contract.
+
+## POC Implementation Loop
+
+When a POC spans multiple OpenSpec units in the same draft artifact, track the
+current POC unit explicitly. Task-state updates must mark only work items that
+belong to the current unit; previously rehearsed or future units stay available
+as context, but they are not marked as the current unit's task state. POC task
+state is contextual and non-authoritative.
+
+After every material POC push and every feedback-fix push, record the pushed
+head and route reviewer feedback against that latest head before moving to the
+next POC unit. Current and completed POC units must keep checkpoints tied to
+each pushed head they reviewed; pending units stay contextual until they are
+implemented.

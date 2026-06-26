@@ -7,6 +7,56 @@ export type PlanPocArtifactInput = {
   changeRef: string;
   host: PlanPocArtifactHost;
   title?: string;
+  pocUnits?: PlanPocUnitInput[];
+  currentPocUnitId?: string;
+  feedbackPushedHeads?: PlanPocFeedbackPushedHeadInput[];
+  feedbackCheckpoints?: PlanPocFeedbackCheckpointInput[];
+};
+
+export type PlanPocUnitStatus = "pending" | "current" | "completed";
+
+export type PlanPocUnitInput = {
+  id: string;
+  title: string;
+  workItemIds: string[];
+  status: PlanPocUnitStatus;
+};
+
+export type PlanPocFeedbackReason = "material_poc_push" | "feedback_fix_push";
+
+export type PlanPocFeedbackPushedHeadInput = {
+  unitId: string;
+  reason: PlanPocFeedbackReason;
+  headSha: string;
+};
+
+export type PlanPocFeedbackCheckpointInput = {
+  unitId: string;
+  reason: PlanPocFeedbackReason;
+  headSha: string;
+  status?: "required" | "complete";
+};
+
+export type PlanPocLoopState = {
+  singleDraftArtifact: true;
+  units: PlanPocUnitInput[];
+  taskState: {
+    currentUnitId: string;
+    authority: "contextual_non_authoritative";
+    contextualWorkItemIds: string[];
+    markedWorkItemIds: string[];
+    nonContextualWorkItemIds: string[];
+  };
+  feedback: {
+    requiredAfter: PlanPocFeedbackReason[];
+    pushedHeads: PlanPocFeedbackPushedHeadInput[];
+    checkpoints: Array<
+      Required<PlanPocFeedbackCheckpointInput> & {
+        reviewScope: "latest_head";
+        requestedAfterPush: true;
+      }
+    >;
+  };
 };
 
 export type PlanPocArtifactState = {
@@ -29,6 +79,7 @@ export type PlanPocArtifactState = {
     deliverySource: "revised_openspec";
     pocCommitsReused: false;
   };
+  pocLoop?: PlanPocLoopState;
   body: string;
 };
 
@@ -64,7 +115,8 @@ export function buildPlanPocArtifactState(
   }
 
   const title = normalizePocTitle(input.title, changeId);
-  const body = [
+  const pocLoop = buildPocLoopState(input);
+  const bodyParts = [
     "## POC Review",
     "",
     "This draft artifact is a review-only implementation rehearsal.",
@@ -79,6 +131,22 @@ export function buildPlanPocArtifactState(
     "## Implementation",
     "",
     "This artifact includes the implementation diff for the rehearsal.",
+  ];
+
+  if (pocLoop) {
+    bodyParts.push(
+      "",
+      "## POC Implementation Loop",
+      "",
+      "Task-state updates mark only contextual work items for the current POC unit.",
+      "POC task state is contextual and non-authoritative.",
+      "Latest-head routed feedback is required after material POC pushes and feedback-fix pushes.",
+      "Multiple POC units may complete in the same draft artifact while reviewer checkpoints remain tied to each pushed head.",
+    );
+  }
+
+  const body = [
+    ...bodyParts,
     "",
     "## Final Delivery Boundary",
     "",
@@ -106,6 +174,7 @@ export function buildPlanPocArtifactState(
       deliverySource: "revised_openspec",
       pocCommitsReused: false,
     },
+    ...(pocLoop ? { pocLoop } : {}),
     body,
   };
 }
@@ -171,6 +240,275 @@ export function validatePlanPocArtifactState(
     errors.push("POC artifact body must reject POC commit reuse");
   }
 
+  if (state.pocLoop) {
+    errors.push(...validatePocLoopState(state.pocLoop, state.body));
+  }
+
+  return errors;
+}
+
+function buildPocLoopState(
+  input: PlanPocArtifactInput,
+): PlanPocLoopState | undefined {
+  if (
+    !input.pocUnits?.length &&
+    !input.currentPocUnitId &&
+    !input.feedbackPushedHeads?.length &&
+    !input.feedbackCheckpoints?.length
+  ) {
+    return undefined;
+  }
+
+  const units = (input.pocUnits ?? []).map((unit) => ({
+    id: unit.id.trim(),
+    title: unit.title.trim(),
+    workItemIds: unit.workItemIds.map((id) => id.trim()).filter(Boolean),
+    status: unit.status,
+  }));
+  const currentUnitId = input.currentPocUnitId?.trim() ?? "";
+  const currentUnit = units.find((unit) => unit.id === currentUnitId);
+  const currentUnits = units.filter((unit) => unit.status === "current");
+
+  if (units.length === 0) {
+    throw new Error("pocUnits are required when POC loop state is provided");
+  }
+
+  if (!currentUnitId) {
+    throw new Error("currentPocUnitId is required for POC loop state");
+  }
+
+  if (!currentUnit) {
+    throw new Error(
+      `currentPocUnitId must reference a POC unit: ${currentUnitId}`,
+    );
+  }
+
+  assertUnique(
+    units.map((unit) => unit.id),
+    "POC unit ids",
+  );
+  for (const unit of units) {
+    if (!unit.id || !unit.title || unit.workItemIds.length === 0) {
+      throw new Error("POC units require id, title, and workItemIds");
+    }
+    assertUnique(unit.workItemIds, `POC unit ${unit.id} work item ids`);
+  }
+  assertUnique(
+    units.flatMap((unit) => unit.workItemIds),
+    "POC loop work item ids",
+  );
+
+  if (
+    currentUnits.length !== 1 ||
+    currentUnits.some((unit) => unit.id !== currentUnitId)
+  ) {
+    throw new Error("exactly one current POC unit must match currentPocUnitId");
+  }
+
+  const contextualWorkItemIds = [...currentUnit.workItemIds];
+  const markedWorkItemIds = [...contextualWorkItemIds];
+  const nonContextualWorkItemIds = units
+    .filter((unit) => unit.id !== currentUnitId)
+    .flatMap((unit) => unit.workItemIds);
+  const pushedHeads = (input.feedbackPushedHeads ?? []).map((push) => ({
+    unitId: push.unitId.trim(),
+    reason: push.reason,
+    headSha: push.headSha.trim(),
+  }));
+  const checkpoints = (input.feedbackCheckpoints ?? []).map((checkpoint) => ({
+    unitId: checkpoint.unitId.trim(),
+    reason: checkpoint.reason,
+    headSha: checkpoint.headSha.trim(),
+    status: checkpoint.status ?? "required",
+    reviewScope: "latest_head" as const,
+    requestedAfterPush: true as const,
+  }));
+
+  return {
+    singleDraftArtifact: true,
+    units,
+    taskState: {
+      currentUnitId,
+      authority: "contextual_non_authoritative",
+      contextualWorkItemIds,
+      markedWorkItemIds,
+      nonContextualWorkItemIds,
+    },
+    feedback: {
+      requiredAfter: ["material_poc_push", "feedback_fix_push"],
+      pushedHeads,
+      checkpoints,
+    },
+  };
+}
+
+function validatePocLoopState(loop: PlanPocLoopState, body: string): string[] {
+  const errors: string[] = [];
+
+  if (loop.singleDraftArtifact !== true) {
+    errors.push("POC loop must use one draft artifact");
+  }
+
+  const currentUnit = loop.units.find(
+    (unit) => unit.id === loop.taskState.currentUnitId,
+  );
+  if (!currentUnit) {
+    errors.push("POC loop current unit must reference a listed unit");
+  }
+
+  if (hasDuplicates(loop.units.map((unit) => unit.id))) {
+    errors.push("POC loop unit ids must be unique");
+  }
+
+  for (const unit of loop.units) {
+    if (hasDuplicates(unit.workItemIds)) {
+      errors.push(`POC loop unit ${unit.id} work item ids must be unique`);
+    }
+  }
+
+  if (hasDuplicates(loop.units.flatMap((unit) => unit.workItemIds))) {
+    errors.push("POC loop work item ids must belong to exactly one unit");
+  }
+
+  if (loop.taskState.authority !== "contextual_non_authoritative") {
+    errors.push("POC loop task state must be contextual and non-authoritative");
+  }
+
+  const currentUnits = loop.units.filter((unit) => unit.status === "current");
+  if (
+    currentUnits.length !== 1 ||
+    currentUnits.some((unit) => unit.id !== loop.taskState.currentUnitId)
+  ) {
+    errors.push(
+      "POC loop must have exactly one current unit matching currentUnitId",
+    );
+  }
+
+  if (
+    !sameItems(
+      loop.taskState.contextualWorkItemIds,
+      currentUnit?.workItemIds ?? [],
+    ) ||
+    !sameItems(loop.taskState.markedWorkItemIds, currentUnit?.workItemIds ?? [])
+  ) {
+    errors.push(
+      "POC loop must mark only contextual work items for the current POC unit",
+    );
+  }
+
+  if (
+    loop.taskState.markedWorkItemIds.some((id) =>
+      loop.taskState.nonContextualWorkItemIds.includes(id),
+    )
+  ) {
+    errors.push("POC loop must not mark non-contextual work items");
+  }
+
+  for (const reason of [
+    "material_poc_push",
+    "feedback_fix_push",
+  ] satisfies PlanPocFeedbackReason[]) {
+    if (!loop.feedback.requiredAfter.includes(reason)) {
+      errors.push(`POC loop must require feedback after ${reason}`);
+    }
+  }
+
+  const activeUnits = loop.units.filter((unit) =>
+    ["completed", "current"].includes(unit.status),
+  );
+
+  for (const push of loop.feedback.pushedHeads) {
+    if (!push.unitId) {
+      errors.push("POC feedback pushed heads require a unitId");
+    }
+    const unit = loop.units.find((unit) => unit.id === push.unitId);
+    if (!unit) {
+      errors.push("POC feedback pushed heads must reference a listed unit");
+    } else if (unit.status === "pending") {
+      errors.push("POC feedback pushed heads must not reference pending units");
+    }
+    if (!push.headSha) {
+      errors.push("POC feedback pushed heads require a headSha");
+    }
+  }
+
+  if (hasDuplicates(loop.feedback.pushedHeads.map(pushKey))) {
+    errors.push("POC feedback pushed heads must be unique");
+  }
+
+  if (hasDuplicates(loop.feedback.checkpoints.map(pushKey))) {
+    errors.push("POC feedback checkpoints must be unique");
+  }
+
+  for (const checkpoint of loop.feedback.checkpoints) {
+    if (!checkpoint.unitId) {
+      errors.push("POC feedback checkpoints require a unitId");
+    }
+    const unit = loop.units.find((unit) => unit.id === checkpoint.unitId);
+    if (!unit) {
+      errors.push("POC feedback checkpoints must reference a listed unit");
+    } else if (unit.status === "pending") {
+      errors.push("POC feedback checkpoints must not reference pending units");
+    }
+    if (!checkpoint.headSha) {
+      errors.push("POC feedback checkpoints require a headSha");
+    }
+    if (checkpoint.reviewScope !== "latest_head") {
+      errors.push("POC feedback checkpoints must route to latest head");
+    }
+    if (checkpoint.requestedAfterPush !== true) {
+      errors.push("POC feedback checkpoints must be requested after each push");
+    }
+    if (
+      !loop.feedback.pushedHeads.some(
+        (push) => pushKey(push) === pushKey(checkpoint),
+      )
+    ) {
+      errors.push("POC feedback checkpoints must match a recorded pushed head");
+    }
+  }
+
+  for (const unit of activeUnits) {
+    const hasMaterialPush = loop.feedback.pushedHeads.some(
+      (push) => push.unitId === unit.id && push.reason === "material_poc_push",
+    );
+    if (!hasMaterialPush) {
+      errors.push(
+        `POC loop unit ${unit.id} requires a recorded pushed head for material_poc_push`,
+      );
+    }
+  }
+
+  for (const push of loop.feedback.pushedHeads) {
+    const activeUnit = activeUnits.find((unit) => unit.id === push.unitId);
+    const matchingCheckpoints = loop.feedback.checkpoints.filter(
+      (checkpoint) => pushKey(checkpoint) === pushKey(push),
+    );
+    if (activeUnit && matchingCheckpoints.length !== 1) {
+      errors.push(
+        `POC loop unit ${push.unitId} requires one feedback checkpoint for ${push.reason} at ${push.headSha}`,
+      );
+    }
+    if (
+      activeUnit?.status === "completed" &&
+      matchingCheckpoints.some((checkpoint) => checkpoint.status !== "complete")
+    ) {
+      errors.push(
+        `POC loop completed unit ${push.unitId} requires complete feedback checkpoint for ${push.reason} at ${push.headSha}`,
+      );
+    }
+  }
+
+  if (!includes(body, "Latest-head routed feedback")) {
+    errors.push("POC artifact body must describe latest-head feedback routing");
+  }
+
+  if (!includes(body, "contextual and non-authoritative")) {
+    errors.push(
+      "POC artifact body must state that task state is contextual and non-authoritative",
+    );
+  }
+
   return errors;
 }
 
@@ -184,6 +522,32 @@ function normalizePocTitle(
 
 function includes(value: string, pattern: string): boolean {
   return value.toLowerCase().includes(pattern.toLowerCase());
+}
+
+function assertUnique(values: string[], label: string): void {
+  if (hasDuplicates(values)) {
+    throw new Error(`${label} must be unique`);
+  }
+}
+
+function hasDuplicates(values: string[]): boolean {
+  return new Set(values).size !== values.length;
+}
+
+function sameItems(left: string[], right: string[]): boolean {
+  return (
+    left.length === right.length &&
+    new Set(left).size === left.length &&
+    left.every((item) => right.includes(item))
+  );
+}
+
+function pushKey(input: {
+  unitId: string;
+  reason: PlanPocFeedbackReason;
+  headSha: string;
+}): string {
+  return `${input.unitId}\0${input.reason}\0${input.headSha}`;
 }
 
 function parseArgs(argv: string[]): PlanPocArtifactInput {
