@@ -512,6 +512,38 @@ test("review-gate-input rejects readiness blocking findings", () => {
   assert.equal(result.stdout, "");
 });
 
+test("review-gate-input emits planning gate input without writing state", () => {
+  const directory = mkdtempSync(join(tmpdir(), "plan-review-gate-input-"));
+  try {
+    runGit(directory, ["init"]);
+    const result = runPlanReview("review-gate-input", planReviewRequest, [
+      "--cwd",
+      directory,
+      "--diff-hash",
+      reviewGateDiffHash,
+    ]);
+    const output = JSON.parse(result.stdout);
+
+    assert.equal(result.status, 0);
+    assert.equal(output.workflow, "plan-review");
+    assert.equal(output.sourceProvenance.phase, "plan-review");
+    assert.equal(
+      output.results["implementation-readiness"].diffHash,
+      reviewGateDiffHash,
+    );
+    assert.equal(
+      existsSync(join(directory, ".git", "ax", "review-gate.json")),
+      false,
+    );
+    assert.equal(
+      existsSync(join(directory, ".git", "ax", "review-gate.invalidated.json")),
+      false,
+    );
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
 test("commit-planning activates review gate and invokes required-gate ax commit", () => {
   const directory = mkdtempSync(join(tmpdir(), "plan-review-commit-"));
   try {
