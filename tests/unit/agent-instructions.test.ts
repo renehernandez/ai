@@ -465,3 +465,20 @@ for (const file of [
     assert.match(text, /stable\s+correlation IDs/);
   });
 }
+
+for (const file of [
+  "skills/plan-review/SKILL.md",
+  "skills/plan-unit-delivery/SKILL.md",
+  "skills/plan-unit-sequencer/SKILL.md",
+] as const) {
+  test(`${file} separates local commit gates from hosted advancement gates`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /local review gate/i);
+    assert.match(text, /commit(?:-boundary| boundary|s?\b)/i);
+    assert.match(text, /hosted/i);
+    assert.match(text, /Nitro/i);
+    assert.match(text, /stack advancement|implementation sequencing|advance/i);
+    assert.match(text, /actionable feedback|actionable-feedback/i);
+  });
+}
