@@ -117,7 +117,7 @@
   `git commit` remains Rene's manual escape hatch.
 - [x] 7.2 Update `skills/ax-cli`, affected plan workflow skills, and adapter
   prompts for explicit reviewer evidence and required-gate commit behavior.
-- [ ] 7.3 Add or update instruction and skill validation tests for the new
+- [x] 7.3 Add or update instruction and skill validation tests for the new
   guidance.
 - [ ] 7.4 Run `writing-skills` review for changed shared skills, prompts, and
   agent behavior.
