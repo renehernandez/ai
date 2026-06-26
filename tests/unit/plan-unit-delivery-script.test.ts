@@ -1497,6 +1497,86 @@ test("validate-ledger rejects metadata-only materiality for updated descriptions
   );
 });
 
+test("validate-ledger rejects local review evidence for review routing", () => {
+  const result = runPlanUnitDelivery(
+    "validate-ledger",
+    deliveryLedger.replace(
+      "    evidence: github selected",
+      "    evidence: local_reviewer_gate passed; github selected",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /review_feedback_routing\.evidence must cite routing or unsupported-host evidence/,
+  );
+});
+
+test("validate-ledger rejects local review evidence for artifact-host review", () => {
+  const result = runPlanUnitDelivery(
+    "validate-ledger",
+    deliveryLedger.replace(
+      "    evidence: PR inspected",
+      "    evidence: reviewer_passes passed for PR",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /artifact_host_review\.evidence must cite artifact-host MR\/PR review or approval evidence/,
+  );
+});
+
+test("validate-ledger rejects local review evidence for pipeline monitoring", () => {
+  const result = runPlanUnitDelivery(
+    "validate-ledger",
+    deliveryLedger.replace(
+      "    evidence: latest-head pipeline passed",
+      "    evidence: implementation-review passed after pipeline check",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /pipeline_monitoring\.evidence must cite CI, pipeline, no-pipeline, or unavailable-pipeline evidence/,
+  );
+});
+
+test("validate-ledger rejects optional local reviewer evidence for hosted gates", () => {
+  const result = runPlanUnitDelivery(
+    "validate-ledger",
+    deliveryLedger.replace(
+      "    evidence: latest-head pipeline passed",
+      "    evidence: ai_readiness_upkeep passed after no-pipeline inspection",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /pipeline_monitoring\.evidence must cite CI, pipeline, no-pipeline, or unavailable-pipeline evidence/,
+  );
+});
+
+test("validate-ledger rejects local review evidence for hosted feedback wait", () => {
+  const result = runPlanUnitDelivery(
+    "validate-ledger",
+    deliveryLedger.replace(
+      "    evidence: latest-head Nitro feedback resolved",
+      "    evidence: docs-alignment-review resolved Nitro feedback",
+    ),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /automatic_review_feedback_wait\.evidence must cite latest-head Nitro feedback wait evidence/,
+  );
+});
+
 test("validate-ledger requires refactoring execution evidence", () => {
   const result = runPlanUnitDelivery(
     "validate-ledger",
