@@ -1,9 +1,9 @@
 ## 1. Skill Contract And POC Artifact Rules
 
-- [ ] 1.1 Add the `plan-poc` skill contract, required input shape, and draft artifact boundary.
+- [x] 1.1 Add the `plan-poc` skill contract, required input shape, and draft artifact boundary.
   - First real confirmation: the `plan-poc` workflow command runs against a sample OpenSpec change and reports draft-only POC output that includes the OpenSpec files, marks the hosted artifact as review-only, and refuses merge or POC commit reuse as final delivery.
-- [ ] 1.2 Add the first POC state template or helper for one draft artifact and one referenced OpenSpec change.
-- [ ] 1.3 Add focused contract coverage for draft state, `POC:` title, OpenSpec inclusion, and non-merge body language.
+- [x] 1.2 Add the first POC state template or helper for one draft artifact and one referenced OpenSpec change.
+- [x] 1.3 Add focused contract coverage for draft state, `POC:` title, OpenSpec inclusion, and non-merge body language.
 
 ## 2. POC Implementation Loop
 
