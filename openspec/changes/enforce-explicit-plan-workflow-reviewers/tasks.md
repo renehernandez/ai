@@ -137,7 +137,7 @@
 - [x] 8.2 Run `pnpm exec tsx scripts/skill-validate.ts`.
 - [x] 8.3 Run `pnpm run test:unit`, `pnpm run test:integration`, and
   `pnpm test`.
-- [ ] 8.4 Discover configured runtime profiles from `ax.config.json`, then run
+- [x] 8.4 Discover configured runtime profiles from `ax.config.json`, then run
   `pnpm ax update --all-profiles`.
 - [ ] 8.5 Add runtime-refresh completion evidence for installed surfaces by
   recording the required `pnpm ax validate --all-profiles` and
