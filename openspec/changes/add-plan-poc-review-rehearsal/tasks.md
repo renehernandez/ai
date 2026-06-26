@@ -19,6 +19,6 @@
 
 ## 4. Runtime Alignment And Regression Coverage
 
-- [ ] 4.1 Update runtime-facing prompts and repo rules so `plan-poc` stays an opt-in review rehearsal.
-- [ ] 4.2 Add drift checks that prevent `plan-poc` from being treated as normal mergeable implementation delivery.
-- [ ] 4.3 Preserve normal `plan-orchestrator` stack-ready routing and private support artifact boundaries in tests.
+- [x] 4.1 Update runtime-facing prompts and repo rules so `plan-poc` stays an opt-in review rehearsal.
+- [x] 4.2 Add drift checks that prevent `plan-poc` from being treated as normal mergeable implementation delivery.
+- [x] 4.3 Preserve normal `plan-orchestrator` stack-ready routing and private support artifact boundaries in tests.

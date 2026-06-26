@@ -96,6 +96,13 @@ export type PlanPocArtifactState = {
   intendedToMerge: false;
   includesOpenSpecFiles: true;
   includesImplementationDiff: true;
+  runtimeRoute: {
+    lane: "poc_rehearsal";
+    optInOnly: true;
+    mergeableDelivery: false;
+    stackReadyEligible: false;
+    finalImplementationEntry: "revised_openspec_plan_orchestrator";
+  };
   finalDelivery: {
     deliverySource: "revised_openspec";
     pocCommitsReused: false;
@@ -186,6 +193,7 @@ export function buildPlanPocArtifactState(
     "",
     "Final delivery must come from a revised OpenSpec.",
     "POC commits must not be reused as final implementation commits.",
+    "Final implementation must re-enter plan-orchestrator from that revised OpenSpec.",
   ].join("\n");
 
   return {
@@ -204,6 +212,13 @@ export function buildPlanPocArtifactState(
     intendedToMerge: false,
     includesOpenSpecFiles: true,
     includesImplementationDiff: true,
+    runtimeRoute: {
+      lane: "poc_rehearsal",
+      optInOnly: true,
+      mergeableDelivery: false,
+      stackReadyEligible: false,
+      finalImplementationEntry: "revised_openspec_plan_orchestrator",
+    },
     finalDelivery: {
       deliverySource: "revised_openspec",
       pocCommitsReused: false,
@@ -261,6 +276,37 @@ export function validatePlanPocArtifactState(
 
   if (state.includesImplementationDiff !== true) {
     errors.push("POC artifact must include the implementation diff");
+  }
+
+  if (
+    state.runtimeRoute?.lane !== "poc_rehearsal" ||
+    state.runtimeRoute?.optInOnly !== true
+  ) {
+    errors.push("POC runtime route must stay opt-in poc_rehearsal");
+  }
+
+  if (
+    state.runtimeRoute?.mergeableDelivery !== false ||
+    state.runtimeRoute?.stackReadyEligible !== false
+  ) {
+    errors.push(
+      "POC runtime route must not be normal mergeable stack delivery",
+    );
+  }
+
+  if (
+    state.runtimeRoute?.finalImplementationEntry !==
+    "revised_openspec_plan_orchestrator"
+  ) {
+    errors.push(
+      "POC final implementation must re-enter plan-orchestrator from revised OpenSpec",
+    );
+  }
+
+  if (!includes(state.body, "re-enter plan-orchestrator")) {
+    errors.push(
+      "POC artifact body must route final implementation through plan-orchestrator",
+    );
   }
 
   if (state.finalDelivery.deliverySource !== "revised_openspec") {

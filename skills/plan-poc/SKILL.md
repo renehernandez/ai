@@ -25,6 +25,24 @@ Do not use for normal implementation delivery, plan review, or plan-ready
 scope shaping. Use the standard plan workflow when the goal is mergeable
 implementation.
 
+`plan-poc` is opt-in only. Do not infer it from "implement", "deliver",
+"continue the plan", "ship this", or ordinary OpenSpec delivery language. If
+the request could mean final delivery, route through `plan-orchestrator`
+instead.
+
+## Runtime Routing Boundary
+
+`plan-poc` does not emit `planning_review`, `plan_delivery_handoff`,
+`delivery_gate_ledger`, or `stack_ready`. Those contracts belong to the normal
+plan delivery workflow. A completed POC reports only the review rehearsal state,
+latest-head reviewer feedback checkpoints, closure outcome, and private
+learning summary evidence.
+
+After POC closure, final implementation must start again from a revised
+OpenSpec through `plan-orchestrator`. The POC branch, POC commits, contextual
+task-state checkboxes, and hosted artifact must not be promoted into a
+mergeable implementation stack.
+
 ## Required Input
 
 Start from one OpenSpec change reference. Before implementation work begins,

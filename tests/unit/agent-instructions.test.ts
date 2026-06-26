@@ -208,6 +208,60 @@ test("plan workflow agent prompts use delivery-unit MR contracts", () => {
   assert.match(deliveryPrompt, /validate-task-delta.*--unit/);
 });
 
+test("plan-poc runtime surfaces keep rehearsal separate from mergeable delivery", () => {
+  const files = [
+    "skills/plan-poc/SKILL.md",
+    "skills/plan-poc/agents/openai.yaml",
+    "rules/investigation-and-implementation.md",
+  ] as const;
+
+  for (const file of files) {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /plan-poc|Plan POC/);
+    assert.match(text, /opt-in|explicit/i);
+    assert.match(text, /review-only|rehearsal/i);
+    assert.match(text, /draft/i);
+    assert.match(text, /close[d]? unmerged|not intended to merge/i);
+    assert.match(text, /private.*learning summary|poc_learning_summary/i);
+    assert.match(text, /revised OpenSpec/i);
+    assert.match(text, /POC\s+commits/i);
+    assert.match(text, /plan-orchestrator/i);
+  }
+
+  const planPocPrompt = readFileSync(
+    "skills/plan-poc/agents/openai.yaml",
+    "utf-8",
+  );
+
+  assert.match(planPocPrompt, /Do not emit planning_review/);
+  assert.match(planPocPrompt, /plan_delivery_handoff/);
+  assert.match(planPocPrompt, /delivery_gate_ledger/);
+  assert.match(planPocPrompt, /stack_ready/);
+  assert.match(planPocPrompt, /normal mergeable implementation delivery/);
+  assert.match(planPocPrompt, /outside the repo by default/);
+});
+
+for (const file of [
+  "skills/plan-orchestrator/SKILL.md",
+  "skills/plan-orchestrator/agents/openai.yaml",
+] as const) {
+  test(`${file} rejects plan-poc artifacts as stack-ready evidence`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /plan-poc/);
+    assert.match(text, /background for revising the\s+OpenSpec/i);
+    assert.match(text, /POC branch/i);
+    assert.match(text, /POC commits/i);
+    assert.match(text, /contextual POC task state/i);
+    assert.match(text, /draft POC artifact/i);
+    assert.match(text, /planning_review/);
+    assert.match(text, /stack base evidence/i);
+    assert.match(text, /implementation artifact evidence/i);
+    assert.match(text, /stack_ready/);
+  });
+}
+
 test("implementation rules keep local workflow artifacts out of work-project repos", () => {
   const text = readFileSync(
     "rules/investigation-and-implementation.md",
