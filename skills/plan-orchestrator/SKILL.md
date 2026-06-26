@@ -45,6 +45,13 @@ does not repair it inline. Missing or stale readiness evidence routes back to
 `plan-review`; missing or stale delivery evidence routes back to
 `plan-unit-delivery`.
 
+`plan-orchestrator` must carry reviewer lists and reviewer evidence exactly as
+the owning phase emitted them. It must not recompute, invent, promote, or
+activate local review-gate state for another phase. Planning commits remain
+owned by `plan-review`; implementation commits remain owned by
+`plan-unit-delivery`; each owning phase must use its required-gate commit helper
+for workflow-owned commits.
+
 Intermediate outputs such as `plan_delivery_handoff`, `openspec_blueprint`,
 `planning_review`, or one delivered delivery-unit MR are not terminal success
 for `plan-orchestrator`; continue until `stack_ready` or report

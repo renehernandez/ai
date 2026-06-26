@@ -58,6 +58,11 @@ artifacts, or private thread metadata by default. When support-artifact evidence
 is relevant to reviewers, use summaries, hashes, thread references, note IDs,
 discussion IDs, or stable correlation IDs instead of local filesystem paths.
 
+For plan workflow artifacts, do not present local reviewer evidence or local
+review-gate state as hosted review, CI, approval, or Nitro evidence. Convert
+only reviewer-relevant risk facts into plain description text, or omit the
+local process details.
+
 Keep evidence when it helps a reviewer assess risk:
 
 - targeted regression commands or fixtures;
