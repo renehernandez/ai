@@ -139,7 +139,7 @@
   `pnpm test`.
 - [x] 8.4 Discover configured runtime profiles from `ax.config.json`, then run
   `pnpm ax update --all-profiles`.
-- [ ] 8.5 Add runtime-refresh completion evidence for installed surfaces by
+ - [x] 8.5 Add runtime-refresh completion evidence for installed surfaces by
   recording the required `pnpm ax validate --all-profiles` and
   `pnpm ax status --all-profiles` results in the delivery ledger or final stack
   evidence.
