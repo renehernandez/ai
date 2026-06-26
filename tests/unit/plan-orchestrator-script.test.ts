@@ -80,6 +80,22 @@ function runPlanOrchestrator(
   };
 }
 
+function runPlanOrchestratorInCwd(
+  command: string,
+  content: string,
+  cwd: string,
+): { status: number | null; stderr: string; stdout: string } {
+  let result:
+    | { status: number | null; stderr: string; stdout: string }
+    | undefined;
+  withTempFile(content, (path) => {
+    result = runPlanOrchestratorArgs([command, "--file", path], cwd);
+  });
+
+  assert.ok(result);
+  return result;
+}
+
 function runPlanOrchestratorCommand(command: string): {
   status: number | null;
   stderr: string;
@@ -685,6 +701,24 @@ test("validate-resume accepts inspected stack state", () => {
 
   assert.equal(result.status, 0);
   assert.match(result.stdout, /orchestrator_resume valid/);
+});
+
+test("validation commands do not write review-gate state", () => {
+  withTempOpenSpecRepo((directory) => {
+    const reviewGateState = join(directory, ".git", "ax", "review-gate.json");
+    const validations = [
+      ["validate-planning-review", planningReview],
+      ["validate-resume", resumeReport],
+      ["validate-stack-ready", stackReady],
+    ] as const;
+
+    for (const [command, input] of validations) {
+      const result = runPlanOrchestratorInCwd(command, input, directory);
+
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.equal(existsSync(reviewGateState), false);
+    }
+  });
 });
 
 test("validate-resume routes stale readiness evidence to plan-ready", () => {
