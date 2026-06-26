@@ -7,9 +7,9 @@
 
 ## 2. POC Implementation Loop
 
-- [ ] 2.1 Add POC branch task-state rules that mark only contextual work items for the current POC unit.
-- [ ] 2.2 Add latest-head routed feedback checkpoints after material POC pushes and feedback-fix pushes.
-- [ ] 2.3 Add fixtures for two POC units completed in one draft artifact with reviewer checkpoints between pushes.
+- [x] 2.1 Add POC branch task-state rules that mark only contextual work items for the current POC unit.
+- [x] 2.2 Add latest-head routed feedback checkpoints after material POC pushes and feedback-fix pushes.
+- [x] 2.3 Add fixtures for two POC units completed in one draft artifact with reviewer checkpoints between pushes.
 
 ## 3. Learning Summary And Closure
 
