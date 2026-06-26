@@ -96,7 +96,7 @@ first so routing and full description policy stay in one place.
    [Targeted reviewer evidence, verification gaps, and hosted state if relevant]
    ```
 
-7. Create a draft MR:
+8. Create a draft MR:
    ```bash
    glab mr create \
      --target-branch "<target>" \
@@ -110,7 +110,7 @@ first so routing and full description policy stay in one place.
    ```
    Add `--reviewer` or `--label` when requested or required by project convention.
 
-8. Return the created MR URL, target/source branch, draft/readiness state, and any verification gaps.
+9. Return the created MR URL, target/source branch, draft/readiness state, and any verification gaps.
 
 ## Quick Reference
 

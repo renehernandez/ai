@@ -98,7 +98,7 @@ first so routing and full description policy stay in one place.
    ```
    Add `--reviewer`, `--assignee @me`, `--label`, or `--template` when requested or required by project convention.
 
-8. Return the created PR URL, base/head branch, draft/readiness state, and any verification gaps.
+9. Return the created PR URL, base/head branch, draft/readiness state, and any verification gaps.
 
 ## Quick Reference
 
