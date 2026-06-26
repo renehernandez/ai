@@ -119,7 +119,7 @@
   prompts for explicit reviewer evidence and required-gate commit behavior.
 - [x] 7.3 Add or update instruction and skill validation tests for the new
   guidance.
-- [ ] 7.4 Run `writing-skills` review for changed shared skills, prompts, and
+- [x] 7.4 Run `writing-skills` review for changed shared skills, prompts, and
   agent behavior.
 
 ## 8. Verification And Runtime Refresh
