@@ -39,6 +39,47 @@ for (const file of ["AGENTS.md", "instructions/AGENTS.md"] as const) {
   });
 }
 
+test("CI and hook instructions require specific names instead of check labels", () => {
+  const repoAgents = readFileSync("AGENTS.md", "utf-8");
+  const portableAgents = readFileSync("instructions/AGENTS.md", "utf-8");
+  const rules = readFileSync("rules/ci-infra-and-cloudflare.md", "utf-8");
+  const localRules = readFileSync("rules/project-local.md", "utf-8");
+  const mise = readFileSync("mise.toml", "utf-8");
+  const lefthook = readFileSync("lefthook.yml", "utf-8");
+  const packageJson = readFileSync("package.json", "utf-8");
+
+  for (const text of [repoAgents, portableAgents]) {
+    assert.match(text, /Across all projects/);
+    assert.match(text, /CI jobs, task-runner entries, package scripts/);
+    assert.match(text, /pre-commit hook entries/);
+    assert.match(text, /generic `check`\s+terminology/);
+    assert.match(text, /`lint`, `format`, `typecheck`, `unit-test`/);
+    assert.match(text, /purpose-specific job, hook, task, or\s+script name/);
+  }
+
+  assert.match(rules, /CI and Local Hook Naming/);
+  assert.match(
+    rules,
+    /CI jobs, package scripts that back CI, or pre-commit hook entries/,
+  );
+  assert.match(rules, /generic `check` terminology/);
+  assert.match(rules, /`cli:check`/);
+  assert.match(
+    rules,
+    /`lint`, `format`, `typecheck`, `unit-test`, `integration-test`/,
+  );
+  assert.match(rules, /tool's native command uses `check`/);
+
+  assert.match(localRules, /`mise run pre-commit`/);
+  assert.doesNotMatch(localRules, /`mise run check`/);
+  assert.match(mise, /\[tasks\.pre-commit\]/);
+  assert.doesNotMatch(mise, /\[tasks\.check\]/);
+  assert.match(lefthook, /biome-lint-format/);
+  assert.doesNotMatch(lefthook, /biome-check/);
+  assert.match(packageJson, /biome:lint-format:staged/);
+  assert.doesNotMatch(packageJson, /biome:check/);
+});
+
 for (const file of ["AGENTS.md", "instructions/AGENTS.md"] as const) {
   test(`${file} routes agent commits through ax commit and gates publication`, () => {
     const text = readFileSync(file, "utf-8");

@@ -1,7 +1,7 @@
 pre-commit:
   commands:
-    biome-check:
-      run: pnpm biome:check
+    biome-lint-format:
+      run: pnpm biome:lint-format:staged
     skills-validate:
       run: pnpm skills:validate
     tests:
