@@ -11,7 +11,9 @@ These rules cover test coverage, GitLab CI, Docker image policy, Cloudflare, Ter
 ## GitLab CI: Container Images
 
 - Never use upstream public images such as `node:22-alpine`, `alpine:3.21`, or `ubuntu:24.04` in CI job `image:` fields.
+- Every GitLab CI job `image:` value must point to an internal Fullscript image, including scalar values, `image:name`, defaults, hidden templates, and copied upstream examples.
 - Always use internal Fullscript images from `images.fullscript.io/devops/ci-images/`.
+- If an upstream image looks useful, find or add the matching internal Fullscript image instead of referencing the upstream registry directly from CI.
 - To find the right image and tag, check the `devops/ci-images` group on `git.fullscript.io`.
 - When unsure which image or tag to use, ask the user before proceeding.
 
