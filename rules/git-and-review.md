@@ -49,6 +49,17 @@ These rules cover Git, GitHub, GitLab, Linear, review routing, and external comm
 - Select the hosted-review provider before pushing a branch. If a remote has
   multiple push URLs, push only to the selected provider URL or a
   provider-specific remote, not to every configured mirror.
+- Before pushing to a non-default source branch, check the live hosted-review
+  state for that branch when the project has a PR/MR workflow or the branch is
+  part of a stack. Use the provider CLI, such as
+  `glab mr list --all --source-branch <branch>` or
+  `gh pr list --head <branch> --state all`, and treat closed or merged review
+  artifacts as a stop condition.
+- Never push to a branch whose only matching hosted PR/MR is already closed or
+  merged. Do not treat the old source branch as reusable continuation work just
+  because Git accepts the push. Stop and ask whether to create a new branch and
+  PR/MR, reopen or explicitly reuse the old review artifact, or take another
+  path.
 - Never include `Co-Authored-By: Claude` or similar co-author attribution lines in MR or PR descriptions.
 
 ## MR and PR Description Maintenance

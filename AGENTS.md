@@ -32,6 +32,11 @@ Portable user-level instructions that are installed into runtime profiles live i
   approval, or the user's manual terminal escape hatch. Do not publish if the
   checkpoint is missing, stale, tied to another HEAD, or has unresolved blockers.
 - Do not force push for ordinary follow-up work, review feedback, or CI fixes. Use subsequent commits because hosted diffs are squash-merged. Force push only when it is necessary to resolve a Git history change, rebase, conflict, stale remote update, or when the user explicitly asks for a history rewrite.
+- Before pushing any non-default source branch in a PR/MR workflow or stack,
+  check live hosted-review state for that branch. Never push to a branch whose
+  only matching hosted PR/MR is already closed or merged; stop and ask whether
+  to create a new branch and review artifact, reopen or explicitly reuse the old
+  artifact, or take another path.
 - When a safe recurring command needs approval, request a reusable scoped prefix rule instead of a one-off approval. Prefer narrow prefixes such as `["pnpm", "test"]`, `["pnpm", "run", "test"]`, `["git", "status"]`, `["git", "diff"]`, `["git", "show"]`, and `["glab", "mr", "view"]`; avoid reusable approvals for destructive commands, dependency installs, pushes, credential access, or broad interpreters like `python`, `node`, or `bash`.
 - Keep approval-seeking commands prefix-matchable: avoid shell redirection, command substitution, heredocs, glob-heavy arguments, and broad `bash -lc` wrappers when a direct command works. If repeated prompts persist in a long-running Codex thread after sandbox or writable-root config changes, tell the user the thread may need to be restarted, forked, or handed off so the new config is loaded.
 - In brainstorming or planning threads, treat agreement as design confirmation only. Do not edit files, generate migrations, or start implementation from scope agreement alone; wait for an explicit implementation trigger such as "implement this", "make the changes", "start the PR", "go ahead and code it", or "apply the plan".
