@@ -45,7 +45,10 @@ These rules govern when to diagnose, when to edit, and how to route implementati
   hosted-review workflow, inspect CI or no-pipeline state, and follow
   branch-caused review or CI feedback through to closure. Select the
   hosted-review provider before pushing, and push only to that provider's remote
-  or URL when a configured remote fans out to multiple hosts.
+  or URL when a configured remote fans out to multiple hosts. Before pushing,
+  check live provider state for the source branch when a PR/MR workflow or stack
+  is in play. If the only matching hosted artifact is closed or merged, stop and
+  ask before reusing that branch or proposing branch reuse.
 - Before any agent-authored work is published by pushing, creating or updating a
   PR/MR, or direct publication, run the final personal publication checkpoint
   against the branch diff and exact HEAD SHA. Record target base, diff scope,
