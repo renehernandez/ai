@@ -1,0 +1,4 @@
+interface:
+  display_name: "Start Project"
+  short_description: "Map new effort context before planning"
+  default_prompt: "Use $start-project to map local context for a new effort and return a Project Context Pack before planning."
