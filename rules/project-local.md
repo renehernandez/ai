@@ -7,4 +7,4 @@ this file into user-level runtime instruction profiles.
 
 - Use `mise install` to install the project toolchain.
 - Use `mise run setup` to install dependencies and configure Lefthook git hooks.
-- Use `mise run check` to run the local Lefthook verification gate.
+- Use `mise run pre-commit` to run the local Lefthook pre-commit gate.

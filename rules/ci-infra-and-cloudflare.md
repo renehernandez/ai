@@ -42,6 +42,13 @@ These rules cover test coverage, GitLab CI, Docker image policy, Cloudflare, Ter
 - Short single-line commands such as `corepack enable`, `pnpm install`, and `echo "..."` are fine inline.
 - Keep CI configuration declarative and scripts testable.
 
+## CI and Local Hook Naming
+
+- Do not name CI jobs, package scripts that back CI, or pre-commit hook entries with generic `check` terminology such as `check`, `cli:check`, `validation:check`, or `*:check`.
+- Use names that state the behavior being enforced: `lint`, `format`, `typecheck`, `unit-test`, `integration-test`, `e2e-test`, `build`, `deploy`, `teardown`, `schema-validate`, or `drift-validate`.
+- If a tool's native command uses `check`, such as `biome check` or `git diff --check`, keep the native command invocation but wrap it in a purpose-specific job, hook, or script name.
+- If one automation intentionally runs multiple enforcement categories, split it when practical. Otherwise name it as an explicit gate such as `pre-commit-verification` instead of hiding it behind `check`.
+
 ## Cloudflare Resources
 
 - Always use `wrangler` CLI via the `/wrangler` skill when interacting with Cloudflare Workers, KV, R2, D1, Durable Objects, Queues, logs, tailing, or deployments.

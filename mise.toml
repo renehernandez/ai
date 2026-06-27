@@ -10,6 +10,6 @@ run = [
   "lefthook install",
 ]
 
-[tasks.check]
-description = "Run local verification"
+[tasks.pre-commit]
+description = "Run Lefthook pre-commit commands"
 run = "lefthook run pre-commit"

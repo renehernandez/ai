@@ -7,9 +7,9 @@
   },
   "scripts": {
     "ax": "tsx scripts/ax.ts",
-    "biome:check": "biome check --staged --no-errors-on-unmatched",
-    "biome:check:all": "biome check .",
-    "biome:write": "biome check --write .",
+    "biome:lint-format:staged": "biome check --staged --no-errors-on-unmatched",
+    "biome:lint-format": "biome check .",
+    "biome:lint-format:write": "biome check --write .",
     "skills:validate": "tsx scripts/skill-validate.ts",
     "test": "node --import tsx --test tests/unit/*.test.ts tests/integration/*.test.ts",
     "test:unit": "node --import tsx --test tests/unit/*.test.ts",

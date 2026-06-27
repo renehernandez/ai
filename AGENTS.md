@@ -42,6 +42,14 @@ Portable user-level instructions that are installed into runtime profiles live i
 - In brainstorming or planning threads, treat agreement as design confirmation only. Do not edit files, generate migrations, or start implementation from scope agreement alone; wait for an explicit implementation trigger such as "implement this", "make the changes", "start the PR", "go ahead and code it", or "apply the plan".
 - When the user says they dislike a proposed name, structure, or design shape, provide alternatives and tradeoffs before changing files, even if they did not explicitly ask for alternatives.
 - For JavaScript and TypeScript projects, invoke package-managed commands through the package manager, such as `pnpm exec`, `pnpm dlx`, or `pnpm run`; never call binaries inside `node_modules` directly.
+- Across all projects, do not name CI jobs, task-runner entries, package scripts
+  that back automation, or pre-commit hook entries with generic `check`
+  terminology. Use names that state the behavior being enforced, such as
+  `lint`, `format`, `typecheck`, `unit-test`, `integration-test`, `e2e-test`,
+  `build`, `schema-validate`, or `drift-validate`. If a tool's native command
+  uses `check`, such as `biome check` or `git diff --check`, keep the native
+  command invocation but wrap it in a purpose-specific job, hook, task, or
+  script name.
 - After changing shared skill, agent, instruction, or rule sources in this repo, run `writing-skills` against the changed agent behavior before committing. Portable shared skills must keep runnable helper logic inside the owning skill folder or a real package dependency; do not use repo-root workflow scripts or `runtime.reusableScripts` to make a skill portable. For live runtime refreshes, use the `ax-cli` steering skill and verify the affected installed surface before treating source edits as live.
 - Do not stage or commit local workflow artifacts into work-project repositories. Keep reviewer scratch, readiness reports, reviewer reports, delivery ledgers, screenshots, command proofs, validation evidence, rejected generated shapes, and private plan-support pointers in the thread or private plan-support storage. Reusable AI repo workflow machinery, managed rules, skills, validators, runtime scripts, and regression fixtures may be committed only when that machinery is the feature being changed in this AI repo.
 - Write agent and Codex hooks in TypeScript unless there is a specific runtime requirement that makes another language a better fit.
