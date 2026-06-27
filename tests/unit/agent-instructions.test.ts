@@ -27,6 +27,21 @@ for (const file of ["AGENTS.md", "instructions/AGENTS.md"] as const) {
   });
 }
 
+test("CI infrastructure rules require internal Fullscript job images", () => {
+  const text = readFileSync("rules/ci-infra-and-cloudflare.md", "utf-8");
+
+  assert.match(text, /GitLab CI: Container Images/);
+  assert.match(text, /Never use upstream public images/);
+  assert.match(text, /CI job `image:` fields/);
+  assert.match(text, /Every GitLab CI job `image:` value/);
+  assert.match(text, /internal Fullscript image/);
+  assert.match(text, /image:name/);
+  assert.match(text, /defaults/);
+  assert.match(text, /hidden templates/);
+  assert.match(text, /images\.fullscript\.io\/devops\/ci-images/);
+  assert.match(text, /instead of referencing the upstream registry directly/);
+});
+
 for (const file of ["AGENTS.md", "instructions/AGENTS.md"] as const) {
   test(`${file} defines the portable shared skill boundary`, () => {
     const text = readFileSync(file, "utf-8");
