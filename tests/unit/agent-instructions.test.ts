@@ -101,6 +101,34 @@ for (const file of [
   });
 }
 
+test("plan-orchestrator resolves helper scripts from the loaded skill directory", () => {
+  const skillText = readFileSync("skills/plan-orchestrator/SKILL.md", "utf-8");
+  const promptText = readFileSync(
+    "skills/plan-orchestrator/agents/openai.yaml",
+    "utf-8",
+  );
+
+  for (const text of [skillText, promptText]) {
+    assert.match(
+      text,
+      /loaded\s+(?:`plan-orchestrator`|plan-orchestrator) skill directory/,
+    );
+    assert.match(text, /target repository/);
+    assert.match(text, /command working directory/);
+    assert.match(
+      text,
+      /do not look for or create [`"]?scripts\/plan-orchestrator\.ts[`"]? in the target\s+repository/i,
+    );
+    assert.doesNotMatch(text, /~\/\.agents/);
+    assert.doesNotMatch(text, /~\/\.codex/);
+    assert.doesNotMatch(text, /\/Users\//);
+    assert.doesNotMatch(
+      text,
+      /skills\/plan-orchestrator\/scripts\/plan-orchestrator\.ts/,
+    );
+  }
+});
+
 test("shared rules define deliverable-only OpenSpec task shape", () => {
   const text = readFileSync("rules/docs-and-specs.md", "utf-8");
 

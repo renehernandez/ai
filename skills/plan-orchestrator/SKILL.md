@@ -148,6 +148,18 @@ The resume state must account for:
 If an earlier MR changed after descendants exist, restack affected descendants
 and rerun Nitro gates for every changed head before continuing.
 
+## Helper Path Resolution
+
+Script paths named in this skill are relative to the loaded
+`plan-orchestrator` skill directory. When the active work is in a target
+repository, keep the command working directory in that target repository so
+Git, OpenSpec, and hosted-review checks inspect the target repository, but
+resolve helper scripts from the loaded skill directory.
+
+Do not look for or create `scripts/plan-orchestrator.ts` in the target
+repository. Target repositories should not carry shared AI workflow helper
+scripts.
+
 ## Completion
 
 The only orchestrator-level terminal states after reviewed planning are:
