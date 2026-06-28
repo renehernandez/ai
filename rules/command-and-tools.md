@@ -20,6 +20,18 @@ These rules apply to command execution, network access, and tool installation ac
 - Prefer purpose-built command flags over shell pipelines when possible.
 - Do not run destructive commands unless the user explicitly asks or approves the exact action.
 - Do not install dependencies unless the user explicitly asks or the approved implementation plan requires it.
+- Route package-management file changes through the owning package manager CLI
+  whenever it provides a command for the change. This includes dependency
+  additions, removals, upgrades, downgrades, semver range changes,
+  workspace/package-manager catalog edits, and lockfile updates in files such as
+  `package.json`, `pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, and
+  `bun.lock`. Use commands such as `pnpm add`, `pnpm remove`, `pnpm update`,
+  `npm install`, `npm uninstall`, `yarn add`, `yarn remove`, `bun add`, or
+  `bun remove`, then review the generated manifest and lockfile diff.
+- Manual edits to package-management files are a last resort for metadata that
+  the package manager cannot update directly, such as scripts, package names,
+  exports, engines, or tool configuration. Do not hand-edit dependency entries,
+  package-manager catalogs, or lockfiles to match those changes.
 
 ## Harness Mapping
 

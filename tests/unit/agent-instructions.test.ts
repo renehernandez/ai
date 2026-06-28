@@ -42,6 +42,34 @@ test("CI infrastructure rules require internal Fullscript job images", () => {
   assert.match(text, /instead of referencing the upstream registry directly/);
 });
 
+test("dependency rules require package-manager-mediated manifest and lockfile changes", () => {
+  const commandRules = readFileSync("rules/command-and-tools.md", "utf-8");
+  const dependencyRules = readFileSync("rules/dependency-security.md", "utf-8");
+
+  assert.match(
+    commandRules,
+    /Route package-management file changes through the owning package manager CLI/,
+  );
+  assert.match(commandRules, /dependency\s+additions, removals, upgrades/);
+  assert.match(commandRules, /`pnpm add`, `pnpm remove`, `pnpm update`/);
+  assert.match(
+    commandRules,
+    /Manual edits to package-management files are a last resort/,
+  );
+  assert.match(commandRules, /Do not hand-edit dependency entries/);
+  assert.match(commandRules, /package-manager catalogs, or lockfiles/);
+
+  assert.match(dependencyRules, /Package Manager Authority/);
+  assert.match(dependencyRules, /Use the owning package manager CLI/);
+  assert.match(dependencyRules, /Do not manually edit dependency sections/);
+  assert.match(
+    dependencyRules,
+    /Manual manifest, catalog, or lockfile edits are\s+not an acceptable substitute/,
+  );
+  assert.match(dependencyRules, /after the dependency change/);
+  assert.match(dependencyRules, /Target version or removal state/);
+});
+
 for (const file of ["AGENTS.md", "instructions/AGENTS.md"] as const) {
   test(`${file} defines the portable shared skill boundary`, () => {
     const text = readFileSync(file, "utf-8");
