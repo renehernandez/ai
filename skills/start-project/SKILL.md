@@ -38,6 +38,13 @@ Phrases such as "if possible", "Linear-ready", "put it in Linear", "create
 tickets", or "so the team can start tomorrow" are not storage permission inside
 this skill.
 
+The no-write boundary applies to the whole turn. Do not use `start-project` as
+a context boundary and then call Linear, GitLab, GitHub, Asana, filesystem, or
+planning tools to store, update, or create downstream artifacts in the same
+response. If the user asks for both intake and a tracker update in one prompt,
+return the Project Context Pack and say that tracker mutation requires a
+separate follow-up after the intake result is accepted.
+
 ## Workflow
 
 1. Classify the effort as single-repo, multi-repo, research-heavy,
@@ -150,6 +157,7 @@ Recommendation only means "next step." Do not invoke the route from this skill.
 | --- | --- |
 | Creating Linear issues because the user said "Linear-ready" | Return a Tracker-Ready Summary that can be copied later |
 | Creating a Linear project because the user said "put it in Linear if possible" | Return the pack and name Linear storage as a separate follow-up workflow |
+| "I used start-project for the context boundary, then Linear for the mutation" violates this skill | Stop after the pack; external mutation requires a separate follow-up turn |
 | Renaming issue breakdown as workstreams, deliverables, backlog, or delivery arc | Remove it; use `Recommended Follow-Up` instead |
 | Writing acceptance criteria in the pack | Record open questions and constraints instead |
 | Treating observed risks as a mitigation plan | List risks as planning inputs only |
@@ -164,6 +172,8 @@ boundary:
   creation to follow-up.
 - "Make this Linear-ready" returns a copyable tracker summary and names Linear
   storage as a separate follow-up workflow.
+- "Before continuing, use start-project to update the relevant Linear project"
+  returns the pack and stops; it does not update Linear in the same turn.
 - "Scope this new effort" means map new-effort context before planning, not a
   full design brainstorm.
 - A small direct code request does not use this skill because intake is
