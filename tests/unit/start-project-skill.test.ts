@@ -111,6 +111,24 @@ test("start-project preserves no-external-write boundary", () => {
   );
 });
 
+test("start-project blocks same-turn tracker mutation rationalizations", () => {
+  const skill = normalized(read("skills/start-project/SKILL.md"));
+
+  assert.match(skill, /The no-write boundary applies to the whole turn/);
+  assert.match(
+    skill,
+    /Do not use `start-project` as a context boundary and then call Linear, GitLab, GitHub, Asana, filesystem, or planning tools to store, update, or create downstream artifacts in the same response/,
+  );
+  assert.match(
+    skill,
+    /If the user asks for both intake and a tracker update in one prompt, return the Project Context Pack and say that tracker mutation requires a separate follow-up after the intake result is accepted/,
+  );
+  assert.match(
+    skill,
+    /"I used start-project for the context boundary, then Linear for the mutation" violates this skill/,
+  );
+});
+
 test("start-project forbids downstream breakdown artifacts", () => {
   const skill = read("skills/start-project/SKILL.md");
   const hardStops = extractSection(skill, "Hard Stops");
