@@ -61,7 +61,7 @@ test("change-request-create rejects GitLab description leaks while keeping revie
   );
   assert.match(
     gitlab,
-    /Omit unnecessary author-workflow references and routine validation already represented by CI or repository hooks/,
+    /Omit unnecessary author-workflow references and routine validation already\s+represented by CI, repository hooks, or workflow ledgers/,
   );
 });
 
@@ -116,7 +116,7 @@ test("change-request-create includes hosted failures without restating routine g
   assert.match(skill, /required reviewer, approval, or merge status/);
   assert.match(
     skill,
-    /Do not restate routine green hosted checks or routine local typecheck, lint,\nformat, pre-commit, pre-push, or diff-hygiene commands/,
+    /Do not restate routine green hosted checks, clean Nitro review state, operational\s+verification state, or routine local typecheck, lint, format, pre-commit,\s+pre-push, or diff-hygiene commands/,
   );
 });
 
@@ -134,10 +134,31 @@ test("change-request-create keeps targeted evidence out of automatic verificatio
   assert.match(skill, /automatic local gate or CI job/);
   assert.match(
     gitlab,
-    /targeted reviewer evidence, verification gaps, and hosted state/,
+    /Behavior-specific proof or explicit reviewer-facing gaps/,
   );
   assert.match(
     github,
-    /targeted reviewer evidence, verification gaps, and hosted state/,
+    /Behavior-specific proof or explicit reviewer-facing gaps/,
+  );
+  assert.match(
+    gitlab,
+    /Do not put clean Nitro review state, passing pipeline state, or\s+operational-verification state in Verification/,
+  );
+  assert.match(
+    github,
+    /Do not put passing check state or routine workflow-gate state in Testing or\s+Verification/,
+  );
+});
+
+test("change-request-create encodes thread 019edf9e verification-drift regression", () => {
+  const skill = read("skills/change-request-create/SKILL.md");
+
+  assert.match(
+    skill,
+    /Description evidence includes local skill paths, planning gates, routine\s+formatter output, targeted regression proof, a clean Nitro review, a passing\s+hosted pipeline, an operational-verification run, and a pending hosted check:/,
+  );
+  assert.match(
+    skill,
+    /pass only if internal\/routine references, clean Nitro state, passing pipeline\s+state, and operational-verification state are omitted while targeted proof and\s+the pending check gap are retained/,
   );
 });

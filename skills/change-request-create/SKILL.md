@@ -57,7 +57,14 @@ should answer:
 - what changed;
 - why it changed;
 - where reviewers should focus;
-- what targeted evidence or hosted status changes review or merge confidence.
+- what behavior-specific evidence, reviewer-requested proof, or explicit gap
+  changes review confidence.
+
+Choose verification content after writing the review focus. Every Testing or
+Verification item must map to one of those focus areas, answer a reviewer
+request, or explain an actionable gap. If evidence is true but does not help a
+developer reviewer evaluate the current diff, keep it in workflow evidence or
+the final thread report instead of the hosted body.
 
 Omit unnecessary internal process and tooling references anywhere in the body,
 including local skill paths, temporary planning files, subagent gates, internal
@@ -74,18 +81,24 @@ review-gate state as hosted review, CI, approval, or Nitro evidence. Convert
 only reviewer-relevant risk facts into plain description text, or omit the
 local process details.
 
-Keep evidence when it helps a reviewer assess risk:
+Keep evidence when it helps a developer reviewer assess changed behavior or a
+specific risk:
 
 - targeted regression commands or fixtures;
 - reproduction checks;
-- browser route, console, viewport, migration, or operational verification;
+- browser route, console, viewport, migration, or deployment checks that prove
+  a changed behavior;
 - reviewer-requested proof;
 - failed, pending, missing, unavailable, or stale hosted checks;
-- required reviewer, approval, or merge status that needs attention.
+- required reviewer, approval, or merge status that needs reviewer attention.
 
-Do not restate routine green hosted checks or routine local typecheck, lint,
-format, pre-commit, pre-push, or diff-hygiene commands when the artifact host,
-CI, or repository hooks already show them.
+Do not restate routine green hosted checks, clean Nitro review state, operational
+verification state, or routine local typecheck, lint, format, pre-commit,
+pre-push, or diff-hygiene commands when the artifact host, CI, repository
+hooks, or workflow ledger already show them. Mention a pipeline, Nitro, or
+operational-verification result only when the change adds or changes that
+surface, a reviewer asked for that proof, or there is an actionable gap or
+failure.
 
 Verification sections are for reviewer-risk evidence, not an audit log of every
 command. Do not list commands just because they were run. Include commands that
@@ -94,6 +107,18 @@ example, `bash scripts/cleanup-nitro-resources.test.sh` is targeted evidence for
 a cleanup-policy change; omit `bunx prettier --check`, `git diff --check`, and
 `shellcheck` when an automatic local gate or CI job already owns that routine
 hygiene.
+
+Do not include a broad proof inventory merely because each item is legitimate.
+For example, after a duplicate-work messaging change, a concise reviewer focus
+plus the targeted note-rendering proof may belong in Verification; incidental
+pipeline-fix context, broad handler coverage, note IDs, pod names, and
+review-environment setup details belong in workflow evidence unless reviewers
+need one of those facts to assess the diff.
+
+Keep workflow completion evidence, including green CI, Nitro feedback,
+publication checkpoints, operational-verification runs, and private review-gate
+state, in the delivery ledger or final thread report unless it meets the
+reviewer-facing criteria above.
 
 ## Template And Update Safety
 
@@ -141,8 +166,8 @@ Do not bypass this policy with a direct provider CLI body update. Raw provider u
    - GitHub: use `github-pr-create`.
    - GitLab: use `glab-mr-create`.
 7. Return the artifact URL, source and target branches, draft/readiness state,
-   routed provider, targeted evidence included, and any hosted status or
-   verification gap reviewers need.
+   routed provider, targeted evidence included, and any reviewer-facing hosted
+   gaps.
 
 Use a body file when the provider CLI supports one and the description contains
 multi-line Markdown, checkboxes, or content that is brittle to pass through shell
@@ -156,8 +181,9 @@ flags.
 | Duplicating provider CLI mechanics here | Delegate mutation to `github-pr-create` or `glab-mr-create` |
 | Replacing a whole existing description | Preserve manual content and update only managed sections |
 | Updating a PR/MR body directly through `gh`, `glab`, or an API call | Apply this description policy first, then use the provider command only for mutation |
-| Listing routine format/lint/typecheck commands | Mention only targeted evidence or hosted status that changes reviewer confidence |
-| Listing commands just because they ran locally | Keep only reviewer-risk evidence, gaps, or hosted state |
+| Listing routine format/lint/typecheck commands | Mention only targeted evidence or gaps that change reviewer confidence |
+| Listing commands just because they ran locally | Keep only reviewer-risk evidence or gaps |
+| Putting Nitro, green pipeline, or operational-verification status in Verification because the workflow ran them | Keep gate state in workflow evidence unless the change modifies that surface or there is an actionable gap |
 | Referring to local plans, skills, or subagents | Convert useful facts into reviewer-facing evidence or omit them |
 | Exposing private plan-support paths | Use summaries, hashes, thread references, note IDs, discussion IDs, or stable correlation IDs |
 | Ignoring project templates | Preserve template shape and fill placeholders |
@@ -174,9 +200,11 @@ flags.
   pass only if the policy is applied before the provider CLI or API mutates the
   body; direct `gh`, `glab`, or API updates are not enough by themselves.
 - Description evidence includes local skill paths, planning gates, routine
-  formatter output, targeted regression proof, and a pending hosted check: pass
-  only if internal/routine references are omitted while targeted proof and
-  hosted status are retained.
+  formatter output, targeted regression proof, a clean Nitro review, a passing
+  hosted pipeline, an operational-verification run, and a pending hosted check:
+  pass only if internal/routine references, clean Nitro state, passing pipeline
+  state, and operational-verification state are omitted while targeted proof and
+  the pending check gap are retained.
 - Description evidence includes one targeted fixture command plus routine
   formatter, shell lint, and diff-hygiene commands covered by hooks or CI: pass
   only if the description keeps the fixture evidence and omits the automatic

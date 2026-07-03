@@ -1,6 +1,6 @@
 ---
 name: plan-unit-delivery
-description: Use when one validated plan_delivery_handoff approved unit should be implemented through local verification, final publication checkpoint, Nitro feedback, CI, and stacked PR/MR delivery.
+description: Use when implementing one approved atomic plan or OpenSpec delivery unit from a validated plan_delivery_handoff or plan-unit-sequencer selection.
 ---
 
 # Plan Unit Delivery
@@ -113,17 +113,21 @@ path.
     unavailable). For existing PRs/MRs, read the current hosted body before
     updating and retain enough pre-update evidence to restore manual sections,
     links, checklist state, reviewer-authored notes, and template content if
-    readback shows damage. The implementation body must describe the approved
-    unit, current behavior, review focus, targeted evidence, hosted status, and
-    stack relationship that changes reviewer confidence. It must omit routine
+    readback shows damage. The implementation body must cover the approved unit,
+    current behavior, review focus, stack relationship, and reviewer-facing
+    proof or gaps. Include proof only when it maps to the stated review focus,
+    answers a reviewer request, or explains an actionable gap. Omit routine
     local validation, private workflow artifacts, raw ledgers, local paths,
-    subagent gates, and author-only plan iteration. Read the hosted body back
-    for the current implementation head before artifact-host review, Nitro
-    request, pipeline monitoring, or final delivery reporting. If readback
-    finds lost manual content, wrong-section updates, stale prior-head content,
-    or a less accurate body, restore through the selected policy owner or block
-    with recovery evidence. Metadata-only reuse is allowed only when the
-    existing body remains accurate for the current head and the ledger records a
+    subagent gates, author-only plan iteration, clean Nitro state, passing
+    pipeline state, and operational-verification state unless that surface
+    changed, a reviewer asked for proof, or an actionable gap exists. Read the
+    hosted body back for the current
+    implementation head before artifact-host review, Nitro
+    request, pipeline monitoring, or final delivery reporting. If readback finds
+    lost manual content, wrong-section updates, stale prior-head content, or a
+    less accurate body, restore through the selected policy owner or block with
+    recovery evidence. Metadata-only reuse is allowed only when the existing
+    body remains accurate for the current head and the ledger records a
     metadata-only materiality decision plus reuse rationale.
 17. Run artifact-host review.
 18. Monitor artifact-host pipelines for the latest head until they pass, fail,
@@ -200,7 +204,7 @@ checkbox delta exists.
 | Assuming Nitro feedback is absent immediately after push | Request Nitro for the latest head, wait up to 10 minutes for review start, then wait for completion |
 | Requesting Nitro or reporting stack readiness before current-head description readback | Run the description policy gate first and record it in `delivery_gate_ledger.description_policy` |
 | Reusing a prior implementation description after a material push | Refresh the hosted description, or record current-head metadata-only reuse with rationale |
-| Exposing raw ledgers, local paths, subagent gates, or author-only plan iteration in the MR body | Rewrite through the description policy owner so the body describes the approved unit and reviewer-facing evidence |
+| Exposing raw ledgers, local paths, subagent gates, author-only plan iteration, clean Nitro state, passing pipeline state, or operational-verification state in the MR body | Rewrite through the description policy owner so the body describes the approved unit, changed behavior, and reviewer-facing evidence or gaps |
 | Moving on after restacking descendants | Rerun the full Nitro gate for every changed descendant head |
 | Returning gate YAML without a readable thread summary | Add `## Readable Summary` before the YAML |
 

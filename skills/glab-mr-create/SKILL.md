@@ -72,9 +72,23 @@ first so routing and full description policy stay in one place.
    `change-request-create` before this adapter. For direct GitLab use:
    - Explain why the change exists and where reviewers should focus.
    - Preserve project template sections and required checklist semantics.
-   - Include targeted evidence or hosted status only when it helps reviewers understand risk.
-   - Omit unnecessary author-workflow references and routine validation already represented by CI or repository hooks.
-   - Treat Verification sections as targeted reviewer evidence, verification gaps, and hosted state; do not list routine checks merely because they ran.
+   - Include only behavior-specific proof, reviewer-requested evidence, or
+     explicit gaps that help reviewers understand changed behavior or risk.
+   - Write the review focus before the Verification section, then include only
+     evidence that maps to that focus, answers a reviewer request, or explains
+     an actionable gap.
+   - Omit unnecessary author-workflow references and routine validation already
+     represented by CI, repository hooks, or workflow ledgers.
+   - Treat Verification sections as reviewer-risk evidence, not a command log
+     or gate summary. Do not list routine checks merely because they ran.
+   - Do not include a broad proof inventory merely because each item is true;
+     omit incidental pipeline fixes, broad handler coverage, note IDs, pod
+     names, and review-environment setup unless reviewers need that detail to
+     assess the current diff.
+   - Do not put clean Nitro review state, passing pipeline state, or
+     operational-verification state in Verification unless this MR changes that
+     surface, a reviewer asked for the proof, or there is an actionable gap or
+     failure.
    - Do not expose local private support artifact paths, raw private support
      artifacts, or private thread metadata. Use summaries, hashes, thread
      references, note IDs, discussion IDs, or stable correlation IDs when
@@ -95,7 +109,7 @@ first so routing and full description policy stay in one place.
    [Files, flows, or decisions worth close attention]
 
    ## Verification
-   [Targeted reviewer evidence, verification gaps, and hosted state if relevant]
+   [Behavior-specific proof or explicit reviewer-facing gaps]
    ```
 
 8. Create a draft MR:
@@ -145,7 +159,8 @@ first so routing and full description policy stay in one place.
 | Guessing target branch | Read remote HEAD, branch config, or project docs |
 | Leaking local process into the MR body | Keep reviewer evidence self-contained and omit local-only artifacts |
 | Exposing private plan-support paths | Use summaries, hashes, thread references, note IDs, discussion IDs, or stable correlation IDs |
-| Treating local review-gate evidence as hosted review | Use host metadata, CI/no-pipeline inspection, and Nitro feedback for hosted status |
+| Treating local review-gate evidence as hosted review | Keep local gate evidence private and continue through the hosted review workflow |
+| Treating clean Nitro, green pipelines, or operational-verification runs as MR Verification content | Keep gate state in workflow evidence unless the MR changes that surface or exposes a reviewer-facing gap |
 | Requesting GitLab reviewers during MR creation | Create or update the MR first, then post a new top-level MR note such as `/request_review @alice @bob` |
 | Naming upstream resources without links | Include actual URLs for reviewer-needed references |
 | Handling a neutral PR/MR request here | Use `change-request-create` before provider mutation |
@@ -162,11 +177,14 @@ first so routing and full description policy stay in one place.
 - Process-heavy change with local plans, pressure tests, internal review gates,
   or private plan support artifacts: pass only if the MR body includes
   self-contained reviewer evidence, omits references to excluded local
-  artifacts, does not treat local gates as hosted review, and links directly to
+  artifacts, does not treat local gates as hosted review, omits clean Nitro,
+  passing pipeline, and operational-verification gate state from Verification
+  unless the MR changes that surface or exposes a gap, and links directly to
   reviewer-needed upstream resources.
 
 ## Test Evidence
 
 - RED scenario: thread `019eb763-9db7-73c2-bf96-d1cdbd88cbaf` showed an MR body leaking local verification/internal reviewer gates and naming upstream resources without links after the user excluded the plan artifact from the MR.
-- GREEN: skill requires reviewer-facing MR bodies that keep necessary evidence self-contained, omit excluded/local process artifacts, and use actual links for reviewer-needed upstream resources.
+- RED scenario: thread `019edf9e-5cb2-74c3-a1ae-e606ca8e7613` showed stacked MR descriptions using the right headers while still filling Verification with routine command output, clean Nitro review state, passing pipeline state, and operational-verification state.
+- GREEN: skill requires reviewer-facing MR bodies that keep necessary evidence self-contained, omit excluded/local process artifacts and routine gate state, and use actual links for reviewer-needed upstream resources.
 - REFACTOR: repo-local `skills/glab-mr-create` is the canonical MR creation workflow for Fullscript Lab repos; shared GitLab helpers remain available through `glab-cli`.
