@@ -767,6 +767,64 @@ for (const file of [
   });
 }
 
+for (const file of [
+  "skills/plan-review/SKILL.md",
+  "skills/plan-unit-delivery/SKILL.md",
+] as const) {
+  test(`${file} keeps reviewer-requested proof in hosted description exceptions`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /clean\s+Nitro\s+state/);
+    assert.match(text, /passing\s+pipeline\s+state/);
+    assert.match(text, /operational-verification\s+state/);
+    assert.match(text, /surface\s+changed/);
+    assert.match(text, /reviewer asked\s+for proof/);
+    assert.match(text, /actionable\s+gap/);
+  });
+}
+
+for (const file of [
+  "skills/change-request-create/SKILL.md",
+  "skills/glab-mr-create/SKILL.md",
+  "skills/github-pr-create/SKILL.md",
+  "skills/plan-review/SKILL.md",
+  "skills/plan-unit-delivery/SKILL.md",
+  "skills/plan-orchestrator/SKILL.md",
+  "rules/git-and-review.md",
+] as const) {
+  test(`${file} filters hosted verification through review focus`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /review focus/i);
+    assert.match(
+      text,
+      /maps?\s+to\s+(one of\s+)?(the\s+)?(those\s+)?(that\s+)?(?:stated\s+)?(?:review\s+)?focus/i,
+    );
+    assert.match(text, /reviewer request|reviewer asked/i);
+    assert.match(text, /actionable\s+gap/i);
+  });
+}
+
+for (const file of [
+  "skills/change-request-create/SKILL.md",
+  "skills/glab-mr-create/SKILL.md",
+  "skills/github-pr-create/SKILL.md",
+  "rules/git-and-review.md",
+] as const) {
+  test(`${file} rejects broad proof inventories in hosted descriptions`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /broad proof inventor(?:y|ies)/i);
+    assert.match(text, /incidental\s+pipeline[- ]fix(?:es| context)?/i);
+    assert.match(text, /note\s+IDs/i);
+    assert.match(text, /pod\s+names/i);
+    assert.match(
+      text,
+      /environment setup|review-environment setup|preview-environment setup/i,
+    );
+  });
+}
+
 test("ax-cli prompt documents required-gate workflow commit behavior", () => {
   const text = readFileSync("skills/ax-cli/agents/openai.yaml", "utf-8");
 
@@ -848,7 +906,8 @@ const hostedReviewEvidenceFiles = [
       /local reviewer evidence|local review-gate evidence/,
       /local review-gate state/,
       /hosted review/,
-      /CI\/no-pipeline inspection/,
+      /Keep local gate evidence private/,
+      /workflow evidence unless the MR changes that surface/,
       /Nitro evidence/,
     ],
   },

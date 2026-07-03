@@ -52,6 +52,22 @@ owned by `plan-review`; implementation commits remain owned by
 `plan-unit-delivery`; each owning phase must use its required-gate commit helper
 for workflow-owned commits.
 
+Hosted MR/PR descriptions are reviewer communication, not orchestrator gate
+ledgers. When this workflow creates, updates, restacks, or resumes a planning or
+implementation review artifact, route description work through the owning
+description policy (`change-request-create`, `glab-mr-create`, or
+`github-pr-create`). Keep Nitro gate state, CI or no-pipeline inspection,
+operational-verification runs, publication checkpoints, local reviewer evidence,
+and private support artifacts in workflow evidence unless the description policy
+allows them because they prove changed behavior, answer a reviewer request, or
+expose an actionable gap. Do not translate `planning_review`,
+`delivery_gate_ledger`, `nitro_feedback_gate`, resume evidence, or
+`stack_ready` evidence into MR Verification content by default. The hosted
+description's review focus must select which proof belongs in the body. Only
+proof that maps to that focus belongs in the hosted description; true workflow
+evidence that does not help reviewers evaluate that focus stays in the workflow
+record.
+
 Intermediate outputs such as `plan_delivery_handoff`, `openspec_blueprint`,
 `planning_review`, or one delivered delivery-unit MR are not terminal success
 for `plan-orchestrator`; continue until `stack_ready` or report

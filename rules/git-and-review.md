@@ -70,6 +70,17 @@ These rules cover Git, GitHub, GitLab, Linear, review routing, and external comm
 - Reviewers only see the final diff. Keep the description aligned to the current branch, not intermediate approaches or reverted work.
 - Do not narrate intermediate decisions, reverted approaches, or scoped-out work in the description unless there is a lasting consequence a reviewer needs to know, such as a follow-up issue or deliberate coverage gap.
 - The `Summary`, `Testing`, `Deployment Notes`, and `Review Notes` sections must describe the MR or PR as it currently stands.
+- Verification or testing sections should contain behavior-specific proof,
+  reviewer-requested evidence, or explicit gaps. Do not list routine local
+  commands, clean Nitro review state, passing pipeline state, or operational
+  verification state merely because the workflow ran them. Mention those
+  surfaces only when the change modifies them, a reviewer asked for that proof,
+  or there is an actionable gap or failure.
+- Write the review focus before choosing Testing or Verification content. Keep
+  only evidence that maps to that focus, answers a reviewer request, or explains
+  an actionable gap; omit broad proof inventories, incidental pipeline fixes,
+  note IDs, pod names, and environment setup details unless reviewers need them
+  to assess the current diff.
 - Do not expose local private support artifact paths such as `~/.ax/plans/...`,
   raw private support artifacts, or private thread metadata in MR or PR
   descriptions by default. When support-artifact evidence is relevant, use

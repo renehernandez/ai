@@ -196,7 +196,8 @@ and next action.
    - state that implementation has not started;
    - name the plan/OpenSpec artifact;
    - name the requested feedback, such as Nitro and developer review;
-   - include exact planning validation performed;
+   - include planning validation only when it proves the reviewed artifact's
+     shape or exposes a reviewer-facing gap;
    - state the expected implementation stack shape, for example `4
      delivery-unit MRs, 22 nested work items`.
    Do not expose local private support paths, raw private support artifacts, or
@@ -212,15 +213,19 @@ and next action.
    to restore manual sections, links, checklist state, reviewer-authored notes,
    and template content if readback shows damage. Read the hosted body back
    after create/update and tie that readback to the current planning artifact
-   head. The body must describe current scope, behavior, boundaries, requested
-   feedback, and reviewer-relevant validation. It must omit author-process
-   history, local workflow detail, raw private support artifacts, and private
-   paths. If readback finds lost manual content, wrong-section updates, stale
-   prior-head content, or a less accurate body, restore through the selected
-   policy owner or block with recovery evidence. Metadata-only reuse is allowed
-   only when the existing body remains accurate for the current head and the
-   final evidence records a metadata-only materiality decision plus reuse
-   rationale.
+   head. The body must cover current scope, behavior, boundaries, requested
+   feedback, expected stack shape, and reviewer-facing proof or gaps. Include
+   proof only when it maps to the stated review focus, answers a reviewer
+   request, or explains an actionable gap. Omit author-process history, local
+   workflow detail, raw private support artifacts, private paths, clean Nitro
+   state, passing pipeline state, and operational-verification state unless
+   that surface changed, a reviewer asked for proof, or an actionable gap
+   exists. If readback finds lost manual content,
+   wrong-section updates, stale prior-head content, or a less accurate body,
+   restore through the selected policy owner or block with recovery evidence.
+   Metadata-only reuse is allowed only when the existing body remains accurate
+   for the current head and the final evidence records a metadata-only
+   materiality decision plus reuse rationale.
 13. Run the artifact-host inspection adapter (`gitlab-adapter-review` or
    `github-adapter-review`) only for host metadata, discussions, and CI/review
    state. Do not run implementation code review against a planning-only diff.
