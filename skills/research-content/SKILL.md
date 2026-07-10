@@ -40,7 +40,7 @@ Prefer sources in this order:
 4. Extract useful examples, stats, references, and quote candidates.
 5. Map current discourse, disagreements, and tired framing to avoid.
 6. Produce research-derived thesis candidates in `possible_angles`.
-7. Hand off to `brainstorming`, `doc-smith`, or `presentations`.
+7. Hand off to `explore`, `plan`, `doc-smith`, or `presentations`.
 
 If current source access is unavailable for current discourse, recent stats,
 market/category movement, or public sentiment, return `status: blocked` with
@@ -55,7 +55,7 @@ research_brief:
   status: complete | blocked
   research_type: content
   topic:
-  intended_next_step: brainstorming | plan-ready | doc-smith | presentations | other
+  intended_next_step: explore | plan | doc-smith | presentations | other
   freshness:
     checked_at:
     stale_risk: low | medium | high

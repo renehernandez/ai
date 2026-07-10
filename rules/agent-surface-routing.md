@@ -29,6 +29,21 @@ Use repo-visible instructions for background-agent PR review rubrics, security e
 - For local implementation, prefer the local checkout plus `~/.agents` and project `AGENTS.md`.
 - For cloud or background PR review, prefer repo-visible instructions and the PR diff.
 - For questions about existing local work, prefer desktop/session state and the local worktree.
-- For questions about merged code, PRs, CI, and remote branches, verify with GitHub.
+- For questions about merged code, PRs/MRs, CI, and remote branches, verify with
+  the project-selected provider.
 
 If a conclusion depends on a surface-specific capability, name the surface in the answer. For example, say "the local desktop agent can use the local skill" or "the background reviewer needs this in repo-visible docs".
+
+## Lifecycle modes across surfaces
+
+Explore, Plan, Execute, Review, and Finish remain the public lifecycle on every
+surface. Surface capability changes what each mode can prove or mutate; it does
+not create another lifecycle entrypoint.
+
+- Explore and Review may run on any surface that can read the required target.
+- Plan and Execute require a repository-visible artifact plus a dedicated
+  branch/worktree with one known write owner before writing.
+- Finish requires authenticated provider access and a current task-local
+  publication checkpoint for the exact target.
+- A hosted or cloud agent without local worktree, hook, or runtime evidence must
+  report that gap and may not infer the missing evidence from machine memory.

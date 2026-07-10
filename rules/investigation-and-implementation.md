@@ -1,107 +1,130 @@
-# Investigation and Implementation Rules
+# Investigation and implementation rules
 
-These rules govern when to diagnose, when to edit, and how to route implementation work.
+These rules define semantic routing, planning artifacts, implementation
+ownership, and the mandatory OpenSpec rehearsal boundary.
 
-## Troubleshooting and Investigation
+## Diagnose and explore before mutation
 
-- When the user is troubleshooting, investigating, or debugging an issue, do not take action such as committing, pushing, editing files, or running fixes before presenting findings and asking how to proceed.
-- Troubleshooting mode means analyze, diagnose, and report, then wait for the user's decision before acting.
-- This applies even when the fix seems obvious.
-- If the failure may come from Codex runtime, hooks, plugins, or automation state, inspect `~/.codex` runtime configuration such as `config.toml`, cached plugin hook definitions, and runtime automation artifacts before changing repo files. Do not assume the fault is in the current workspace just because the symptom appeared there.
+- Troubleshooting, investigation, debugging, research, project intake, and
+  divergent design begin in Explore and remain read-only.
+- Present findings before entering Execute. Do not edit, fix, commit, publish,
+  or mutate external state until the user requests implementation.
+- When the symptom may come from local runtime, hooks, plugins, or automation,
+  inspect the relevant local state before assuming the repository is at fault.
+- Agreement on a design confirms the decision; it does not authorize artifact
+  or implementation writes.
+- If the user rejects a name, structure, taxonomy, folder layout, API shape, or
+  other design choice, present alternatives and tradeoffs before changing it.
 
-## Brainstorming and Design Sessions
+## Route semantically
 
-- When the user wants to brainstorm, design, or think through a problem, always use the `/brainstorm` skill.
-- Do not load the lower-level `brainstorming` skill directly for these requests.
-- This applies in plan mode and normal mode.
-- When the user says they dislike a proposed name, structure, taxonomy, folder
-  layout, API shape, or other design choice, treat it as a request for
-  alternatives and tradeoffs. Do not rename, restructure, or otherwise apply
-  the change unless the user explicitly asks for implementation.
+Direct Execute is eligible only when the request fits one coherent final MR and
+has no unresolved behavior, architecture, migration, safety, ownership,
+ordering, cross-component contract, or verification decision. File count and
+line count may inform risk but never select the workflow.
 
-## Code Implementation
+Enter Plan when any material implementation decision remains. Plan stays
+conversational until scope, design, delivery shape, risk, acceptance, proof, and
+policy are coherent. If direct Execute discovers a material unresolved
+decision, freeze writes and return the decision plus worktree identity to Plan.
 
-- When the user asks to implement, fix, build, or apply changes, work in the current agent session by default.
-- Skills and workflows may delegate to available local, cloud, or custom subagents when they define a bounded implementation, exploration, or verification lane.
-- Do not refer to retired agent names or require a subagent that is not available in the current harness.
-- For implementation work that needs planning, review-first delivery, stacked PRs/MRs, or multi-step coordination, use `plan-orchestrator` and its related plan workflow skills.
-- `plan-poc` is an explicit review-only OpenSpec rehearsal lane, not normal
-  implementation delivery. Use it only when Rene asks for a POC, proof of
-  concept, implementation rehearsal, or `plan-poc` run. A POC artifact stays
-  draft, is closed unmerged, and feeds a private learning summary for later
-  OpenSpec revision. Final implementation must re-enter the normal
-  `plan-orchestrator` path from the revised OpenSpec; do not promote POC
-  commits, contextual POC task state, or the draft POC artifact into a
-  mergeable delivery stack.
-- Accepted implementation work includes direct user requests to implement, fix,
-  build, apply a plan, or deliver review-feedback changes, plus approved plan
-  workflow delivery units. It excludes brainstorming, planning, OpenSpec
-  proposal creation, `plan-ready` output, planning review, troubleshooting-only
-  findings, and review-only work until the user or workflow enters an
-  implementation or delivery step.
-- After accepted implementation work is complete, verify the change, stage only
-  the intended files, commit on the feature branch, push to the selected
-  hosted-review remote, create or update a PR/MR when the project has a
-  hosted-review workflow, inspect CI or no-pipeline state, and follow
-  branch-caused review or CI feedback through to closure. Select the
-  hosted-review provider before pushing, and push only to that provider's remote
-  or URL when a configured remote fans out to multiple hosts. Before pushing,
-  check live provider state for the source branch when a PR/MR workflow or stack
-  is in play. If the only matching hosted artifact is closed or merged, stop and
-  ask before reusing that branch or proposing branch reuse.
-- Before any agent-authored work is published by pushing, creating or updating a
-  PR/MR, or direct publication, run the final personal publication checkpoint
-  against the branch diff and exact HEAD SHA. Record target base, diff scope,
-  HEAD SHA, reviewer outcome, and any blocking findings in private thread or
-  support evidence unless the project workflow already requires reviewer-facing
-  evidence. If the checkpoint is missing, stale, tied to a different HEAD, or
-  reports unresolved blockers, pause before publishing. This checkpoint is a
-  personal workflow boundary and does not replace hosted review, CI, Nitro,
-  MR/PR approval, or project gates.
-- Pause instead of publishing when the diff contains secrets, unrelated user
-  changes, generated noise, unresolved product or safety decisions, or ambiguous
-  hosted-review provider routing. If verification is blocked by external state
-  or missing local tooling and no product, safety, or routing decision is
-  pending, publish only after disclosing the limitation in the hosted review
-  artifact or final handoff.
-- In plan-to-OpenSpec conversion, `.agents/plans/**` files are scratch intake.
-  Delete the source plan only after the OpenSpec change is created, strict
-  validation passes, and repo-local OpenSpec scaffolding validation passes when
-  available. Preserve it when creation or validation fails. If the source plan
-  is already committed, block and repair the branch instead of publishing a
-  deletion-only source-plan diff. For `artifact_type: openspec`, the
-  planning-review diff must contain no `.agents/plans/**` paths.
-- For `artifact_type: plan`, only the primary atomic plan markdown document
-  under `.agents/plans/**` is a valid reviewed planning artifact. Support
-  sidecars such as review requests, reviewer selections, handoffs, blueprints,
-  ledgers, reports, validation inputs, and validation outputs must not be
-  committed and must stay in thread evidence by default. When file-backed
-  recovery or correlation is needed, use the private plan-artifact workflow
-  owned by the `ax-cli` steering skill. Do not commit `.agents/plans/**` support
-  sidecars.
-- Do not stage or commit local workflow artifacts into work-project
-  repositories. Reviewer scratch, readiness reports, reviewer reports, delivery
-  ledgers, screenshots, command proof, validation evidence, rejected generated
-  shapes, and private plan-support pointers belong in the chat thread or
-  private plan-support storage. Reusable AI repo workflow machinery, managed
-  agent rules, skills, validators, runtime scripts, and regression fixtures may
-  be committed only in the AI project that owns them and only when that
-  machinery is the feature being changed.
-- Portable shared skills must not depend on repo-root workflow scripts, private
-  runtime paths, or `runtime.reusableScripts`. Package helper logic inside the
-  owning skill folder, or use a real package dependency, so the skill remains
-  reusable on its own.
+Plan selects one artifact:
 
-## Local Code Review
+- Use an atomic plan at `.agents/plans/<slug>.md` for one coherent final MR that
+  needs no durable cross-component contract or mandatory full rehearsal.
+- Use one OpenSpec change for independently reviewable delivery units, a durable
+  cross-component contract, migration design, or work requiring the full POC.
 
-- When the user asks to review local changes, review their changes, review the working tree, or self-review, use the relevant review skill in the current session.
-- For broad or high-risk reviews, skills may launch available local, cloud, or custom subagents for independent review lanes, then reconcile findings in the parent thread.
-- Do not refer to retired agent names or require a subagent that is not available in the current harness.
+Only primary atomic-plan Markdown belongs under `.agents/plans`. Reviewer
+requests, selections, blueprints, handoffs, ledgers, fingerprints, command
+proof, and other private workflow evidence remain task-local. Do not commit a
+second representation of an OpenSpec.
 
-## Compound Step
+## Own one worktree
 
-- Invoke the `/compound` skill at the end of substantive implementation, troubleshooting, brainstorming, or design work when non-obvious learnings should be captured.
-- Also invoke `/compound` at the end of a substantive session when the user says they are done, such as `that's it`, `thanks`, `wrap up`, or `done for now`.
-- Keep the compound step brief.
-- Skip it when the work was trivial, such as a single typo fix or small config tweak, or when no non-obvious learning was produced.
-- Respect the user's request to skip compound.
+- Before the first Plan or Execute write, verify or create one dedicated branch
+  and worktree with exactly one write owner.
+- Parallel writers use disjoint branches/worktrees and disjoint file ownership.
+- A transfer records branch, worktree, HEAD, changed paths, untracked paths, and
+  diff fingerprint. The previous owner stops writing first.
+- Dirty, shared, contradictory, or externally changed ownership blocks writes
+  until reconciled or moved to a clean isolated worktree.
+- Reviewers stay read-only. Plan owns planning fixes; Execute owns implementation
+  fixes.
+
+## Rehearse every OpenSpec completely
+
+Every OpenSpec receives one full disposable implementation POC before final
+implementation. An atomic plan does not require a POC unless the user requests
+one.
+
+The POC:
+
+1. Starts from the locally reviewed initial OpenSpec commit in its own
+   branch/worktree.
+2. Implements every task, requirement, scenario, acceptance criterion, and
+   applicable production concern with direct success and failure proof.
+3. Exercises real decision boundaries or fidelity-equivalent environments.
+4. Uses isolated HOME and runtime roots for AX behavior and never mutates the
+   live user runtime.
+5. Opens one draft review-only PR/MR whose title starts with `POC:` and whose
+   description says it must close unmerged.
+6. Receives current local implementation review, configured CI, latest-head
+   hosted automated review, and personal acceptance of the exact clean HEAD.
+7. Refreshes every exact-head gate after any POC HEAD change.
+8. Freezes after acceptance, closes unmerged, and removes its local worktree.
+
+The POC rehearses task completion and archival in a disposable repository copy
+without checking the source `tasks.md` or archiving the live change. POC commits
+must never be merged, rebased, cherry-picked, or applied into final delivery.
+
+After acceptance, Plan reconciles durable findings into proposal, design, delta
+specs, tasks, and required tracker content once per authorized cycle. Local-only
+implementation observations remain transient. A materially unproved
+reconciliation delta returns to the user before another POC cycle.
+
+## Deliver final artifacts by top-level unit
+
+- There is no separate planning MR and no reconciliation-only MR.
+- An atomic plan produces one final implementation MR containing the plan and
+  implementation.
+- OpenSpec produces one final implementation MR per top-level delivery unit.
+  Nested work items become cohesive commits inside that unit.
+- Final implementation starts independently from the reconciled OpenSpec, never
+  from POC ancestry.
+- The first unit contains the reconciled planning-base state. Each later unit
+  branches from the previous unit in one total Git predecessor order, even when
+  logical dependencies permit parallel work.
+- Each final unit carries its own task/spec changes. The last unit carries task
+  completion and required OpenSpec archive changes.
+- A material final-implementation contract delta returns to Plan; the user
+  decides whether another POC is required.
+
+## Review and publication boundary
+
+Review inspects every changed planning artifact with implementation-readiness,
+edge-case/risk, simplification/scope, and refactoring reviewers. It inspects POC
+and final implementation targets with correctness, regression, maintainability,
+and verification reviewers. Add affected-domain specialists.
+
+Review evidence is task-local and bound to an artifact fingerprint or exact
+target-base/HEAD pair. Before any push or hosted artifact mutation, Review emits
+`publication_checkpoint` with target-base diff, hook evidence, required local
+reviewers, provider route, and blockers. Any HEAD or target-base change makes it
+stale.
+
+Finish consumes the current checkpoint, publishes the configured final
+artifact, and follows hosted gates. Implementation and delivery requests permit
+publication but do not permit merge. Merge, deployment, and cleanup require
+explicit language or activated project policy.
+
+## Repository artifacts
+
+Do not stage or commit reviewer scratch, readiness reports, reviewer reports,
+delivery ledgers, screenshots, command proof, local paths, or private support
+pointers. Reusable rules, mode packages, validators, runtime code, and regression
+fixtures may be committed in the repository that owns them when they are the
+feature being changed.
+
+Portable shared skills keep executable helper logic inside the owning skill
+folder or a real package dependency.

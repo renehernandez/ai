@@ -1,6 +1,6 @@
 ---
 name: openspec-propose
-description: Propose a new change with all artifacts generated in one step. Use when the user wants to quickly describe what they want to build and get a complete proposal with design, specs, and tasks ready for implementation.
+description: Explicit-only developer command. Invoke only when the user explicitly names this OpenSpec adapter or its /opsx command.
 license: MIT
 compatibility: Requires openspec CLI.
 metadata:
@@ -109,3 +109,11 @@ After completing all artifacts, summarize:
 - If context is critically unclear, ask the user - but prefer making reasonable decisions to keep momentum
 - If a change with that name already exists, ask if user wants to continue it or create a new one
 - Verify each artifact file exists after writing before proceeding to next
+
+## Explicit Invocation Boundary
+
+Do not infer this adapter from ordinary language. Route ordinary work through the owning lifecycle mode.
+
+<!-- ax-openspec-skill: openspec-propose; explicit-only -->
+
+<!-- ax-openspec-content-sha256: sha256:2120f6dd5924fe86a55d852e4e49adb5b6494c6306049c52506d3c78016be30b -->

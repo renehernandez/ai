@@ -153,3 +153,8 @@ This skill supports the "actions on a change" model:
 
 - **Can be invoked anytime**: Before all artifacts are done (if tasks exist), after partial implementation, interleaved with other actions
 - **Allows artifact updates**: If implementation reveals design issues, suggest updating artifacts - not phase-locked, work fluidly
+
+<!-- ax-openspec-command: apply.md; explicit-only -->
+<!-- Invoke only as /opsx:apply; do not infer from ordinary language. -->
+
+<!-- ax-openspec-content-sha256: sha256:2279ce18da463c625e2c9618d5e02d310ceb38836ee0094ba46dba44bc7ddd61 -->

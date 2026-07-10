@@ -39,50 +39,74 @@ These rules apply to command execution, network access, and tool installation ac
 - In Codex, apply shell instructions to the available shell command tool.
 - If a rule names a tool that is unavailable in the current harness, use the closest safe equivalent and report the fallback when it affects verification or behavior.
 
-## Skill Installation
+## AX runtime convergence
 
-- Use `pnpm ax skills install --profile <name>` for first-time installs of managed skills for a machine profile.
-- Use `pnpm ax skills update --profile <name>` to refresh managed skills from their configured upstream refs.
-- Use `pnpm ax skills validate --profile <name>` for local, non-network validation of managed skill configuration.
-- Use `pnpm ax skills status --profile <name>` to inspect installed skill copies and symlinks.
-- Add `--profile <name>` to scope skills work to one machine profile; repeat it to select multiple profiles.
-- Use either `--all-profiles` or one or more `--profile <name>` flags for non-interactive skills commands.
-- Managed skills are canonical under `.agents/skills`; configured harness roots such as `.codex/skills` and `.claude/skills` stay real directories that contain per-skill symlinks back to the canonical skill directories.
-- After changing any managed skill source under `skills/`, run `writing-skills` against the changed skill before committing, then run `pnpm ax skills update --profile <name>` before treating the change as live. Repo source files and installed runtime copies can drift until the update runs.
-- After refreshing a changed skill, verify the active runtime surface with `pnpm ax skills status --profile <name>`. Use `pnpm ax skills validate --profile <name>` or `pnpm ax validate --all-profiles` when the change affects shared workflow contracts, agent prompts, or cross-profile behavior.
-- Portable shared skills must keep runnable helper logic inside the owning skill folder or a real package dependency. Do not teach non-`ax-cli` skills to call repo-root workflow scripts, installed runtime paths, profile refresh commands, private plan-artifact commands, or `runtime.reusableScripts`.
-- `runtime.reusableScripts` is not an accepted mechanism for making shared skills portable. If a skill needs helper code, package that code under the skill directory before publishing or installing the skill.
-- Do not manually create skill symlinks or hand-copy managed skills into runtime folders.
-- Do not use `npx skills`; this repo manages skills through the internal `pnpm ax` CLI.
+Tracked `ax.config.json` is desired state. Local
+`~/.agents/runtime/managed-runtime.json` records installed profiles, exactly one
+workflow-policy profile, AX-owned paths, and content hashes. The live filesystem
+is observed state.
 
-## AX Sync
+- Use `pnpm ax sync` to build one validated candidate and converge selected
+  skills, instructions, and hooks.
+- Only top-level sync may initialize the manifest or change installed/policy
+  profile selection. A first headless run supplies explicit profile and policy
+  selection. Later headless selection changes use an exact-manifest-hash-bound
+  profile-selection file.
+- Scoped `pnpm ax skills sync`, `pnpm ax instructions sync`, and
+  `pnpm ax hooks sync` require an initialized valid manifest, reuse its profile
+  selection, and mutate only that surface.
+- Do not hand-copy runtime assets, create managed symlinks manually, or edit
+  managed hook registration directly.
+- Portable shared skills keep executable helpers in the owning skill directory
+  or a real package dependency.
 
-- This repo currently has no repo-managed subagent mappings. Skills may still delegate to available local, cloud, or custom subagents exposed by the active harness.
-- Do not manually create subagent symlinks or hand-copy generated agent files into runtime folders; use the repo runtime or the owning harness mechanism when adding managed subagents.
+Each distinct configured source/ref pair resolves once per sync invocation and
+uses one immutable source snapshot for every selected entry. Disposable source
+caches live under `~/.agents/runtime/cache`; they are never ownership or
+installed truth.
 
-## Hook Runtime Sync
+Every runtime mutation holds the runtime-root lock, validates the complete
+candidate before touching live entries, retains transaction payloads under
+`~/.agents/runtime/transactions`, writes `managed-runtime.json` last, and keeps
+seven verified backups per changed asset/target under
+`~/.agents/runtime/backups`.
 
-- Use `pnpm ax hooks install` for first-time managed hook setup.
-- Use `pnpm ax hooks update` after changing files under `hooks/` or hook registration behavior.
-- Use `pnpm ax hooks validate` to enforce managed hook symlink state and Codex/Claude startup registration state.
-- Use `pnpm ax hooks status` for read-only hook source, symlink, registration, Codex trust, and selected remote reporting.
-- Do not manually create managed hook symlinks or hand-copy hook files into `~/.agents/hooks`, `~/.codex/hooks`, or `~/.claude/hooks`.
-- Do not manually edit Codex or Claude startup hook registration when `ax hooks update` can apply the registration with backups.
-- Codex startup hook trust is app-owned state. If status reports `[untrusted] codex startup hook trust`, report that state and avoid hand-editing trust hashes.
+## Offline inspection
 
-## Instruction Runtime Sync
+- Use `pnpm ax status` and `pnpm ax validate` for offline, read-only inspection
+  with no network access or filesystem mutation.
+- Status reports desired, managed, observed, cache, collision, lock, and
+  recovery state. It cannot establish remote-ref freshness.
+- Validate fails when desired, ownership, observed content, profile policy,
+  hooks, or recovery state violates the local contract.
+- Scoped `skills`, `instructions`, and `hooks` status/validate commands apply
+  the same offline boundary to one surface.
+- Codex hook trust is app-owned state. Report an untrusted status; do not edit
+  trust hashes manually.
 
-- Use `pnpm ax instructions install --profile <name>` for first-time `AGENTS.md` and managed rule-file symlink setup.
-- Use `pnpm ax instructions update --profile <name>` after changing managed instruction paths.
-- Use `pnpm ax instructions validate --profile <name>` for local validation of configured instruction sources and targets.
-- Use `pnpm ax instructions status --profile <name>` to inspect instruction symlinks.
-- Use `--profile personal` on personal machines and `--profile work` on Fullscript work machines.
-- Use `--all-profiles` only when intentionally validating or installing the union of all machine profiles.
-- Do not manually create managed instruction symlinks or hand-copy managed instruction files into runtime folders.
+## Repo-local OpenSpec sync
 
-## Runtime Wrapper Commands
+- Use `ax openspec sync` in the invocation repository to converge missing,
+  configured, or repairable partial repo-local OpenSpec state.
+- Headless missing or context-required state uses `--context-file <path>`.
+  Configured context review remains explicit through its config-review flags.
+- `ax openspec status` and `ax openspec validate` are offline, read-only, and
+  perform no mutation.
+- Top-level runtime sync never mutates OpenSpec files in the current working
+  directory.
+- Canonical generated skills live under `.agents/skills/openspec-*`; canonical
+  commands live under `.agents/commands/opsx`; configured harness targets use
+  normalized relative links.
 
-- Use `pnpm ax install --profile <name>` or `pnpm ax update --profile <name>` to refresh skills, instructions, and hooks.
-- Use `pnpm ax validate --profile <name>` or `pnpm ax status --profile <name>` to validate skills and instructions while reporting hook state. Use scoped `pnpm ax hooks validate` when hook symlink and startup registration failures should block.
-- Use `pnpm ax shim install|status|uninstall` to manage the global `~/.local/bin/ax` entrypoint; do not use `pnpm link` as the supported global access path.
-- Add `--help` to the root command, wrapper commands, scoped commands, or scoped subcommands to inspect available options before running a command.
+## Isolated proof and live activation
+
+- Run pre-merge AX proof with isolated HOME, manifest, cache, transactions,
+  backups, skills, instructions, hooks, and profile targets.
+- A feature branch, dirty source, or disposable worktree must never mutate live
+  runtime roots.
+- After merge, verify the clean merged default branch source matches the hosted
+  default branch, then run live `ax sync`.
+- Keep shim lifecycle separate from runtime convergence. Use
+  `pnpm ax shim install`, `pnpm ax shim status`, and `pnpm ax shim uninstall` for
+  the managed `~/.local/bin/ax` entrypoint.
+- Add `--help` to inspect root, scoped, and shim command options.

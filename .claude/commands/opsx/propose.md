@@ -1,1 +1,0 @@
-../../../.agents/commands/opsx/propose.md

@@ -158,3 +158,8 @@ Target archive directory already exists.
 - Show clear summary of what happened
 - If sync is requested, use the Skill tool to invoke `openspec-sync-specs` (agent-driven)
 - If delta specs exist, always run the sync assessment and show the combined summary before prompting
+
+<!-- ax-openspec-command: archive.md; explicit-only -->
+<!-- Invoke only as /opsx:archive; do not infer from ordinary language. -->
+
+<!-- ax-openspec-content-sha256: sha256:6ff70323960e41a230a8affa3272a925894b90ad9881f088c2905e9658486f6a -->

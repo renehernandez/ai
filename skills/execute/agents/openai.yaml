@@ -1,0 +1,5 @@
+interface:
+  display_name: "Execute"
+  short_description: "Implement with one owned writer"
+  default_prompt: "Use $execute to verify one-writer worktree ownership, implement direct work, a complete OpenSpec POC, or one final delivery unit, run local Review automatically, and stop before unauthorized terminal actions."
+

@@ -170,3 +170,8 @@ When things crystallize, you might offer a summary - but it's optional. Sometime
 - **Do visualize** - A good diagram is worth many paragraphs
 - **Do explore the codebase** - Ground discussions in reality
 - **Do question assumptions** - Including the user's and your own
+
+<!-- ax-openspec-command: explore.md; explicit-only -->
+<!-- Invoke only as /opsx:explore; do not infer from ordinary language. -->
+
+<!-- ax-openspec-content-sha256: sha256:d5c2124bba00f2d20ed4d7c0a8af313039cfa24eafd1ddf1937940eabdb230ec -->

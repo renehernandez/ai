@@ -1,0 +1,36 @@
+[
+  {
+    "id": "explicit-atomic-cannot-hide-migration",
+    "contract": {
+      "explicitRoute": "atomic_plan",
+      "coherentSingleMr": true,
+      "severalDeliveryUnits": false,
+      "durableCrossComponentContract": false,
+      "migrationDesign": true,
+      "fullPocRequired": false,
+      "unresolvedMaterialDecision": false
+    },
+    "expectedArtifact": "openspec"
+  },
+  {
+    "id": "finish-word-alone-never-merges",
+    "request": "Finish the implementation and report readiness.",
+    "expected": {
+      "publish": true,
+      "merge": false,
+      "deploy": false,
+      "cleanup": false
+    }
+  },
+  {
+    "id": "explicit-terminal-authority-is-narrow",
+    "request": "Merge when green; do not deploy or clean up.",
+    "expected": {
+      "publish": false,
+      "merge": true,
+      "deploy": false,
+      "cleanup": false
+    },
+    "note": "Explicit negative language keeps unrelated terminal authority disabled."
+  }
+]

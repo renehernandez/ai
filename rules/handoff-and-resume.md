@@ -10,8 +10,10 @@ before the structured block so the thread remains scannable.
 When handing off non-trivial work, include:
 
 - objective and current decision;
+- current mode and mutation authority;
 - repository, cwd, branch, and PR number if any;
-- current worktree state, including uncommitted changes;
+- write owner, current worktree state, exact HEAD, changed/untracked paths, and
+  diff fingerprint;
 - files changed or docs written;
 - verification already run, using exact test layer names such as unit, component, worker-runtime, database integration, local browser E2E, deployed-preview E2E, or deployment verification;
 - CI, review, merge, or deploy state if relevant;
@@ -25,11 +27,14 @@ For cloud handoffs, include repo-visible file paths and avoid relying only on lo
 When resuming from a handoff, do not restart discovery from scratch. First verify the handoff against live state:
 
 1. Confirm cwd, branch, worktree, and uncommitted changes.
-2. Confirm PR and CI state through `gh` when relevant.
+2. Confirm PR/MR, CI, review, and terminal state through the selected provider
+   CLI when relevant.
 3. Re-read only the rule files and changed files needed for the next action.
 4. Continue from the next concrete action unless live state contradicts the handoff.
 
-If live state differs from the handoff, state the difference and use live state as authoritative.
+If live state differs from the handoff, state the difference and use live state
+as authoritative. Invalidate stale worktree ownership, exact-target Review, and
+publication evidence before continuing.
 
 ## Cross-Surface Notes
 

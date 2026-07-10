@@ -1,9 +1,0 @@
-plan_review_request:
-  status: ready_for_review
-  artifact_type: openspec
-  artifact_ref: openspec/changes/add-change-request-create
-  review_goal: "Validate the managed change request creation plan before implementation."
-  requested_reviewers:
-    - nitro
-    - developers
-  unresolved_blockers: []

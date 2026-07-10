@@ -14,7 +14,7 @@ Turn planning artifacts into Linear-ready delivery slices with the user. Treat t
 
 Use for OpenSpec-to-Linear breakdowns, plan-to-ticket conversion, milestone shaping, project issue sequencing, or when a user asks to create Linear issues from a spec/design.
 
-Do not use for implementation planning inside one already-written ticket; use `plan-ready` for that.
+Do not use for implementation planning inside one already-written ticket; use `plan` for that.
 
 ## Core Rule
 

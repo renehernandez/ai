@@ -70,7 +70,7 @@ research_routing:
 ```
 
 `next_step` should name the selected skill or the better downstream skill, such
-as `brainstorming`, `plan-ready`, `doc-smith`, or `presentations`.
+as `explore`, `plan`, `doc-smith`, or `presentations`.
 
 Do not run downstream brainstorming, planning, writing, deck creation, or code
 implementation from this skill. Recommend that next step in the brief instead.
