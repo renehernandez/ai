@@ -45,9 +45,15 @@ all evidence tied to the previous fingerprint, base, or HEAD.
 
 Review normalizes provider comments, automated review, CI, and approvals after
 Finish performs the required provider interaction. GitHub, generic GitLab, and
-Fullscript GitLab/Nitro retain their configured policies. Stale-head feedback
-never passes a latest-head gate, and hosted gates never replace the local
-baseline.
+Fullscript GitLab/Nitro retain their configured policies. Feedback for a stale
+source HEAD or target-base SHA never passes a latest-effective-diff gate, and
+hosted gates never replace the local baseline.
+
+Inspect the complete available feedback surface for every configured required
+reviewer, not only its summary status or opening sentence. For Nitro, read the
+entire response and all unresolved Nitro-authored discussions. Reassuring text
+such as `no findings` does not clear actionable language later in the same note
+or applicable findings carried forward from older heads.
 
 Keep provider, artifact URL, target base, head SHA, normalized status, and
 findings in the task handoff. Keep reviewer identities, transcripts,
@@ -67,8 +73,8 @@ Before every push, PR/MR creation, or PR/MR update, emit a task-local
 - no blockers.
 
 `scripts/review-contract.ts` validates this checkpoint. Any HEAD or resolved
-target-base SHA change makes it stale. If evidence cannot be recovered after resume, rerun it;
-do not reconstruct persisted gate state.
+target-base SHA change makes it stale. If evidence cannot be recovered after
+resume, rerun it; do not reconstruct persisted gate state.
 
 ## Common Mistakes
 

@@ -51,6 +51,11 @@ When continuing from a handoff:
 Live state is authoritative. A contradiction invalidates ownership, exact-head
 review, or publication evidence until the owning mode refreshes it.
 
+When resuming a multi-MR stack, reconstruct each lane from live worktree and
+provider state, including its source HEAD, target branch and HEAD, draft state,
+pipeline graph, configured reviewer feedback, and predecessor relationship.
+Do not create or depend on a persisted workflow ledger.
+
 ## Startup brief
 
 Keep the brief short: surface, repository/worktree, branch and dirty state,

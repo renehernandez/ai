@@ -67,19 +67,24 @@ export function validatePublicationCheckpoint(
 
 export type HostedFinding = {
   head: string;
+  targetBaseSha: string;
   status: "passed" | "finding" | "blocked" | "pending";
   findings: readonly string[];
 };
 
 export function normalizeHostedFinding(
   finding: HostedFinding,
-  expectedHead: string,
+  expected: { head: string; targetBaseSha: string },
 ): HostedFinding {
-  if (finding.head !== expectedHead) {
+  if (
+    finding.head !== expected.head ||
+    finding.targetBaseSha !== expected.targetBaseSha
+  ) {
     return {
       head: finding.head,
+      targetBaseSha: finding.targetBaseSha,
       status: "blocked",
-      findings: ["hosted feedback belongs to a stale head"],
+      findings: ["hosted feedback belongs to a stale effective diff"],
     };
   }
   return finding;

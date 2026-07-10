@@ -94,7 +94,8 @@ The system SHALL keep the locally reviewed initial OpenSpec on a local planning-
 
 #### Scenario: Atomic implementation is authorized
 - **WHEN** an atomic plan is selected
-- **THEN** the plan and implementation may be published together in one final MR
+- **THEN** the plan and implementation MUST be published together as one change
+  set in one final PR/MR
 
 #### Scenario: Atomic delivery completes or is abandoned
 - **WHEN** final delivery merges or the plan is abandoned
@@ -136,4 +137,3 @@ The system SHALL publish reconciled planning state with the owning final impleme
 - **WHEN** an artifact will not be implemented
 - **THEN** Plan records the disposition in the appropriate durable project surface
 - **AND** Finish does not mark it complete silently
-
