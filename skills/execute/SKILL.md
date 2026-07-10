@@ -30,13 +30,15 @@ Before the first write and after resume:
 4. allow exactly one writer to edit, stage, and commit that artifact.
 
 Read-only reviewers may run in parallel. Another writer needs a different
-branch/worktree and disjoint file ownership. A handoff identifies branch,
-worktree, HEAD, changed and untracked paths, and diff fingerprint; the previous
-writer stops first.
+branch/worktree with one writer. Prefer disjoint paths, but allow declared
+integration hotspots whose normal restack conflicts belong to the descendant
+owner. A handoff identifies branch, worktree, HEAD, changed and untracked paths,
+and diff fingerprint; the previous writer stops first.
 
 ## Implementation Routes
 
-- Direct or atomic work implements one coherent final MR.
+- Direct work implements one coherent final MR. Atomic work keeps the plan and
+  implementation in one change set for that single final MR and has no POC.
 - A POC implements the complete reviewed OpenSpec in its disposable worktree,
   including applicable production concerns, without checking source tasks.
 - Final OpenSpec work implements exactly one top-level delivery unit per MR.
@@ -47,9 +49,18 @@ Final work starts from the normal target base plus reconciled planning state,
 never from POC ancestry. Do not merge, rebase, cherry-pick, or apply POC commits.
 
 Top-level units have a total Git predecessor order even when logical
-dependencies permit parallel work. A later unit branches from its Git
-predecessor. After a predecessor squash-merges, retarget and restack descendants
-onto the verified merged commit, then refresh every changed exact-head gate.
+dependencies permit parallel work. Create one singly owned branch/worktree per
+unit. Start independent units immediately, contract-dependent units when their
+accepted interface is fixed in the stack seed, and implementation-dependent
+units only after required predecessor output exists.
+
+The root branch targets the normal target; every descendant targets its
+immediate predecessor branch and restacks onto the predecessor's current
+published head before first publication. Eligible owners may implement and fix
+feedback concurrently. Restack propagation stays ordered and coalesces obsolete
+upstream heads. After a predecessor squash-merges, retarget the immediate child
+to the normal target and restack it without replaying predecessor commits, then
+refresh every changed effective-diff gate.
 
 ## Commit And Review Loop
 
@@ -61,6 +72,10 @@ Automatically invoke Review read-only for the exact implementation diff/head.
 Execute fixes in-scope implementation findings, then refreshes Review. A
 finding that changes the contract returns to Plan. When local Review passes,
 hand its publication checkpoint to Finish when publication is authorized.
+
+Finish may reactivate the current lane owner for CI or hosted-review findings
+after publication without another user prompt. If that owner is unavailable,
+perform the standard exclusive ownership handoff before a replacement edits.
 
 Execute-only or local-only wording stops before Finish. `implement`, `deliver`,
 or `proceed` authorizes the normal publication sequence after Review, but never

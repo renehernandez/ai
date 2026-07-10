@@ -32,6 +32,13 @@ When resuming from a handoff, do not restart discovery from scratch. First verif
 3. Re-read only the rule files and changed files needed for the next action.
 4. Continue from the next concrete action unless live state contradicts the handoff.
 
+For a multi-MR stack, verify every active lane's branch, worktree, source and
+target heads, draft state, pipeline graph, configured review feedback, and Git
+predecessor before resuming. Route new work to the current lane owner. If the
+original writer is unavailable, confirm it is inactive and complete the normal
+ownership handoff before a replacement edits; never infer ownership from an old
+summary.
+
 If live state differs from the handoff, state the difference and use live state
 as authoritative. Invalidate stale worktree ownership, exact-target Review, and
 publication evidence before continuing.

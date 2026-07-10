@@ -116,12 +116,17 @@ test("REFACTOR route closes atomic-plan and implicit-merge loopholes", () => {
   assert.deepEqual(terminalAuthority(narrow.request), narrow.expected);
 });
 
-test("Plan owns mandatory full POC and one final MR per top-level unit", () => {
+test("Plan keeps atomic delivery in one change set and rehearses OpenSpec", () => {
   const skill = read("skills/plan/SKILL.md");
 
   assert.match(skill, /Every OpenSpec, without exception/);
   assert.match(skill, /production-complete POC/);
-  assert.match(skill, /There is no planning MR/);
+  assert.match(
+    skill,
+    /atomic plan and its implementation are one change set in one final MR/,
+  );
+  assert.match(skill, /no planning-only MR, POC phase, or POC MR/);
+  assert.match(skill, /If rehearsal is required, select\s+OpenSpec/);
   assert.match(skill, /one final MR per top-level delivery unit/);
   assert.match(skill, /Do not start another POC automatically/);
 });
@@ -147,6 +152,42 @@ test("Execute enforces one writer and preserves total Git order", () => {
   assert.throws(
     () => finalDeliveryOrder(["contract", "contract"]),
     /invalid_delivery_unit/,
+  );
+});
+
+test("mode skills coordinate parallel draft stacks through hosted readiness", () => {
+  const plan = read("skills/plan/SKILL.md");
+  const execute = read("skills/execute/SKILL.md");
+  const review = read("skills/review/SKILL.md");
+  const finish = read("skills/finish/SKILL.md");
+
+  assert.match(
+    plan,
+    /independent, contract-dependent, or implementation-dependent/,
+  );
+  assert.match(plan, /expected branch\/worktree ownership/);
+  assert.match(execute, /one singly owned branch\/worktree per\s+unit/);
+  assert.match(
+    execute,
+    /Eligible owners may implement and fix\s+feedback concurrently/,
+  );
+  assert.match(execute, /Restack propagation stays ordered/);
+  assert.match(review, /complete available feedback surface/);
+  assert.match(
+    review,
+    /read the\s+entire response and all unresolved Nitro-authored discussions/,
+  );
+  assert.match(finish, /Create every final MR as draft/);
+  assert.match(
+    finish,
+    /technical\s+readiness never authorize changing it from draft to ready/,
+  );
+  assert.match(finish, /Do not stop at publication/);
+  assert.match(finish, /green parent pipeline/);
+  assert.match(finish, /repeat without another user prompt/);
+  assert.match(
+    finish,
+    /Report `draft_stack_ready` while every MR\s+remains draft/,
   );
 });
 
@@ -242,13 +283,36 @@ test("Review rejects stale checkpoints and hosted feedback", () => {
 
   assert.deepEqual(
     normalizeHostedFinding(
-      { head: "old", status: "passed", findings: [] },
-      "new",
+      {
+        head: "old",
+        targetBaseSha: "base-a",
+        status: "passed",
+        findings: [],
+      },
+      { head: "new", targetBaseSha: "base-a" },
     ),
     {
       head: "old",
+      targetBaseSha: "base-a",
       status: "blocked",
-      findings: ["hosted feedback belongs to a stale head"],
+      findings: ["hosted feedback belongs to a stale effective diff"],
+    },
+  );
+  assert.deepEqual(
+    normalizeHostedFinding(
+      {
+        head: "new",
+        targetBaseSha: "base-a",
+        status: "passed",
+        findings: [],
+      },
+      { head: "new", targetBaseSha: "base-b" },
+    ),
+    {
+      head: "new",
+      targetBaseSha: "base-a",
+      status: "blocked",
+      findings: ["hosted feedback belongs to a stale effective diff"],
     },
   );
 });
@@ -285,6 +349,37 @@ test("Finish resolves provider precedence and never infers merge from finish", (
   );
   assert.equal(terminalAuthority("please deploy this release").deploy, true);
   assert.equal(terminalAuthority("merge when green").merge, true);
+  assert.deepEqual(terminalAuthority("proceed to merge"), {
+    publish: true,
+    merge: true,
+    deploy: false,
+    cleanup: false,
+  });
+  assert.deepEqual(terminalAuthority("proceed"), {
+    publish: true,
+    merge: false,
+    deploy: false,
+    cleanup: false,
+  });
+  assert.equal(terminalAuthority("mark the MRs ready").merge, false);
+  assert.equal(terminalAuthority("request all reviews").merge, false);
+  assert.equal(
+    terminalAuthority("we are not ready to proceed to merge").merge,
+    false,
+  );
+  assert.equal(terminalAuthority("should we proceed to merge?").merge, false);
+  assert.equal(
+    terminalAuthority("what happens if we proceed to merge?").merge,
+    false,
+  );
+  assert.equal(
+    terminalAuthority("before we proceed to merge, run the tests").merge,
+    false,
+  );
+  assert.equal(
+    terminalAuthority("proceed to merge request review").merge,
+    false,
+  );
   assert.deepEqual(
     terminalAuthority("do not merge, deploy, publish, or clean up", {
       publish: true,

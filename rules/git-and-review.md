@@ -45,14 +45,27 @@ Before any push, PR/MR creation, or PR/MR update, Review emits a task-local
 - resolved provider route;
 - blocking findings.
 
-If HEAD or target base changes, the checkpoint becomes stale. Missing task-local
-evidence is recomputed; do not reconstruct or persist local gate state through a
-repository or runtime tool.
+If HEAD or the resolved target-base SHA changes, the effective diff and
+checkpoint become stale even when the target ref and source HEAD are unchanged.
+Missing task-local evidence is recomputed; do not reconstruct or persist local
+gate state through a repository or runtime tool.
 
 Finish performs provider mutations and polling. Implementation or delivery
 language authorizes publication and hosted feedback follow-through without
 merge. Merge, deployment, and cleanup require explicit user language or an
 activated project policy. Hosted findings do not expand authority.
+
+Finish remains active after publication. It monitors the newest effective
+pipeline graph and every configured required reviewer, routes in-scope failures
+to the current Execute lane owner, and repeats the Review/push/provider cycle
+without another user prompt. MR creation, pending provider state, a green parent
+pipeline, or a review request is not completion.
+
+Required accessible jobs and downstream pipelines must pass. Allowed failures,
+manual jobs, skipped jobs, and explicit no-pipeline state follow project policy.
+Canceled or superseded older pipelines do not decide the current gate. Missing
+credentials or inaccessible required provider state is a blocker; transient
+provider delay remains under monitoring or a supported wakeup.
 
 ## Hosted artifact maintenance
 
@@ -84,20 +97,26 @@ inside a discussion, modify the MR description, or change the reviewer field as
 a substitute.
 
 When active Fullscript project policy selects Nitro, Finish posts
-`/request_review @nitro` after initial publication and every head-changing
-follow-up push. Latest-head Nitro feedback must complete without unresolved
-actionable findings. Feedback tied to an earlier head is stale.
+`/request_review @nitro` after initial publication and every effective-diff
+change: either the source HEAD or resolved target-base SHA. Latest-effective-diff
+Nitro feedback must complete without unresolved actionable findings. Feedback
+tied to an earlier source HEAD or target-base SHA is stale.
 
 ## AI repository delivery
 
-- This repository publishes through GitLab `origin` MRs targeting `main`.
+- This repository publishes through GitLab `origin`. A single or root MR targets
+  `main`; each stacked descendant targets its immediate predecessor branch until
+  that predecessor merges and the child is retargeted.
 - The GitHub remote is a mirror and is used only under explicit direction or a
   documented GitLab outage path.
-- Finish inspects CI or explicit no-pipeline state and latest-head Nitro before
-  reporting readiness.
+- Finish inspects CI or explicit no-pipeline state and latest-effective-diff
+  Nitro before reporting readiness.
 - No planning-only MR is created. A POC is draft and closes unmerged. An atomic
-  plan produces one final MR; OpenSpec produces one final MR per top-level
-  delivery unit.
+  plan and its implementation form one change set in one final MR, with no POC
+  phase; OpenSpec produces one final MR per top-level delivery unit.
+- Every final MR is created as draft and verified live as draft. Local Review,
+  CI, approvals, hosted review, and technical readiness never remove draft
+  status.
 - Final implementation never uses POC commits or ancestry.
 
 ## Multi-unit final delivery
@@ -105,15 +124,31 @@ actionable findings. Feedback tied to an earlier head is stale.
 - Top-level delivery-unit order defines one total Git predecessor chain.
 - Logical dependencies control semantic eligibility; the total chain controls
   branch ancestry and merge order.
+- Seed every branch/worktree before implementation. The root MR targets the
+  normal target branch; each descendant MR targets its immediate predecessor
+  source branch and restacks onto the predecessor's current published head
+  before first publication.
+- Implement semantically eligible units concurrently in singly owned
+  worktrees. Keep publication and restack propagation ordered, and coalesce
+  superseded upstream heads into one restack onto the newest reviewed
+  predecessor.
 - Set formal GitLab blocking dependencies when the provider supports them.
 - Merge explicitly authorized final units from the bottom of the chain to the
   top. Use each live source HEAD as the merge guard.
 - After a predecessor squash-merges, refresh the child, verify its target
-  changed to the default branch, and restack it onto the verified merged commit.
-- Every changed descendant HEAD reruns local Review, CI, approvals, and
-  configured hosted automated review before its merge.
+  changed to the default branch, and restack it with the verified merged commit
+  and old predecessor head so predecessor commits are not replayed.
+- Restack pushes use an exact expected remote-head lease. On lease rejection,
+  inspect external commits and re-establish ownership before integrating them;
+  never retry by blindly accepting the new remote SHA.
+- Every changed descendant effective diff reruns local Review, CI, approvals,
+  and configured hosted automated review before its merge.
 - Stop before the next merge when default-branch CI for the landed predecessor
   is failed, blocked, or unavailable under project policy.
+- Technical stack readiness leaves every MR draft. Explicit merge authority
+  starts a frozen bottom-to-top sequence: mark only the current MR ready, wait
+  for any required review triggered by that transition, merge it, then restack
+  and revalidate the next draft MR.
 
 ## Commit and artifact titles
 

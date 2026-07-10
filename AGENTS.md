@@ -21,8 +21,8 @@ authority expansion, state the mode, mutation authority, and goal once.
 
 - **Explore** is read-only discovery, research, project intake, and divergent
   thinking. It produces no repository, tracker, or provider writes.
-- **Plan** settles material decisions conversationally, then writes one atomic
-  plan or OpenSpec artifact. It does not implement from design agreement alone.
+- **Plan** settles material decisions conversationally, then writes the selected
+  planning artifact. It does not implement from design agreement alone.
 - **Execute** implements accepted work in one owned branch/worktree. Exactly one write owner controls each worktree and may edit, stage, and commit there.
 - **Review** is read-only inspection of one artifact fingerprint, target-base
   diff, or exact HEAD. It returns findings to Plan or Execute and emits the
@@ -83,36 +83,42 @@ Execute-only, Review-only, or local-only stops at that boundary.
 
 - Plan stays conversational until scope, design, delivery shape, risk,
   acceptance, proof, and policy decisions are coherent.
-- Use one atomic plan for a coherent final MR that needs no durable
-  cross-component contract or mandatory rehearsal.
-- Use OpenSpec for multiple independently reviewable delivery units, durable
-  cross-component contracts, migration design, or work requiring full
-  rehearsal.
-- Every OpenSpec receives one complete disposable implementation POC. Publish it
-  as a draft review-only MR, satisfy local and hosted automated review, obtain
-  personal acceptance of the exact clean head, then close it unmerged.
-- Reconcile durable POC findings into the OpenSpec once per authorized cycle.
-  Final implementation starts independently; do not promote POC commits.
-- Do not create a separate planning MR. An atomic plan produces one final MR.
-  OpenSpec produces one final MR per top-level delivery unit; nested work items
-  become cohesive commits in that unit. This change has one final MR.
+- AI-repo work uses one atomic plan and one final MR. When a proposed change is
+  too broad for one coherent MR, split it into separately accepted atomic
+  changes. Do not infer an OpenSpec route for ordinary AI-repo work.
+- OpenSpec adapters remain explicit developer commands. When the user explicitly
+  invokes one, follow its complete POC and delivery contract; otherwise create
+  no OpenSpec change for this repository.
+- Do not create a separate planning MR. An atomic plan and its implementation
+  are one change set in one final MR, with no POC MR or POC phase.
 - Review evidence stays task-local. A changed artifact, target base, or HEAD
   invalidates its evidence and publication checkpoint.
 
 ## Repository Finish policy
 
-- Finish routes this repo through GitLab `origin` MRs targeting `main`. Do not
-  push `main` or publish directly to it without explicit user authorization.
+- Finish routes this repo through GitLab `origin`. A single or root MR targets
+  `main`; each stacked descendant targets its immediate predecessor branch
+  until that predecessor merges and the child retargets. Do not push `main` or
+  publish directly to it without explicit user authorization.
 - The `github` remote is a mirror. When a remote has several push URLs, publish
   only to the selected GitLab URL or a provider-specific remote.
 - Finish inspects CI or no-pipeline state and posts a new top-level note
-  containing only `/request_review @nitro`. Latest-head Nitro feedback must be
-  clean or fully resolved before readiness.
+  containing only `/request_review @nitro`. It reads the complete Nitro response
+  and unresolved Nitro-authored discussions; reassuring summary language does
+  not override carried-forward actionable feedback.
+- Every final MR is created and kept draft through implementation, CI, review,
+  and technical readiness. Finish stays active after publication, follows the
+  complete pipeline graph and hosted feedback, and reactivates the current
+  Execute owner to fix in-scope failures without requiring another user prompt.
 - Implementation or delivery wording authorizes publication and hosted
   follow-through, not merge. Merge, deployment, and cleanup remain explicit.
 - For multiple final delivery units, preserve the total predecessor order,
-  retarget and restack after predecessor squash merges, and refresh every
-  changed exact-head gate.
+  implement semantically eligible units concurrently in singly owned
+  worktrees, retarget and restack after predecessor squash merges, and refresh
+  every changed effective-diff gate.
+- Technical readiness leaves every MR draft. Explicit merge authority starts a
+  bottom-to-top sequence that marks only the current MR ready immediately before
+  its merge and waits for any review triggered by that transition.
 
 ## AX runtime
 

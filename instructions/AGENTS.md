@@ -75,8 +75,9 @@ modes.
 
 - Plan remains conversational until scope, design, delivery shape, risk,
   acceptance, proof, and policy choices are coherent.
-- Use an atomic plan for one coherent final MR that needs no durable
-  cross-component specification or mandatory rehearsal.
+- Use an atomic plan for one coherent implementation unit that needs no durable
+  cross-component specification or mandatory rehearsal. Its plan and
+  implementation form one change set in one final PR/MR; it has no POC phase.
 - Use OpenSpec for independently reviewable delivery units, durable
   cross-component contracts, migration design, or work requiring full
   rehearsal.
@@ -85,11 +86,20 @@ modes.
   personal acceptance of the exact clean head, then closes unmerged.
 - Reconcile durable POC findings once per authorized cycle. Implement final
   code independently; never promote POC commits.
-- Do not publish a separate planning PR/MR. An atomic plan produces one final
-  PR/MR. OpenSpec produces one final PR/MR per top-level delivery unit, with
+- Do not publish a separate planning PR/MR. An atomic plan and its
+  implementation are one change set in one final PR/MR, with no POC PR/MR or
+  POC phase. OpenSpec produces one final PR/MR per top-level delivery unit, with
   nested work items implemented cohesively inside that unit.
 - Review evidence and the publication checkpoint remain task-local and become
   stale when the artifact, target base, or HEAD changes.
+- For multiple final units, Plan records semantic eligibility and one total Git
+  order. Execute may develop eligible units concurrently when each has a singly
+  owned branch/worktree; publication and restack propagation preserve the Git
+  predecessor order.
+- Final MRs remain draft through implementation and technical readiness.
+  Finish continues monitoring configured CI and hosted review after publication
+  and routes in-scope failures to the current lane owner without another user
+  prompt.
 - Implementation or delivery wording authorizes Finish publication and hosted
   follow-through, not merge. Merge, deployment, and cleanup remain explicit.
 
@@ -101,7 +111,9 @@ modes.
   reviewer, approvals, and direct-publication policy.
 - Nitro applies only to Fullscript GitLab projects whose active policy selects
   it. A review request is a new top-level note containing only
-  `/request_review @nitro`, and latest-head feedback must pass.
+  `/request_review @nitro`. Read the complete response and unresolved
+  Nitro-authored discussions; actionable feedback anywhere in the response must
+  be fixed or explicitly dispositioned before readiness.
 - Review retrieves and normalizes hosted findings read-only. Finish performs
   provider mutations and polling. Plan or Execute owns fixes.
 

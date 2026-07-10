@@ -29,16 +29,24 @@ export type TerminalAuthority = {
 
 function explicitlyRequests(
   request: string,
-  action: "merge" | "ship" | "deploy" | "clean up" | "cleanup",
+  action:
+    | "merge"
+    | "ship"
+    | "proceed to merge"
+    | "deploy"
+    | "clean up"
+    | "cleanup",
 ): boolean {
-  const escaped = action.replace(" ", "\\s+");
+  const escaped = action.replaceAll(" ", "\\s+");
+  const actionSuffix =
+    action === "proceed to merge" ? "(?!\\s+request\\b)" : "";
   const politePrefix =
     "(?:please\\s+|can you\\s+|could you\\s+|would you\\s+|go ahead and\\s+|i want you to\\s+|you (?:can|should|may)\\s+|let'?s\\s+)?";
   const clauseStart = new RegExp(
-    `(?:^|[.!?;]\\s*)${politePrefix}${escaped}\\b`,
+    `(?:^|[.!?;]\\s*)${politePrefix}${escaped}\\b${actionSuffix}`,
   );
   const chained = new RegExp(
-    `\\b(?:and then|then|also|and)\\s+${politePrefix}${escaped}\\b`,
+    `\\b(?:and then|then|also|and)\\s+${politePrefix}${escaped}\\b${actionSuffix}`,
   );
   return clauseStart.test(request) || chained.test(request);
 }
@@ -62,7 +70,8 @@ export function terminalAuthority(
   const merge =
     (/\bmerge when green\b|\badd to (?:the )?merge queue\b/.test(normalized) ||
       explicitlyRequests(normalized, "merge") ||
-      explicitlyRequests(normalized, "ship")) &&
+      explicitlyRequests(normalized, "ship") ||
+      explicitlyRequests(normalized, "proceed to merge")) &&
     !denies("merg(?:e|es|ed|ing)", "ship(?:s|ped|ping)?");
 
   const publishDenied = denies(

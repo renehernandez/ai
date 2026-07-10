@@ -30,8 +30,10 @@ decision, freeze writes and return the decision plus worktree identity to Plan.
 
 Plan selects one artifact:
 
-- Use an atomic plan at `.agents/plans/<slug>.md` for one coherent final MR that
-  needs no durable cross-component contract or mandatory full rehearsal.
+- Use an atomic plan at `.agents/plans/<slug>.md` for one coherent
+  implementation unit that needs no durable cross-component contract or
+  mandatory full rehearsal. The plan and implementation are one change set in
+  one final PR/MR.
 - Use one OpenSpec change for independently reviewable delivery units, a durable
   cross-component contract, migration design, or work requiring the full POC.
 
@@ -44,7 +46,10 @@ second representation of an OpenSpec.
 
 - Before the first Plan or Execute write, verify or create one dedicated branch
   and worktree with exactly one write owner.
-- Parallel writers use disjoint branches/worktrees and disjoint file ownership.
+- Parallel writers use disjoint branches/worktrees with one writer each. Prefer
+  disjoint paths, but allow declared integration hotspots; the descendant owner
+  resolves normal restack conflicts and material contract conflicts return to
+  Plan.
 - A transfer records branch, worktree, HEAD, changed paths, untracked paths, and
   diff fingerprint. The previous owner stops writing first.
 - Dirty, shared, contradictory, or externally changed ownership blocks writes
@@ -55,8 +60,9 @@ second representation of an OpenSpec.
 ## Rehearse every OpenSpec completely
 
 Every OpenSpec receives one full disposable implementation POC before final
-implementation. An atomic plan does not require a POC unless the user requests
-one.
+implementation. An atomic plan has no POC phase or POC PR/MR. If the accepted
+contract requires a rehearsal, select OpenSpec instead of adding a POC to an
+atomic plan.
 
 The POC:
 
@@ -69,8 +75,9 @@ The POC:
    live user runtime.
 5. Opens one draft review-only PR/MR whose title starts with `POC:` and whose
    description says it must close unmerged.
-6. Receives current local implementation review, configured CI, latest-head
-   hosted automated review, and personal acceptance of the exact clean HEAD.
+6. Receives current local implementation review, configured CI,
+   latest-effective-diff hosted automated review, and personal acceptance of
+   the exact clean HEAD.
 7. Refreshes every exact-head gate after any POC HEAD change.
 8. Freezes after acceptance, closes unmerged, and removes its local worktree.
 
@@ -86,15 +93,23 @@ reconciliation delta returns to the user before another POC cycle.
 ## Deliver final artifacts by top-level unit
 
 - There is no separate planning MR and no reconciliation-only MR.
-- An atomic plan produces one final implementation MR containing the plan and
-  implementation.
+- An atomic plan and its implementation form one change set in one final MR.
+  Do not split them into planning, POC, and implementation artifacts.
 - OpenSpec produces one final implementation MR per top-level delivery unit.
   Nested work items become cohesive commits inside that unit.
 - Final implementation starts independently from the reconciled OpenSpec, never
   from POC ancestry.
+- Plan classifies each unit as independent, contract-dependent, or
+  implementation-dependent and records one total Git predecessor order.
+  Independent units need no predecessor output; contract-dependent units may
+  start when their accepted interface is fixed in the stack seed;
+  implementation-dependent units wait for predecessor code, generated output,
+  runtime behavior, or verification evidence.
 - The first unit contains the reconciled planning-base state. Each later unit
-  branches from the previous unit in one total Git predecessor order, even when
-  logical dependencies permit parallel work.
+  branches from the previous unit in the total Git order. Semantically eligible
+  units may implement and follow review concurrently in separately owned
+  worktrees even though publication, restack propagation, and merge ancestry
+  remain ordered.
 - Each final unit carries its own task/spec changes. The last unit carries task
   completion and required OpenSpec archive changes.
 - A material final-implementation contract delta returns to Plan; the user

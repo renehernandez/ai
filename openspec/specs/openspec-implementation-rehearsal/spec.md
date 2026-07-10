@@ -20,7 +20,9 @@ After the five-mode cutover, the system SHALL build one full disposable POC for 
 
 #### Scenario: Atomic plan is selected
 - **WHEN** Plan produces an atomic plan rather than OpenSpec
-- **THEN** no POC is mandatory unless the user requests one
+- **THEN** the atomic plan has no POC phase or POC PR/MR
+- **AND** its plan and implementation form one change set in one final PR/MR
+- **AND** work requiring rehearsal is routed to OpenSpec instead
 
 #### Scenario: POC review artifact is published
 - **WHEN** the complete POC is ready for hosted review
@@ -178,4 +180,3 @@ The system SHALL implement the reconciled OpenSpec without POC ancestry and SHAL
 - **WHEN** any final unit requires behavior or contract changes beyond the reconciled OpenSpec
 - **THEN** Execute stops and returns to Plan
 - **AND** Plan asks the user whether another POC is required for the unproved delta
-
