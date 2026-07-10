@@ -1,6 +1,6 @@
 ---
 name: openspec-archive-change
-description: Archive a completed change in the experimental workflow. Use when the user wants to finalize and archive a change after implementation is complete.
+description: Explicit-only developer command. Invoke only when the user explicitly names this OpenSpec adapter or its /opsx command.
 license: MIT
 compatibility: Requires openspec CLI.
 metadata:
@@ -115,3 +115,11 @@ All artifacts complete. All tasks complete.
 - Show clear summary of what happened
 - If sync is requested, use openspec-sync-specs approach (agent-driven)
 - If delta specs exist, always run the sync assessment and show the combined summary before prompting
+
+## Explicit Invocation Boundary
+
+Do not infer this adapter from ordinary language. Route ordinary work through the owning lifecycle mode.
+
+<!-- ax-openspec-skill: openspec-archive-change; explicit-only -->
+
+<!-- ax-openspec-content-sha256: sha256:2e3c793d217269a71b84cd44e8f887d7379a829eaafc35d1abf5bfe1faa5c8a9 -->

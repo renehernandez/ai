@@ -1,9 +1,0 @@
-plan_review_request:
-  status: ready_for_review
-  artifact_type: openspec
-  artifact_ref: openspec/changes/guide-openspec-runtime-setup
-  review_goal: "Validate the guided OpenSpec runtime setup plan before implementation."
-  requested_reviewers:
-    - codex
-    - developers
-  unresolved_blockers: []

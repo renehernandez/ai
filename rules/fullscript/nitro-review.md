@@ -1,10 +1,18 @@
-# Fullscript Nitro Review Rules
+# Fullscript Nitro review rules
 
-These rules apply only in Fullscript repositories that use Nitro for hosted GitLab MR review.
+These rules apply only in Fullscript repositories whose active GitLab policy
+selects Nitro.
 
-## Explicit Nitro Review Requests
-
-- After creating a GitLab MR, request a `nitro` review by running `glab mr note <MR_IID> -m "/request_review @nitro"` so the new top-level MR note contains only `/request_review @nitro`, unless the user explicitly opted out or the project does not use Nitro.
-- After pushing a follow-up commit to a GitLab MR, request a Nitro re-review the same way when the diff materially changed.
-- Skip the re-review request only when the push contains no source changes or a Nitro review is already in flight for the same diff.
-- Do not apply these rules on personal machines, personal GitHub repositories, or repositories where Nitro is unavailable.
+- Review retrieves and normalizes Nitro discussions read-only. Finish owns the
+  review request, provider polling, and readiness decision.
+- Finish requests Nitro through a new top-level MR note containing only
+  `/request_review @nitro` after initial publication and every head-changing
+  follow-up push.
+- Skip a duplicate request only when Nitro review is already in flight for the
+  same exact head.
+- The latest-head Nitro feedback must complete without unresolved actionable
+  findings. Older feedback is stale and cannot satisfy the gate.
+- Nitro does not replace local Review, CI, approvals, or user acceptance of a
+  mandatory OpenSpec POC.
+- Do not apply Nitro policy to GitHub, generic GitLab, personal projects, or a
+  Fullscript project whose active policy does not select Nitro.

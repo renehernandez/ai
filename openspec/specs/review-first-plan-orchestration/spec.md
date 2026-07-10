@@ -4,146 +4,212 @@
 Define the reviewed planning workflow for plan and OpenSpec delivery, including
 stacked implementation artifacts, Nitro feedback gates, stack integrity, and
 runtime alignment requirements.
-
 ## Requirements
-### Requirement: Single Stacked Delivery Mode
-The system SHALL use stacked delivery as the only implementation mode for
-review-first plan orchestration.
-
-#### Scenario: Planning review mode is stacked delivery
-- **WHEN** `plan-review` emits `planning_review`
-- **THEN** `planning_review.mode` is `stacked_delivery`
-- **AND** `planning_review.gate_outcome` is `ready_for_stack`
-- **AND** `stack_base_ref` and `stack_base_evidence` are present
-
-#### Scenario: Legacy delivery modes are rejected
-- **WHEN** a plan workflow input or handoff uses `ship_then_continue` or
-  `stack_when_ready`
-- **THEN** the workflow rejects it as legacy
-- **AND** it does not start implementation sequencing
-
-#### Scenario: Direct publish is unsupported for orchestrated delivery
-- **WHEN** an orchestrated plan workflow routes an implementation artifact
-- **THEN** `direct_publish` is rejected
-- **AND** the workflow requires a stacked PR or MR artifact
-
 ### Requirement: Nitro-Capable Hosted Route
-The system SHALL require a Nitro-capable Fullscript GitLab MR route for the
-first stacked-delivery cut.
+The system SHALL require Nitro only when direct user, project, or workflow-policy profile selects it for the current GitLab artifact.
 
-#### Scenario: Fullscript GitLab route is supported
-- **WHEN** the planning or implementation artifact is a Fullscript GitLab MR
-- **THEN** the workflow may request Nitro feedback with `/request_review @nitro`
+#### Scenario: Fullscript GitLab selects Nitro
+- **WHEN** a POC or final MR belongs to a Fullscript project whose policy requires Nitro
+- **THEN** Finish posts the configured review request
+- **AND** Nitro must pass for the latest required head
 
-#### Scenario: Unsupported host blocks routing
-- **WHEN** the artifact host is GitHub, non-Fullscript GitLab, or ambiguous
-- **THEN** the workflow reports `nitro_route_unsupported`
-- **AND** it does not substitute Codex or another feedback provider
+#### Scenario: GitHub route is selected
+- **WHEN** the artifact host is GitHub
+- **THEN** the workflow uses configured GitHub review, CI, and approval policy
+- **AND** absence of Nitro does not block
+
+#### Scenario: Generic GitLab route is selected
+- **WHEN** the artifact host is non-Fullscript GitLab
+- **THEN** the workflow uses that project's MR, CI, approval, and automated-review policy
+
+#### Scenario: Provider policy is ambiguous
+- **WHEN** host or required reviewer policy cannot be resolved
+- **THEN** publication blocks with the routing gap
+- **AND** completed local work remains valid for its exact state
 
 ### Requirement: Shared Nitro Feedback Gate
-The system SHALL normalize Nitro feedback through a shared
-`nitro_feedback_gate` before planning review, unit delivery, or stack-ready
-completion can pass.
+The system SHALL normalize Nitro feedback only for artifacts whose active policy requires Nitro.
 
-#### Scenario: Nitro start timeout blocks progress
-- **WHEN** Nitro feedback is requested for the latest MR head
-- **AND** Nitro does not acknowledge or start review within 10 minutes while
-  polling every 1 minute
-- **THEN** the workflow reports `nitro_review_start_blocked`
-- **AND** it does not advance to the next MR
+#### Scenario: Required Nitro does not start
+- **WHEN** Nitro is required for the latest head and does not acknowledge or start within project policy
+- **THEN** the workflow reports the current blocked state
+- **AND** does not treat the artifact as approved
 
-#### Scenario: Nitro pending does not pass completion
-- **WHEN** Nitro feedback status is `pending`
-- **THEN** the workflow records review-start evidence
-- **AND** reports `nitro_review_completion_pending`
-- **AND** does not advance to the next MR
+#### Scenario: Required Nitro is pending
+- **WHEN** latest-head Nitro feedback is pending
+- **THEN** completion remains pending
 
-#### Scenario: Latest-head Nitro findings block advancement
-- **WHEN** Nitro returns findings for the latest MR head
-- **THEN** the workflow reports `nitro_feedback_unresolved`
-- **AND** requires the findings to be fixed or documented as non-actionable
-- **AND** requires fresh Nitro feedback after the next material head-changing
-  push
+#### Scenario: Required Nitro has findings
+- **WHEN** Nitro returns actionable findings for the latest head
+- **THEN** the owning Plan or Execute mode fixes or dispositions them
+- **AND** every new head requires fresh feedback
 
-#### Scenario: Stale Nitro feedback does not satisfy the gate
-- **WHEN** Nitro feedback belongs to an older MR head
-- **THEN** the workflow reports `nitro_feedback_stale`
-- **AND** requires fresh latest-head Nitro feedback before advancement
+#### Scenario: Nitro feedback is stale
+- **WHEN** required feedback belongs to an older head
+- **THEN** it does not satisfy the gate
 
-#### Scenario: Clean Nitro feedback passes
-- **WHEN** Nitro completes latest-head review with no unresolved actionable
-  findings
-- **THEN** the shared gate outcome is `passed`
+#### Scenario: Required Nitro is clean
+- **WHEN** Nitro completes latest-head review without unresolved actionable findings
+- **THEN** the Nitro gate passes
+
+#### Scenario: Nitro is not selected
+- **WHEN** active policy does not require Nitro
+- **THEN** the workflow relies on configured local review, hosted automation, approvals, and CI
 
 ### Requirement: Material Push Feedback Refresh
-The system SHALL request fresh Nitro feedback after every material
-head-changing push in the plan workflow.
+The system SHALL refresh each provider review bound to the latest head after every head-changing push.
 
-#### Scenario: Feedback-fix push refreshes Nitro
-- **WHEN** an agent pushes changes to address Nitro feedback
-- **THEN** it requests fresh Nitro feedback for the new head
-- **AND** waits for the shared Nitro gate to pass
+#### Scenario: Feedback fix changes the head
+- **WHEN** Plan or Execute pushes a feedback fix
+- **THEN** Finish requests current configured hosted feedback for the new head
 
-#### Scenario: Non-feedback material push refreshes Nitro
-- **WHEN** an MR head changes because of restack, conflict fix, pipeline fix,
-  user edit, rebase, or plan/documentation feedback fix
-- **THEN** the workflow requests fresh Nitro feedback for the new head
-- **AND** waits for the shared Nitro gate to pass
+#### Scenario: Other material change occurs
+- **WHEN** a head changes through conflict repair, pipeline repair, user edit, rebase, or spec/implementation correction
+- **THEN** every latest-head-bound gate refreshes before readiness
+
+#### Scenario: Provider has no latest-head automated reviewer
+- **WHEN** active policy configures no hosted automated reviewer
+- **THEN** remaining approvals and CI apply
+- **AND** local Review remains required
 
 ### Requirement: Stack Identity Evidence
-The system SHALL carry stack identity evidence through planning and delivery
-handoffs.
+The system SHALL carry live identity for the POC and every final delivery unit without persisting private reviewer state in team artifacts.
 
-#### Scenario: Planning handoff records stack base
-- **WHEN** planning review completes
-- **THEN** the handoff records expected stack base ref and SHA
-- **AND** records stack-base evidence from the Nitro-clean planning MR
+#### Scenario: Planned delivery shape is recorded
+- **WHEN** local planning review completes
+- **THEN** task state records the normal target base, logical dependencies, total Git predecessor order, and expected final artifact count
+- **AND** every unit after the first has exactly one Git predecessor even when logical work could run independently
 
-#### Scenario: Implementation handoff records predecessor
-- **WHEN** an implementation MR is created or updated
-- **THEN** the delivery evidence records predecessor MR, expected base ref/SHA,
-  implementation MR URL, implementation head SHA, and restack-required state
+#### Scenario: POC identity is recorded
+- **WHEN** the full POC is created or updated
+- **THEN** task state records planning commit, POC branch/head, draft URL, target base, review freshness, personal-acceptance status, and accepted SHA
+- **AND** the POC is never an implementation predecessor
+
+#### Scenario: Final unit identity is recorded
+- **WHEN** a final delivery-unit PR/MR is created or updated
+- **THEN** task state records unit ID, branch/head, target base or predecessor, artifact URL, and current gate state
+
+#### Scenario: Team-facing artifact is rendered
+- **WHEN** a POC or final description is created
+- **THEN** it contains team-relevant scope, unit/dependency links, decisions, verification, and review intent
+- **AND** omits local fingerprints, reviewer identities, ledgers, and handoff paths
 
 ### Requirement: Stack-Ready Completion
-The system SHALL consider orchestration complete only when the full MR stack is
-ready for merge.
+The system SHALL report planned delivery ready only when the POC and every artifact derived from the reviewed delivery shape satisfy current gates.
 
-#### Scenario: Atomic plan stack is ready
-- **WHEN** a single plan has one planning MR and one implementation MR
-- **AND** both MRs have passed latest-head Nitro gates
-- **AND** the implementation MR is stacked on the planning MR
-- **THEN** the workflow reports `stack_ready`
+#### Scenario: Atomic plan is ready
+- **WHEN** its one final MR passes required local review, provider review, CI, and applicable Linear policy
+- **THEN** Finish reports merge readiness for that exact head
 
 #### Scenario: OpenSpec stack is ready
-- **WHEN** an OpenSpec change has one planning MR and one implementation MR per
-  deliverable task
-- **AND** every MR in stack order has passed latest-head Nitro gates
-- **AND** the stack tip `tasks.md` has all deliverable tasks checked
-- **THEN** the workflow reports `stack_ready`
+- **WHEN** the POC is accepted and closed unmerged, every final delivery-unit MR passes current local/provider/CI gates, task/spec state is complete, dependencies are valid, and required Linear mappings are current
+- **THEN** Finish reports `stack_ready`
 
-#### Scenario: Earlier MR changes after descendants exist
-- **WHEN** an earlier MR changes after descendant MRs exist
-- **THEN** affected descendants must be restacked
-- **AND** every changed MR must rerun the full Nitro feedback gate before
-  `stack_ready`
+#### Scenario: OpenSpec has one delivery unit
+- **WHEN** its POC is accepted and its one final MR passes every current gate
+- **THEN** Finish reports merge readiness for that MR without manufacturing a multi-MR stack
 
-#### Scenario: Merge follow-through remains separate
-- **WHEN** the workflow reports `stack_ready`
-- **THEN** it does not merge the stack
-- **AND** merge follow-through is handled by a separate workflow
+#### Scenario: Earlier unit changes
+- **WHEN** an earlier delivery-unit head changes after dependent units exist
+- **THEN** affected descendants restack and every changed exact head refreshes local and hosted gates
+
+#### Scenario: Predecessor squash-merges
+- **WHEN** a predecessor merges as a squash commit
+- **THEN** its child retargets to the default branch and restacks onto the verified merged commit
+- **AND** changed child/descendant heads refresh required gates before their merge
+
+#### Scenario: Task evidence is incomplete
+- **WHEN** a reconciled task is unchecked or a completed task lacks implementation and verification evidence
+- **THEN** stack readiness is blocked
+
+#### Scenario: Finish lacks merge authority
+- **WHEN** every readiness gate passes without explicit merge authority
+- **THEN** Finish reports readiness and does not merge
+
+#### Scenario: Merge is authorized
+- **WHEN** the user explicitly authorizes merge
+- **THEN** Finish merges final artifacts in dependency order after current checks, approvals, and remote identity pass
+- **AND** verifies remote merged state
 
 ### Requirement: Rule And Runtime Alignment
-The system SHALL align shared instructions, runtime surfaces, and verification
-with stacked Nitro-reviewed delivery.
+The system SHALL align shared instructions, mode skills, retained specialists, runtime profiles, provider rules, and verification with five-mode artifact-shaped delivery.
 
-#### Scenario: Direct-main rule is overridden for plan orchestration
-- **WHEN** repo rules describe direct-main publication
-- **THEN** they include an explicit exception for `plan-orchestrator` stacked
-  delivery
+#### Scenario: Personal profile is provider-neutral
+- **WHEN** personal instructions describe planning and delivery
+- **THEN** they do not require a specific host or Nitro globally
 
-#### Scenario: Runtime refresh proves installed behavior
-- **WHEN** shared plan workflow skills or instructions change
-- **THEN** runtime skill update, status, and validation run for personal and
-  work profiles
-- **AND** instruction status and validation run when installed instructions
-  changed
+#### Scenario: Work profile preserves Fullscript policy
+- **WHEN** work policy is active in a Fullscript project
+- **THEN** GitLab, Nitro, CI, approval, and review-request requirements remain available behind Review and Finish
+
+#### Scenario: Lifecycle discoverability is validated
+- **WHEN** personal or work profiles are built
+- **THEN** validation finds exactly five public lifecycle entries and configured retained specialists
+- **AND** no retired lifecycle package is installed
+
+#### Scenario: Runtime proof runs before merge
+- **WHEN** shared modes, instructions, rules, hooks, or AX behavior change
+- **THEN** sync, status, and validation run against isolated roots
+- **AND** live runtime remains unchanged until verified merged source is available
+
+### Requirement: OpenSpec delivery uses a POC and task-shaped final artifacts
+The system SHALL use one draft unmergeable POC artifact and one mergeable final implementation artifact per top-level OpenSpec delivery unit.
+
+#### Scenario: Initial planning completes
+- **WHEN** the OpenSpec passes local planning review
+- **THEN** it remains on a local planning-base branch without a separate planning PR/MR
+- **AND** the first final delivery unit later includes the reconciled planning-base commits
+
+#### Scenario: POC is published
+- **WHEN** full implementation rehearsal is ready
+- **THEN** one draft POC PR/MR contains the initial OpenSpec and complete implementation against the normal target branch
+- **AND** it closes unmerged after current automated and personal review
+
+#### Scenario: Final implementation is published
+- **WHEN** POC findings are reconciled and clean final implementation passes local review
+- **THEN** each top-level delivery unit produces one final mergeable PR/MR with its associated specification and implementation changes
+- **AND** no planning or reconciliation-only artifact exists
+
+#### Scenario: This change has one final artifact
+- **WHEN** `simplify-ai-experience-modes` retains one top-level delivery unit
+- **THEN** it produces one final mergeable implementation MR after the POC
+
+#### Scenario: Direct Execute is eligible
+- **WHEN** a request qualifies for direct Execute without a planning artifact
+- **THEN** it may produce one implementation PR/MR without a POC
+- **AND** local Review and provider policy still apply
+
+### Requirement: OpenSpec changes stay in owning final artifacts
+The system SHALL include each unit's task/spec changes in its implementation MR and required OpenSpec archival in the last unit.
+
+#### Scenario: POC changes the contract
+- **WHEN** personal POC review completes with durable findings
+- **THEN** Plan reconciles those findings once before final implementation
+
+#### Scenario: Final implementation completes the change
+- **WHEN** the final implementation satisfies every reconciled task and requirement
+- **THEN** the last delivery-unit MR contains the necessary OpenSpec completion/archive changes
+- **AND** planning reviewers inspect the resulting canonical-spec/archive diff before publication
+- **AND** no later spec-only MR is required
+
+#### Scenario: Final implementation discovers a material delta
+- **WHEN** final implementation requires a contract change beyond the reconciled OpenSpec
+- **THEN** work returns to Plan and the user decides whether another POC is required
+
+### Requirement: Pre-cutover workflow bootstraps this one-unit migration
+The system SHALL use current bounded workflow mechanics to deliver this change without importing a separate planning MR or unnecessary multi-unit stack.
+
+#### Scenario: Initial spec is committed
+- **WHEN** this change is locally reviewed before the five modes exist
+- **THEN** the current root session and explicit OpenSpec apply workflow own the final-delivery worktree
+- **AND** current repository commit rules remain in force
+
+#### Scenario: POC mechanics run
+- **WHEN** the draft POC is created or reviewed
+- **THEN** current POC, GitLab publication, and Nitro adapters may provide bounded mechanics
+- **AND** they create no planning MR or implementation stack
+
+#### Scenario: Final implementation resumes
+- **WHEN** the POC closes and reconciliation completes
+- **THEN** execution returns to the original final-delivery branch under the user's single-MR instruction
+- **AND** current `ax commit` remains the commit path until the final source cutover removes it

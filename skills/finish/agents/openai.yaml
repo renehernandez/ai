@@ -1,0 +1,5 @@
+interface:
+  display_name: "Finish"
+  short_description: "Publish safely without implicit merge"
+  default_prompt: "Use $finish to resolve provider policy, require a current exact-head publication checkpoint, publish and follow hosted feedback, report readiness, and merge, deploy, or clean up only with explicit terminal authority."
+

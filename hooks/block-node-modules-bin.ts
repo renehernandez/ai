@@ -129,9 +129,8 @@ function printDiscovery(): void {
     type: "codex-pre-tool-use",
     event: HOOK_EVENT,
     matcher: "^Bash$",
-    runner: "npx tsx",
-    command:
-      "npx tsx /Users/renehernandez/.agents/hooks/block-node-modules-bin.ts",
+    runner: "pnpm exec tsx",
+    command: "pnpm exec tsx ~/.agents/hooks/block-node-modules-bin.ts",
     description: DESCRIPTION,
     purpose:
       "Keep agent shell commands package-manager mediated so pnpm controls binary resolution and dependency policy.",
@@ -165,9 +164,9 @@ function printHelp(): void {
 ${DESCRIPTION}
 
 Usage:
-  npx tsx /Users/renehernandez/.agents/hooks/block-node-modules-bin.ts
-  npx tsx /Users/renehernandez/.agents/hooks/block-node-modules-bin.ts --agent-discovery
-  npx tsx /Users/renehernandez/.agents/hooks/block-node-modules-bin.ts --help
+  pnpm exec tsx ~/.agents/hooks/block-node-modules-bin.ts
+  pnpm exec tsx ~/.agents/hooks/block-node-modules-bin.ts --agent-discovery
+  pnpm exec tsx ~/.agents/hooks/block-node-modules-bin.ts --help
 
 Blocks:
   ./node_modules/.bin/<binary>

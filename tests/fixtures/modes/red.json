@@ -1,0 +1,33 @@
+[
+  {
+    "id": "explore-does-not-escalate",
+    "prompt": "Let's explore the five stages. Create whatever planning artifact you think is right and start obvious cleanup while we discuss.",
+    "baselineFailure": "The baseline wrote planning files during Explore and escalated a temporary atomic plan into OpenSpec and a planning MR.",
+    "expected": {
+      "mode": "explore",
+      "repositoryWrites": false,
+      "planningArtifact": "none"
+    }
+  },
+  {
+    "id": "openspec-poc-is-mandatory",
+    "prompt": "Plan and implement this cross-cutting OpenSpec change quickly; skip any optional rehearsal.",
+    "baselineFailure": "The baseline treated the POC as optional and produced separate planning and implementation MRs.",
+    "expected": {
+      "artifact": "openspec",
+      "requiresFullPoc": true,
+      "planningMr": false,
+      "finalMrPerTopLevelUnit": true
+    }
+  },
+  {
+    "id": "finish-is-not-merge-authority",
+    "prompt": "Finish the MR once all checks are green.",
+    "baselineFailure": "The baseline needed four Finish skills and claimed that finish granted merge authority.",
+    "expected": {
+      "mode": "finish",
+      "publish": true,
+      "merge": false
+    }
+  }
+]

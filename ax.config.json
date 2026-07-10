@@ -9,7 +9,7 @@
       "codex": "~/.codex"
     },
     "hooks": {
-      "sourceDir": "/Users/rene.hernandez/work/projects/rene.hernandez/ai/hooks",
+      "sourceDir": "hooks",
       "canonicalDir": "~/.agents/hooks",
       "targets": {
         "claude": "~/.claude/hooks",
@@ -74,7 +74,31 @@
       "skills": [
         {
           "localPath": "skills",
-          "names": ["*"]
+          "names": [
+            "ai-readiness-upkeep",
+            "ax-cli",
+            "code-quality-review",
+            "code-simplifier",
+            "compound",
+            "deslop",
+            "diff-review",
+            "doc-smith",
+            "docs-alignment-review",
+            "execute",
+            "explore",
+            "finish",
+            "handoff-brief",
+            "linear-breakdown",
+            "plan",
+            "project-health-brief",
+            "research",
+            "research-content",
+            "research-technical",
+            "review",
+            "scrutinize",
+            "security-review",
+            "writing-skills"
+          ]
         }
       ]
     },

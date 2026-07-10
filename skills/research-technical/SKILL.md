@@ -38,7 +38,7 @@ Prefer sources in this order:
 4. Extract current implementation patterns.
 5. Identify anti-patterns, deprecated paths, and failure modes.
 6. Compare viable options and source conflicts.
-7. Hand off constraints to `brainstorming` or `plan-ready`.
+7. Hand off constraints to `explore` or `plan`.
 
 If current source access is unavailable for a fast-moving API, SDK, cloud,
 security, model/provider, pricing, or platform-support topic, return
@@ -58,7 +58,7 @@ research_brief:
   status: complete | blocked
   research_type: technical
   topic:
-  intended_next_step: brainstorming | plan-ready | doc-smith | presentations | other
+  intended_next_step: explore | plan | doc-smith | presentations | other
   freshness:
     checked_at:
     stale_risk: low | medium | high

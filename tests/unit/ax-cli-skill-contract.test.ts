@@ -1,0 +1,64 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import test from "node:test";
+
+const root = process.cwd();
+const skill = readFileSync(join(root, "skills/ax-cli/SKILL.md"), "utf8");
+const metadata = readFileSync(
+  join(root, "skills/ax-cli/agents/openai.yaml"),
+  "utf8",
+);
+
+test("ax-cli skill removes retired mutation and workflow commands", () => {
+  const retiredGuidance = [
+    /top-level `install\|update/,
+    /\b(?:pnpm )?ax (?:skills|instructions|hooks) (?:install|update)\b/,
+    /\b(?:pnpm )?ax openspec (?:install|update)\b/,
+    /\bax commit\b/,
+    /\bax review-gate\b/,
+    /\bax plans artifact\b/,
+  ];
+
+  for (const pattern of retiredGuidance) {
+    assert.doesNotMatch(skill, pattern);
+  }
+  assert.doesNotMatch(metadata, /\bax commit\b|review-gate|plans artifact/);
+});
+
+test("ax-cli skill retrieves the single-sync runtime contract", () => {
+  assert.match(skill, /sync[^\n]+only runtime[^\n]+mutation/i);
+  assert.match(skill, /`pnpm ax sync`/);
+  assert.match(skill, /`ax sync`/);
+  assert.match(skill, /`pnpm ax skills sync`/);
+  assert.match(skill, /`pnpm ax instructions sync`/);
+  assert.match(skill, /`pnpm ax hooks sync`/);
+  assert.match(skill, /`ax openspec sync`/);
+
+  assert.match(skill, /`ax\.config\.json`[^\n]+desired state/i);
+  assert.match(skill, /managed-runtime\.json`[\s\S]{0,80}ownership state/i);
+  assert.match(skill, /--policy-profile/);
+  assert.match(
+    skill,
+    /--profile personal --profile work --policy-profile work/,
+  );
+  assert.match(skill, /--profile-selection-file/);
+  assert.match(skill, /--adoption-file/);
+  assert.match(skill, /--recovery-file/);
+  assert.match(skill, /sha256-tree-v1/);
+  assert.match(skill, /status[^\n]+validate[^\n]+offline[^\n]+read-only/i);
+});
+
+test("ax-cli skill retrieves source, isolation, shim, and activation rules", () => {
+  assert.match(skill, /latest[^\n]+remote[^\n]+ref/i);
+  assert.match(skill, /resolved SHA[\s\S]{0,80}not persisted/i);
+  assert.match(skill, /isolated[\s\S]{0,80}runtime roots/i);
+  assert.match(skill, /HOME=<isolated-home>/);
+  assert.match(skill, /--runtime-root <isolated-runtime-root>/);
+  assert.match(skill, /post-merge[\s\S]{0,80}`ax sync`/i);
+  assert.match(skill, /shim `install`, `status`, and `uninstall`/i);
+
+  assert.match(metadata, /default_prompt:/);
+  assert.match(metadata, /ax sync/i);
+  assert.doesNotMatch(metadata, /install and update|install\|update/i);
+});

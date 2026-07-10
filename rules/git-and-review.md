@@ -1,152 +1,134 @@
-# Git and Review Rules
+# Git and review rules
 
-These rules cover Git, GitHub, GitLab, Linear, review routing, and external comments.
+These rules define native commits, exact-target Review evidence, Finish
+publication, provider policy, and explicit terminal authority.
 
-## GitHub CLI
+## Provider tools
 
-- Always use `gh` CLI when interacting with GitHub PRs, issues, releases, repositories, or API calls.
-- Never use `curl` with the GitHub API directly. Use `gh api` for authenticated requests.
-- Examples: `gh pr view 123 --repo owner/repo`, `gh issue list`, `gh api repos/owner/repo/releases`.
+- Use `gh` for GitHub PRs, issues, releases, and authenticated API calls.
+- Use `glab` for GitLab MRs, discussions, pipelines, and authenticated API
+  calls. Prefer a dedicated subcommand before `glab api`.
+- Use provider-qualified commands when several repositories or hosts are
+  available.
+- Resolve provider behavior from direct user instruction, project policy, one
+  workflow-policy profile, then remote inference. Ambiguous routing blocks
+  provider writes without invalidating completed local work.
 
-## Linear Issue Management
+## Native commits and branch safety
 
-- Never assign `nitro` or any other agent as delegate when creating Linear issues without explicit user confirmation.
-- Always ask before delegating issues to automated agents.
-- Always create Linear issues with status `Todo`, never `Triage`.
+- Use a native Git commit with repository hooks enabled. Never use `--no-verify`.
+- Stage only the cohesive planning or implementation boundary owned by the
+  current worktree. Fix and restage after a hook failure before retrying.
+- Never commit or push a default branch without explicit user authorization.
+- Do not force-push ordinary feedback, CI-fix, or follow-up commits. Force-push
+  only for an explicitly authorized history rewrite or a necessary history
+  repair such as rebase/conflict recovery.
+- Before pushing a non-default branch, inspect matching hosted artifacts. Do not
+  push when the only matching PR/MR is closed or merged; ask whether to create a
+  new branch, reopen or explicitly reuse the artifact, or take another path.
+- Select the provider before pushing. If a remote has multiple push URLs, push
+  only to the selected provider URL or a provider-specific remote.
 
-## Comment Attribution
+## Review and Finish boundary
 
-- When posting a human-readable comment directly on the user's behalf to GitLab, GitHub, Linear, or another external system, append this final line: `Co-Authored by: <harness>`.
-- Replace `<harness>` with the actual harness name, such as `Codex`, `Claude Code`, or the specific agent posting the comment.
-- Do not add this attribution to commit messages, MR or PR descriptions, generated comment bodies that another service posts, or command-only comments such as `/request_review @nitro`.
+Review is read-only. It inspects one planning artifact fingerprint or one exact
+target-base diff and HEAD, runs the required local reviewer baseline, and
+normalizes hosted findings retrieved by Finish.
 
-## Semantic Commit and MR Title Prefixes
+Before any push, PR/MR creation, or PR/MR update, Review emits a task-local
+`publication_checkpoint` containing:
 
-- Always evaluate the impact of a change before choosing a semantic prefix. Do not default to `chore:` for routine-looking changes.
-- Check the repository CI/CD pipeline config, such as `.gitlab-ci.yml`, `release.config.js`, or semantic-release config, to understand how prefixes affect versioning, releases, and deployments.
-- Review recent `git log` to match repository conventions and see which prefixes trigger releases.
-- Choose the prefix based on what the change does, not what it looks like.
-- If a change triggers a new release or version, such as a dependency bump that publishes a package, use a release-triggering prefix such as `fix:` or `feat:`.
-- If a change is truly invisible to consumers, such as docs, CI tweaks, or non-published files, `chore:` is appropriate.
-- When unsure whether a change triggers a release, check the pipeline config before committing.
+- target base and exact HEAD;
+- current target-base diff scope;
+- repository-hook evidence;
+- required local reviewer outcomes;
+- resolved provider route;
+- blocking findings.
 
-## Git Commits
+If HEAD or target base changes, the checkpoint becomes stale. Missing task-local
+evidence is recomputed; do not reconstruct or persist local gate state through a
+repository or runtime tool.
 
-- Agents must use `ax commit` for commits instead of invoking `git commit` manually. `ax commit` validates local review-gate state before delegating to Git and preserves the user's manual terminal escape hatch.
-- Plan workflow skills that own planning or implementation commits must use their required-gate commit helpers, which delegate to `ax commit --require-review-gate`; raw `git commit` remains Rene's manual terminal escape hatch.
-- Legacy slash commit helpers may still shape commit messages or host-specific publish flow when explicitly available, but they must not bypass `ax commit` for agent-authored commits.
-- Never use `--no-verify` when committing.
-- Do not force push for ordinary follow-up work, review feedback, or CI fixes. Use subsequent commits because the user's hosted diffs are squash-merged. Force push only when it is necessary to resolve a Git history change, rebase, conflict, stale remote update, or when the user explicitly asks for a history rewrite.
-- If a commit fails due to pre-commit hooks, fix branch-caused failures and retry; ask the user how to proceed only when the failure is unrelated, external, or requires a product decision.
-- Always ask before committing or pushing to default branches such as `main` or `master`.
-- In this `ai` repo, completed work should be delivered through a GitLab `origin` merge request targeting `main` with Nitro review by default. Do not commit directly to `main` or push `main` unless the user explicitly asks for direct publication.
-- For this repo, treat GitLab `origin` as the primary hosted-review and publishing remote. The `github` remote remains a mirror path; use it only when the user explicitly asks or GitLab is unavailable.
-- A hosted delivery for this repo is complete only after the GitLab MR exists, CI or no-pipeline state is inspected, Nitro review is requested in a new top-level MR note containing only `/request_review @nitro`, and latest-head Nitro feedback is clean or fully resolved.
-- For feature work, run the pre-commit quality gate, commit the feature branch, push it, create or update the artifact-host PR/MR, monitor CI, and fix branch-caused failures.
-- For host-neutral work, choose the hosted-review provider from project
-  instructions, existing artifact URLs, or `change-request-create`; pause when
-  provider routing remains ambiguous.
-- Select the hosted-review provider before pushing a branch. If a remote has
-  multiple push URLs, push only to the selected provider URL or a
-  provider-specific remote, not to every configured mirror.
-- Before pushing to a non-default source branch, check the live hosted-review
-  state for that branch when the project has a PR/MR workflow or the branch is
-  part of a stack. Use the provider CLI, such as
-  `glab mr list --all --source-branch <branch>` or
-  `gh pr list --head <branch> --state all`, and treat closed or merged review
-  artifacts as a stop condition.
-- Never push to a branch whose only matching hosted PR/MR is already closed or
-  merged. Do not treat the old source branch as reusable continuation work just
-  because Git accepts the push. Stop and ask whether to create a new branch and
-  PR/MR, reopen or explicitly reuse the old review artifact, or take another
-  path.
-- Never include `Co-Authored-By: Claude` or similar co-author attribution lines in MR or PR descriptions.
+Finish performs provider mutations and polling. Implementation or delivery
+language authorizes publication and hosted feedback follow-through without
+merge. Merge, deployment, and cleanup require explicit user language or an
+activated project policy. Hosted findings do not expand authority.
 
-## MR and PR Description Maintenance
+## Hosted artifact maintenance
 
-- For host-neutral requests to create or update a PR, MR, pull request, merge request, change request, or review artifact, use `change-request-create` first. Let it select the artifact provider and description policy, then delegate provider-specific mutation to `github-pr-create` or `glab-mr-create`.
-- Use provider-specific creation skills directly only when the user explicitly asks for GitHub or GitLab, an existing artifact URL fixes the host, or a higher-level workflow has already selected the provider adapter.
-- After any commit that changes an MR or PR's scope, behavior, approach, deployment requirements, or reviewer-facing content, update the description proactively. Do not wait for the user to ask.
-- Reviewers only see the final diff. Keep the description aligned to the current branch, not intermediate approaches or reverted work.
-- Do not narrate intermediate decisions, reverted approaches, or scoped-out work in the description unless there is a lasting consequence a reviewer needs to know, such as a follow-up issue or deliberate coverage gap.
-- The `Summary`, `Testing`, `Deployment Notes`, and `Review Notes` sections must describe the MR or PR as it currently stands.
-- Verification or testing sections should contain behavior-specific proof,
-  reviewer-requested evidence, or explicit gaps. Do not list routine local
-  commands, clean Nitro review state, passing pipeline state, or operational
-  verification state merely because the workflow ran them. Mention those
-  surfaces only when the change modifies them, a reviewer asked for that proof,
-  or there is an actionable gap or failure.
-- Write the review focus before choosing Testing or Verification content. Keep
-  only evidence that maps to that focus, answers a reviewer request, or explains
-  an actionable gap; omit broad proof inventories, incidental pipeline fixes,
-  note IDs, pod names, and environment setup details unless reviewers need them
-  to assess the current diff.
-- Do not expose local private support artifact paths such as `~/.ax/plans/...`,
-  raw private support artifacts, or private thread metadata in MR or PR
-  descriptions by default. When support-artifact evidence is relevant, use
-  summaries, hashes, thread references, note IDs, discussion IDs, or stable
-  correlation IDs instead of local filesystem paths.
-- Use `glab mr update <IID> --description "..."` for GitLab and `gh pr edit <number> --body "..."` for GitHub.
+- Before mutating an existing PR/MR, read its current head, target, state,
+  description, discussions, approvals, and CI state needed by the action.
+- After a commit changes scope, behavior, approach, deployment requirements, or
+  reviewer-facing content, align the PR/MR description before requesting review.
+- Describe the final diff. Do not narrate reverted approaches, local reviewer
+  identities, private paths, fingerprints, ledgers, or author-only process.
+- Verification sections contain behavior-specific reviewer evidence,
+  reviewer-requested proof, or actionable gaps. Omit routine command logs,
+  passing CI, and clean automated-review state unless they are the subject of
+  the change or expose a gap.
+- When posting a human-readable comment on the user's behalf, append
+  `Co-Authored by: <harness>`. Do not add attribution to commits, PR/MR
+  descriptions, service-generated bodies, or command-only review notes.
 
-## Creating Hosted Reviews from a Dirty Working Tree
+## GitLab review requests
 
-- When a hosted-review creation skill such as `/glab-mr-create` is invoked on a non-default branch with uncommitted changes, commit and push the relevant changes before creating the MR or PR. Do not ask first unless the diff includes unrelated user changes, secrets, generated noise, or a failed verification decision.
-- Use `ax commit` or the equivalent review-gated commit workflow to author the commit. Standard rules still apply: no `--no-verify`, no default-branch push without confirmation, and no co-author attribution in commits.
-- After committing and pushing, continue the hosted review creation workflow.
+Request or re-request GitLab review through a new top-level MR note containing
+only the slash command:
 
-## Local Code Review
+```text
+/request_review @alice @bob
+```
 
-- When the user asks to review local changes, review their changes, review the working tree, or self-review, use the relevant local review skill in the current session.
-- Implementation review of local changes is distinct from hosted PR/MR review.
-- Skills may use available local, cloud, or custom subagents for independent review lanes when the diff is broad or high-risk.
+Use one note for all reviewers in that request. Do not edit an old note, reply
+inside a discussion, modify the MR description, or change the reviewer field as
+a substitute.
 
-## Hosted Provider Reviews
+When active Fullscript project policy selects Nitro, Finish posts
+`/request_review @nitro` after initial publication and every head-changing
+follow-up push. Latest-head Nitro feedback must complete without unresolved
+actionable findings. Feedback tied to an earlier head is stale.
 
-- When the user asks to review a merge request, such as `review MR !123` or a `git.fullscript.io` merge request URL, use the GitLab review skill or adapter in the current session.
-- When the user asks to review a GitHub pull request, such as `review PR #123` or a `github.com/.../pull/123` URL, use the GitHub review skill or adapter in the current session.
-- Do not use the `glab-cli` skill as the review rubric for MR reviews; it may still be used for authenticated GitLab data retrieval when the review skill requires GitLab CLI access.
-- When requesting or re-requesting GitLab MR review from one or more reviewers, create a new top-level MR note containing only the slash command: `glab mr note <MR_IID> -m "/request_review @alice @bob"`.
-- Use one slash-command note for all reviewers in the request. A single reviewer is also valid, such as `glab mr note <MR_IID> -m "/request_review @alice"`. Do not split the same request across multiple notes unless a later follow-up needs a separate re-review request.
-- Do not request GitLab MR review by editing an existing note, replying in a discussion, changing the MR description, using `glab mr update --reviewer`, or mutating reviewers through the GitLab API.
+## AI repository delivery
 
-## GitLab CLI
+- This repository publishes through GitLab `origin` MRs targeting `main`.
+- The GitHub remote is a mirror and is used only under explicit direction or a
+  documented GitLab outage path.
+- Finish inspects CI or explicit no-pipeline state and latest-head Nitro before
+  reporting readiness.
+- No planning-only MR is created. A POC is draft and closes unmerged. An atomic
+  plan produces one final MR; OpenSpec produces one final MR per top-level
+  delivery unit.
+- Final implementation never uses POC commits or ancestry.
 
-- Always use the `/glab-cli` skill when performing GitLab CLI operations or interacting with `git.fullscript.io` URLs, except for MR reviews.
-- Prefer `glab` subcommands such as `glab mr update` or `glab mr view` over raw `glab api` calls.
-- Use `glab api` only when no suitable subcommand exists.
+## Multi-unit final delivery
 
-## GitLab MR Dependencies
+- Top-level delivery-unit order defines one total Git predecessor chain.
+- Logical dependencies control semantic eligibility; the total chain controls
+  branch ancestry and merge order.
+- Set formal GitLab blocking dependencies when the provider supports them.
+- Merge explicitly authorized final units from the bottom of the chain to the
+  top. Use each live source HEAD as the merge guard.
+- After a predecessor squash-merges, refresh the child, verify its target
+  changed to the default branch, and restack it onto the verified merged commit.
+- Every changed descendant HEAD reruns local Review, CI, approvals, and
+  configured hosted automated review before its merge.
+- Stop before the next merge when default-branch CI for the landed predecessor
+  is failed, blocked, or unavailable under project policy.
 
-- When an MR depends on other MRs being merged first, use the GitLab MR dependencies API to set formal blocking dependencies.
-- Do not only mention dependencies in the MR description.
-- The API endpoint is `POST /projects/:id/merge_requests/:merge_request_iid/blocks`.
-- The endpoint requires the global `blocking_merge_request_id`, not the IID.
-- To get the global ID, fetch the blocking MR first with `glab api projects/<project>/merge_requests/<iid>` and extract the `id` field.
-- For cross-project dependencies, also pass `blocking_project_id`, the numeric project ID of the project containing the blocking MR.
-- Same-project example: `glab api --method POST "projects/<project>/merge_requests/<iid>/blocks" -f blocking_merge_request_id=<global_id>`.
-- Cross-project example: `glab api --method POST "projects/<project>/merge_requests/<iid>/blocks" -f blocking_merge_request_id=<global_id> -f blocking_project_id=<project_id>`.
-- You may also mention dependencies in the MR description for human context, but the formal API dependency is authoritative.
+## Commit and artifact titles
 
-## GitLab Stacked Diffs
+- Choose semantic prefixes from consumer impact and release behavior, not from
+  the apparent file type.
+- Inspect repository release configuration and recent history before choosing a
+  prefix that may publish or version an artifact.
+- Do not add AI co-author attribution to commit or PR/MR titles and
+  descriptions.
 
-- Before running `glab stack amend`, verify the current branch maps to the intended MR.
-- First run `git branch --show-current` to confirm the current branch.
-- Then run `glab mr list --source-branch <branch> --repo <repo>` to confirm which MR that branch maps to.
-- `glab stack sync` always leaves the working tree on the last branch in the stack.
-- Never assume you are on the correct branch after a stack sync.
-- Never amend a diff without explicitly navigating to the correct branch first.
+## Linear
 
-## Merging Stacked MRs
-
-- When the user asks to merge MRs in a stack, merge from the bottom of the
-  stack to the top: merge the first/base MR to `main` first, then the next MR,
-  and continue until the last/top MR is merged last.
-- Do not collapse the stack by merging the top MR first unless the user
-  explicitly asks for that alternate landing shape.
-- After each lower MR lands, refresh the next MR from live GitLab state before
-  merging. GitLab may automatically retarget the next stacked MR to `main`.
-- Expect conflicts to appear after retargeting. If the next MR is not
-  mergeable, resolve the conflict on that MR's source branch, rerun the relevant
-  verification, push the conflict fix, and re-check the MR before merging.
-- Use the live MR head SHA as the merge guard for each MR and verify each merge
-  with provider state before proceeding to the next MR.
+- Never assign an automated agent as a Linear delegate without explicit user
+  confirmation.
+- Create issues in the project's delivery-ready status required by active
+  policy; never invent a fallback status.
+- Scope, acceptance, and verification remain canonical in the Plan artifact.
+  Linear remains canonical for assignment, priority, scheduling, and status.

@@ -1,6 +1,6 @@
 ---
 name: openspec-explore
-description: Enter explore mode - a thinking partner for exploring ideas, investigating problems, and clarifying requirements. Use when the user wants to think through something before or during a change.
+description: Explicit-only developer command. Invoke only when the user explicitly names this OpenSpec adapter or its /opsx command.
 license: MIT
 compatibility: Requires openspec CLI.
 metadata:
@@ -285,3 +285,11 @@ But this summary is optional. Sometimes the thinking IS the value.
 - **Do visualize** - A good diagram is worth many paragraphs
 - **Do explore the codebase** - Ground discussions in reality
 - **Do question assumptions** - Including the user's and your own
+
+## Explicit Invocation Boundary
+
+Do not infer this adapter from ordinary language. Route ordinary work through the owning lifecycle mode.
+
+<!-- ax-openspec-skill: openspec-explore; explicit-only -->
+
+<!-- ax-openspec-content-sha256: sha256:b93d342cd73bc7d6832ca9970adaf5901d69416a3dfd7a6fb8324768e6ae296b -->

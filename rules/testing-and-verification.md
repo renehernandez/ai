@@ -35,3 +35,20 @@ verification.
 
 Do not use vague shortcut labels for verification. Report skipped layers,
 external blockers, and CI-only coverage as verification gaps.
+
+## Planning, POC, and final targets
+
+- Planning artifacts use implementation-readiness, edge-case/risk,
+  simplification/scope, and refactoring reviewers against one artifact
+  fingerprint.
+- POC and final implementation use correctness, regression, maintainability,
+  and verification reviewers against one target-base diff and exact HEAD.
+- Every OpenSpec POC proves the complete accepted contract, including applicable
+  operational, migration, rollback, compatibility, security, performance, and
+  accessibility concerns. Explicit requirements cannot be waived by a receipt.
+- Exercise central decision boundaries directly or in a fidelity-equivalent
+  environment. A mock that bypasses the decision is not verification.
+- Run pre-merge AX proof only with isolated HOME and runtime roots. Live runtime
+  activation waits for verified merged default branch source and `ax sync`.
+- Any artifact, target-base, or HEAD change invalidates target-bound evidence.
+  Rerun the affected verification and Review surfaces.

@@ -17,8 +17,8 @@ Use for local implementation diffs and for the reviewed diff supplied by GitHub/
 
 | Review context | First move |
 | --- | --- |
-| GitHub PR | Use `github-adapter-review` to gather artifact-host context, then apply this rubric |
-| GitLab MR | Use `gitlab-adapter-review` to gather artifact-host context, then apply this rubric |
+| GitHub PR | Use `review` to gather exact artifact-host context, then apply this rubric |
+| GitLab MR | Use `review` to gather exact artifact-host context, then apply this rubric |
 | Local changes | Inspect status, diff, and relevant repo rules |
 | Hosted/cloud review | Use the adapter output and verified diff |
 | Reviewer feedback follow-through | Use the feedback-specific skill first, then check claims against the verified diff |
@@ -27,7 +27,7 @@ Use for local implementation diffs and for the reviewed diff supplied by GitHub/
 ## Workflow
 
 1. Load project review rules: `AGENTS.md`, relevant `.agents/rules/*.md`, and repo-specific review rubrics.
-2. Establish the diff base with provider tools or `git merge-base`. For hosted GitHub/GitLab review, let `github-adapter-review` or `gitlab-adapter-review` provide PR/MR metadata, base/head SHAs, comments, checks, and the verified diff.
+2. Establish the diff base with provider tools or `git merge-base`. For hosted GitHub/GitLab review, let `review` provide PR/MR metadata, base/head SHAs, comments, checks, and the verified diff.
 3. If provider tools are unavailable, establish the best local base from remotes/refs, state what could not be verified, and scope findings to the verified diff only.
 4. Read changed files plus enough surrounding code to avoid false positives.
 5. Run an AI readiness upkeep pass when the diff changes verification scripts, task commands, hooks, CI/release/deploy config, generated artifacts, schemas or API contracts, infrastructure config, agent instructions, rules, skills, prompts, review rubrics, or review feedback that future agents should repeat or avoid. Use `ai-readiness-upkeep` when available; otherwise report missing cheap enforceable verification as a review finding.

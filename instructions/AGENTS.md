@@ -1,128 +1,135 @@
 # User-Level Agent Instructions
 
-This file is the concise entrypoint for agents running as `rene.hernandez`.
-The linked rule files are normative and preserve the detailed policies.
+This is the portable entrypoint for agents running as `rene.hernandez`. Apply
+higher-priority system, developer, and direct user instructions first, then the
+project `AGENTS.md` and relevant files under [rules/](../rules/).
 
-## Scope and Precedence
+## Five-mode workflow
 
-- Follow higher-priority system, developer, and direct user instructions first.
-- Then apply this file and the linked files under [rules/](../rules/).
-- When a project has its own `AGENTS.md`, apply the more specific project rules for that workspace.
-- If a rule names a tool that is unavailable in the current harness, use the closest safe equivalent and say what changed.
-- For accepted implementation work, finish on a feature branch by committing,
-  pushing to the selected hosted-review remote, and creating or updating a
-  PR/MR when the project has a hosted-review workflow.
-- Do not install dependencies or run destructive commands unless the user
-  explicitly asks.
-- For implementation work that needs planning, review-first delivery, stacked PRs/MRs, or multi-step coordination, route through `plan-orchestrator` and the related plan workflow skills.
-- For small direct implementation work, use the current session and the project's local verification/review rules unless the user explicitly asks for a plan workflow.
+Explore, Plan, Execute, Review, and Finish are the only inferred lifecycle
+modes. An explicit mode name overrides inference. For non-trivial work, announce
+the mode, mutation authority, and goal once when entering or expanding
+authority.
 
-## Quick Operating Rules
+- **Explore** is read-only discovery, research, project intake, and divergent
+  thinking. It does not write repository, tracker, or provider state.
+- **Plan** resolves material decisions conversationally, then writes one atomic
+  plan or OpenSpec artifact.
+- **Execute** implements accepted work in one owned branch/worktree. Exactly one write owner controls each worktree and may edit, stage, and commit there.
+- **Review** inspects one exact artifact fingerprint, target-base diff, or HEAD
+  read-only and returns findings to Plan or Execute.
+- **Finish** owns provider mutations, hosted feedback follow-through, and
+  readiness. Merge, deployment, and cleanup require explicit user authority or
+  activated project policy.
 
-- Keep commands simple: one command per tool call, no compound shell chains, and no `--no-verify`.
-- Agents must use `ax commit` instead of raw `git commit` when committing work.
-  Ordinary iteration uses the normal `ax commit` path; `ax commit --require-review-gate`
-  is opt-in only when the user or active workflow explicitly requires it. Plan workflow skills
-  may use their required-gate commit helpers only when that gate is explicitly
-  required; raw `git commit` remains Rene's manual terminal escape hatch. Before any agent publishes work by
-  pushing, creating or updating a PR/MR, or direct publication, run the final
-  personal publication checkpoint against the branch diff and exact HEAD SHA.
-  This personal checkpoint does not replace hosted review, CI, Nitro, MR/PR
-  approval, or the user's manual terminal escape hatch. Do not publish if the
-  checkpoint is missing, stale, tied to another HEAD, or has unresolved blockers.
-- Do not force push for ordinary follow-up work, review feedback, or CI fixes. Use subsequent commits because hosted diffs are squash-merged. Force push only when it is necessary to resolve a Git history change, rebase, conflict, stale remote update, or when the user explicitly asks for a history rewrite.
-- Before pushing any non-default source branch in a PR/MR workflow or stack,
-  check live hosted-review state for that branch. Never push to a branch whose
-  only matching hosted PR/MR is already closed or merged; stop and ask whether
-  to create a new branch and review artifact, reopen or explicitly reuse the old
-  artifact, or take another path.
-- When a safe recurring command needs approval, request a reusable scoped prefix rule instead of a one-off approval. Prefer narrow prefixes such as `["pnpm", "test"]`, `["pnpm", "run", "test"]`, `["git", "status"]`, `["git", "diff"]`, `["git", "show"]`, and `["glab", "mr", "view"]`; avoid reusable approvals for destructive commands, dependency installs, pushes, credential access, or broad interpreters like `python`, `node`, or `bash`.
-- Keep approval-seeking commands prefix-matchable: avoid shell redirection, command substitution, heredocs, glob-heavy arguments, and broad `bash -lc` wrappers when a direct command works. If repeated prompts persist in a long-running Codex thread after sandbox or writable-root config changes, tell the user the thread may need to be restarted, forked, or handed off so the new config is loaded.
-- In brainstorming or planning threads, treat agreement as design confirmation only. Do not edit files, generate migrations, or start implementation from scope agreement alone; wait for an explicit implementation trigger such as "implement this", "make the changes", "start the PR", "go ahead and code it", or "apply the plan".
-- When the user says they dislike a proposed name, structure, or design shape, provide alternatives and tradeoffs before changing files, even if they did not explicitly ask for alternatives.
-- For JavaScript and TypeScript projects, invoke package-managed commands through the package manager, such as `pnpm exec`, `pnpm dlx`, or `pnpm run`; never call binaries inside `node_modules` directly.
-- Across all projects, do not name CI jobs, task-runner entries, package scripts
-  that back automation, or pre-commit hook entries with generic `check`
-  terminology. Use names that state the behavior being enforced, such as
-  `lint`, `format`, `typecheck`, `unit-test`, `integration-test`, `e2e-test`,
-  `build`, `schema-validate`, or `drift-validate`. If a tool's native command
-  uses `check`, such as `biome check` or `git diff --check`, keep the native
-  command invocation but wrap it in a purpose-specific job, hook, task, or
-  script name.
-- After changing shared skill, agent, instruction, or rule sources in this repo, run `writing-skills` against the changed agent behavior before committing. Portable shared skills must keep runnable helper logic inside the owning skill folder or a real package dependency; do not use repo-root workflow scripts or `runtime.reusableScripts` to make a skill portable. For live runtime refreshes, use the `ax-cli` steering skill and verify the affected installed surface before treating source edits as live.
-- Do not stage or commit local workflow artifacts into work-project repositories. Keep reviewer scratch, readiness reports, reviewer reports, delivery ledgers, screenshots, command proofs, validation evidence, rejected generated shapes, and private plan-support pointers in the thread or private plan-support storage. Reusable AI repo workflow machinery, managed rules, skills, validators, runtime scripts, and regression fixtures may be committed only when that machinery is the feature being changed in this AI repo.
-- Write agent and Codex hooks in TypeScript unless there is a specific runtime requirement that makes another language a better fit.
-- After changing hook sources or hook registration behavior, run `pnpm ax hooks update` for the affected machine when live runtime refresh is intended, then use `pnpm ax hooks validate` or `pnpm ax hooks status` to confirm symlinks, startup registration, Codex trust state, and selected remote reporting.
-- In troubleshooting mode, diagnose and report before editing or fixing anything.
-- For multi-file implementation requests, work in the current agent session unless the user explicitly asks to use a subagent or the active workflow launches available subagents for bounded work or verification.
-- For review work, use the relevant review skill or adapter in the current session. Skills may delegate to available local, cloud, or custom subagents when the workflow benefits from independent review lanes.
-- Use confidence scores on actionable statements as defined in [rules/confidence.md](../rules/confidence.md).
-- Use `/doc-smith` for non-trivial documentation work and Mermaid for Markdown diagrams.
-- Use `/scrutinize` for adversarial validation of plans, implementation diffs, PRs, hosted review feedback, proposed approaches, sanity checks, and second opinions.
-- Always use the `hallmark` skill for frontend design work, including greenfield UI, redesigns, design audits, visual polish, and design extraction from URLs or screenshots.
-- Always use the 1Password MCP server when working with 1Password developer environments; do not wait for the user to explicitly ask for it.
-- Prefer CLI tools that carry authentication and org conventions: `gh` for GitHub, `glab` for GitLab, and `wrangler` for Cloudflare.
-- Project-specific instructions define the hosted-review route, reviewer gates,
-  target branch, and direct-publication policy. Do not push default branches
-  unless the user explicitly asks for direct publication.
-- Nitro review applies only to Fullscript GitLab merge requests in projects
-  where Nitro is available; do not request Nitro for GitHub PRs or non-Fullscript
-  repositories.
-- GitLab review and re-review requests must be posted as a new top-level MR
-  note containing only `/request_review @alice @bob`; use one note for all
-  reviewers in the request. A single reviewer note such as
-  `/request_review @alice` is also valid.
-- Review-first plan workflows use the project-selected hosted-review route with
-  stacked delivery when required. A `plan-orchestrator` run may finish only with
-  `stack_ready` for the full reviewed stack or `delivery_blocked` with evidence;
-  one delivered OpenSpec task, `plan-ready` output, or `planning_review` handoff
-  is not terminal success.
-- When asked to merge stacked PRs/MRs, follow
-  [rules/git-and-review.md](../rules/git-and-review.md): land the stack
-  bottom-to-top, expect each next artifact to retarget to the mainline branch,
-  and resolve any newly surfaced conflicts before merging the next artifact.
-- Do not use "smoke test" or "smoke tests" wording. Describe the exact verification performed instead, such as browser route checks, console checks, or manual browser verification.
-- Avoid slop-like contrast phrasing and generic AI filler. Do not lean on formulas like "X, not just Y", "more than just", "isn't just", or "the future of"; state the concrete claim directly.
-- Describe the exact verification performed instead of using vague shortcut
-  labels. Prefer precise phrases such as browser route checks, responsive
-  viewport checks, console checks, local browser E2E tests, deployed-preview E2E
-  tests, or manual browser verification.
-- When returning machine-readable YAML or JSON contracts in chat, first include a concise `## Readable Summary`, then include the structured block for machine use.
+Route from unresolved decisions and contract needs. Direct Execute is eligible
+only when one coherent MR can deliver the outcome and no material behavior,
+architecture, migration, safety, ownership, ordering, cross-component contract,
+or verification decision remains. Otherwise use Plan. Narrow language such as
+read-only, Plan-only, Execute-only, Review-only, or local-only limits later
+modes.
 
-## Harness Entrypoints
+## Operating rules
 
-### Project Setup
+- Keep commands simple: one command per tool call, no compound shell chains,
+  and no `--no-verify`.
+- Use native hook-enabled Git commits. Fix hook failures and restage before
+  retrying; never bypass repository hooks.
+- Do not install dependencies or run destructive commands without explicit
+  authorization from the user or accepted implementation contract.
+- Do not force-push ordinary follow-up, feedback, or CI-fix commits. Reserve
+  force-push for an authorized history rewrite or required history repair.
+- Before pushing a non-default branch, inspect live hosted state. Do not reuse a
+  branch whose only review artifact is closed or merged without user direction.
+- Request narrow reusable approval prefixes for recurring safe commands. Avoid
+  broad approvals for destructive commands, dependency installation,
+  publication, credentials, or interpreters.
+- For JavaScript and TypeScript, use `pnpm exec`, `pnpm dlx`, or `pnpm run`;
+  never invoke `node_modules/.bin` directly.
+- Across all projects, avoid generic `check` terminology for CI jobs,
+  task-runner entries, automation-backed package scripts, and pre-commit hook
+  entries. Use behavior-specific names such as `lint`, `format`, `typecheck`, `unit-test`, `integration-test`, `e2e-test`, `build`, `schema-validate`, or
+  `drift-validate`. A native command such as `biome check` stays behind a
+  purpose-specific job, hook, task, or script name.
+- After changing shared skill, agent, instruction, or rule sources, run
+  `writing-skills` against the changed agent behavior before committing.
+  Portable shared skills keep runnable helpers in the owning skill folder or a
+  real package dependency.
+- Keep reviewer scratch, fingerprints, handoffs, ledgers, command proof, and
+  other private workflow evidence in the task. Under `.agents/plans`, commit
+  only a primary atomic-plan Markdown file.
+- Write agent hooks in TypeScript unless a concrete runtime requirement dictates
+  another language.
+- Troubleshooting stays read-only through diagnosis and report. Enter Execute
+  only when the user requests a fix.
+- Use confidence scores from [rules/confidence.md](../rules/confidence.md).
+- Use `doc-smith` for non-trivial documentation, `scrutinize` for adversarial
+  validation, and `hallmark` for frontend design.
+- Prefer authenticated organization-aware CLIs: `gh`, `glab`, and `wrangler`.
+- Name the exact verification layer performed; do not use vague shorthand.
+- Avoid generic AI filler and formulaic contrast phrasing.
+- Before a machine-readable YAML or JSON contract, add a concise
+  `## Readable Summary`.
 
-- Use the current project's local setup, dependency, and verification
-  instructions. Prefer commands declared in the project `AGENTS.md`, task
-  runner config, package scripts, README, or nearby docs.
-- Do not assume this user-level instruction file defines a universal setup
-  command. Project-specific commands belong in project-specific instructions.
+## Planning and delivery
 
-### Shared Automations
+- Plan remains conversational until scope, design, delivery shape, risk,
+  acceptance, proof, and policy choices are coherent.
+- Use an atomic plan for one coherent final MR that needs no durable
+  cross-component specification or mandatory rehearsal.
+- Use OpenSpec for independently reviewable delivery units, durable
+  cross-component contracts, migration design, or work requiring full
+  rehearsal.
+- Every OpenSpec receives one complete disposable implementation POC. The POC is
+  a draft review-only PR/MR that receives local and hosted automated review plus
+  personal acceptance of the exact clean head, then closes unmerged.
+- Reconcile durable POC findings once per authorized cycle. Implement final
+  code independently; never promote POC commits.
+- Do not publish a separate planning PR/MR. An atomic plan produces one final
+  PR/MR. OpenSpec produces one final PR/MR per top-level delivery unit, with
+  nested work items implemented cohesively inside that unit.
+- Review evidence and the publication checkpoint remain task-local and become
+  stale when the artifact, target base, or HEAD changes.
+- Implementation or delivery wording authorizes Finish publication and hosted
+  follow-through, not merge. Merge, deployment, and cleanup remain explicit.
 
-- Store reusable Codex automation definitions under [automations/](../automations/).
-- Runtime folders such as `~/.codex/automations` and `~/.agents/automations` should point here by symlink.
-- Keep automation prompts self-contained and repo-aware; ignore runtime-only state such as jitter salts, logs, per-run state files, and automation memory/state artifacts such as `memory.md` and `state.json`.
+## Provider policy
 
-### Installed Rules
+- Resolve provider behavior from direct user instruction, project policy, one
+  workflow-policy profile, then remote inference.
+- Project instructions select the review host, target branch, automated
+  reviewer, approvals, and direct-publication policy.
+- Nitro applies only to Fullscript GitLab projects whose active policy selects
+  it. A review request is a new top-level note containing only
+  `/request_review @nitro`, and latest-head feedback must pass.
+- Review retrieves and normalizes hosted findings read-only. Finish performs
+  provider mutations and polling. Plan or Execute owns fixes.
 
-Load the rule files installed under [rules/](../rules/). Runtime profiles may install only the rule files relevant to this machine.
+## AX runtime
 
-### Claude Code
+- Tracked `ax.config.json` is desired state. Local
+  `~/.agents/runtime/managed-runtime.json` is ownership state. The filesystem is
+  observed state.
+- Use `ax sync` for runtime convergence. Scoped `skills sync`,
+  `instructions sync`, and `hooks sync` require an initialized manifest and do
+  not change its installed or policy profile selection.
+- Use `ax status` and `ax validate` for offline, read-only inspection with no
+  network access or mutation.
+- Exercise feature-branch AX behavior only with isolated HOME and runtime roots.
+  Keep the live runtime unchanged before merge.
+- After merge, verify a clean local default-branch source and run live
+  `ax sync`.
+- Use `ax openspec sync` in the invocation repository for repo-local OpenSpec.
+  Headless first-time setup requires `--context-file <path>`; top-level runtime
+  sync never mutates the current working directory's OpenSpec assets.
 
-- Treat `Bash`, `Task`, and slash skills such as `/glab-commit` as literal harness capabilities when available.
-- Never use `WebFetch`; use `curl` through `Bash` for web content as described in [rules/command-and-tools.md](../rules/command-and-tools.md).
-- Use `/brainstorm` for brainstorming and design sessions, not the lower-level `brainstorming` skill name.
+## Harness entrypoints
 
-### Codex
-
-- Map `Bash` instructions to the shell command tool available in Codex.
-- Read the relevant skill `SKILL.md` before applying a named skill.
-- Use `apply_patch` for manual file edits and read files before editing them.
-- If a rule or skill uses subagents, keep prompts bounded, avoid write access unless explicitly approved by the workflow or user, and reconcile findings in the parent thread.
-
-### Fullscript Workflows
-
-- GitLab, GitHub, Linear, Cloudflare, Terraform, CI, Docker, and documentation rules are captured in the linked files.
-- Fullscript-specific rules apply whenever working in Fullscript repositories, internal GitLab, internal CI, Cloudflare resources, or org-owned infrastructure.
+- Use the current project's own setup and verification commands.
+- Store reusable Codex automations in the shared `automations/` source and keep
+  prompts self-contained and repo-aware.
+- Load the installed rule files relevant to the active runtime profile.
+- In Codex, map shell guidance to the available shell tool, read selected skills
+  fully, use `apply_patch` for manual edits, and keep delegated work bounded.
+- Fullscript-specific rules apply to Fullscript repositories, internal GitLab,
+  internal CI, Cloudflare resources, and organization-owned infrastructure.

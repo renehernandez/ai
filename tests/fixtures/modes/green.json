@@ -1,0 +1,38 @@
+[
+  {
+    "id": "settled-atomic-plan",
+    "contract": {
+      "coherentSingleMr": true,
+      "severalDeliveryUnits": false,
+      "durableCrossComponentContract": false,
+      "migrationDesign": false,
+      "fullPocRequired": false,
+      "unresolvedMaterialDecision": false
+    },
+    "expectedArtifact": "atomic_plan"
+  },
+  {
+    "id": "cross-cutting-openspec",
+    "contract": {
+      "coherentSingleMr": false,
+      "severalDeliveryUnits": true,
+      "durableCrossComponentContract": true,
+      "migrationDesign": false,
+      "fullPocRequired": true,
+      "unresolvedMaterialDecision": false
+    },
+    "expectedArtifact": "openspec"
+  },
+  {
+    "id": "unresolved-plan-stays-conversational",
+    "contract": {
+      "coherentSingleMr": true,
+      "severalDeliveryUnits": false,
+      "durableCrossComponentContract": false,
+      "migrationDesign": false,
+      "fullPocRequired": false,
+      "unresolvedMaterialDecision": true
+    },
+    "expectedArtifact": "none"
+  }
+]

@@ -1,0 +1,5 @@
+interface:
+  display_name: "Review"
+  short_description: "Inspect exact targets with four lanes"
+  default_prompt: "Use $review read-only with the target-specific four-lane baseline, normalize hosted findings separately, route fixes to Plan or Execute, and emit an exact-head publication checkpoint without persisted gate state."
+

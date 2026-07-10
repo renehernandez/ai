@@ -1,0 +1,5 @@
+interface:
+  display_name: "Explore"
+  short_description: "Investigate and clarify without writes"
+  default_prompt: "Use $explore to inspect context read-only, test assumptions, return decisions or open questions in chat, and propose Plan before any artifact write."
+

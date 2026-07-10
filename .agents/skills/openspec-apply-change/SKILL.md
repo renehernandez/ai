@@ -1,6 +1,6 @@
 ---
 name: openspec-apply-change
-description: Implement tasks from an OpenSpec change. Use when the user wants to start implementing, continue implementation, or work through tasks.
+description: Explicit-only developer command. Invoke only when the user explicitly names this OpenSpec adapter or its /opsx command.
 license: MIT
 compatibility: Requires openspec CLI.
 metadata:
@@ -157,3 +157,11 @@ This skill supports the "actions on a change" model:
 
 - **Can be invoked anytime**: Before all artifacts are done (if tasks exist), after partial implementation, interleaved with other actions
 - **Allows artifact updates**: If implementation reveals design issues, suggest updating artifacts - not phase-locked, work fluidly
+
+## Explicit Invocation Boundary
+
+Do not infer this adapter from ordinary language. Route ordinary work through the owning lifecycle mode.
+
+<!-- ax-openspec-skill: openspec-apply-change; explicit-only -->
+
+<!-- ax-openspec-content-sha256: sha256:aacd471adfcea609f85696fabfc788ac989117381cabc3de4f5662ab84357f4e -->

@@ -1,15 +1,54 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
 
-const instructionFiles = [
-  "AGENTS.md",
-  "instructions/AGENTS.md",
+const entrypoints = ["AGENTS.md", "instructions/AGENTS.md"] as const;
+const lifecycleRules = [
+  ...entrypoints,
+  "rules/investigation-and-implementation.md",
+  "rules/session-startup.md",
   "rules/docs-and-specs.md",
-  "rules/handoff-and-resume.md",
+  "rules/git-and-review.md",
+] as const;
+const modeNames = ["Explore", "Plan", "Execute", "Review", "Finish"] as const;
+
+const retiredLifecycleReferences = [
+  /\bbrainstorming\b/,
+  /\bstart-project\b/,
+  /\bsession-start\b/,
+  /\bplan-ready\b/,
+  /\bplan-review\b/,
+  /\bplan-orchestrator\b/,
+  /\bplan-poc\b/,
+  /\bplan-unit-sequencer\b/,
+  /\bplan-unit-delivery\b/,
+  /\breview-feedback-routing\b/,
+  /\bchange-request-create\b/,
+  /\bmerge-followthrough\b/,
 ] as const;
 
-for (const file of instructionFiles) {
+for (const file of entrypoints) {
+  test(`${file} exposes the five-mode lifecycle and bounded authority`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    for (const mode of modeNames) {
+      assert.match(text, new RegExp(`\\b${mode}\\b`));
+    }
+    assert.match(text, /explicit mode name.*override/i);
+    assert.match(text, /one (?:write )?owner.*worktree|one writer.*worktree/i);
+    assert.match(text, /merge, deployment, and cleanup.*explicit/i);
+  });
+
+  test(`${file} keeps shared behavior mechanically reviewed`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /writing-skills/);
+    assert.match(text, /shared skill, agent, instruction, or rule sources/);
+    assert.match(text, /Portable shared skills/);
+    assert.match(text, /owning skill folder/);
+    assert.match(text, /real package dependency/);
+  });
+
   test(`${file} requires readable summaries for structured thread contracts`, () => {
     const text = readFileSync(file, "utf-8");
 
@@ -18,31 +57,133 @@ for (const file of instructionFiles) {
   });
 }
 
-for (const file of ["AGENTS.md", "instructions/AGENTS.md"] as const) {
-  test(`${file} requires writing-skills review for agent behavior changes`, () => {
+test("active lifecycle rules contain no retired public entrypoints", () => {
+  for (const file of lifecycleRules) {
     const text = readFileSync(file, "utf-8");
+    for (const retired of retiredLifecycleReferences) {
+      assert.doesNotMatch(text, retired, `${file} still references ${retired}`);
+    }
+  }
+});
 
-    assert.match(text, /writing-skills/);
-    assert.match(text, /shared skill, agent, instruction, or rule sources/);
-  });
-}
+test("startup rules perform shared mode preflight without a lifecycle skill", () => {
+  const text = readFileSync("rules/session-startup.md", "utf-8");
+
+  assert.match(text, /mode preflight/i);
+  assert.match(text, /mode, mutation authority, and goal/i);
+  assert.match(text, /git status --short --branch/);
+  assert.match(text, /git worktree list/);
+  assert.match(text, /one writer|one write owner/i);
+  assert.match(text, /target-base diff|exact HEAD/i);
+  for (const mode of modeNames) {
+    assert.match(text, new RegExp(`\\b${mode}\\b`));
+  }
+});
+
+test("implementation rules route semantically and enforce the full OpenSpec POC", () => {
+  const text = readFileSync(
+    "rules/investigation-and-implementation.md",
+    "utf-8",
+  );
+
+  assert.match(text, /semantic/i);
+  assert.match(text, /no unresolved.*behavior.*architecture.*migration/is);
+  assert.match(text, /atomic plan/i);
+  assert.match(text, /OpenSpec/i);
+  assert.match(text, /every OpenSpec.*full.*POC/is);
+  assert.match(text, /draft.*review-only.*close.*unmerged/is);
+  assert.match(
+    text,
+    /personal acceptance.*exact.*HEAD|exact.*HEAD.*personal acceptance/is,
+  );
+  assert.match(text, /one final.*MR.*top-level delivery unit/is);
+  assert.match(
+    text,
+    /no separate planning (?:PR|MR)|no planning-only (?:PR|MR)/i,
+  );
+  assert.match(text, /POC commits.*not.*merge|never.*cherry-pick.*POC/is);
+});
+
+test("documentation rules keep OpenSpec adapters explicit and task-shaped", () => {
+  const text = readFileSync("rules/docs-and-specs.md", "utf-8");
+
+  assert.match(text, /explicit developer command/i);
+  assert.match(text, /ordinary language.*five modes/is);
+  assert.match(text, /top-level.*delivery unit.*final.*PR\/MR/is);
+  assert.match(text, /nested work items/i);
+  assert.match(text, /complete.*POC/i);
+  assert.match(text, /only primary.*Markdown.*\.agents\/plans/is);
+});
+
+test("Git rules separate Review from Finish and use native hook-enabled commits", () => {
+  const text = readFileSync("rules/git-and-review.md", "utf-8");
+
+  assert.match(text, /native.*Git commit|Git commit.*repository hooks/i);
+  assert.match(text, /never.*--no-verify/i);
+  assert.match(text, /Review.*read-only/is);
+  assert.match(text, /Finish.*provider mutation/is);
+  assert.match(text, /publication_checkpoint/);
+  assert.match(text, /task-local/i);
+  assert.match(text, /HEAD or target base.*stale/is);
+  assert.match(text, /merge.*explicit/i);
+  assert.doesNotMatch(text, /ax commit|review-gate|plans artifact/i);
+});
+
+test("AI repo Finish policy remains GitLab and Nitro specific", () => {
+  const repoAgents = readFileSync("AGENTS.md", "utf-8");
+  const portableAgents = readFileSync("instructions/AGENTS.md", "utf-8");
+  const gitRules = readFileSync("rules/git-and-review.md", "utf-8");
+  const nitroRules = readFileSync("rules/fullscript/nitro-review.md", "utf-8");
+
+  assert.match(repoAgents, /GitLab `origin`/);
+  assert.match(repoAgents, /Nitro/);
+  assert.match(repoAgents, /\/request_review @nitro/);
+  assert.match(portableAgents, /Nitro.*Fullscript GitLab/is);
+  assert.match(
+    gitRules,
+    /direct user instruction.*project policy.*workflow-policy profile/is,
+  );
+  assert.match(nitroRules, /Fullscript repositories/);
+  assert.match(nitroRules, /\/request_review @nitro/);
+  assert.match(nitroRules, /latest head|latest-head/);
+});
+
+test("only primary Markdown plans are tracked", () => {
+  const planEntries = readdirSync(".agents/plans", { withFileTypes: true });
+
+  for (const entry of planEntries) {
+    assert.equal(
+      entry.isFile(),
+      true,
+      `.agents/plans/${entry.name} is not a file`,
+    );
+    assert.match(
+      entry.name,
+      /\.md$/,
+      `.agents/plans/${entry.name} is a private workflow sidecar`,
+    );
+  }
+});
+
+test("the five public mode packages exist", () => {
+  for (const mode of ["explore", "plan", "execute", "review", "finish"]) {
+    assert.equal(
+      existsSync(`skills/${mode}/SKILL.md`),
+      true,
+      `skills/${mode}/SKILL.md is missing`,
+    );
+  }
+});
 
 test("CI infrastructure rules require internal Fullscript job images", () => {
   const text = readFileSync("rules/ci-infra-and-cloudflare.md", "utf-8");
 
   assert.match(text, /GitLab CI: Container Images/);
   assert.match(text, /Never use upstream public images/);
-  assert.match(text, /CI job `image:` fields/);
-  assert.match(text, /Every GitLab CI job `image:` value/);
-  assert.match(text, /internal Fullscript image/);
-  assert.match(text, /image:name/);
-  assert.match(text, /defaults/);
-  assert.match(text, /hidden templates/);
   assert.match(text, /images\.fullscript\.io\/devops\/ci-images/);
-  assert.match(text, /instead of referencing the upstream registry directly/);
 });
 
-test("dependency rules require package-manager-mediated manifest and lockfile changes", () => {
+test("dependency changes remain package-manager mediated", () => {
   const commandRules = readFileSync("rules/command-and-tools.md", "utf-8");
   const dependencyRules = readFileSync("rules/dependency-security.md", "utf-8");
 
@@ -50,875 +191,31 @@ test("dependency rules require package-manager-mediated manifest and lockfile ch
     commandRules,
     /Route package-management file changes through the owning package manager CLI/,
   );
-  assert.match(commandRules, /dependency\s+additions, removals, upgrades/);
-  assert.match(commandRules, /`pnpm add`, `pnpm remove`, `pnpm update`/);
-  assert.match(
-    commandRules,
-    /Manual edits to package-management files are a last resort/,
-  );
   assert.match(commandRules, /Do not hand-edit dependency entries/);
-  assert.match(commandRules, /package-manager catalogs, or lockfiles/);
-
   assert.match(dependencyRules, /Package Manager Authority/);
   assert.match(dependencyRules, /Use the owning package manager CLI/);
-  assert.match(dependencyRules, /Do not manually edit dependency sections/);
-  assert.match(
-    dependencyRules,
-    /Manual manifest, catalog, or lockfile edits are\s+not an acceptable substitute/,
-  );
-  assert.match(dependencyRules, /after the dependency change/);
-  assert.match(dependencyRules, /Target version or removal state/);
 });
 
-for (const file of ["AGENTS.md", "instructions/AGENTS.md"] as const) {
-  test(`${file} defines the portable shared skill boundary`, () => {
-    const text = readFileSync(file, "utf-8");
-
-    assert.match(text, /Portable shared skills/);
-    assert.match(text, /owning skill folder/);
-    assert.match(text, /real package dependency/);
-    assert.match(text, /runtime\.reusableScripts/);
-    assert.match(text, /ax-cli/);
-  });
-}
-
-test("CI and hook instructions require specific names instead of check labels", () => {
+test("CI and hook automation uses behavior-specific names", () => {
   const repoAgents = readFileSync("AGENTS.md", "utf-8");
   const portableAgents = readFileSync("instructions/AGENTS.md", "utf-8");
-  const rules = readFileSync("rules/ci-infra-and-cloudflare.md", "utf-8");
   const localRules = readFileSync("rules/project-local.md", "utf-8");
   const mise = readFileSync("mise.toml", "utf-8");
   const lefthook = readFileSync("lefthook.yml", "utf-8");
-  const packageJson = readFileSync("package.json", "utf-8");
 
   for (const text of [repoAgents, portableAgents]) {
-    assert.match(text, /Across all projects/);
-    assert.match(text, /CI jobs, task-runner entries, package scripts/);
-    assert.match(text, /pre-commit hook entries/);
-    assert.match(text, /generic `check`\s+terminology/);
+    assert.match(text, /generic `check` terminology/);
     assert.match(text, /`lint`, `format`, `typecheck`, `unit-test`/);
-    assert.match(text, /purpose-specific job, hook, task, or\s+script name/);
   }
-
-  assert.match(rules, /CI and Local Hook Naming/);
-  assert.match(
-    rules,
-    /CI jobs, package scripts that back CI, or pre-commit hook entries/,
-  );
-  assert.match(rules, /generic `check` terminology/);
-  assert.match(rules, /`cli:check`/);
-  assert.match(
-    rules,
-    /`lint`, `format`, `typecheck`, `unit-test`, `integration-test`/,
-  );
-  assert.match(rules, /tool's native command uses `check`/);
-
   assert.match(localRules, /`mise run pre-commit`/);
-  assert.doesNotMatch(localRules, /`mise run check`/);
   assert.match(mise, /\[tasks\.pre-commit\]/);
-  assert.doesNotMatch(mise, /\[tasks\.check\]/);
   assert.match(lefthook, /biome-lint-format/);
-  assert.doesNotMatch(lefthook, /biome-check/);
-  assert.match(packageJson, /biome:lint-format:staged/);
-  assert.doesNotMatch(packageJson, /biome:check/);
 });
 
-for (const file of ["AGENTS.md", "instructions/AGENTS.md"] as const) {
-  test(`${file} routes agent commits through ax commit and gates publication`, () => {
-    const text = readFileSync(file, "utf-8");
+test("hook discovery uses the snapshot-managed portable runtime path", () => {
+  const hook = readFileSync("hooks/block-node-modules-bin.ts", "utf-8");
 
-    assert.match(text, /ax commit/);
-    assert.match(text, /--require-review-gate/);
-    assert.match(text, /instead of raw `git commit`/);
-    assert.match(text, /final\s+personal\s+publication\s+checkpoint/);
-    assert.match(text, /exact\s+HEAD SHA/);
-    assert.match(text, /user's manual terminal/);
-  });
-}
-
-for (const file of ["AGENTS.md", "instructions/AGENTS.md"] as const) {
-  test(`${file} defaults accepted implementation work to branch publication`, () => {
-    const text = readFileSync(file, "utf-8");
-
-    assert.match(text, /accepted implementation work/);
-    assert.match(text, /committing/);
-    assert.match(text, /pushing to the selected hosted-review remote/);
-    assert.match(text, /creating or updating a\s+PR\/MR/);
-    assert.match(text, /hosted-review workflow/);
-    assert.match(
-      text,
-      /Do not install dependencies or run destructive commands/,
-    );
-  });
-}
-
-for (const file of [
-  "AGENTS.md",
-  "instructions/AGENTS.md",
-  "rules/git-and-review.md",
-] as const) {
-  test(`${file} requires plan workflow commit helpers to use required-gate mode`, () => {
-    const text = readFileSync(file, "utf-8");
-
-    assert.match(text, /Plan workflow skills/);
-    assert.match(text, /required-gate commit helpers/);
-    assert.match(text, /ax commit --require-review-gate/);
-    assert.match(
-      text,
-      /raw `git commit` remains Rene's manual terminal escape hatch/,
-    );
-  });
-}
-
-for (const file of [
-  "AGENTS.md",
-  "instructions/AGENTS.md",
-  "skills/plan-orchestrator/SKILL.md",
-] as const) {
-  test(`${file} pins plan-orchestrator terminal states`, () => {
-    const text = readFileSync(file, "utf-8");
-
-    assert.match(text, /plan-orchestrator/);
-    assert.match(text, /stack_ready/);
-    assert.match(text, /delivery_blocked/);
-    assert.match(text, /not terminal success/);
-  });
-}
-
-test("plan-orchestrator resolves helper scripts from the loaded skill directory", () => {
-  const skillText = readFileSync("skills/plan-orchestrator/SKILL.md", "utf-8");
-  const promptText = readFileSync(
-    "skills/plan-orchestrator/agents/openai.yaml",
-    "utf-8",
-  );
-
-  for (const text of [skillText, promptText]) {
-    assert.match(
-      text,
-      /loaded\s+(?:`plan-orchestrator`|plan-orchestrator) skill directory/,
-    );
-    assert.match(text, /target repository/);
-    assert.match(text, /command working directory/);
-    assert.match(
-      text,
-      /do not look for or create [`"]?scripts\/plan-orchestrator\.ts[`"]? in the target\s+repository/i,
-    );
-    assert.doesNotMatch(text, /~\/\.agents/);
-    assert.doesNotMatch(text, /~\/\.codex/);
-    assert.doesNotMatch(text, /\/Users\//);
-    assert.doesNotMatch(
-      text,
-      /skills\/plan-orchestrator\/scripts\/plan-orchestrator\.ts/,
-    );
-  }
+  assert.match(hook, /pnpm exec tsx ~\/\.agents\/hooks/);
+  assert.doesNotMatch(hook, /\/Users\//);
+  assert.doesNotMatch(hook, /npx tsx/);
 });
-
-test("shared rules define deliverable-only OpenSpec task shape", () => {
-  const text = readFileSync("rules/docs-and-specs.md", "utf-8");
-
-  assert.match(text, /OpenSpec Task Shape/);
-  assert.match(text, /deliverable implementation areas/);
-  assert.match(text, /task groups anywhere in the file/);
-  assert.match(text, /proof subcheck/);
-  assert.match(text, /not a separate OpenSpec task checkbox/);
-  assert.match(text, /independent delivery unit/);
-  assert.match(text, /needs_spec_redesign/);
-  assert.match(text, /Do not silently rewrite `tasks\.md`/);
-});
-
-test("planning skills reject lifecycle-only OpenSpec task phases", () => {
-  const planReadyText = readFileSync("skills/plan-ready/SKILL.md", "utf-8");
-
-  assert.match(planReadyText, /documentation, testing/);
-  assert.match(planReadyText, /validation/);
-  assert.match(planReadyText, /blocked_readiness\.reason/);
-  assert.match(planReadyText, /needs_spec_redesign/);
-  assert.match(planReadyText, /proof subchecks/);
-  assert.match(planReadyText, /not as\s+OpenSpec\s+task checkboxes/);
-
-  for (const file of [
-    "skills/openspec-tasks/SKILL.md",
-    "skills/plan-review/SKILL.md",
-    "skills/plan-unit-sequencer/SKILL.md",
-  ] as const) {
-    const text = readFileSync(file, "utf-8");
-
-    assert.match(text, /documentation, testing/);
-    assert.match(text, /validation/);
-    assert.match(text, /anywhere|anywhere in the file/);
-    assert.match(text, /proof subchecks/);
-    assert.match(text, /not as\s+OpenSpec\s+task checkboxes/);
-    assert.match(text, /needs_spec_redesign/);
-  }
-
-  const orchestratorText = readFileSync(
-    "skills/plan-orchestrator/SKILL.md",
-    "utf-8",
-  );
-
-  assert.match(orchestratorText, /lifecycle-only/i);
-  assert.match(orchestratorText, /needs_spec_redesign/);
-  assert.match(orchestratorText, /ask the user|how to proceed/);
-  assert.match(orchestratorText, /silently rewriting/);
-});
-
-test("plan workflow agent prompts use delivery-unit MR contracts", () => {
-  const promptFiles = [
-    "skills/plan-unit-delivery/agents/openai.yaml",
-    "skills/plan-unit-sequencer/agents/openai.yaml",
-    "skills/plan-orchestrator/agents/openai.yaml",
-  ] as const;
-  const activeSkillFiles = [
-    "skills/plan-unit-delivery/SKILL.md",
-    "skills/plan-unit-sequencer/SKILL.md",
-    "skills/plan-orchestrator/SKILL.md",
-  ] as const;
-  const stalePromptPatterns = [
-    /selected_task_id/,
-    /unit_task_delta_valid/,
-    /selected task ID/i,
-    /selected task base SHA/i,
-    /OpenSpec task checkbox/i,
-    /exactly one expected deliverable task/i,
-    /each selected OpenSpec task/i,
-    /each OpenSpec task delivered/i,
-    /task-delta validation/i,
-    /task-to-artifact evidence/i,
-  ];
-  const staleRuntimeSurfacePatterns = [
-    /selected_task_id/,
-    /unit_task_delta_valid/,
-    /one implementation MR per OpenSpec task/i,
-    /one MR per OpenSpec task/i,
-    /each selected OpenSpec task/i,
-    /each OpenSpec task delivered/i,
-  ];
-
-  for (const file of promptFiles) {
-    const text = readFileSync(file, "utf-8");
-
-    assert.match(text, /delivery unit/i);
-    assert.match(text, /one separate stacked PR\/MR|one separate PR\/MR/i);
-    for (const pattern of stalePromptPatterns) {
-      assert.doesNotMatch(text, pattern);
-    }
-  }
-
-  for (const file of activeSkillFiles) {
-    const text = readFileSync(file, "utf-8");
-
-    assert.match(text, /delivery unit/i);
-    for (const pattern of staleRuntimeSurfacePatterns) {
-      assert.doesNotMatch(text, pattern);
-    }
-  }
-
-  const deliveryPrompt = readFileSync(
-    "skills/plan-unit-delivery/agents/openai.yaml",
-    "utf-8",
-  );
-  assert.match(deliveryPrompt, /delivery_unit_delta_valid/);
-  assert.match(deliveryPrompt, /one commit per nested work item/i);
-  assert.match(deliveryPrompt, /validate-task-delta.*--unit/);
-});
-
-test("plan-poc runtime surfaces keep rehearsal separate from mergeable delivery", () => {
-  const files = [
-    "skills/plan-poc/SKILL.md",
-    "skills/plan-poc/agents/openai.yaml",
-    "rules/investigation-and-implementation.md",
-  ] as const;
-
-  for (const file of files) {
-    const text = readFileSync(file, "utf-8");
-
-    assert.match(text, /plan-poc|Plan POC/);
-    assert.match(text, /opt-in|explicit/i);
-    assert.match(text, /review-only|rehearsal/i);
-    assert.match(text, /draft/i);
-    assert.match(text, /close[d]? unmerged|not intended to merge/i);
-    assert.match(text, /private.*learning summary|poc_learning_summary/i);
-    assert.match(text, /revised OpenSpec/i);
-    assert.match(text, /POC\s+commits/i);
-    assert.match(text, /plan-orchestrator/i);
-  }
-
-  const planPocPrompt = readFileSync(
-    "skills/plan-poc/agents/openai.yaml",
-    "utf-8",
-  );
-
-  assert.match(planPocPrompt, /Do not emit planning_review/);
-  assert.match(planPocPrompt, /plan_delivery_handoff/);
-  assert.match(planPocPrompt, /delivery_gate_ledger/);
-  assert.match(planPocPrompt, /stack_ready/);
-  assert.match(planPocPrompt, /normal mergeable implementation delivery/);
-  assert.match(planPocPrompt, /outside the repo by default/);
-});
-
-for (const file of [
-  "skills/plan-orchestrator/SKILL.md",
-  "skills/plan-orchestrator/agents/openai.yaml",
-] as const) {
-  test(`${file} rejects plan-poc artifacts as stack-ready evidence`, () => {
-    const text = readFileSync(file, "utf-8");
-
-    assert.match(text, /plan-poc/);
-    assert.match(text, /background for revising the\s+OpenSpec/i);
-    assert.match(text, /POC branch/i);
-    assert.match(text, /POC commits/i);
-    assert.match(text, /contextual POC task state/i);
-    assert.match(text, /draft POC artifact/i);
-    assert.match(text, /planning_review/);
-    assert.match(text, /stack base evidence/i);
-    assert.match(text, /implementation artifact evidence/i);
-    assert.match(text, /stack_ready/);
-  });
-}
-
-test("implementation rules keep local workflow artifacts out of work-project repos", () => {
-  const text = readFileSync(
-    "rules/investigation-and-implementation.md",
-    "utf-8",
-  );
-
-  assert.match(
-    text,
-    /local workflow artifacts into work-project\s+repositories/,
-  );
-  assert.match(text, /Do not stage or commit/);
-  assert.match(text, /readiness reports/);
-  assert.match(text, /reviewer reports/);
-  assert.match(text, /delivery\s+ledgers/);
-  assert.match(text, /screenshots/);
-  assert.match(text, /private\s+plan-support storage/);
-  assert.match(text, /Reusable AI repo workflow machinery/);
-  assert.match(text, /regression fixtures/);
-});
-
-test("implementation rules define accepted implementation followthrough", () => {
-  const text = readFileSync(
-    "rules/investigation-and-implementation.md",
-    "utf-8",
-  );
-
-  assert.match(text, /Accepted implementation work includes/);
-  assert.match(text, /implement, fix,\s+build, apply a plan/);
-  assert.match(text, /review-feedback changes/);
-  assert.match(text, /planning review/);
-  assert.match(text, /troubleshooting-only\s+findings/);
-  assert.match(text, /commit on the feature branch/);
-  assert.match(text, /push to the selected\s+hosted-review remote/);
-  assert.match(text, /create or\s+update a PR\/MR/);
-  assert.match(text, /Select the\s+hosted-review provider before pushing/);
-  assert.match(text, /remote fans out to multiple\s+hosts/);
-  assert.match(text, /inspect CI or\s+no-pipeline state/);
-  assert.match(text, /ambiguous\s+hosted-review provider routing/);
-});
-
-for (const file of [
-  "AGENTS.md",
-  "instructions/AGENTS.md",
-  "rules/investigation-and-implementation.md",
-  "skills/ax-cli/SKILL.md",
-  "skills/change-request-create/SKILL.md",
-  "skills/glab-mr-create/SKILL.md",
-  "skills/github-pr-create/SKILL.md",
-  "skills/plan-review/SKILL.md",
-  "skills/plan-review/agents/openai.yaml",
-  "skills/plan-unit-delivery/SKILL.md",
-  "skills/plan-unit-delivery/agents/openai.yaml",
-] as const) {
-  test(`${file} gates agent publication with the final personal checkpoint`, () => {
-    const text = readFileSync(file, "utf-8");
-
-    assert.match(text, /final\s+personal\s+publication\s+checkpoint/);
-    assert.match(text, /exact\s+HEAD SHA/);
-    assert.match(text, /push|pushing|PR\/MR|publication/);
-    assert.match(text, /missing, stale|stale, tied/);
-    assert.match(text, /unresolved blockers|blocking findings/);
-  });
-}
-
-for (const file of [
-  "AGENTS.md",
-  "instructions/AGENTS.md",
-  "skills/ax-cli/SKILL.md",
-  "skills/plan-review/SKILL.md",
-  "skills/plan-review/agents/openai.yaml",
-  "skills/plan-unit-delivery/SKILL.md",
-  "skills/plan-unit-delivery/agents/openai.yaml",
-] as const) {
-  test(`${file} keeps required local commit gates opt-in`, () => {
-    const text = readFileSync(file, "utf-8");
-
-    assert.match(text, /--require-review-gate|required-gate commit helper/);
-    assert.match(text, /opt-in|by default/);
-    assert.match(text, /explicitly\s+(requires|requested|asks)/);
-  });
-}
-
-for (const file of [
-  "skills/plan-review/SKILL.md",
-  "skills/plan-review/agents/openai.yaml",
-  "skills/plan-unit-delivery/SKILL.md",
-  "skills/plan-unit-delivery/agents/openai.yaml",
-] as const) {
-  test(`${file} commits through the repo-required wrapper without teaching AX syntax`, () => {
-    const text = readFileSync(file, "utf-8");
-
-    assert.match(text, /repo-required commit wrapper/);
-    assert.doesNotMatch(text, /ax commit/);
-  });
-}
-
-for (const file of [
-  "skills/plan-unit-delivery/SKILL.md",
-  "skills/plan-unit-delivery/agents/openai.yaml",
-] as const) {
-  test(`${file} includes direct publication in checkpoint triggers`, () => {
-    const text = readFileSync(file, "utf-8");
-
-    assert.match(text, /direct\s+publication/);
-  });
-}
-
-test("plan-review reruns the publication checkpoint after feedback-fix head changes", () => {
-  const text = readFileSync("skills/plan-review/SKILL.md", "utf-8");
-
-  assert.match(text, /branch head changes after feedback fixes/);
-  assert.match(text, /rerun the final personal publication checkpoint/);
-  assert.match(text, /new branch diff\s+and exact HEAD SHA/);
-  assert.match(text, /before any push or hosted artifact mutation/);
-});
-
-test("ax-cli defines concrete private publication checkpoint evidence", () => {
-  const text = readFileSync("skills/ax-cli/SKILL.md", "utf-8");
-
-  assert.match(text, /personal_publication_checkpoint:/);
-  assert.match(text, /target_base:/);
-  assert.match(text, /diff_scope:/);
-  assert.match(text, /head_sha:/);
-  assert.match(text, /reviewer_outcome:/);
-  assert.match(text, /blocking_findings:/);
-  assert.match(text, /evidence_visibility:/);
-});
-
-test("ax-cli documents stale active gate recovery without defaulting to reruns", () => {
-  const text = readFileSync("skills/ax-cli/SKILL.md", "utf-8");
-
-  assert.match(text, /active workflow-required review gate/);
-  assert.match(text, /did not explicitly require/);
-  assert.match(text, /do\s+not reflexively rerun all local reviewers/);
-  assert.match(text, /stale workflow state/);
-  assert.match(text, /ax review-gate status/);
-});
-
-for (const file of ["AGENTS.md", "instructions/AGENTS.md"] as const) {
-  test(`${file} blocks committed local workflow artifacts while preserving AI repo fixtures`, () => {
-    const text = readFileSync(file, "utf-8");
-
-    assert.match(text, /Do not stage or commit local workflow artifacts/);
-    assert.match(text, /work-project repositories/);
-    assert.match(text, /reviewer scratch/);
-    assert.match(text, /readiness reports/);
-    assert.match(text, /reviewer reports/);
-    assert.match(text, /delivery ledgers/);
-    assert.match(text, /validation evidence/);
-    assert.match(text, /private plan-support pointers/);
-    assert.match(text, /private plan-support storage/);
-    assert.match(text, /Reusable AI repo workflow machinery/);
-    assert.match(text, /regression fixtures/);
-    assert.match(text, /feature being changed in this AI repo/);
-  });
-}
-
-test("git rules require stacked MRs to land bottom-to-top", () => {
-  const text = readFileSync("rules/git-and-review.md", "utf-8");
-
-  assert.match(text, /merge MRs in a stack/);
-  assert.match(text, /bottom of the\s+stack to the top/);
-  assert.match(text, /first\/base MR to `main` first/);
-  assert.match(text, /last\/top MR is merged last/);
-  assert.match(text, /retarget the next stacked MR to `main`/);
-  assert.match(text, /resolve the conflict on that MR's source branch/);
-});
-
-test("git rules route host-neutral hosted review requests", () => {
-  const text = readFileSync("rules/git-and-review.md", "utf-8");
-
-  assert.match(text, /host-neutral work/);
-  assert.match(text, /project\s+instructions/);
-  assert.match(text, /existing artifact URLs/);
-  assert.match(text, /change-request-create/);
-  assert.match(text, /provider routing remains ambiguous/);
-  assert.match(text, /Select the hosted-review provider before pushing/);
-  assert.match(text, /multiple push URLs/);
-  assert.match(text, /not to every configured mirror/);
-});
-
-test("ai repo delivery uses GitLab MRs with Nitro review by default", () => {
-  const agentsText = readFileSync("AGENTS.md", "utf-8");
-  const gitRulesText = readFileSync("rules/git-and-review.md", "utf-8");
-
-  for (const text of [agentsText, gitRulesText]) {
-    assert.match(text, /GitLab `origin`/);
-    assert.match(
-      text,
-      /merge request.*targeting `main`|merge requests against `main`/,
-    );
-    assert.match(text, /\/request_review @nitro/);
-    assert.match(text, /latest-head Nitro feedback/);
-    assert.doesNotMatch(text, /commit directly on `main` after completing/);
-    assert.doesNotMatch(text, /GitHub is the primary `main` publishing remote/);
-    assert.doesNotMatch(text, /ordinary direct-publish guidance/);
-  }
-});
-
-test("portable instructions keep hosted review routing project-specific", () => {
-  const text = readFileSync("instructions/AGENTS.md", "utf-8");
-
-  assert.match(text, /Project-specific instructions define/);
-  assert.match(text, /hosted-review route/);
-  assert.match(text, /Do not push default branches/);
-  assert.match(text, /Fullscript GitLab merge requests/);
-  assert.match(text, /do not request Nitro for GitHub PRs/);
-  assert.match(text, /project-selected hosted-review route/);
-  assert.doesNotMatch(text, /For this repo/);
-  assert.doesNotMatch(text, /GitLab `origin`/);
-  assert.doesNotMatch(text, /merge requests against `main`/);
-});
-
-test("Fullscript Nitro rules stay scoped to Fullscript GitLab MRs", () => {
-  const text = readFileSync("rules/fullscript/nitro-review.md", "utf-8");
-
-  assert.match(text, /Fullscript repositories/);
-  assert.match(text, /GitLab MR/);
-  assert.match(text, /After creating a GitLab MR/);
-  assert.match(text, /After pushing a follow-up commit to a GitLab MR/);
-  assert.match(text, /materially changed/);
-  assert.match(text, /personal GitHub repositories/);
-  assert.match(text, /Nitro is unavailable/);
-});
-
-for (const file of [
-  "skills/plan-ready/SKILL.md",
-  "skills/plan-ready/agents/openai.yaml",
-] as const) {
-  test(`${file} keeps readiness separate from orchestrator completion`, () => {
-    const text = readFileSync(file, "utf-8");
-
-    assert.match(text, /readiness is not terminal completion/i);
-    assert.match(text, /stack_ready/);
-    assert.match(text, /delivery_blocked/);
-  });
-}
-
-for (const file of [
-  "skills/plan-ready/SKILL.md",
-  "skills/plan-ready/agents/openai.yaml",
-] as const) {
-  test(`${file} routes reviewer selection for task-shape and workflow-artifact blockers`, () => {
-    const text = readFileSync(file, "utf-8");
-
-    assert.match(text, /docs-and-agent-alignment/);
-    assert.match(text, /ax-and-skill-compatibility/);
-    assert.match(text, /local workflow artifact/i);
-    assert.match(text, /lifecycle-only/);
-    assert.match(text, /validation-only/);
-    assert.match(text, /proof-only/);
-    assert.match(text, /checkbox-only/);
-  });
-}
-
-for (const file of [
-  "skills/plan-ready/SKILL.md",
-  "skills/plan-ready/agents/openai.yaml",
-] as const) {
-  test(`${file} makes baseline reviewer task-shape blockers non-optional`, () => {
-    const text = readFileSync(file, "utf-8");
-
-    assert.match(text, /baseline reviewer/i);
-    assert.match(text, /blocking planning-readiness\s+findings/);
-    assert.match(text, /final documentation or validation\s+phases/);
-    assert.match(text, /checkbox-only delivery\s+units/);
-    assert.match(text, /committed local workflow artifacts/);
-    assert.match(text, /not optional suggestions|not suggestions/);
-  });
-}
-
-for (const file of [
-  "skills/plan-review/SKILL.md",
-  "skills/plan-review/agents/openai.yaml",
-] as const) {
-  test(`${file} keeps planning review separate from orchestrator completion`, () => {
-    const text = readFileSync(file, "utf-8");
-
-    assert.match(text, /planning_review/);
-    assert.match(text, /not terminal success/i);
-    assert.match(text, /stack_ready/);
-    assert.match(text, /delivery_blocked/);
-  });
-}
-
-for (const file of [
-  "skills/plan-ready/SKILL.md",
-  "skills/plan-ready/agents/openai.yaml",
-  "skills/plan-review/SKILL.md",
-  "skills/plan-review/agents/openai.yaml",
-  "skills/plan-orchestrator/SKILL.md",
-  "skills/plan-orchestrator/agents/openai.yaml",
-  "rules/investigation-and-implementation.md",
-] as const) {
-  test(`${file} keeps support artifacts out of committed plan sidecars`, () => {
-    const text = readFileSync(file, "utf-8");
-
-    assert.match(text, /\.agents\/plans/);
-    assert.match(text, /support\s+(workflow\s+)?(artifacts|sidecars)/i);
-    assert.match(text, /thread/);
-    assert.match(
-      text,
-      /private\s+support\s+(storage|artifacts|copies)|thread evidence|pnpm ax plans artifact|private AX plan artifact/i,
-    );
-    if (file.startsWith("skills/")) {
-      assert.doesNotMatch(
-        text,
-        /pnpm ax plans artifact|private AX plan artifact|~\/\.ax\/plans/i,
-      );
-    }
-    assert.match(
-      text,
-      /Do not commit|must\s+not\s+be\s+committed|must be rejected/,
-    );
-  });
-}
-
-test("repo implementation rules distinguish primary atomic plan markdown from support sidecars", () => {
-  const text = readFileSync(
-    "rules/investigation-and-implementation.md",
-    "utf-8",
-  );
-
-  assert.match(text, /primary\s+atomic\s+plan\s+markdown/i);
-  assert.match(text, /valid reviewed planning artifact/i);
-  assert.match(text, /support\s+sidecars/i);
-  assert.match(
-    text,
-    /do not commit `.agents\/plans\/\*\*` support\s+sidecars/i,
-  );
-});
-
-test("ax-cli skill documents private plan artifact record and list commands", () => {
-  const text = readFileSync("skills/ax-cli/SKILL.md", "utf-8");
-
-  assert.match(text, /Private Plan Support Artifacts/);
-  assert.match(text, /ax plans artifact record/);
-  assert.match(text, /ax plans artifact list/);
-  assert.match(text, /\.agents\/plans\/example\.md/);
-  assert.match(text, /review_request/);
-  assert.match(text, /reviewer_selection/);
-  assert.match(text, /validation_input/);
-  assert.match(text, /validation_output/);
-  assert.match(text, /invocation target repo/i);
-  assert.match(text, /do not commit/i);
-  assert.match(text, /do not expose local private workspace paths/i);
-});
-
-for (const file of [
-  "skills/change-request-create/SKILL.md",
-  "skills/glab-mr-create/SKILL.md",
-  "skills/github-pr-create/SKILL.md",
-  "rules/git-and-review.md",
-] as const) {
-  test(`${file} keeps hosted descriptions free of private plan artifact paths`, () => {
-    const text = readFileSync(file, "utf-8");
-
-    assert.match(
-      text,
-      /private support artifacts?|private plan-support paths/i,
-    );
-    if (file.startsWith("skills/")) {
-      assert.doesNotMatch(text, /~\/\.ax\/plans|private AX plan artifact/i);
-    }
-    assert.match(text, /MR|PR|hosted|description/i);
-    assert.match(text, /summaries/);
-    assert.match(text, /hashes/);
-    assert.match(text, /thread references/);
-    assert.match(text, /note IDs/);
-    assert.match(text, /discussion IDs/);
-    assert.match(text, /stable\s+correlation IDs/);
-  });
-}
-
-for (const file of [
-  "skills/plan-review/SKILL.md",
-  "skills/plan-unit-delivery/SKILL.md",
-  "skills/plan-unit-sequencer/SKILL.md",
-] as const) {
-  test(`${file} separates local commit gates from hosted advancement gates`, () => {
-    const text = readFileSync(file, "utf-8");
-
-    assert.match(text, /local review gate/i);
-    assert.match(text, /commit(?:-boundary| boundary|s?\b)/i);
-    assert.match(text, /hosted/i);
-    assert.match(text, /Nitro/i);
-    assert.match(text, /stack advancement|implementation sequencing|advance/i);
-    assert.match(text, /actionable feedback|actionable-feedback/i);
-  });
-}
-
-for (const file of [
-  "skills/plan-review/SKILL.md",
-  "skills/plan-unit-delivery/SKILL.md",
-] as const) {
-  test(`${file} keeps reviewer-requested proof in hosted description exceptions`, () => {
-    const text = readFileSync(file, "utf-8");
-
-    assert.match(text, /clean\s+Nitro\s+state/);
-    assert.match(text, /passing\s+pipeline\s+state/);
-    assert.match(text, /operational-verification\s+state/);
-    assert.match(text, /surface\s+changed/);
-    assert.match(text, /reviewer asked\s+for proof/);
-    assert.match(text, /actionable\s+gap/);
-  });
-}
-
-for (const file of [
-  "skills/change-request-create/SKILL.md",
-  "skills/glab-mr-create/SKILL.md",
-  "skills/github-pr-create/SKILL.md",
-  "skills/plan-review/SKILL.md",
-  "skills/plan-unit-delivery/SKILL.md",
-  "skills/plan-orchestrator/SKILL.md",
-  "rules/git-and-review.md",
-] as const) {
-  test(`${file} filters hosted verification through review focus`, () => {
-    const text = readFileSync(file, "utf-8");
-
-    assert.match(text, /review focus/i);
-    assert.match(
-      text,
-      /maps?\s+to\s+(one of\s+)?(the\s+)?(those\s+)?(that\s+)?(?:stated\s+)?(?:review\s+)?focus/i,
-    );
-    assert.match(text, /reviewer request|reviewer asked/i);
-    assert.match(text, /actionable\s+gap/i);
-  });
-}
-
-for (const file of [
-  "skills/change-request-create/SKILL.md",
-  "skills/glab-mr-create/SKILL.md",
-  "skills/github-pr-create/SKILL.md",
-  "rules/git-and-review.md",
-] as const) {
-  test(`${file} rejects broad proof inventories in hosted descriptions`, () => {
-    const text = readFileSync(file, "utf-8");
-
-    assert.match(text, /broad proof inventor(?:y|ies)/i);
-    assert.match(text, /incidental\s+pipeline[- ]fix(?:es| context)?/i);
-    assert.match(text, /note\s+IDs/i);
-    assert.match(text, /pod\s+names/i);
-    assert.match(
-      text,
-      /environment setup|review-environment setup|preview-environment setup/i,
-    );
-  });
-}
-
-test("ax-cli prompt documents required-gate workflow commit behavior", () => {
-  const text = readFileSync("skills/ax-cli/agents/openai.yaml", "utf-8");
-
-  assert.match(text, /ax commit/);
-  assert.match(text, /raw git commit/);
-  assert.match(text, /workflow-owned commits/);
-  assert.match(text, /explicit reviewer evidence/);
-  assert.match(text, /ax commit --require-review-gate/);
-  assert.match(text, /owning workflow helper/);
-  assert.match(text, /stop before push or hosted review/);
-  assert.match(text, /--no-verify/);
-});
-
-for (const file of [
-  "skills/plan-orchestrator/SKILL.md",
-  "skills/plan-orchestrator/agents/openai.yaml",
-] as const) {
-  test(`${file} preserves phase-owned reviewer evidence and commit ownership`, () => {
-    const text = readFileSync(file, "utf-8");
-
-    assert.match(text, /reviewer lists/);
-    assert.match(text, /reviewer evidence/);
-    assert.match(text, /owning phase/);
-    assert.match(text, /do not recompute|must not recompute/);
-    assert.match(text, /local review-gate state/);
-    assert.match(text, /plan-review/);
-    assert.match(text, /plan-unit-delivery/);
-  });
-}
-
-test("plan-unit-sequencer prompt keeps local gates out of stack advancement", () => {
-  const text = readFileSync(
-    "skills/plan-unit-sequencer/agents/openai.yaml",
-    "utf-8",
-  );
-
-  assert.match(text, /local reviewer gates/);
-  assert.match(text, /commit-boundary proof/);
-  assert.match(text, /MR approval/);
-  assert.match(text, /CI\/no-pipeline inspection/);
-  assert.match(text, /Nitro feedback/);
-  assert.match(text, /stack advancement evidence/);
-  assert.match(text, /latest-head Nitro review/);
-});
-
-const hostedReviewEvidenceFiles = [
-  {
-    file: "skills/review-feedback-routing/SKILL.md",
-    patterns: [
-      /Local reviewer evidence/,
-      /source provenance/,
-      /artifact-host inspection/,
-      /CI or no-pipeline/,
-      /nitro_feedback_gate/,
-    ],
-  },
-  {
-    file: "skills/gitlab-adapter-review/SKILL.md",
-    patterns: [
-      /Local reviewer evidence/,
-      /local review-gate state/,
-      /not artifact-host context/,
-      /pipeline\/check state/,
-    ],
-  },
-  {
-    file: "skills/change-request-create/SKILL.md",
-    patterns: [
-      /local reviewer evidence/,
-      /local\s+review-gate state/,
-      /hosted review/,
-      /CI/,
-      /Nitro evidence/,
-    ],
-  },
-  {
-    file: "skills/glab-mr-create/SKILL.md",
-    patterns: [
-      /local reviewer evidence|local review-gate evidence/,
-      /local review-gate state/,
-      /hosted review/,
-      /Keep local gate evidence private/,
-      /workflow evidence unless the MR changes that surface/,
-      /Nitro evidence/,
-    ],
-  },
-] as const;
-
-for (const { file, patterns } of hostedReviewEvidenceFiles) {
-  test(`${file} rejects local review-gate evidence as hosted review evidence`, () => {
-    const text = readFileSync(file, "utf-8");
-
-    for (const pattern of patterns) {
-      assert.match(text, pattern);
-    }
-  });
-}

@@ -1,307 +1,150 @@
 ---
 name: ax-cli
-description: Use when managing local Agents Experience assets with the ax CLI, including shared skills, AGENTS.md/rules instructions, hooks, runtime profiles, repo-local OpenSpec scaffolding, or validation after changing shared agent assets.
-allowed-tools: Read, Grep, Bash(git:*), Bash(pnpm:*)
+description: Use when managing local Agents Experience assets with the ax CLI, including runtime sync, profiles, adoption, recovery, shared skills, instructions, hooks, repo-local OpenSpec scaffolding, or runtime validation.
+allowed-tools: Read, Grep, Bash(ax:*), Bash(git:*), Bash(pnpm:*)
 ---
 
 # AX CLI
 
 ## Overview
 
-Use the runtime CLI as the entrypoint for shared runtime assets. Inside this AI
-repo, use `pnpm ax ...`. From another target project, use the AX-managed
-`~/.local/bin/ax` shim when available. Prefer the wrapper over direct script
-execution, direct filesystem edits to installed runtime copies, or raw upstream
-OpenSpec setup.
+AX converges reusable agent assets from declared source state. Inside the AI
+repo, use `pnpm ax ...`; from another project, use the AX-managed
+`~/.local/bin/ax` shim. `sync` is the only runtime-content mutation command.
+`status` and `validate` are offline and read-only.
+
+Shim `install`, `status`, and `uninstall` manage only the executable shim; they
+never synchronize runtime content.
 
 ## First Move
 
-1. Inspect live state before mutation:
-   ```bash
-   git status --short --branch
-   ```
-2. Choose the narrowest runtime scope that matches the work.
-3. Inspect that scope before mutating it:
-   - whole runtime from any target repo: `ax status`;
-   - profile-managed runtime assets: `pnpm ax status --profile <name>`;
-   - skills only: `pnpm ax skills status --profile <name>`;
-   - instructions only: `pnpm ax instructions status --profile <name>`;
-   - hooks only: `pnpm ax hooks status`;
-   - OpenSpec only: `pnpm ax openspec status`.
-4. Run `validate` after every install or update.
-5. For unfamiliar options, check current help instead of guessing:
-   ```bash
-   pnpm ax <scope> <command> --help
-   ```
+1. Run `git status --short --branch` and `ax status` before mutation.
+2. Choose the narrowest applicable command from the table below.
+3. Inspect unfamiliar flags with `pnpm ax <scope> <command> --help`.
+4. Run the matching `validate` command after every successful sync.
 
-## Command Selection
-
-| Need | Scope |
-| --- | --- |
-| All profile-managed runtime assets | top-level `install|update|status|validate --profile <name>` |
-| Shared skills | `skills` |
-| AGENTS.md/rules instructions | `instructions` |
-| Hooks | `hooks` |
-| Repo-local OpenSpec scaffolding | `openspec` |
-| Commit through the AX wrapper | `commit` |
-| Inspect or validate local review-gate state | `review-gate` |
-| Private plan workflow support artifacts | `plans artifact` |
-| Drift check without file mutation | `status` or `validate` before `install`/`update` |
-
-Use `install` for first-time runtime setup. Use `update` for already managed
-assets. If state is unclear, run `status` first.
-
-## Profile And Config Flags
-
-Runtime profiles select installed skill and instruction surfaces such as
-`personal` and `work`.
-
-| Scope | Accepts `--profile` / `--all-profiles` | Notes |
+| Need | Command in this repo | Command through the shim |
 | --- | --- | --- |
-| Top-level `install|update|status|validate` | Yes | Applies to skills and instructions; hooks run as configured. |
-| `skills` | Yes | Use after changing `skills/**`. |
-| `instructions` | Yes | Use after changing `AGENTS.md`, `instructions/**`, or `rules/**`. |
-| `hooks` | No | Hook targets come from `ax.config.json`. |
-| `openspec` | No | OpenSpec scaffolding is repo-local, not profile-local. |
+| All selected runtime surfaces | `pnpm ax sync` | `ax sync` |
+| Skills only | `pnpm ax skills sync` | `ax skills sync` |
+| Instructions and rules only | `pnpm ax instructions sync` | `ax instructions sync` |
+| Hooks only | `pnpm ax hooks sync` | `ax hooks sync` |
+| Repo-local OpenSpec | `pnpm ax openspec sync` | `ax openspec sync` |
+| Inspect without mutation | `pnpm ax status` / `pnpm ax validate` | `ax status` / `ax validate` |
+| Manage the executable shim | `pnpm ax shim <command>` | Use the durable AI repo |
 
-`--config <path>` is the shared override when a non-default
-`ax.config.json` is required.
+Scoped skills, instructions, and hooks syncs require an existing valid runtime
+manifest. They reuse its installed profiles and policy profile, cannot change
+that selection, and report `runtime_not_initialized` before first top-level
+sync. OpenSpec is repo-local and targets the invocation working directory.
+Top-level runtime sync never mutates OpenSpec files.
 
-When invoked through the managed `~/.local/bin/ax` shim, source root and default
-config path resolve to the durable AI repo. Repo-local scopes such as `openspec`
-target the current working directory. Do not silently run AI repo package
-scripts against a target repo to simulate global usage; use the managed shim or
-explicitly explain the source/config/target roots before proceeding.
+## Desired State And Local Ownership
 
-## Commit And Review Gate
+Tracked `ax.config.json` is desired state. Local
+`~/.agents/runtime/managed-runtime.json` is AX ownership state. The filesystem
+is observed state.
 
-Agents should commit through `ax commit`, not raw `git commit`:
+The local manifest stores its schema and canonical hash versions, installed
+profiles, one `policyProfile`, AX-owned paths, and content hashes. It does not
+duplicate source URLs, refs, resolved SHAs, timestamps, cache paths,
+transactions, or tracked configuration. Do not create or consult a tracked
+runtime lock file.
 
-```bash
-ax review-gate status
-ax review-gate validate-commit
-ax commit -m "Commit message"
-```
+Every identity-bearing manifest, authorization file, journal, backup, and
+recovery file uses `sha256-tree-v1`; an unknown hash version blocks before
+mutation.
 
-Ordinary personal workflow iteration uses `ax commit -m`. `ax commit` checks
-local review-gate state before delegating to Git. When no active review gate
-exists, validation allows the commit with a note. When a gate is active,
-required review-pass evidence must match the staged diff.
+AX resolves each latest configured remote ref once per invocation and builds
+all matching entries from one immutable snapshot. A resolved SHA is diagnostic
+output and is not persisted. Local clean sources use their Git tree; dirty or
+arbitrary sources must remain content-identical before, during, and after the
+candidate copy. Runtime caches are disposable and never prove ownership.
 
-Use required-gate mode only when the user or active workflow explicitly
-requires a per-commit gate:
+## Profiles And Policy
 
-```bash
-ax commit --require-review-gate -m "Commit message"
-```
+The first interactive `ax sync` previews available profiles and records the
+confirmed installed set plus one policy profile from that set. First headless
+sync must provide `--profile <name>` or `--all-profiles` together with
+`--policy-profile <name>`.
 
-In required-gate mode, `ax commit` snapshots the reviewed staged diff, required
-review passes, and active gate evidence before delegating to Git. After Git
-creates the commit, it verifies the created commit diff and atomically
-compare-and-consumes the same active gate. If the command reports `committed
-successfully but review gate was not consumed` or `failed to consume review
-gate`, treat the created head as not locally reviewed for automation purposes:
-inspect the commit, rerun the required local reviewers for the current gate
-state, activate a fresh gate, and retry the workflow step.
+Repeat `--profile` to select several profiles, for example:
+`pnpm ax sync --profile personal --profile work --policy-profile work`. Use
+`--all-profiles` only when every configured profile is intended.
 
-V1 supports normal staged commits with `-m` or `--message`. It rejects
-commit-shape-mutating or bypass modes such as `--amend`, `-a`, `--all`,
-`--include`, `--only`, pathspec commits, and `--no-verify`.
+Later interactive selection changes require confirmation. Later headless
+changes require `--profile-selection-file <path>` bound to the current manifest
+hash and containing the complete replacement installed set and one policy
+profile. A missing, duplicated, or uninstalled policy profile blocks with
+`policy_profile_ambiguous`.
 
-## Personal Publication Checkpoint
+## Adoption And Recovery
 
-The blocking default for agent-authored personal workflow work is publication,
-not every commit. Before an agent publishes by pushing, creating or updating a
-PR/MR, or direct publication, run one final personal publication checkpoint for
-the branch diff and exact HEAD SHA.
+When no manifest exists but legacy content does, top-level sync previews
+exact-hash `manage`, `replace-managed`, and `remove` actions. Confirm every
+action interactively or pass `--adoption-file <path>` with exact paths, hashes,
+and actions. Hash drift or an unapproved occupied path remains an unmanaged
+collision; replacement and removal create verified backups first.
 
-The checkpoint must record:
+Read-only inspection reports incomplete transactions without recovering them.
+The next mutating sync recovers hash-matching old or candidate state. If AX
+reports `recovery_conflict` or `recovery_failed`, use
+`ax sync --recovery-file <path>` with exact current hashes and an action for
+every affected path. OpenSpec recovery uses
+`ax openspec sync --recovery-file <path>`. Never overwrite content whose hash
+matches neither journal state. Successful changes retain seven verified
+backups per asset and target.
 
-- target base and branch diff scope;
-- exact HEAD SHA being published;
-- reviewer outcome and any blocking findings;
-- whether evidence is private thread/support evidence or part of an existing
-  reviewer-facing project workflow.
+## Repo-Local OpenSpec
 
-Use this minimal private evidence shape in the thread or private support
-storage:
+Run `ax openspec status` to classify the current repository as missing,
+configured, repairable partial, or context-required partial. Use
+`ax openspec sync` for every mutating state:
 
-```yaml
-personal_publication_checkpoint:
-  status: passed
-  target_base: <base-ref-or-sha>
-  diff_scope: <branch-diff-reviewed>
-  head_sha: <exact-head-sha>
-  reviewer_outcome: passed
-  blocking_findings: []
-  evidence_visibility: private
-```
+- Missing or context-required partial state previews inferred context in a TTY;
+  headless use requires `--context-file <path>`.
+- Configured state refreshes only drifted assets. Use `--review-config`, plus
+  `--accept-config-changes` only for an authorized headless config change.
+- Repairable partial state reconstructs generated assets from valid config.
 
-Do not publish when the checkpoint is missing, stale, tied to a different HEAD,
-or has unresolved blockers. Keep checkpoint evidence private unless the
-project-selected hosted-review workflow already asks for reviewer-facing
-evidence. Hosted review, CI, Nitro, approvals, and project gates remain
-separate and still run after publication.
+AX resolves `openspec` from PATH, reports its version, and does not manage that
+CLI package. It validates the complete candidate before a repository-scoped
+transaction, refuses unrelated dirty-path overwrites, and keeps repository
+paths out of the local runtime manifest. Finish with `ax openspec validate`.
 
-If ordinary `ax commit` is blocked by an active workflow-required review gate
-that the current user request or active workflow did not explicitly require, do
-not reflexively rerun all local reviewers or switch to required-gate mode. Treat
-the active gate as stale workflow state, inspect `ax review-gate status`, and
-recover that state before continuing ordinary iteration.
+## Feature Work And Activation
 
-## Private Plan Support Artifacts
-
-Use `plans artifact` when a plan workflow needs file-backed recovery or
-correlation for support workflow artifacts that must not be committed under
-`.agents/plans/**`.
+Pre-merge feature work must bind both HOME-expanded targets and AX state to
+isolated runtime roots. Keep the same values for every proof command:
 
 ```bash
-ax plans artifact record --plan .agents/plans/example.md --kind <kind> --file <path>
-ax plans artifact list --plan .agents/plans/example.md
+HOME=<isolated-home> pnpm ax --runtime-root <isolated-runtime-root> status
+HOME=<isolated-home> pnpm ax --runtime-root <isolated-runtime-root> sync --all-profiles --policy-profile work
+HOME=<isolated-home> pnpm ax --runtime-root <isolated-runtime-root> validate
 ```
 
-`--plan` must be the repo-relative primary markdown plan under
-`.agents/plans/**`. `--file` can be either a repo-relative path inside the
-invocation target repo or an absolute path to a local temporary/thread support
-artifact. `--kind` must be one of `review_request`, `reviewer_selection`, `handoff`,
-`blueprint`, `ledger`, `report`, `validation_input`, or `validation_output`.
-Keep support artifacts in the thread by default; record them only when
-file-backed recovery or correlation is needed.
+This isolates manifests, caches, transactions, backups, profiles, skills,
+instructions, and hooks when configured targets use `~`. If a target is
+absolute, point `--config <path>` at a proof-only config whose targets are also
+isolated. AX rejects live-root mutation from a feature branch, dirty source, or
+disposable worktree with `unverified_live_source`.
 
-The command keys records to the invocation target repo identity, normalized plan
-path, plan path hash, plan slug, and plan content fingerprint. It writes
-immutable private blobs plus manifest, revision metadata, and append-only index
-records under the private AX plan workspace. Do not commit those private files,
-and do not expose local private workspace paths in PR/MR descriptions; use the
-printed JSON record data, hashes, note IDs, discussion IDs, or stable
-correlation IDs when hosted review needs evidence.
-
-When invoked from another project through the managed `~/.local/bin/ax` shim,
-the target repo is the current working directory. From this AI repo, use
-`pnpm ax plans artifact ...`. Use `list` to recover prior records for a plan
-before assuming thread-only evidence is lost.
-
-## OpenSpec Setup
-
-Do not run raw `openspec init` for repo-local managed setup. Use:
-
-```bash
-ax openspec status
-ax openspec install --context-file ./openspec-context.md
-ax openspec update
-ax openspec validate
-```
-
-State rules:
-
-| State | Meaning | Action |
-| --- | --- | --- |
-| Missing | No managed OpenSpec footprint exists | `install`, then `validate` |
-| Configured | Config and normalized managed assets exist | `update` for refresh, `validate` for proof |
-| Partial | Some OpenSpec footprint exists but config or generated assets are incomplete | Report findings; do not overwrite with blind `install` |
-
-When a repo already has OpenSpec files, run `status` and `validate` before any
-mutation. Run `install` only when setup is missing. Run `update` for configured
-projects or after repair guidance indicates generated assets should refresh.
-
-First-time install writes confirmed `openspec/config.yaml` before upstream
-generation. In headless mode, provide `--context-file <path>`; do not invent or
-accept inferred context with an `--accept-inferred-config` flag. Interactive
-install previews tools, schema, profile, delivery, workflows, context, and rules
-before asking for confirmation.
-
-Normal update is asset-focused and exits without mutation when generated assets
-validate as current. To review inferred config context/rule changes, opt in with
-`--review-config`; in headless mode add `--accept-config-changes` only when the
-proposed merged config should be written.
-
-`openspec validate` checks repo config quality, generated asset targets,
-portable skill boundaries, and symlink normalization. Run it after install,
-update, or accepted config review.
-
-## After Shared Asset Changes
-
-Refresh every affected installed surface before treating source edits as live:
-
-- `skills/**`: update and validate both `personal` and `work` with
-  `pnpm ax skills ... --profile <name>`.
-- `instructions/**`, `rules/**`, or `AGENTS.md`: update and validate both
-  profiles with `pnpm ax instructions ... --profile <name>`.
-- `hooks/**`: use `pnpm ax hooks update`, then
-  `pnpm ax hooks validate`.
-- generated OpenSpec skills or commands: use `pnpm ax openspec
-  update`, then `pnpm ax openspec validate`.
+After merge, verify a clean default-branch source; post-merge activation is an
+ordinary `ax sync`. Candidate validation, transactional apply or rollback, and
+post-apply validation are the activation gate.
 
 ## Portable Skill Boundary
 
-The `ax-cli` skill is the only shared skill that should teach AX commands,
-runtime profile mechanics, installed runtime paths, private plan-artifact
-commands, or managed symlink behavior. Other shared skills must be reusable from
-their own directories.
-
-For portable skills:
-
-- keep runnable helper logic inside the skill folder, usually under
-  `scripts/`;
-- call helpers relative to the skill directory in examples and instructions;
-- use a real package dependency when helper code must be shared across skills;
-- do not import repo-root workflow scripts from skill scripts;
-- do not tell agents to repair portability with `runtime.reusableScripts`.
-
-`runtime.reusableScripts` is not the supported portability mechanism for shared
-skills. If validation finds a skill reaching outside its directory, package the
-needed helper in that skill instead of wiring a top-level runtime script into
-the profile.
-
-If an update changes installed files, rerun the matching `status` or `validate`
-command before finishing.
+Keep AX command and runtime-path steering in this skill. Other portable skills
+keep runnable helpers inside their own directory or use a real package
+dependency; they do not depend on unrelated repo-root workflow scripts.
 
 ## Common Mistakes
 
-| Mistake | Fix |
+| Mistake | Correct action |
 | --- | --- |
-| Running raw `openspec init` in a managed repo | Use `pnpm ax openspec install` only for missing setup. |
-| Recommending `pnpm link` for global access | Use `pnpm ax shim install` and verify with `ax status`. |
-| Running headless OpenSpec install without confirmed context | Provide `--context-file <path>`; do not use unsupported `--accept-inferred-config`. |
-| Passing `--profile` to `openspec` or `hooks` | Use profile flags only on top-level, `skills`, and `instructions` commands. |
-| Running `install` on an existing OpenSpec footprint | Run `status` and `validate`; use `update` for configured scaffolding. |
-| Expecting normal `openspec update` to rewrite config | Use `update --review-config`, and add `--accept-config-changes` only for accepted headless writes. |
-| Editing installed runtime copies directly | Edit source in this repo, then run the matching `ax ... update`. |
-| Calling work complete after source edits only | Refresh installed copies and run profile validation. |
-| Guessing flags from memory | Run `pnpm ax <scope> <command> --help`. |
-| Making a portable skill depend on repo-root scripts | Package helper logic under that skill or use a real package dependency. |
-| Using `runtime.reusableScripts` as a portability fix | Move the helper into the owning skill; keep this field out of shared-skill portability guidance. |
-| Committing plan workflow support sidecars under `.agents/plans/**` | Keep them in thread evidence or record them with `ax plans artifact record`. |
-| Treating private artifact paths as hosted evidence | Use summaries, hashes, note IDs, discussion IDs, or stable correlation IDs instead. |
-| Running `plans artifact record` against the wrong repo | Invoke `ax` from the target repo so records key to the correct target identity. |
-
-## Test Evidence
-
-- RED: baseline OpenSpec initialization avoided raw `openspec init`, but still
-  listed `install` after `status` despite recognizing the current checkout was
-  already configured. The skill now says `install` only when state is missing.
-- GREEN control: baseline OpenSpec profile pressure correctly rejected
-  `--profile` for `openspec`; this skill preserves that rule in the profile
-  table.
-- GREEN control: baseline existing-setup pressure correctly chose
-  `openspec status` and `validate` before mutation; this skill makes that the
-  default path.
-- GREEN control: baseline runtime-refresh pressure correctly updated both
-  `personal` and `work`; this skill preserves that rule in the shared asset
-  table.
-- GREEN: with this skill loaded, OpenSpec setup pressure kept `install`
-  conditional on missing state and used `update` for configured scaffolding.
-- GREEN: with this skill loaded, OpenSpec profile pressure rejected
-  `--profile personal` and used repo-local `openspec update` plus validation.
-- GREEN: with this skill loaded, shared-skill refresh pressure updated and
-  validated both runtime profiles before treating the source change as live.
-- RED: baseline commit pressure treated `git commit -m` as the obvious agent
-  path and had no final review boundary before publication.
-- GREEN: with this skill loaded, commit pressure used ordinary `ax commit -m`
-  for iteration, preserved `ax commit --require-review-gate -m` as an explicit
-  opt-in mode, rejected bypass or shape-changing flags, and blocked publication
-  until a final personal publication checkpoint matched the branch diff and
-  exact HEAD SHA.
-- GREEN: with this skill loaded, plan workflow support artifacts use
-  `ax plans artifact record|list` for private file-backed recovery while
-  avoiding committed `.agents/plans/**` sidecars and hosted local-path leaks.
+| Editing installed runtime copies | Edit source, then run the matching sync and validate commands. |
+| Passing profile flags to a scoped sync | Change selection only through top-level sync. |
+| Expecting status to fetch a remote | Treat freshness as unknown until sync; status stays offline. |
+| Running raw upstream OpenSpec setup | Use repo-local `ax openspec sync`. |
+| Activating live roots from feature work | Use isolated runtime roots; activate only after merge. |
