@@ -1,6 +1,6 @@
 ---
 name: ax-cli
-description: Use when managing local Agents Experience assets with the ax CLI, including runtime sync, profiles, adoption, recovery, shared skills, instructions, hooks, repo-local OpenSpec scaffolding, or runtime validation.
+description: Use when managing local Agents Experience assets with the ax CLI, including authoritative runtime sync, shared skills, instructions, hooks, profiles, repo-local OpenSpec scaffolding, or runtime validation.
 allowed-tools: Read, Grep, Bash(ax:*), Bash(git:*), Bash(pnpm:*)
 ---
 
@@ -8,143 +8,106 @@ allowed-tools: Read, Grep, Bash(ax:*), Bash(git:*), Bash(pnpm:*)
 
 ## Overview
 
-AX converges reusable agent assets from declared source state. Inside the AI
+AX treats tracked `ax.config.json` as authoritative desired state. Inside the AI
 repo, use `pnpm ax ...`; from another project, use the AX-managed
 `~/.local/bin/ax` shim. `sync` is the only runtime-content mutation command.
 `status` and `validate` are offline and read-only.
 
-Shim `install`, `status`, and `uninstall` manage only the executable shim; they
+Shim `install`, `status`, and `uninstall` manage only the executable shim. They
 never synchronize runtime content.
 
-## First Move
+## Commands
 
-1. Run `git status --short --branch` and `ax status` before mutation.
-2. Choose the narrowest applicable command from the table below.
-3. Inspect unfamiliar flags with `pnpm ax <scope> <command> --help`.
-4. Run the matching `validate` command after every successful sync.
-
-| Need | Command in this repo | Command through the shim |
+| Need | In this repo | Through the shim |
 | --- | --- | --- |
-| All selected runtime surfaces | `pnpm ax sync` | `ax sync` |
+| All runtime surfaces | `pnpm ax sync` | `ax sync` |
 | Skills only | `pnpm ax skills sync` | `ax skills sync` |
 | Instructions and rules only | `pnpm ax instructions sync` | `ax instructions sync` |
 | Hooks only | `pnpm ax hooks sync` | `ax hooks sync` |
 | Repo-local OpenSpec | `pnpm ax openspec sync` | `ax openspec sync` |
-| Inspect without mutation | `pnpm ax status` / `pnpm ax validate` | `ax status` / `ax validate` |
+| Inspect runtime structure | `pnpm ax status` / `pnpm ax validate` | `ax status` / `ax validate` |
 | Manage the executable shim | `pnpm ax shim <command>` | Use the durable AI repo |
 
-Scoped skills, instructions, and hooks syncs require an existing valid runtime
-manifest. They reuse its installed profiles and policy profile, cannot change
-that selection, and report `runtime_not_initialized` before first top-level
-sync. OpenSpec is repo-local and targets the invocation working directory.
-Top-level runtime sync never mutates OpenSpec files.
+Run the matching `validate` command after a scoped sync. Top-level `ax sync`
+validates every installed runtime surface before returning success.
 
-## Desired State And Local Ownership
+## Authoritative runtime sync
 
-Tracked `ax.config.json` is desired state. Local
-`~/.agents/runtime/managed-runtime.json` is AX ownership state. The filesystem
-is observed state.
+Runtime selection comes from `runtime.installedProfiles` and
+`runtime.policyProfile` in `ax.config.json`. Change the tracked config when the
+machine should install a different profile set or policy profile. Runtime sync
+has no selection, adoption, or ownership flags.
 
-The local manifest stores its schema and canonical hash versions, installed
-profiles, one `policyProfile`, AX-owned paths, and content hashes. It does not
-duplicate source URLs, refs, resolved SHAs, timestamps, cache paths,
-transactions, or tracked configuration. Do not create or consult a tracked
-runtime lock file.
+AX builds and validates every candidate before touching live targets. It then:
 
-Every identity-bearing manifest, authorization file, journal, backup, and
-recovery file uses `sha256-tree-v1`; an unknown hash version blocks before
-mutation.
+- replaces every exact skill, instruction, and hook target declared by the
+  selected profiles;
+- removes exact skill names listed in `runtime.retiredSkills`;
+- recreates configured Codex and Claude symlinks; and
+- leaves unrelated files and skills outside those declared targets untouched.
 
-AX resolves each latest configured remote ref once per invocation and builds
-all matching entries from one immutable snapshot. A resolved SHA is diagnostic
-output and is not persisted. Local clean sources use their Git tree; dirty or
-arbitrary sources must remain content-identical before, during, and after the
-candidate copy. Runtime caches are disposable and never prove ownership.
+Runtime sync does not create a local ownership manifest, retain runtime
+backups, or require recovery decisions. If a sync is interrupted, rerun
+`ax sync`. The runtime cache under `~/.agents/runtime/cache` is disposable.
 
-## Profiles And Policy
+AX resolves each latest configured remote ref once per invocation and builds matching
+entries from that snapshot. A resolved commit may appear in command output but
+does not control later synchronization.
 
-The first interactive `ax sync` previews available profiles and records the
-confirmed installed set plus one policy profile from that set. First headless
-sync must provide `--profile <name>` or `--all-profiles` together with
-`--policy-profile <name>`.
+## Status and validation
 
-Repeat `--profile` to select several profiles, for example:
-`pnpm ax sync --profile personal --profile work --policy-profile work`. Use
-`--all-profiles` only when every configured profile is intended.
+`status` and `validate` are offline and read-only. They verify structural state:
 
-Later interactive selection changes require confirmation. Later headless
-changes require `--profile-selection-file <path>` bound to the current manifest
-hash and containing the complete replacement installed set and one policy
-profile. A missing, duplicated, or uninstalled policy profile blocks with
-`policy_profile_ambiguous`.
+- every configured target exists;
+- configured links point to their canonical targets; and
+- explicitly retired skill paths are absent.
 
-## Adoption And Recovery
+They do not fetch remote refs or compare installed file contents. Run `ax sync`
+to restore the authoritative source content.
 
-When no manifest exists but legacy content does, top-level sync previews
-exact-hash `manage`, `replace-managed`, and `remove` actions. Confirm every
-action interactively or pass `--adoption-file <path>` with exact paths, hashes,
-and actions. Hash drift or an unapproved occupied path remains an unmanaged
-collision; replacement and removal create verified backups first.
+## Repo-local OpenSpec
 
-Read-only inspection reports incomplete transactions without recovering them.
-The next mutating sync recovers hash-matching old or candidate state. If AX
-reports `recovery_conflict` or `recovery_failed`, use
-`ax sync --recovery-file <path>` with exact current hashes and an action for
-every affected path. OpenSpec recovery uses
-`ax openspec sync --recovery-file <path>`. Never overwrite content whose hash
-matches neither journal state. Successful changes retain seven verified
-backups per asset and target.
+OpenSpec remains repository-scoped and transactionally managed. Run
+`ax openspec status` to classify the invocation repository, then use
+`ax openspec sync` for mutation:
 
-## Repo-Local OpenSpec
-
-Run `ax openspec status` to classify the current repository as missing,
-configured, repairable partial, or context-required partial. Use
-`ax openspec sync` for every mutating state:
-
-- Missing or context-required partial state previews inferred context in a TTY;
-  headless use requires `--context-file <path>`.
-- Configured state refreshes only drifted assets. Use `--review-config`, plus
+- Missing or context-required partial state needs `--context-file <path>` in
+  headless use.
+- Configured state refreshes drifted assets. Use `--review-config` and
   `--accept-config-changes` only for an authorized headless config change.
 - Repairable partial state reconstructs generated assets from valid config.
 
-AX resolves `openspec` from PATH, reports its version, and does not manage that
-CLI package. It validates the complete candidate before a repository-scoped
-transaction, refuses unrelated dirty-path overwrites, and keeps repository
-paths out of the local runtime manifest. Finish with `ax openspec validate`.
+AX resolves `openspec` from PATH and does not manage that package. Finish with
+`ax openspec validate`.
 
-## Feature Work And Activation
+## Feature work and activation
 
-Pre-merge feature work must bind both HOME-expanded targets and AX state to
-isolated runtime roots. Keep the same values for every proof command:
+Before merge, use isolated HOME and runtime roots for targets and the cache:
 
 ```bash
 HOME=<isolated-home> pnpm ax --runtime-root <isolated-runtime-root> status
-HOME=<isolated-home> pnpm ax --runtime-root <isolated-runtime-root> sync --all-profiles --policy-profile work
+HOME=<isolated-home> pnpm ax --runtime-root <isolated-runtime-root> sync
 HOME=<isolated-home> pnpm ax --runtime-root <isolated-runtime-root> validate
 ```
 
-This isolates manifests, caches, transactions, backups, profiles, skills,
-instructions, and hooks when configured targets use `~`. If a target is
-absolute, point `--config <path>` at a proof-only config whose targets are also
-isolated. AX rejects live-root mutation from a feature branch, dirty source, or
-disposable worktree with `unverified_live_source`.
+If a target is absolute, use a proof-only config whose targets are isolated.
+AX rejects live-root mutation from a feature branch, dirty source, or disposable
+worktree. Post-merge, run `ax sync` from a verified clean default-branch source
+to activate the merged runtime.
 
-After merge, verify a clean default-branch source; post-merge activation is an
-ordinary `ax sync`. Candidate validation, transactional apply or rollback, and
-post-apply validation are the activation gate.
-
-## Portable Skill Boundary
+## Portable skill boundary
 
 Keep AX command and runtime-path steering in this skill. Other portable skills
 keep runnable helpers inside their own directory or use a real package
-dependency; they do not depend on unrelated repo-root workflow scripts.
+dependency.
 
-## Common Mistakes
+## Common mistakes
 
 | Mistake | Correct action |
 | --- | --- |
-| Editing installed runtime copies | Edit source, then run the matching sync and validate commands. |
-| Passing profile flags to a scoped sync | Change selection only through top-level sync. |
-| Expecting status to fetch a remote | Treat freshness as unknown until sync; status stays offline. |
+| Editing an installed runtime copy | Edit the AI repo source, then run `ax sync`. |
+| Passing profile flags to sync | Update `runtime.installedProfiles` and `runtime.policyProfile`. |
+| Expecting status to fetch a remote | Run sync when remote freshness matters. |
+| Expecting validate to detect content drift | Run sync to restore source content; validate checks structure. |
 | Running raw upstream OpenSpec setup | Use repo-local `ax openspec sync`. |
-| Activating live roots from feature work | Use isolated runtime roots; activate only after merge. |
+| Activating live roots from feature work | Use isolated roots and activate after merge. |

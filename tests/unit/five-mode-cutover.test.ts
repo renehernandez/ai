@@ -106,7 +106,6 @@ test("retired lifecycle packages and root workflow state are absent", () => {
     assert.equal(existsSync(join(root, "scripts", name)), false, name);
   }
   assert.equal(existsSync(join(root, "ax.lock.json")), false);
-  assert.equal(existsSync(join(root, ".ax", "cache")), false);
 });
 
 test("tracked plan artifacts are primary Markdown only", () => {

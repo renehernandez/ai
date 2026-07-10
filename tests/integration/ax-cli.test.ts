@@ -95,6 +95,9 @@ function createRuntimeSource(root: string): {
       {
         version: 1,
         runtime: {
+          installedProfiles: ["personal"],
+          policyProfile: "personal",
+          retiredSkills: [],
           canonicalSkillsDir: join(installRoot, "agents", "skills"),
           skillSymlinkTargets: [
             join(installRoot, "codex", "skills"),
@@ -173,10 +176,6 @@ test("CLI synchronizes an isolated runtime and reports offline local state", () 
         "--runtime-root",
         fixture.runtimeRoot,
         "sync",
-        "--profile",
-        "personal",
-        "--policy-profile",
-        "personal",
         "--json",
       ],
       { cwd: target, sourceRoot: fixture.sourceRoot },
@@ -184,19 +183,9 @@ test("CLI synchronizes an isolated runtime and reports offline local state", () 
     assert.equal(first.status, 0, first.stderr || first.stdout);
     const result = JSON.parse(first.stdout) as { status: string };
     assert.equal(result.status, "synchronized");
-    const manifestPath = join(fixture.runtimeRoot, "managed-runtime.json");
-    const manifestText = readFileSync(manifestPath, "utf-8");
-    const manifest = JSON.parse(manifestText) as Record<string, unknown>;
-    assert.deepEqual(Object.keys(manifest).sort(), [
-      "hashVersion",
-      "installedProfiles",
-      "ownedPaths",
-      "policyProfile",
-      "schemaVersion",
-    ]);
-    assert.doesNotMatch(
-      manifestText,
-      /resolvedCommit|timestamp|cachePath|url|ref/,
+    assert.equal(
+      existsSync(join(fixture.runtimeRoot, "managed-runtime.json")),
+      false,
     );
     assert.equal(existsSync(join(fixture.sourceRoot, "ax.lock.json")), false);
     assert.equal(existsSync(join(fixture.sourceRoot, ".ax", "cache")), false);

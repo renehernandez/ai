@@ -10,15 +10,15 @@ const activeRuntimeDocs = [
   "rules/command-and-tools.md",
 ] as const;
 
-test("active AX docs use sync and local managed runtime state", () => {
+test("active AX docs use config-driven authoritative sync", () => {
   for (const relativePath of activeRuntimeDocs) {
     const content = readFileSync(relativePath, "utf-8");
 
     assert.match(content, /\bax sync\b|\bax .* sync\b/);
-    assert.match(content, /managed-runtime\.json/);
     assert.match(content, /ax\.config\.json/);
-    assert.match(content, /desired state/i);
-    assert.match(content, /managed|ownership/i);
+    assert.match(content, /authoritative/i);
+    assert.doesNotMatch(content, /managed-runtime\.json/);
+    assert.doesNotMatch(content, /adoption-file|profile-selection-file/);
   }
 });
 
@@ -47,19 +47,18 @@ test("active AX docs contain no retired runtime or workflow commands", () => {
   }
 });
 
-test("AX reference separates desired, managed, observed, and cache state", () => {
+test("AX reference describes authoritative targets and structural validation", () => {
   const content = readFileSync("docs/ax.md", "utf-8");
 
-  assert.match(content, /tracked `ax\.config\.json`.*desired state/is);
-  assert.match(
-    content,
-    /`~\/\.agents\/runtime\/managed-runtime\.json`.*ownership state/is,
-  );
-  assert.match(content, /filesystem.*observed state/is);
+  assert.match(content, /tracked `ax\.config\.json`.*authoritative/is);
+  assert.match(content, /runtime\.installedProfiles/);
+  assert.match(content, /runtime\.policyProfile/);
+  assert.match(content, /runtime\.retiredSkills/);
+  assert.match(content, /unrelated filesystem\s+paths untouched/is);
   assert.match(content, /~\/\.agents\/runtime\/cache/);
-  assert.match(content, /~\/\.agents\/runtime\/transactions/);
-  assert.match(content, /~\/\.agents\/runtime\/backups/);
-  assert.match(content, /sha256-tree-v1/);
+  assert.doesNotMatch(content, /~\/\.agents\/runtime\/transactions/);
+  assert.doesNotMatch(content, /~\/\.agents\/runtime\/backups/);
+  assert.doesNotMatch(content, /sha256-tree-v1/);
 });
 
 test("status and validate documentation is offline and read-only", () => {

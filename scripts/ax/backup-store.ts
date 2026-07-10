@@ -9,7 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, join, resolve } from "node:path";
-import { stableJson } from "./runtime-state.ts";
+import { stableJson } from "./json-state.ts";
 import {
   ABSENT_HASH,
   type ContentHash,

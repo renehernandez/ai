@@ -1,9 +1,8 @@
 # Agent hooks
 
 This directory contains versioned TypeScript hooks for the local agent runtime.
-Tracked `ax.config.json` is desired state; local
-`~/.agents/runtime/managed-runtime.json` records managed ownership and hashes;
-the runtime filesystem is observed state.
+Tracked `ax.config.json` is authoritative runtime state. Hook sync replaces the
+exact configured hook targets and leaves unrelated paths untouched.
 
 `runtime.hooks.sourceDir` is the repository-relative `hooks` directory. AX
 resolves it inside the immutable source snapshot used by the current sync, so
@@ -12,22 +11,22 @@ model without a machine-specific checkout path.
 
 ## Synchronize hooks
 
-Initialize the complete runtime through top-level sync:
+Synchronize the complete runtime through top-level sync:
 
 ```bash
 pnpm ax sync
 ```
 
-After initialization, synchronize only the hook surface with:
+Synchronize only the hook surface with:
 
 ```bash
 pnpm ax hooks sync
 ```
 
-Hook sync consumes the installed and workflow-policy profile selection from
-`~/.agents/runtime/managed-runtime.json`. It builds hook payloads and startup
-registration from one immutable source snapshot, applies them through the
-runtime transaction, writes ownership state last, and retains verified backups.
+Hook sync uses `runtime.installedProfiles` and `runtime.policyProfile` from
+tracked config. It builds the complete temporary hook candidate before
+replacing canonical hooks and configured harness links. Rerun hook sync after
+an interrupted update.
 
 Inspect the surface offline and read-only:
 
@@ -36,13 +35,12 @@ pnpm ax hooks status
 pnpm ax hooks validate
 ```
 
-Status and validate perform no network access and no mutation. They compare
-`ax.config.json` desired state with managed ownership and observed hook files,
-links, Codex/Claude registration, Codex trust state, selected remote, locks, and
-recovery state. Missing remote-ref freshness is resolved only by sync.
+Status and validate perform no network access and no mutation. They verify hook
+path presence and configured link targets. They do not compare file contents or
+establish remote-ref freshness; sync restores source content.
 
-Before merge, run hook synchronization with isolated HOME, manifest, cache,
-transactions, backups, targets, and harness config. Do not refresh the live
+Before merge, run hook synchronization with isolated HOME, cache, targets, and
+harness config. Do not refresh the live
 hook runtime from a feature branch or disposable worktree. After merge, verify
 the clean merged default branch source, then run live `ax sync`.
 

@@ -8,11 +8,6 @@ type Parsed = {
   command: string;
   configPath: string;
   runtimeRoot?: string;
-  profileNames?: string[];
-  allProfiles?: boolean;
-  policyProfile?: string;
-  profileSelectionFile?: string;
-  adoptionFile?: string;
   recoveryFile?: string;
   contextFile?: string;
 };
@@ -61,45 +56,41 @@ test("AX exposes sync/status/validate surfaces and keeps workflow commands absen
   assert.doesNotMatch(help, /plans artifact/);
 });
 
-test("top-level sync parses first and later selection/recovery inputs", () => {
+test("top-level sync reads runtime selection from config", () => {
   const [parsed] = parse([
     "--config",
     "/tmp/config.json",
     "--runtime-root",
     "/tmp/runtime",
     "sync",
-    "--profile",
-    "personal",
-    "--profile",
-    "work",
-    "--policy-profile",
-    "work",
-    "--profile-selection-file",
-    "/tmp/selection.json",
-    "--adoption-file",
-    "/tmp/adoption.json",
-    "--recovery-file",
-    "/tmp/recovery.json",
   ]);
   assert.equal(parsed.command, "sync");
   assert.equal(parsed.scope, undefined);
-  assert.deepEqual(parsed.profileNames, ["personal", "work"]);
-  assert.equal(parsed.policyProfile, "work");
   assert.equal(parsed.runtimeRoot, "/tmp/runtime");
-  assert.equal(parsed.profileSelectionFile, "/tmp/selection.json");
-  assert.equal(parsed.adoptionFile, "/tmp/adoption.json");
-  assert.equal(parsed.recoveryFile, "/tmp/recovery.json");
+  for (const option of [
+    "--profile",
+    "--all-profiles",
+    "--policy-profile",
+    "--profile-selection-file",
+    "--adoption-file",
+    "--recovery-file",
+  ]) {
+    assert.match(
+      parseError(["sync", option, "value"]).message,
+      /unknown option/,
+    );
+  }
 });
 
-test("scoped runtime sync does not expose profile-selection flags", () => {
+test("scoped runtime sync exposes no ownership or selection flags", () => {
   const error = parseError(["skills", "sync", "--profile", "personal"]);
   assert.match(error.message, /unknown option '--profile'/);
-  const [parsed] = parse([
-    "instructions",
-    "sync",
-    "--adoption-file",
-    "/tmp/adopt.json",
-  ]);
+  assert.match(
+    parseError(["instructions", "sync", "--adoption-file", "/tmp/adopt.json"])
+      .message,
+    /unknown option '--adoption-file'/,
+  );
+  const [parsed] = parse(["instructions", "sync"]);
   assert.equal(parsed.scope, "instructions");
   assert.equal(parsed.command, "sync");
 });

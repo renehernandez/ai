@@ -13,42 +13,24 @@ OpenSpec target the current working directory.
 
 ## State model
 
-AX separates three kinds of state:
+Tracked `ax.config.json` is authoritative runtime state. It declares source
+refs, `runtime.installedProfiles`, `runtime.policyProfile`, exact targets,
+instructions, hooks, and `runtime.retiredSkills`.
 
-Tracked `ax.config.json` is desired state,
-`~/.agents/runtime/managed-runtime.json` is ownership state, and the filesystem
-is observed state.
-
-| State | Location | Purpose |
-| --- | --- | --- |
-| Desired | tracked `ax.config.json` | Profiles, source refs, selected assets, targets, instructions, hooks, and OpenSpec settings |
-| Managed | `~/.agents/runtime/managed-runtime.json` | Installed profiles, one policy profile, AX-owned paths, and content hashes |
-| Observed | live filesystem | Current files, directories, symlinks, executable bits, collisions, and drift |
-
-The local manifest uses `sha256-tree-v1` and does not duplicate desired source
-configuration. Runtime support state lives under:
-
-- `~/.agents/runtime/cache` for disposable source caches;
-- `~/.agents/runtime/transactions` for recoverable mutation journals and
-  retained candidate payloads;
-- `~/.agents/runtime/backups` for the latest seven verified backups per changed
-  asset and target.
+AX replaces declared targets on every sync and leaves unrelated filesystem
+paths untouched. It stores only a disposable remote-source cache under
+`~/.agents/runtime/cache`; runtime synchronization has no ownership manifest,
+content ledger, backup store, or recovery journal.
 
 ## Synchronize runtime profiles
 
-Run top-level sync to initialize or converge selected profiles:
+Run top-level sync to converge the profiles selected in tracked config:
 
 ```bash
 pnpm ax sync
 ```
 
-The first interactive run previews installed profiles and exactly one
-workflow-policy profile. A first headless run supplies `--profile` or
-`--all-profiles` plus `--policy-profile <name>`. Later headless profile changes
-use a profile-selection file bound to the current manifest hash.
-
-Scoped synchronization requires an initialized valid manifest and retains its
-profile selection:
+Scoped synchronization uses the same config without initialization state:
 
 ```bash
 pnpm ax skills sync
@@ -58,26 +40,24 @@ pnpm ax hooks sync
 
 Each distinct configured source/ref pair resolves once per invocation. Every
 selected entry from that source uses one immutable snapshot, preventing mixed
-source versions inside one candidate. AX validates the full candidate before
-mutation, writes the local manifest last, and recovers interrupted changes from
-retained hashes and payloads.
+source versions inside one candidate. AX validates the full temporary candidate
+before replacing exact live targets. If a run is interrupted, run sync again.
 
 ## Inspect local state offline
 
 Status and validate are offline, read-only commands. They perform no network
-access, source fetch, target mutation, recovery, backup creation, or manifest
-write.
+access, source fetch, or target mutation.
 
 ```bash
 pnpm ax status
 pnpm ax validate
 ```
 
-Status reports source/config roots, manifest, cache, transactions, backups,
-shim health, installed/policy profiles, desired/managed/observed differences,
-collisions, locks, and recovery state. Validate exits non-zero when local state
-violates the contract. Neither command proves remote-ref freshness; sync does
-that while constructing its candidate.
+Status reports source/config roots, cache state, installed/policy profiles,
+missing targets, invalid links, and retired paths that remain present. Validate
+checks the same structural contract and exits non-zero on findings. Neither
+command compares file contents or proves remote-ref freshness. Run sync to
+restore authoritative content and resolve current remote refs.
 
 When offline inspection includes OpenSpec, AX locates the configured
 `openspec` executable or the first executable on `PATH` through filesystem
@@ -145,15 +125,14 @@ managed assets.
 
 ## Prove changes without touching live runtime
 
-Before merge, run AX behavior only with isolated HOME, manifest, cache,
-transactions, backups, skill, instruction, hook, and profile roots. Feature
+Before merge, run AX behavior only with isolated HOME, cache, skill,
+instruction, hook, and profile roots. Feature
 branches, dirty source, and disposable worktrees cannot target canonical live
 runtime roots.
 
 After merge, verify the clean merged default branch source matches the hosted
-default branch. Then run live `ax sync`. Candidate
-validation, recoverable apply, and post-apply validation form the activation
-gate.
+default branch. Then run live `ax sync`. Candidate construction and structural
+post-sync validation form the activation gate.
 
 ## Manage the shim
 

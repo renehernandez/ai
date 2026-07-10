@@ -41,44 +41,35 @@ These rules apply to command execution, network access, and tool installation ac
 
 ## AX runtime convergence
 
-Tracked `ax.config.json` is desired state. Local
-`~/.agents/runtime/managed-runtime.json` records installed profiles, exactly one
-workflow-policy profile, AX-owned paths, and content hashes. The live filesystem
-is observed state.
+Tracked `ax.config.json` is authoritative runtime state. It declares installed
+profiles, exactly one workflow-policy profile, exact runtime targets, and
+explicitly retired skills.
 
-- Use `pnpm ax sync` to build one validated candidate and converge selected
-  skills, instructions, and hooks.
-- Only top-level sync may initialize the manifest or change installed/policy
-  profile selection. A first headless run supplies explicit profile and policy
-  selection. Later headless selection changes use an exact-manifest-hash-bound
-  profile-selection file.
+- Use `pnpm ax sync` to build one validated candidate, replace every declared
+  skill, instruction, and hook target, and remove `runtime.retiredSkills`.
+- Change `runtime.installedProfiles` and `runtime.policyProfile` in tracked
+  config when the machine selection changes. Sync has no selection flags.
 - Scoped `pnpm ax skills sync`, `pnpm ax instructions sync`, and
-  `pnpm ax hooks sync` require an initialized valid manifest, reuse its profile
-  selection, and mutate only that surface.
+  `pnpm ax hooks sync` use that tracked selection and mutate only that surface.
+- Leave unrelated paths outside AX's exact configured targets untouched.
 - Do not hand-copy runtime assets, create managed symlinks manually, or edit
   managed hook registration directly.
 - Portable shared skills keep executable helpers in the owning skill directory
   or a real package dependency.
 
-Each distinct configured source/ref pair resolves once per sync invocation and
-uses one immutable source snapshot for every selected entry. Disposable source
-caches live under `~/.agents/runtime/cache`; they are never ownership or
-installed truth.
-
-Every runtime mutation holds the runtime-root lock, validates the complete
-candidate before touching live entries, retains transaction payloads under
-`~/.agents/runtime/transactions`, writes `managed-runtime.json` last, and keeps
-seven verified backups per changed asset/target under
-`~/.agents/runtime/backups`.
+Each distinct configured source/ref pair resolves once per sync invocation.
+AX validates the complete temporary candidate before replacing live entries.
+Disposable source caches live under `~/.agents/runtime/cache`. If sync is
+interrupted, rerun it.
 
 ## Offline inspection
 
 - Use `pnpm ax status` and `pnpm ax validate` for offline, read-only inspection
   with no network access or filesystem mutation.
-- Status reports desired, managed, observed, cache, collision, lock, and
-  recovery state. It cannot establish remote-ref freshness.
-- Validate fails when desired, ownership, observed content, profile policy,
-  hooks, or recovery state violates the local contract.
+- Status reports configured profiles, path presence, link targets, retired
+  paths, and cache state. It cannot establish remote-ref freshness.
+- Validate checks runtime structure, not byte-for-byte content. Run sync to
+  restore authoritative content.
 - Scoped `skills`, `instructions`, and `hooks` status/validate commands apply
   the same offline boundary to one surface.
 - Codex hook trust is app-owned state. Report an untrusted status; do not edit
@@ -100,8 +91,8 @@ seven verified backups per changed asset/target under
 
 ## Isolated proof and live activation
 
-- Run pre-merge AX proof with isolated HOME, manifest, cache, transactions,
-  backups, skills, instructions, hooks, and profile targets.
+- Run pre-merge AX proof with isolated HOME, cache, skills, instructions, hooks,
+  and profile targets.
 - A feature branch, dirty source, or disposable worktree must never mutate live
   runtime roots.
 - After merge, verify the clean merged default branch source matches the hosted

@@ -21,7 +21,7 @@ import {
   resolve,
 } from "node:path";
 import { createVerifiedBackup } from "./backup-store.ts";
-import { stableJson, writeJsonAtomic } from "./runtime-state.ts";
+import { stableJson, writeJsonAtomic } from "./json-state.ts";
 import {
   ABSENT_HASH,
   type ContentHash,
@@ -1125,8 +1125,8 @@ function replaceManifestFromRetained(
       `transaction_manifest_copy_verification_failed: ${destination}`,
     );
   }
-  // managed-runtime.json is a regular file; rename over its existing path is
-  // the atomic commit point and intentionally has no target-absent window.
+  // A transaction manifest is a regular file; rename over its existing path
+  // is the atomic commit point and intentionally has no target-absent window.
   renameSync(state.stagedPath, destination);
   if (hashPath(destination) !== expectedHash) {
     throw new Error(`transaction_manifest_apply_failed: ${destination}`);

@@ -36,22 +36,22 @@ test("ax-cli skill retrieves the single-sync runtime contract", () => {
   assert.match(skill, /`ax openspec sync`/);
 
   assert.match(skill, /`ax\.config\.json`[^\n]+desired state/i);
-  assert.match(skill, /managed-runtime\.json`[\s\S]{0,80}ownership state/i);
-  assert.match(skill, /--policy-profile/);
-  assert.match(
-    skill,
-    /--profile personal --profile work --policy-profile work/,
-  );
-  assert.match(skill, /--profile-selection-file/);
-  assert.match(skill, /--adoption-file/);
-  assert.match(skill, /--recovery-file/);
-  assert.match(skill, /sha256-tree-v1/);
+  assert.match(skill, /installedProfiles/);
+  assert.match(skill, /policyProfile/);
+  assert.match(skill, /authoritative/i);
+  assert.match(skill, /replace|overwrite/i);
+  assert.match(skill, /retiredSkills/);
+  assert.match(skill, /unrelated[^\n]+untouched/i);
+  assert.doesNotMatch(skill, /managed-runtime\.json/);
+  assert.doesNotMatch(skill, /--profile-selection-file/);
+  assert.doesNotMatch(skill, /--adoption-file/);
+  assert.doesNotMatch(skill, /--recovery-file/);
+  assert.doesNotMatch(skill, /sha256-tree-v1/);
   assert.match(skill, /status[^\n]+validate[^\n]+offline[^\n]+read-only/i);
 });
 
 test("ax-cli skill retrieves source, isolation, shim, and activation rules", () => {
   assert.match(skill, /latest[^\n]+remote[^\n]+ref/i);
-  assert.match(skill, /resolved SHA[\s\S]{0,80}not persisted/i);
   assert.match(skill, /isolated[\s\S]{0,80}runtime roots/i);
   assert.match(skill, /HOME=<isolated-home>/);
   assert.match(skill, /--runtime-root <isolated-runtime-root>/);

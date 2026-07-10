@@ -23,10 +23,6 @@ import {
   syncOpenSpec,
   validateOpenSpec,
 } from "./ax/openspec-sync.ts";
-import type {
-  InteractiveProfileSelectionInput,
-  ProfileSelection,
-} from "./ax/runtime-state.ts";
 import {
   type AxRuntimeConfig,
   inspectRuntime,
@@ -45,11 +41,6 @@ type ParsedArgs = {
   shimCommand?: ShimCommand;
   configPath: string;
   runtimeRoot?: string;
-  profileNames?: string[];
-  allProfiles?: boolean;
-  policyProfile?: string;
-  profileSelectionFile?: string;
-  adoptionFile?: string;
   recoveryFile?: string;
   contextFile?: string;
   reviewConfig?: boolean;
@@ -68,11 +59,6 @@ type CommandExecutor = (input: ParsedArgs) => void;
 type CommandOptions = {
   config?: string;
   runtimeRoot?: string;
-  profile?: string[];
-  allProfiles?: boolean;
-  policyProfile?: string;
-  profileSelectionFile?: string;
-  adoptionFile?: string;
   recoveryFile?: string;
   contextFile?: string;
   reviewConfig?: boolean;
@@ -173,14 +159,6 @@ export function executeParsedCommand(input: ParsedArgs): void {
       config,
       runtimeRoot,
       surface: input.scope,
-      profiles: input.profileNames,
-      allProfiles: input.allProfiles,
-      policyProfile: input.policyProfile,
-      profileSelectionFile: input.profileSelectionFile,
-      adoptionFile: input.adoptionFile,
-      recoveryFile: input.recoveryFile,
-      confirm: confirmPrompt,
-      selectProfileSelection: promptProfileSelection,
     });
     printResult(result, input.json);
     return;
@@ -236,9 +214,6 @@ function addRuntimeCommand(
     .command(command)
     .description(`${label(command)} all managed runtime assets`)
     .option("--json", "Emit structured JSON");
-  if (command === "sync") {
-    addSyncOptions(subcommand, true);
-  }
   subcommand.action((options: CommandOptions, commandObject: Command) => {
     execute(parsedCommand(undefined, command, options, commandObject));
   });
@@ -257,9 +232,6 @@ function addRuntimeScope(
       .command(command)
       .description(`${label(command)} managed ${scope}`)
       .option("--json", "Emit structured JSON");
-    if (command === "sync") {
-      addSyncOptions(subcommand, false);
-    }
     subcommand.action((options: CommandOptions, commandObject: Command) => {
       execute(parsedCommand(scope, command, options, commandObject));
     });
@@ -297,35 +269,6 @@ function addOpenSpecCommands(program: Command, execute: CommandExecutor): void {
     });
   }
   addLegacyRuntimeCommands(parent, "ax openspec", "ax openspec sync");
-}
-
-function addSyncOptions(command: Command, allowProfiles: boolean): void {
-  if (allowProfiles) {
-    command
-      .option(
-        "--profile <name>",
-        "Select an installed profile; repeat for multiple",
-        collectOption,
-      )
-      .option("--all-profiles", "Select every configured profile")
-      .option(
-        "--policy-profile <name>",
-        "Select the one workflow-policy profile",
-      )
-      .option(
-        "--profile-selection-file <path>",
-        "Hash-bound later profile replacement",
-      );
-  }
-  command
-    .option(
-      "--adoption-file <path>",
-      "Exact-hash managed-runtime adoption decisions",
-    )
-    .option(
-      "--recovery-file <path>",
-      "Exact-hash transaction recovery decisions",
-    );
 }
 
 function addLegacyRuntimeCommands(
@@ -385,11 +328,6 @@ function parsedCommand(
     runtimeRoot: globals.runtimeRoot
       ? expandPath(globals.runtimeRoot, sourceRoot)
       : undefined,
-    profileNames: options.profile,
-    allProfiles: options.allProfiles,
-    policyProfile: options.policyProfile,
-    profileSelectionFile: resolveOptional(options.profileSelectionFile),
-    adoptionFile: resolveOptional(options.adoptionFile),
     recoveryFile: resolveOptional(options.recoveryFile),
     contextFile: resolveOptional(options.contextFile),
     reviewConfig: options.reviewConfig,
@@ -400,10 +338,6 @@ function parsedCommand(
 
 function runtimeCommands(): RuntimeCommand[] {
   return ["sync", "status", "validate"];
-}
-
-function collectOption(value: string, previous: string[] = []): string[] {
-  return [...previous, value];
 }
 
 function printResult(value: unknown, json?: boolean): void {
@@ -428,33 +362,6 @@ function confirmPrompt(message: string): boolean {
     return false;
   }
   return readPromptLine(`${message}\nConfirm? [y/N] `).toLowerCase() === "y";
-}
-
-function promptProfileSelection(
-  input: InteractiveProfileSelectionInput,
-): ProfileSelection {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    throw new Error(
-      "profile_selection_required: interactive profile selection needs a TTY",
-    );
-  }
-  const available = input.availableProfiles.join(", ");
-  const installedDefault = input.requestedProfiles.join(",");
-  const installedInput = readPromptLine(
-    `Available profiles: ${available}\nInstalled profiles (comma-separated)${installedDefault ? ` [${installedDefault}]` : ""}: `,
-  );
-  const installedProfiles = (installedInput || installedDefault)
-    .split(",")
-    .map((profile) => profile.trim())
-    .filter(Boolean);
-  const policyDefault = input.requestedPolicyProfile ?? "";
-  const policyInput = readPromptLine(
-    `Workflow-policy profile${policyDefault ? ` [${policyDefault}]` : ""}: `,
-  );
-  return {
-    installedProfiles,
-    policyProfile: policyInput || policyDefault,
-  };
 }
 
 function readPromptLine(message: string): string {

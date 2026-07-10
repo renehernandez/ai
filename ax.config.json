@@ -1,6 +1,32 @@
 {
   "version": 1,
   "runtime": {
+    "installedProfiles": ["personal", "work"],
+    "policyProfile": "work",
+    "retiredSkills": [
+      "brainstorming",
+      "change-request-create",
+      "codex-review-feedback",
+      "github-adapter-review",
+      "github-pr-create",
+      "gitlab-adapter-review",
+      "glab-mr-create",
+      "merge-followthrough",
+      "nitro-review-feedback",
+      "openspec-tasks",
+      "plan-coordinate",
+      "plan-delivery",
+      "plan-orchestrator",
+      "plan-poc",
+      "plan-ready",
+      "plan-review",
+      "plan-to-review",
+      "plan-unit-delivery",
+      "plan-unit-sequencer",
+      "review-feedback-routing",
+      "session-start",
+      "start-project"
+    ],
     "canonicalSkillsDir": "~/.agents/skills",
     "skillSymlinkTargets": ["~/.codex/skills", "~/.claude/skills"],
     "instructionSymlinkTargets": {

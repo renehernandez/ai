@@ -5,8 +5,9 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
-  readFileSync,
+  readlinkSync,
   realpathSync,
+  renameSync,
   rmSync,
   symlinkSync,
 } from "node:fs";
@@ -19,42 +20,7 @@ import {
   relative,
   resolve,
 } from "node:path";
-import {
-  type AdoptionAction,
-  adoptionActionFor,
-  type InteractiveProfileSelector,
-  type ManagedRuntimeManifest,
-  manifestHash,
-  type ProfileSelection,
-  readAdoptionFile,
-  readManagedRuntimeManifest,
-  resolveProfileSelection,
-  stableJson,
-  validateManagedRuntimeManifest,
-  writeManagedRuntimeManifestAtomic,
-} from "./runtime-state.ts";
-import {
-  ABSENT_HASH,
-  type ContentHash,
-  copyPath,
-  HASH_VERSION,
-  hashPath,
-  type ObservedHash,
-  SourceSnapshotManager,
-} from "./source-snapshot.ts";
-import {
-  applyTransaction,
-  inspectMutationLock,
-  inspectTransactions,
-  type JournalTargetAuthorizer,
-  type OwnershipRecord,
-  type RecoveryAction,
-  recoverTransactions,
-  resolveRecovery,
-  type TransactionJournal,
-  type TransactionOperationInput,
-  withMutationLock,
-} from "./transaction-engine.ts";
+import { copyPath, SourceSnapshotManager } from "./source-snapshot.ts";
 
 export type RuntimeSurface = "skills" | "instructions" | "hooks";
 
@@ -69,6 +35,9 @@ export type InstructionPathConfig =
 export type AxRuntimeConfig = {
   version: 1;
   runtime: {
+    installedProfiles: string[];
+    policyProfile: string;
+    retiredSkills?: string[];
     canonicalSkillsDir: string;
     skillSymlinkTargets: string[];
     instructionSymlinkTargets?: Record<string, string>;
@@ -88,11 +57,7 @@ export type AxRuntimeConfig = {
 
 export type RuntimePaths = {
   runtimeRoot: string;
-  manifestPath: string;
   cacheRoot: string;
-  transactionsRoot: string;
-  backupsRoot: string;
-  lockPath: string;
 };
 
 export type RuntimeSyncOptions = {
@@ -100,27 +65,16 @@ export type RuntimeSyncOptions = {
   config: AxRuntimeConfig;
   runtimeRoot?: string;
   surface?: RuntimeSurface;
-  profiles?: string[];
-  allProfiles?: boolean;
-  policyProfile?: string;
-  profileSelectionFile?: string;
-  adoptionFile?: string;
-  recoveryFile?: string;
-  interactive?: boolean;
-  confirm?: (message: string) => boolean;
-  selectProfileSelection?: InteractiveProfileSelector;
 };
 
 export type RuntimeSyncResult = {
-  status: "synchronized" | "current" | "recovered";
-  manifestPath: string;
+  status: "synchronized";
   installedProfiles: string[];
   policyProfile: string;
   changedPaths: string[];
   sources: Array<{
     source: string;
     resolvedCommit?: string;
-    contentHash: ContentHash;
   }>;
 };
 
@@ -129,14 +83,11 @@ export type RuntimeStatusReport = {
   sourceRoot: string;
   paths: RuntimePaths;
   installedProfiles: string[];
-  policyProfile?: string;
+  policyProfile: string;
   desiredPaths: string[];
-  managedPaths: string[];
-  observed: Record<string, ObservedHash>;
+  observed: Record<string, "missing" | "file" | "directory" | "symlink">;
   cache: "present" | "missing";
   remoteRefFreshness: "unknown_until_sync";
-  lock?: Record<string, unknown>;
-  transactions: ReturnType<typeof inspectTransactions>;
   findings: string[];
   warnings: string[];
 };
@@ -145,23 +96,12 @@ type CandidateEntry = {
   path: string;
   surface: RuntimeSurface;
   candidatePath: string;
-  hash: ContentHash;
   asset: string;
 };
 
-type RuntimeTransactionMetadata = {
-  previousProfiles: string[] | null;
-  previousPolicyProfile: string | null;
-  candidateProfiles: string[];
-  candidatePolicyProfile: string;
-  previousInventory: Record<string, string[]>;
-  candidateInventory: Record<string, string[]>;
-};
-
-type RuntimeTargetPolicy = {
-  targetRoots: string[];
-  directChildTargetRoots: string[];
-  exactTargetPaths: string[];
+type RuntimeSelection = {
+  installedProfiles: string[];
+  policyProfile: string;
 };
 
 const REQUIRED_MODE_NAMES = [
@@ -171,223 +111,61 @@ const REQUIRED_MODE_NAMES = [
   "plan",
   "review",
 ] as const;
-const RETIRED_LIFECYCLE_NAMES = [
-  "brainstorming",
-  "change-request-create",
-  "codex-review-feedback",
-  "github-adapter-review",
-  "github-pr-create",
-  "gitlab-adapter-review",
-  "glab-mr-create",
-  "merge-followthrough",
-  "nitro-review-feedback",
-  "openspec-tasks",
-  "plan-coordinate",
-  "plan-delivery",
-  "plan-orchestrator",
-  "plan-poc",
-  "plan-ready",
-  "plan-review",
-  "plan-to-review",
-  "plan-unit-delivery",
-  "plan-unit-sequencer",
-  "review-feedback-routing",
-  "session-start",
-  "start-project",
-] as const;
-
 export function runtimePaths(runtimeRoot?: string): RuntimePaths {
   const root = resolve(runtimeRoot ?? defaultRuntimeRoot());
   return {
     runtimeRoot: root,
-    manifestPath: join(root, "managed-runtime.json"),
     cacheRoot: join(root, "cache"),
-    transactionsRoot: join(root, "transactions"),
-    backupsRoot: join(root, "backups"),
-    lockPath: join(root, "mutation.lock"),
   };
 }
 
 export function syncRuntime(options: RuntimeSyncOptions): RuntimeSyncResult {
   const sourceRoot = resolve(options.sourceRoot);
   const paths = runtimePaths(options.runtimeRoot);
-  validateRuntimeSupportPaths(paths);
-  validateRuntimeAssetRoots(options.config, sourceRoot);
-  const recoveryTargetPolicy = runtimeRecoveryTargetPolicy(
-    options.config,
-    sourceRoot,
-    paths,
-  );
-
-  if (options.recoveryFile) {
-    resolveRuntimeRecovery({
-      paths,
-      recoveryFile: options.recoveryFile,
-      targetPolicy: recoveryTargetPolicy,
-    });
-    const recovered = readManagedRuntimeManifest(paths.manifestPath);
-    return {
-      status: "recovered",
-      manifestPath: paths.manifestPath,
-      installedProfiles: recovered?.installedProfiles ?? [],
-      policyProfile: recovered?.policyProfile ?? "",
-      changedPaths: [],
-      sources: [],
-    };
-  }
-
   validateConfig(options.config, sourceRoot);
-
-  return withMutationLock(
-    { lockPath: paths.lockPath, domain: "runtime", root: paths.runtimeRoot },
-    () => {
-      recoverTransactions({
-        transactionsRoot: paths.transactionsRoot,
-        backupsRoot: paths.backupsRoot,
-        ...recoveryTargetPolicy,
-        authorizeJournalTarget: authorizeRuntimeJournalTarget,
-      });
-      assertVerifiedLiveSource(sourceRoot, paths.runtimeRoot);
-      const existing = readManagedRuntimeManifest(paths.manifestPath);
-      if (options.surface && !existing) {
-        throw new Error(
-          `runtime_not_initialized: ax ${options.surface} sync requires ${paths.manifestPath}; run ax sync first`,
-        );
-      }
-      if (
-        options.surface &&
-        ((options.profiles?.length ?? 0) > 0 ||
-          options.allProfiles ||
-          options.policyProfile ||
-          options.profileSelectionFile)
-      ) {
-        throw new Error(
-          `scoped_profile_selection_forbidden: ax ${options.surface} sync consumes managed-runtime.json selection`,
-        );
-      }
-      const selection = options.surface
-        ? {
-            installedProfiles: [...(existing?.installedProfiles ?? [])],
-            policyProfile: existing?.policyProfile ?? "",
-          }
-        : resolveProfileSelection({
-            availableProfiles: Object.keys(options.config.profiles),
-            manifest: existing,
-            requestedProfiles: options.profiles,
-            allProfiles: options.allProfiles,
-            requestedPolicyProfile: options.policyProfile,
-            profileSelectionFile: options.profileSelectionFile,
-            interactive:
-              options.interactive ??
-              Boolean(process.stdin.isTTY && process.stdout.isTTY),
-            confirm: options.confirm,
-            selectProfileSelection: options.selectProfileSelection,
-          });
-      const stagingRoot = mkdtempSync(join(paths.runtimeRoot, ".candidate-"));
-      const snapshots = new SourceSnapshotManager({
-        cacheRoot: paths.cacheRoot,
-        temporaryRoot: stagingRoot,
-      });
-      try {
-        const built = buildRuntimeCandidate({
-          config: options.config,
-          sourceRoot,
-          selection,
-          stagingRoot,
-          snapshots,
-          surface: options.surface,
-        });
-        const desired = built.entries;
-        const adoption = options.adoptionFile
-          ? readAdoptionFile(options.adoptionFile)
-          : undefined;
-        const plan = planRuntimeOperations({
-          config: options.config,
-          sourceRoot,
-          desired,
-          existing,
-          selection,
-          surface: options.surface,
-          adoption,
-          interactive:
-            options.interactive ??
-            Boolean(process.stdin.isTTY && process.stdout.isTTY),
-          confirm: options.confirm,
-        });
-        const candidateManifestPath = join(stagingRoot, "managed-runtime.json");
-        writeManagedRuntimeManifestAtomic(candidateManifestPath, plan.manifest);
-        const unchangedManifest =
-          manifestHash(existing) === manifestHash(plan.manifest);
-        if (plan.operations.length === 0 && unchangedManifest) {
-          return {
-            status: "current",
-            manifestPath: paths.manifestPath,
-            installedProfiles: selection.installedProfiles,
-            policyProfile: selection.policyProfile,
-            changedPaths: [],
-            sources: built.sources,
-          };
-        }
-        const metadata: RuntimeTransactionMetadata = {
-          previousProfiles: existing?.installedProfiles ?? null,
-          previousPolicyProfile: existing?.policyProfile ?? null,
-          candidateProfiles: selection.installedProfiles,
-          candidatePolicyProfile: selection.policyProfile,
-          previousInventory: manifestInventoryByProfile(existing),
-          candidateInventory: inventoryByProfile(
-            options.config,
-            selection.installedProfiles,
-            sourceRoot,
-          ),
-        };
-        applyTransaction({
-          domain: "runtime",
-          root: paths.runtimeRoot,
-          lockPath: paths.lockPath,
-          lockHeld: true,
-          transactionsRoot: paths.transactionsRoot,
-          backupsRoot: paths.backupsRoot,
-          operations: plan.operations,
-          targetRoots: [],
-          directChildTargetRoots: [],
-          exactTargetPaths: [
-            ...plan.operations.map((operation) => operation.path),
-            paths.manifestPath,
-          ],
-          manifestPath: paths.manifestPath,
-          candidateManifestPath,
-          metadata,
-          validateApplied: () => {
-            const applied = readManagedRuntimeManifest(paths.manifestPath);
-            if (
-              !applied ||
-              manifestHash(applied) !== manifestHash(plan.manifest)
-            ) {
-              throw new Error("runtime_post_apply_manifest_mismatch");
-            }
-            for (const [path, hash] of Object.entries(applied.ownedPaths)) {
-              if (hashPath(path) !== hash) {
-                throw new Error(`runtime_post_apply_hash_mismatch: ${path}`);
-              }
-            }
-          },
-        });
-        return {
-          status: "synchronized",
-          manifestPath: paths.manifestPath,
-          installedProfiles: selection.installedProfiles,
-          policyProfile: selection.policyProfile,
-          changedPaths: plan.operations
-            .map((operation) => operation.path)
-            .sort(),
-          sources: built.sources,
-        };
-      } finally {
-        snapshots.dispose();
-        rmSync(stagingRoot, { force: true, recursive: true });
-      }
-    },
-  );
+  assertVerifiedLiveSource(sourceRoot, paths.runtimeRoot);
+  mkdirSync(paths.runtimeRoot, { recursive: true });
+  const selection = runtimeSelection(options.config);
+  const stagingRoot = mkdtempSync(join(paths.runtimeRoot, ".candidate-"));
+  const snapshots = new SourceSnapshotManager({
+    cacheRoot: paths.cacheRoot,
+    temporaryRoot: stagingRoot,
+  });
+  try {
+    const built = buildRuntimeCandidate({
+      config: options.config,
+      sourceRoot,
+      selection,
+      stagingRoot,
+      snapshots,
+      surface: options.surface,
+    });
+    const changedPaths = [
+      ...removeLegacyRuntimeState(paths),
+      ...applyRuntimeCandidate({
+        config: options.config,
+        sourceRoot,
+        desired: built.entries,
+        surface: options.surface,
+      }),
+    ].sort((left, right) => left.localeCompare(right));
+    const report = inspectRuntime(options);
+    if (!report.ok) {
+      throw new Error(
+        `runtime_post_sync_validation_failed:\n${report.findings.map((finding) => `- ${finding}`).join("\n")}`,
+      );
+    }
+    return {
+      status: "synchronized",
+      installedProfiles: selection.installedProfiles,
+      policyProfile: selection.policyProfile,
+      changedPaths,
+      sources: built.sources,
+    };
+  } finally {
+    snapshots.dispose();
+    rmSync(stagingRoot, { force: true, recursive: true });
+  }
 }
 
 export function inspectRuntime(input: {
@@ -400,21 +178,17 @@ export function inspectRuntime(input: {
   const paths = runtimePaths(input.runtimeRoot);
   const findings: string[] = [];
   const warnings: string[] = [];
-  let manifest: ManagedRuntimeManifest | undefined;
+  let selection: RuntimeSelection | undefined;
   try {
     validateConfig(input.config, sourceRoot);
-    validateRuntimeSupportPaths(paths);
-    manifest = readManagedRuntimeManifest(paths.manifestPath);
+    selection = runtimeSelection(input.config);
   } catch (error) {
     findings.push(error instanceof Error ? error.message : String(error));
   }
-  if (!manifest) {
-    findings.push(
-      "profile_selection_required: managed-runtime.json is missing; run ax sync",
-    );
-  }
-  const profiles = manifest?.installedProfiles ?? [];
-  const desired = configuredDesiredPaths(input.config, profiles, sourceRoot);
+  const profiles = selection?.installedProfiles ?? [];
+  const desired = selection
+    ? configuredDesiredPaths(input.config, profiles, sourceRoot)
+    : new Set<string>();
   const desiredPaths = [...desired]
     .filter(
       (path) =>
@@ -422,48 +196,58 @@ export function inspectRuntime(input: {
         pathBelongsToSurface(input.config, path, input.surface, sourceRoot),
     )
     .sort();
-  const managedPaths = Object.keys(manifest?.ownedPaths ?? {})
-    .filter(
-      (path) =>
-        !input.surface ||
-        pathBelongsToSurface(input.config, path, input.surface, sourceRoot),
-    )
-    .sort();
-  const observed: Record<string, ObservedHash> = {};
-  for (const path of [...new Set([...desiredPaths, ...managedPaths])].sort()) {
-    const hash = hashPath(path);
-    observed[path] = hash;
-    const managedHash = manifest?.ownedPaths[path];
-    if (managedHash && managedHash !== hash) {
-      findings.push(
-        `managed_content_drift: ${path} expected ${managedHash}, observed ${hash}`,
-      );
-    } else if (!managedHash && hash !== ABSENT_HASH) {
-      findings.push(
-        `unmanaged_collision: ${path} is occupied without manifest ownership`,
-      );
-    } else if (managedHash && !desired.has(path)) {
-      findings.push(
-        `managed_desired_drift: ${path} is owned but no longer desired`,
-      );
+  const observed: RuntimeStatusReport["observed"] = {};
+  for (const path of desiredPaths) {
+    observed[path] = pathKind(path);
+    if (observed[path] === "missing") {
+      findings.push(`runtime_path_missing: ${path}`);
     }
   }
-  for (const path of retiredLifecyclePaths(input.config, sourceRoot)) {
-    if (hashPath(path) !== ABSENT_HASH && !manifest?.ownedPaths[path]) {
-      findings.push(`unmanaged_lifecycle_conflict: ${path}`);
+  if (selection && (!input.surface || input.surface === "skills")) {
+    const canonicalSkills = expandPath(
+      input.config.runtime.canonicalSkillsDir,
+      sourceRoot,
+    );
+    for (const name of configuredSkillNames(
+      input.config,
+      profiles,
+      sourceRoot,
+    )) {
+      const skillPath = join(canonicalSkills, name);
+      const skillFile = join(skillPath, "SKILL.md");
+      if (pathKind(skillPath) !== "missing" && !existsSync(skillFile)) {
+        findings.push(`runtime_skill_invalid: ${skillFile} is missing`);
+      }
     }
   }
-  const transactions = inspectTransactions(paths.transactionsRoot);
-  if (transactions.length > 0) {
-    for (const transaction of transactions) {
-      findings.push(
-        `${transaction.phase === "manifest_committed" ? "incomplete_transaction" : transaction.phase}: ${transaction.transactionId}`,
-      );
+  if (selection) {
+    for (const [path, target] of expectedRuntimeLinks(
+      input.config,
+      profiles,
+      sourceRoot,
+      input.surface,
+    )) {
+      if (pathKind(path) === "missing") {
+        continue;
+      }
+      if (pathKind(path) !== "symlink") {
+        findings.push(`runtime_link_invalid: ${path} is not a symlink`);
+        continue;
+      }
+      const observedTarget = resolve(dirname(path), readlinkSync(path));
+      if (observedTarget !== resolve(target)) {
+        findings.push(
+          `runtime_link_target_invalid: ${path} points to ${observedTarget}, expected ${resolve(target)}`,
+        );
+      }
     }
   }
-  const lock = inspectMutationLock(paths.lockPath);
-  if (lock) {
-    warnings.push(`mutation_lock_active: pid=${String(lock.pid ?? "unknown")}`);
+  if (selection && (!input.surface || input.surface === "skills")) {
+    for (const path of retiredLifecyclePaths(input.config, sourceRoot)) {
+      if (existsOrSymlink(path)) {
+        findings.push(`retired_runtime_path_present: ${path}`);
+      }
+    }
   }
   if (!existsSync(paths.cacheRoot)) {
     warnings.push(
@@ -478,14 +262,11 @@ export function inspectRuntime(input: {
     sourceRoot,
     paths,
     installedProfiles: profiles,
-    policyProfile: manifest?.policyProfile,
+    policyProfile: selection?.policyProfile ?? "",
     desiredPaths,
-    managedPaths,
     observed,
     cache: existsSync(paths.cacheRoot) ? "present" : "missing",
     remoteRefFreshness: "unknown_until_sync",
-    lock,
-    transactions,
     findings,
     warnings,
   };
@@ -509,7 +290,7 @@ export function validateRuntime(input: {
 function buildRuntimeCandidate(input: {
   config: AxRuntimeConfig;
   sourceRoot: string;
-  selection: ProfileSelection;
+  selection: RuntimeSelection;
   stagingRoot: string;
   snapshots: SourceSnapshotManager;
   surface?: RuntimeSurface;
@@ -519,6 +300,7 @@ function buildRuntimeCandidate(input: {
 } {
   const entries = new Map<string, CandidateEntry>();
   const sources: RuntimeSyncResult["sources"] = [];
+  const skillSources = new Map<string, string>();
   let candidateSequence = 0;
   let localSnapshotRoot: string | undefined;
   const includeSurface = (surface: RuntimeSurface): boolean =>
@@ -531,7 +313,6 @@ function buildRuntimeCandidate(input: {
     sources.push({
       source: input.sourceRoot,
       resolvedCommit: sourceSnapshot.resolvedCommit,
-      contentHash: sourceSnapshot.contentHash,
     });
     localSnapshotRoot = sourceSnapshot.path;
     return localSnapshotRoot;
@@ -579,7 +360,6 @@ function buildRuntimeCandidate(input: {
                 sources.push({
                   source: `${source.url}#${source.ref}`,
                   resolvedCommit: remote.resolvedCommit,
-                  contentHash: remote.contentHash,
                 });
                 const basePath = join(remote.path, source.basePath);
                 assertExistingSourceContained(
@@ -596,15 +376,18 @@ function buildRuntimeCandidate(input: {
         const names = expandSkillNames(snapshot.path, source.names);
         for (const name of names) {
           validateSkillName(name, "skill name");
-          if (
-            RETIRED_LIFECYCLE_NAMES.includes(
-              name as (typeof RETIRED_LIFECYCLE_NAMES)[number],
-            )
-          ) {
+          if (input.config.runtime.retiredSkills?.includes(name)) {
             throw new Error(`retired_lifecycle_configured: ${name}`);
           }
           skillNames.add(name);
           const skillSource = join(snapshot.path, name);
+          const previousSource = skillSources.get(name);
+          if (previousSource && previousSource !== skillSource) {
+            throw new Error(
+              `candidate_collision: skill ${name} is declared by ${previousSource} and ${skillSource}`,
+            );
+          }
+          skillSources.set(name, skillSource);
           assertExistingSourceContained(
             snapshot.root,
             skillSource,
@@ -782,331 +565,152 @@ function buildRuntimeCandidate(input: {
   return { entries, sources: deduplicateSources(sources) };
 }
 
-function planRuntimeOperations(input: {
+function applyRuntimeCandidate(input: {
   config: AxRuntimeConfig;
   sourceRoot: string;
   desired: Map<string, CandidateEntry>;
-  existing?: ManagedRuntimeManifest;
-  selection: ProfileSelection;
   surface?: RuntimeSurface;
-  adoption?: ReturnType<typeof readAdoptionFile>;
-  interactive: boolean;
-  confirm?: (message: string) => boolean;
-}): {
-  operations: TransactionOperationInput[];
-  manifest: ManagedRuntimeManifest;
-} {
-  const operations: TransactionOperationInput[] = [];
-  const previousOwned = input.existing?.ownedPaths ?? {};
-  const nextOwned: Record<string, ContentHash> = input.surface
-    ? { ...previousOwned }
-    : {};
-  const usedAdoptions = new Set<string>();
-  for (const [path, candidate] of input.desired) {
-    const observed = hashPath(path);
-    const previousHash = previousOwned[path];
-    if (previousHash && observed !== previousHash) {
-      throw new Error(
-        `managed_content_drift: ${path} expected ${previousHash}, observed ${observed}`,
-      );
-    }
-    if (!previousHash && observed !== ABSENT_HASH) {
-      const action: AdoptionAction =
-        observed === candidate.hash ? "manage" : "replace-managed";
-      authorizeAdoption(input, path, observed, action, usedAdoptions);
-    }
-    nextOwned[path] = candidate.hash;
-    if (observed !== candidate.hash || previousHash !== candidate.hash) {
-      operations.push({
-        path,
-        asset: candidate.asset,
-        candidatePath: candidate.candidatePath,
-        expectedPreviousHash: observed,
-        previousOwnership: previousHash ? { hash: previousHash } : null,
-        candidateOwnership: { hash: candidate.hash },
-      });
-    }
-  }
-  const ownedCandidates = Object.keys(previousOwned).filter((path) =>
-    input.surface
-      ? pathBelongsToSurface(
-          input.config,
-          path,
-          input.surface,
-          input.sourceRoot,
-        )
-      : true,
-  );
-  for (const path of ownedCandidates) {
-    if (input.desired.has(path)) {
-      continue;
-    }
-    const observed = hashPath(path);
-    if (observed !== previousOwned[path]) {
-      throw new Error(
-        `managed_content_drift: refusing to prune ${path}; expected ${previousOwned[path]}, observed ${observed}`,
-      );
-    }
-    delete nextOwned[path];
-    operations.push({
-      path,
-      asset: "managed-prune",
-      delete: true,
-      expectedPreviousHash: observed,
-      previousOwnership: { hash: previousOwned[path] },
-      candidateOwnership: null,
-    });
+}): string[] {
+  const changedPaths: string[] = [];
+  for (const [path, candidate] of [...input.desired.entries()].sort(
+    ([left], [right]) => left.localeCompare(right),
+  )) {
+    replaceRuntimePath(candidate.candidatePath, path);
+    changedPaths.push(path);
   }
   if (!input.surface || input.surface === "skills") {
-    for (const retiredPath of retiredLifecyclePaths(
-      input.config,
-      input.sourceRoot,
-    )) {
-      if (input.desired.has(retiredPath) || previousOwned[retiredPath]) {
+    for (const path of retiredLifecyclePaths(input.config, input.sourceRoot)) {
+      if (!existsOrSymlink(path)) {
         continue;
       }
-      const observed = hashPath(retiredPath);
-      if (observed === ABSENT_HASH) {
-        continue;
-      }
-      authorizeAdoption(input, retiredPath, observed, "remove", usedAdoptions);
-      operations.push({
-        path: retiredPath,
-        asset: "retired-lifecycle",
-        delete: true,
-        expectedPreviousHash: observed,
-        previousOwnership: null,
-        candidateOwnership: null,
-      });
+      rmSync(path, { force: true, recursive: true });
+      changedPaths.push(path);
     }
   }
-  for (const entry of input.adoption?.actions ?? []) {
-    if (!usedAdoptions.has(entry.path)) {
-      throw new Error(`unused_adoption_approval: ${entry.path}`);
+  return [...new Set(changedPaths)].sort((left, right) =>
+    left.localeCompare(right),
+  );
+}
+
+function removeLegacyRuntimeState(paths: RuntimePaths): string[] {
+  const removed: string[] = [];
+  for (const path of [
+    join(paths.runtimeRoot, "managed-runtime.json"),
+    join(paths.runtimeRoot, "transactions"),
+    join(paths.runtimeRoot, "backups"),
+    join(paths.runtimeRoot, "mutation.lock"),
+  ]) {
+    if (!existsOrSymlink(path)) {
+      continue;
     }
+    rmSync(path, { force: true, recursive: true });
+    removed.push(path);
   }
+  return removed;
+}
+
+function replaceRuntimePath(candidatePath: string, targetPath: string): void {
+  const target = resolve(targetPath);
+  mkdirSync(dirname(target), { recursive: true });
+  const temporary = join(
+    dirname(target),
+    `.${basename(target)}.ax-sync-${process.pid}-${Math.random().toString(16).slice(2)}`,
+  );
+  try {
+    rmSync(temporary, { force: true, recursive: true });
+    copyPath(candidatePath, temporary);
+    rmSync(target, { force: true, recursive: true });
+    renameSync(temporary, target);
+  } finally {
+    rmSync(temporary, { force: true, recursive: true });
+  }
+}
+
+function runtimeSelection(config: AxRuntimeConfig): RuntimeSelection {
   return {
-    operations,
-    manifest: validateManagedRuntimeManifest({
-      schemaVersion: 1,
-      hashVersion: HASH_VERSION,
-      installedProfiles: input.selection.installedProfiles,
-      policyProfile: input.selection.policyProfile,
-      ownedPaths: nextOwned,
-    }),
+    installedProfiles: [...config.runtime.installedProfiles],
+    policyProfile: config.runtime.policyProfile,
   };
 }
 
-function authorizeAdoption(
-  input: {
-    adoption?: ReturnType<typeof readAdoptionFile>;
-    interactive: boolean;
-    confirm?: (message: string) => boolean;
-  },
-  path: string,
-  observed: ObservedHash,
-  action: AdoptionAction,
-  used: Set<string>,
-): void {
-  const approved = adoptionActionFor(input.adoption, path, observed, action);
-  if (approved) {
-    used.add(path);
-    return;
+function pathKind(path: string): "missing" | "file" | "directory" | "symlink" {
+  if (!existsOrSymlink(path)) {
+    return "missing";
   }
-  if (
-    input.interactive &&
-    input.confirm?.(`${action} ${path} observed=${observed}`)
-  ) {
-    return;
+  const stats = lstatSync(path);
+  if (stats.isSymbolicLink()) {
+    return "symlink";
   }
-  throw new Error(
-    `adoption_required: ${action} ${path} observed=${observed}; confirm interactively or provide --adoption-file`,
+  if (stats.isDirectory()) {
+    return "directory";
+  }
+  return "file";
+}
+
+function expectedRuntimeLinks(
+  config: AxRuntimeConfig,
+  profiles: string[],
+  sourceRoot: string,
+  surface?: RuntimeSurface,
+): Map<string, string> {
+  const links = new Map<string, string>();
+  const canonicalSkills = expandPath(
+    config.runtime.canonicalSkillsDir,
+    sourceRoot,
   );
-}
-
-function resolveRuntimeRecovery(input: {
-  paths: RuntimePaths;
-  recoveryFile: string;
-  targetPolicy: RuntimeTargetPolicy;
-}): void {
-  resolveRecovery({
-    lockPath: input.paths.lockPath,
-    transactionsRoot: input.paths.transactionsRoot,
-    backupsRoot: input.paths.backupsRoot,
-    recoveryFile: input.recoveryFile,
-    ...input.targetPolicy,
-    authorizeJournalTarget: authorizeRuntimeJournalTarget,
-    validateDerived: ({ journal, actions, profileSelectionState }) => {
-      const metadata = runtimeMetadata(journal);
-      const selectionChanged =
-        stableJson(metadata.previousProfiles) !==
-          stableJson(metadata.candidateProfiles) ||
-        metadata.previousPolicyProfile !== metadata.candidatePolicyProfile;
-      if (selectionChanged && !profileSelectionState) {
-        throw new Error(
-          "recovery_profile_selection_required: choose profileSelectionState previous|candidate",
-        );
-      }
-      const selectedProfiles =
-        profileSelectionState === "previous"
-          ? metadata.previousProfiles
-          : metadata.candidateProfiles;
-      if (!selectedProfiles) {
-        for (const operation of journal.operations) {
-          const action = actions[operation.path] ?? "apply-candidate";
-          if (action === "apply-candidate" && operation.candidateOwnership) {
-            throw new Error(
-              `recovery_ownership_invalid: first-sync previous state cannot own ${operation.path}`,
-            );
-          }
-        }
-        return;
-      }
-      for (const operation of journal.operations) {
-        const action = actions[operation.path] ?? "apply-candidate";
-        const ownership =
-          action === "restore-previous"
-            ? operation.previousOwnership
-            : action === "apply-candidate"
-              ? operation.candidateOwnership
-              : null;
-        const inventoryBySelectedProfile =
-          action === "restore-previous"
-            ? metadata.previousInventory
-            : metadata.candidateInventory;
-        const inventory = new Set(
-          selectedProfiles.flatMap(
-            (profile) => inventoryBySelectedProfile[profile] ?? [],
-          ),
-        );
-        if (ownership && !inventory.has(operation.path)) {
-          throw new Error(
-            `recovery_ownership_out_of_inventory: ${operation.path}`,
-          );
-        }
-      }
-    },
-    deriveManifest: ({ journal, actions, profileSelectionState }) => {
-      const previous = readRetainedManifest(journal.manifest?.previousPayload);
-      const candidate = readRetainedManifest(
-        journal.manifest?.candidatePayload,
+  for (const name of configuredSkillNames(config, profiles, sourceRoot)) {
+    const canonicalTarget = join(canonicalSkills, name);
+    for (const targetRoot of config.runtime.skillSymlinkTargets) {
+      links.set(
+        join(expandPath(targetRoot, sourceRoot), name),
+        canonicalTarget,
       );
-      const selected =
-        profileSelectionState === "previous" ? previous : candidate;
-      if (!selected) {
-        return undefined;
-      }
-      const ownedPaths = { ...selected.ownedPaths };
-      for (const operation of journal.operations) {
-        const action: RecoveryAction =
-          actions[operation.path] ?? "apply-candidate";
-        const ownership: OwnershipRecord =
-          action === "restore-previous"
-            ? operation.previousOwnership
-            : action === "apply-candidate"
-              ? operation.candidateOwnership
-              : null;
-        if (ownership) {
-          ownedPaths[operation.path] = ownership.hash;
-        } else {
-          delete ownedPaths[operation.path];
-        }
-      }
-      return validateManagedRuntimeManifest({ ...selected, ownedPaths });
-    },
-    validateResolved: ({ journal, profileSelectionState, derivedManifest }) => {
-      const metadata = runtimeMetadata(journal);
-      if (derivedManifest === undefined) {
-        const restoresFirstSyncAbsence =
-          profileSelectionState === "previous" &&
-          metadata.previousProfiles === null &&
-          metadata.previousPolicyProfile === null;
-        if (!restoresFirstSyncAbsence) {
-          throw new Error(
-            "runtime_recovery_manifest_invalid: absent manifest is allowed only for first-sync previous state",
-          );
-        }
-        if (readManagedRuntimeManifest(input.paths.manifestPath)) {
-          throw new Error(
-            "runtime_recovery_manifest_invalid: managed-runtime.json should be absent",
-          );
-        }
-        return;
-      }
-      const expected = validateManagedRuntimeManifest(
-        derivedManifest,
-        "derived managed-runtime.json",
-      );
-      const applied = readManagedRuntimeManifest(input.paths.manifestPath);
-      if (!applied || manifestHash(applied) !== manifestHash(expected)) {
-        throw new Error(
-          "runtime_recovery_manifest_invalid: installed manifest differs from derived recovery state",
-        );
-      }
-      for (const [path, expectedHash] of Object.entries(applied.ownedPaths)) {
-        const observed = hashPath(path);
-        if (observed !== expectedHash) {
-          throw new Error(
-            `runtime_recovery_owned_hash_mismatch: ${path} expected ${expectedHash}, observed ${observed}`,
-          );
-        }
-      }
-    },
-  });
-}
+    }
+  }
 
-function runtimeMetadata(
-  journal: TransactionJournal,
-): RuntimeTransactionMetadata {
-  const metadata = journal.metadata as RuntimeTransactionMetadata | undefined;
-  if (!metadata?.candidateProfiles || !metadata.candidateInventory) {
-    throw new Error(
-      `runtime_transaction_metadata_missing: ${journal.transactionId}`,
+  const instructionTargets = config.runtime.instructionSymlinkTargets ?? {};
+  if (Object.keys(instructionTargets).length > 0) {
+    const canonicalName = canonicalTargetName(instructionTargets);
+    const canonicalRoot = expandPath(
+      instructionTargets[canonicalName],
+      sourceRoot,
     );
+    for (const instruction of selectedInstructionPaths(config, profiles)) {
+      const targetRelative = instructionTargetPath(instruction);
+      const canonicalTarget = join(canonicalRoot, targetRelative);
+      for (const [targetName, targetRoot] of Object.entries(
+        instructionTargets,
+      )) {
+        if (targetName !== canonicalName) {
+          links.set(
+            join(expandPath(targetRoot, sourceRoot), targetRelative),
+            canonicalTarget,
+          );
+        }
+      }
+    }
   }
-  return metadata;
-}
 
-function readRetainedManifest(
-  path: string | null | undefined,
-): ManagedRuntimeManifest | undefined {
-  if (!path) {
-    return undefined;
+  const hooks = config.runtime.hooks;
+  if (hooks) {
+    const canonicalHooks = expandPath(
+      hooks.canonicalDir ?? "~/.agents/hooks",
+      sourceRoot,
+    );
+    for (const target of Object.values(hooks.targets ?? {})) {
+      links.set(expandPath(target, sourceRoot), canonicalHooks);
+    }
   }
-  return validateManagedRuntimeManifest(
-    JSON.parse(readFileSync(path, "utf-8")) as unknown,
-    path,
+
+  if (!surface) {
+    return links;
+  }
+  return new Map(
+    [...links].filter(([path]) =>
+      pathBelongsToSurface(config, path, surface, sourceRoot),
+    ),
   );
 }
-
-const authorizeRuntimeJournalTarget: JournalTargetAuthorizer = ({
-  journal,
-  targetPath,
-  kind,
-}) => {
-  if (kind !== "operation" || journal.domain !== "runtime") {
-    return false;
-  }
-  const operation = journal.operations.find(
-    (candidate) => candidate.path === targetPath,
-  );
-  if (!operation) {
-    return false;
-  }
-  const previous = readRetainedManifest(journal.manifest?.previousPayload);
-  if (
-    operation.previousOwnership &&
-    previous?.ownedPaths[targetPath] === operation.previousOwnership.hash
-  ) {
-    return true;
-  }
-  const candidate = readRetainedManifest(journal.manifest?.candidatePayload);
-  return Boolean(
-    operation.candidateOwnership &&
-      candidate?.ownedPaths[targetPath] === operation.candidateOwnership.hash,
-  );
-};
-
 function registerCopiedCandidate(
   entries: Map<string, CandidateEntry>,
   input: {
@@ -1128,7 +732,6 @@ function registerCopiedCandidate(
     path: resolve(input.path),
     surface: input.surface,
     candidatePath,
-    hash: requireContentHash(hashPath(candidatePath)),
     asset: input.asset,
   });
 }
@@ -1155,7 +758,6 @@ function registerSymlinkCandidate(
     path: resolve(input.path),
     surface: input.surface,
     candidatePath,
-    hash: requireContentHash(hashPath(candidatePath)),
     asset: input.asset,
   });
 }
@@ -1165,12 +767,14 @@ function registerCandidate(
   entry: CandidateEntry,
 ): void {
   const existing = entries.get(entry.path);
-  if (existing && existing.hash !== entry.hash) {
+  if (existing && existing.asset !== entry.asset) {
     throw new Error(
-      `candidate_collision: ${entry.path} differs between ${existing.asset} and ${entry.asset}`,
+      `candidate_collision: ${entry.path} is declared by ${existing.asset} and ${entry.asset}`,
     );
   }
-  entries.set(entry.path, entry);
+  if (!existing) {
+    entries.set(entry.path, entry);
+  }
 }
 
 function selectedSkillSources(
@@ -1215,23 +819,7 @@ function configuredDesiredPaths(
   sourceRoot: string,
 ): Set<string> {
   const paths = new Set<string>();
-  const names = new Set<string>();
-  for (const profile of profiles) {
-    for (const source of selectedSkillSources(config, profile)) {
-      for (const name of source.names) {
-        if (name !== "*") {
-          names.add(name);
-        } else if ("localPath" in source) {
-          for (const discovered of expandSkillNames(
-            expandPath(source.localPath, sourceRoot),
-            source.names,
-          )) {
-            names.add(discovered);
-          }
-        }
-      }
-    }
-  }
+  const names = configuredSkillNames(config, profiles, sourceRoot);
   for (const name of names) {
     paths.add(
       join(expandPath(config.runtime.canonicalSkillsDir, sourceRoot), name),
@@ -1265,29 +853,29 @@ function configuredDesiredPaths(
   return paths;
 }
 
-function inventoryByProfile(
+function configuredSkillNames(
   config: AxRuntimeConfig,
   profiles: string[],
   sourceRoot: string,
-): Record<string, string[]> {
-  return Object.fromEntries(
-    profiles.map((profile) => [
-      profile,
-      [...configuredDesiredPaths(config, [profile], sourceRoot)].sort(),
-    ]),
-  );
-}
-
-function manifestInventoryByProfile(
-  manifest: ManagedRuntimeManifest | undefined,
-): Record<string, string[]> {
-  if (!manifest) {
-    return {};
+): Set<string> {
+  const names = new Set<string>();
+  for (const profile of profiles) {
+    for (const source of selectedSkillSources(config, profile)) {
+      for (const name of source.names) {
+        if (name !== "*") {
+          names.add(name);
+        } else if ("localPath" in source) {
+          for (const discovered of expandSkillNames(
+            expandPath(source.localPath, sourceRoot),
+            source.names,
+          )) {
+            names.add(discovered);
+          }
+        }
+      }
+    }
   }
-  const ownedPaths = Object.keys(manifest.ownedPaths).sort();
-  return Object.fromEntries(
-    manifest.installedProfiles.map((profile) => [profile, [...ownedPaths]]),
-  );
+  return names;
 }
 
 function pathBelongsToSurface(
@@ -1325,7 +913,7 @@ function retiredLifecyclePaths(
     ...config.runtime.skillSymlinkTargets,
   ];
   return roots.flatMap((root) =>
-    RETIRED_LIFECYCLE_NAMES.map((name) =>
+    (config.runtime.retiredSkills ?? []).map((name) =>
       join(expandPath(root, sourceRoot), name),
     ),
   );
@@ -1359,6 +947,37 @@ function validateConfig(config: AxRuntimeConfig, sourceRoot: string): void {
   }
   if (!config.profiles || Object.keys(config.profiles).length === 0) {
     throw new Error("invalid_config: profiles are required");
+  }
+  if (
+    !Array.isArray(config.runtime.installedProfiles) ||
+    config.runtime.installedProfiles.length === 0
+  ) {
+    throw new Error("invalid_config: runtime.installedProfiles is required");
+  }
+  const installedProfiles = [
+    ...new Set(config.runtime.installedProfiles),
+  ].sort();
+  if (installedProfiles.length !== config.runtime.installedProfiles.length) {
+    throw new Error("invalid_config: runtime.installedProfiles has duplicates");
+  }
+  for (const profile of installedProfiles) {
+    if (!config.profiles[profile]) {
+      throw new Error(`unknown_profile: ${profile}`);
+    }
+  }
+  if (!installedProfiles.includes(config.runtime.policyProfile)) {
+    throw new Error(
+      `invalid_config: runtime.policyProfile '${config.runtime.policyProfile}' must be installed`,
+    );
+  }
+  for (const name of config.runtime.retiredSkills ?? []) {
+    validateSkillName(name, "retired_skill_name_invalid");
+  }
+  if (
+    new Set(config.runtime.retiredSkills ?? []).size !==
+    (config.runtime.retiredSkills ?? []).length
+  ) {
+    throw new Error("invalid_config: runtime.retiredSkills has duplicates");
   }
   validateRuntimeAssetRoots(config, sourceRoot);
   const instructionRoots = Object.values(
@@ -1438,23 +1057,6 @@ function validateConfig(config: AxRuntimeConfig, sourceRoot: string): void {
   }
 }
 
-function validateRuntimeSupportPaths(paths: RuntimePaths): void {
-  assertRuntimeAssetRoot(paths.runtimeRoot, "runtime root");
-  for (const [label, path] of Object.entries({
-    manifest: paths.manifestPath,
-    cache: paths.cacheRoot,
-    transactions: paths.transactionsRoot,
-    backups: paths.backupsRoot,
-    lock: paths.lockPath,
-  })) {
-    assertRuntimeTargetContained(
-      paths.runtimeRoot,
-      path,
-      `runtime_support_path_escape: ${label}`,
-    );
-  }
-}
-
 function validateRuntimeAssetRoots(
   config: AxRuntimeConfig,
   sourceRoot: string,
@@ -1488,62 +1090,6 @@ function validateRuntimeAssetRoots(
   }
   for (const hookRoot of hookRoots) {
     assertRuntimeAssetRoot(hookRoot, "runtime hook root");
-  }
-}
-
-function runtimeRecoveryTargetPolicy(
-  config: AxRuntimeConfig,
-  sourceRoot: string,
-  paths: RuntimePaths,
-): RuntimeTargetPolicy {
-  const exactTargetPaths = [
-    ...configuredInstructionTargetPaths(config, sourceRoot),
-    ...runtimeHookRoots(config, sourceRoot),
-    ...retiredLifecyclePaths(config, sourceRoot),
-    ...ownedPathsForRecoveryAuthorization(paths.manifestPath),
-    paths.manifestPath,
-  ]
-    .map((path) => resolve(path))
-    .filter((path, index, values) => values.indexOf(path) === index)
-    .sort((left, right) => left.localeCompare(right));
-  return {
-    targetRoots: [],
-    directChildTargetRoots: runtimeSkillRoots(config, sourceRoot),
-    exactTargetPaths,
-  };
-}
-
-function configuredInstructionTargetPaths(
-  config: AxRuntimeConfig,
-  sourceRoot: string,
-): string[] {
-  const roots = Object.values(
-    config.runtime.instructionSymlinkTargets ?? {},
-  ).map((root) => expandPath(root, sourceRoot));
-  const targets = new Set<string>();
-  for (const profile of Object.values(config.profiles ?? {})) {
-    for (const instruction of profile.paths ?? []) {
-      const targetPath = instructionTargetPath(instruction);
-      assertSafeRelativePath(
-        targetPath,
-        "instruction_target_path_invalid: recovery authorization",
-        false,
-      );
-      for (const root of roots) {
-        targets.add(join(root, targetPath));
-      }
-    }
-  }
-  return [...targets];
-}
-
-function ownedPathsForRecoveryAuthorization(manifestPath: string): string[] {
-  try {
-    return Object.keys(
-      readManagedRuntimeManifest(manifestPath)?.ownedPaths ?? {},
-    );
-  } catch {
-    return [];
   }
 }
 
@@ -1870,13 +1416,6 @@ function deduplicateSources(
 
 function sanitize(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]+/g, "-");
-}
-
-function requireContentHash(hash: ObservedHash): ContentHash {
-  if (hash === ABSENT_HASH) {
-    throw new Error("candidate_path_absent");
-  }
-  return hash;
 }
 
 function existsOrSymlink(path: string): boolean {

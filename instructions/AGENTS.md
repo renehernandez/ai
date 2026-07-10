@@ -107,14 +107,14 @@ modes.
 
 ## AX runtime
 
-- Tracked `ax.config.json` is desired state. Local
-  `~/.agents/runtime/managed-runtime.json` is ownership state. The filesystem is
-  observed state.
-- Use `ax sync` for runtime convergence. Scoped `skills sync`,
-  `instructions sync`, and `hooks sync` require an initialized manifest and do
-  not change its installed or policy profile selection.
+- Tracked `ax.config.json` is authoritative runtime state. It declares installed
+  profiles, one policy profile, exact managed targets, and retired skills.
+- Use `ax sync` for runtime convergence. It replaces declared targets and
+  removes explicitly retired skills without adoption or ownership prompts.
+- Scoped `skills sync`, `instructions sync`, and `hooks sync` use the same
+  tracked selection. Unrelated paths remain untouched.
 - Use `ax status` and `ax validate` for offline, read-only inspection with no
-  network access or mutation.
+  network access, content comparison, or mutation.
 - Exercise feature-branch AX behavior only with isolated HOME and runtime roots.
   Keep the live runtime unchanged before merge.
 - After merge, verify a clean local default-branch source and run live

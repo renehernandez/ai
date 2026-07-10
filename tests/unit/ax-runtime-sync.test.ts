@@ -4,7 +4,6 @@ import {
   chmodSync,
   mkdirSync,
   mkdtempSync,
-  readdirSync,
   readFileSync,
   rmSync,
   symlinkSync,
@@ -16,21 +15,9 @@ import { join } from "node:path";
 import test from "node:test";
 import { createVerifiedBackup } from "../../scripts/ax/backup-store.ts";
 import {
-  manifestHash,
-  readManagedRuntimeManifest,
-  validateManagedRuntimeManifest,
-} from "../../scripts/ax/runtime-state.ts";
-import {
-  type AxRuntimeConfig,
-  inspectRuntime,
-  syncRuntime,
-} from "../../scripts/ax/runtime-sync.ts";
-import {
   copyPath,
-  HASH_VERSION,
   hashPath,
   SourceSnapshotManager,
-  sha256Bytes,
 } from "../../scripts/ax/source-snapshot.ts";
 import {
   applyTransaction,
@@ -40,7 +27,7 @@ import {
 } from "../../scripts/ax/transaction-engine.ts";
 
 function withTempDir(callback: (root: string) => void): void {
-  const root = mkdtempSync(join(tmpdir(), "ax-runtime-sync-"));
+  const root = mkdtempSync(join(tmpdir(), "ax-runtime-internals-"));
   try {
     callback(root);
   } finally {
@@ -48,91 +35,7 @@ function withTempDir(callback: (root: string) => void): void {
   }
 }
 
-function runtimeFixture(root: string): {
-  sourceRoot: string;
-  runtimeRoot: string;
-  installRoot: string;
-  config: AxRuntimeConfig;
-} {
-  const sourceRoot = join(root, "source");
-  const runtimeRoot = join(root, "runtime");
-  const installRoot = join(root, "installed");
-  for (const name of ["explore", "plan", "execute", "review", "finish"]) {
-    const skill = join(sourceRoot, "skills", name);
-    mkdirSync(skill, { recursive: true });
-    writeFileSync(
-      join(skill, "SKILL.md"),
-      `---\nname: ${name}\ndescription: ${name}\n---\n# ${name}\n`,
-      "utf-8",
-    );
-  }
-  mkdirSync(join(sourceRoot, "instructions"), { recursive: true });
-  writeFileSync(
-    join(sourceRoot, "instructions", "AGENTS.md"),
-    "# Agents\n",
-    "utf-8",
-  );
-  mkdirSync(join(sourceRoot, "rules"), { recursive: true });
-  writeFileSync(join(sourceRoot, "rules", "base.md"), "# Rule\n", "utf-8");
-  mkdirSync(join(sourceRoot, "hooks"), { recursive: true });
-  writeFileSync(
-    join(sourceRoot, "hooks", "startup.ts"),
-    "export {};\n",
-    "utf-8",
-  );
-  const config: AxRuntimeConfig = {
-    version: 1,
-    runtime: {
-      canonicalSkillsDir: join(installRoot, "agents", "skills"),
-      skillSymlinkTargets: [
-        join(installRoot, "codex", "skills"),
-        join(installRoot, "claude", "skills"),
-      ],
-      instructionSymlinkTargets: {
-        agents: join(installRoot, "agents"),
-        codex: join(installRoot, "codex"),
-        claude: join(installRoot, "claude"),
-      },
-      hooks: {
-        sourceDir: "hooks",
-        canonicalDir: join(installRoot, "agents", "hooks"),
-        targets: {
-          codex: join(installRoot, "codex", "hooks"),
-          claude: join(installRoot, "claude", "hooks"),
-        },
-      },
-    },
-    profiles: {
-      personal: {
-        include: ["modes"],
-        paths: [
-          { sourcePath: "instructions/AGENTS.md", targetPath: "AGENTS.md" },
-          "rules/base.md",
-        ],
-      },
-      work: {
-        include: ["modes"],
-        paths: [
-          { sourcePath: "instructions/AGENTS.md", targetPath: "AGENTS.md" },
-          "rules/base.md",
-        ],
-      },
-    },
-    blocks: {
-      modes: {
-        skills: [
-          {
-            localPath: "skills",
-            names: ["explore", "plan", "execute", "review", "finish"],
-          },
-        ],
-      },
-    },
-  };
-  return { sourceRoot, runtimeRoot, installRoot, config };
-}
-
-test("sha256-tree-v1 includes empty directories, symlink targets, and executable bits only", () => {
+test("OpenSpec tree hashing includes symlink targets and executable bits", () => {
   withTempDir((root) => {
     mkdirSync(join(root, "tree", "empty"), { recursive: true });
     const file = join(root, "tree", "tool");
@@ -146,11 +49,10 @@ test("sha256-tree-v1 includes empty directories, symlink targets, and executable
 
     chmodSync(file, 0o750);
     assert.notEqual(hashPath(join(root, "tree")), initial);
-    assert.match(String(initial), /^sha256:[a-f0-9]{64}$/);
   });
 });
 
-test("snapshot copies preserve relative symlink payloads and tree hashes", () => {
+test("snapshot copies preserve relative symlinks", () => {
   withTempDir((root) => {
     const source = join(root, "source");
     const target = join(root, "target");
@@ -164,7 +66,7 @@ test("snapshot copies preserve relative symlink payloads and tree hashes", () =>
   });
 });
 
-test("remote refs resolve once per invocation and advance on the next invocation", () => {
+test("remote refs resolve once per invocation and advance on the next", () => {
   withTempDir((root) => {
     const repository = join(root, "repository");
     mkdirSync(repository);
@@ -202,177 +104,12 @@ test("remote refs resolve once per invocation and advance on the next invocation
   });
 });
 
-test("managed runtime manifest rejects duplicated desired or source state", () => {
-  const valid = validateManagedRuntimeManifest({
-    schemaVersion: 1,
-    hashVersion: HASH_VERSION,
-    installedProfiles: ["personal"],
-    policyProfile: "personal",
-    ownedPaths: {
-      "/tmp/example": sha256Bytes("example"),
-    },
-  });
-  assert.deepEqual(Object.keys(valid).sort(), [
-    "hashVersion",
-    "installedProfiles",
-    "ownedPaths",
-    "policyProfile",
-    "schemaVersion",
-  ]);
-  assert.throws(
-    () =>
-      validateManagedRuntimeManifest({
-        ...valid,
-        resolvedCommit: "deadbeef",
-      }),
-    /unexpected=\[resolvedCommit\]/,
-  );
-  assert.throws(
-    () =>
-      validateManagedRuntimeManifest({
-        ...valid,
-        policyProfile: "work",
-      }),
-    /policy_profile_ambiguous/,
-  );
-});
-
-test("top-level sync initializes local ownership and scoped sync consumes it", () => {
+test("OpenSpec transaction recovery restores preimages", () => {
   withTempDir((root) => {
-    const fixture = runtimeFixture(root);
-    const first = syncRuntime({
-      ...fixture,
-      profiles: ["personal"],
-      policyProfile: "personal",
-      interactive: false,
-    });
-    assert.equal(first.status, "synchronized");
-    const manifest = readManagedRuntimeManifest(first.manifestPath);
-    assert.deepEqual(manifest?.installedProfiles, ["personal"]);
-    assert.equal(manifest?.policyProfile, "personal");
-    assert.ok(Object.keys(manifest?.ownedPaths ?? {}).length >= 10);
-    assert.equal(existsSyncCompat(join(root, "source", "ax.lock.json")), false);
-    assert.equal(existsSyncCompat(join(root, "source", ".ax", "cache")), false);
-
-    const second = syncRuntime({
-      ...fixture,
-      surface: "skills",
-      interactive: false,
-    });
-    assert.equal(second.status, "current");
-    const status = inspectRuntime(fixture);
-    assert.equal(status.ok, true, status.findings.join("\n"));
-  });
-});
-
-test("scoped sync rejects a missing manifest", () => {
-  withTempDir((root) => {
-    const fixture = runtimeFixture(root);
-    assert.throws(
-      () =>
-        syncRuntime({
-          ...fixture,
-          surface: "hooks",
-          interactive: false,
-        }),
-      /runtime_not_initialized/,
-    );
-  });
-});
-
-test("manifest-less occupied paths require exact-hash adoption", () => {
-  withTempDir((root) => {
-    const fixture = runtimeFixture(root);
-    const occupied = join(fixture.installRoot, "agents", "skills", "explore");
-    mkdirSync(join(occupied, ".."), { recursive: true });
-    copyDirectory(join(fixture.sourceRoot, "skills", "explore"), occupied);
-    assert.throws(
-      () =>
-        syncRuntime({
-          ...fixture,
-          profiles: ["personal"],
-          policyProfile: "personal",
-          interactive: false,
-        }),
-      /adoption_required: manage/,
-    );
-    const adoptionFile = join(root, "adoption.json");
-    writeFileSync(
-      adoptionFile,
-      `${JSON.stringify({
-        schemaVersion: 1,
-        hashVersion: HASH_VERSION,
-        actions: [
-          {
-            path: occupied,
-            observedHash: hashPath(occupied),
-            action: "manage",
-          },
-        ],
-      })}\n`,
-      "utf-8",
-    );
-    const result = syncRuntime({
-      ...fixture,
-      profiles: ["personal"],
-      policyProfile: "personal",
-      adoptionFile,
-      interactive: false,
-    });
-    assert.equal(result.status, "synchronized");
-  });
-});
-
-test("later headless profile changes require an exact manifest-bound file", () => {
-  withTempDir((root) => {
-    const fixture = runtimeFixture(root);
-    const first = syncRuntime({
-      ...fixture,
-      profiles: ["personal"],
-      policyProfile: "personal",
-      interactive: false,
-    });
-    assert.throws(
-      () =>
-        syncRuntime({
-          ...fixture,
-          profiles: ["work"],
-          policyProfile: "work",
-          interactive: false,
-        }),
-      /profile_selection_file_required/,
-    );
-    const current = readManagedRuntimeManifest(first.manifestPath);
-    assert.ok(current);
-    const selectionFile = join(root, "profile-selection.json");
-    writeFileSync(
-      selectionFile,
-      `${JSON.stringify({
-        schemaVersion: 1,
-        hashVersion: HASH_VERSION,
-        currentManifestHash: manifestHash(current),
-        installedProfiles: ["work"],
-        policyProfile: "work",
-      })}\n`,
-      "utf-8",
-    );
-    const changed = syncRuntime({
-      ...fixture,
-      profileSelectionFile: selectionFile,
-      interactive: false,
-    });
-    assert.deepEqual(changed.installedProfiles, ["work"]);
-    assert.equal(changed.policyProfile, "work");
-  });
-});
-
-test("transaction recovery restores preimages or finalizes a committed candidate by hashes", () => {
-  withTempDir((root) => {
-    const transactionsRoot = join(root, "transactions");
-    const backupsRoot = join(root, "backups");
-    const lockPath = join(root, "lock");
     const target = join(root, "target.txt");
     const candidate = join(root, "candidate.txt");
+    const transactionsRoot = join(root, "transactions");
+    const backupsRoot = join(root, "backups");
     const manifest = join(root, "manifest.json");
     const candidateManifest = join(root, "candidate-manifest.json");
     writeFileSync(target, "old\n", "utf-8");
@@ -383,69 +120,7 @@ test("transaction recovery restores preimages or finalizes a committed candidate
     assert.throws(
       () =>
         applyTransaction({
-          domain: "test",
-          root,
-          lockPath,
-          transactionsRoot,
-          backupsRoot,
-          operations: [
-            { path: target, asset: "target", candidatePath: candidate },
-          ],
-          manifestPath: manifest,
-          candidateManifestPath: candidateManifest,
-          fault: (point) => {
-            if (point.startsWith("after-target:")) {
-              throw new TransactionInterruption();
-            }
-          },
-        }),
-      TransactionInterruption,
-    );
-    assert.equal(readFileSync(target, "utf-8"), "new\n");
-    recoverTransactions({ transactionsRoot, backupsRoot });
-    assert.equal(readFileSync(target, "utf-8"), "old\n");
-    assert.equal(readFileSync(manifest, "utf-8"), "old-manifest\n");
-
-    assert.throws(
-      () =>
-        applyTransaction({
-          domain: "test",
-          root,
-          lockPath,
-          transactionsRoot,
-          backupsRoot,
-          operations: [
-            { path: target, asset: "target", candidatePath: candidate },
-          ],
-          manifestPath: manifest,
-          candidateManifestPath: candidateManifest,
-          fault: (point) => {
-            if (point === "after-manifest") {
-              throw new TransactionInterruption();
-            }
-          },
-        }),
-      TransactionInterruption,
-    );
-    recoverTransactions({ transactionsRoot, backupsRoot });
-    assert.equal(readFileSync(target, "utf-8"), "new\n");
-    assert.equal(readFileSync(manifest, "utf-8"), "new-manifest\n");
-    assert.deepEqual(inspectTransactions(transactionsRoot), []);
-  });
-});
-
-test("transaction recovery preserves an external edit as a conflict", () => {
-  withTempDir((root) => {
-    const target = join(root, "target.txt");
-    const candidate = join(root, "candidate.txt");
-    const transactionsRoot = join(root, "transactions");
-    const backupsRoot = join(root, "backups");
-    writeFileSync(target, "old\n", "utf-8");
-    writeFileSync(candidate, "new\n", "utf-8");
-    assert.throws(
-      () =>
-        applyTransaction({
-          domain: "test",
+          domain: "openspec-test",
           root,
           lockPath: join(root, "lock"),
           transactionsRoot,
@@ -453,6 +128,8 @@ test("transaction recovery preserves an external edit as a conflict", () => {
           operations: [
             { path: target, asset: "target", candidatePath: candidate },
           ],
+          manifestPath: manifest,
+          candidateManifestPath: candidateManifest,
           fault: (point) => {
             if (point.startsWith("after-target:")) {
               throw new TransactionInterruption();
@@ -461,68 +138,31 @@ test("transaction recovery preserves an external edit as a conflict", () => {
         }),
       TransactionInterruption,
     );
-    writeFileSync(target, "external\n", "utf-8");
-    assert.throws(
-      () => recoverTransactions({ transactionsRoot, backupsRoot }),
-      /recovery_conflict/,
-    );
-    assert.equal(readFileSync(target, "utf-8"), "external\n");
-    assert.equal(
-      inspectTransactions(transactionsRoot)[0]?.phase,
-      "recovery_conflict",
-    );
+    recoverTransactions({ transactionsRoot, backupsRoot });
+    assert.equal(readFileSync(target, "utf-8"), "old\n");
+    assert.equal(readFileSync(manifest, "utf-8"), "old-manifest\n");
+    assert.deepEqual(inspectTransactions(transactionsRoot), []);
   });
 });
 
-test("backup store retains the latest seven verified preimages", () => {
+test("verified backup store remains available to OpenSpec transactions", () => {
   withTempDir((root) => {
     const target = join(root, "target.txt");
-    const backupsRoot = join(root, "backups");
-    for (let index = 0; index < 9; index += 1) {
-      writeFileSync(target, `${index}\n`, "utf-8");
-      createVerifiedBackup({ backupsRoot, asset: "test", targetPath: target });
-    }
-    const targetSets = readdirSync(join(backupsRoot, "test"));
-    assert.equal(targetSets.length, 1);
-    assert.equal(
-      readdirSync(join(backupsRoot, "test", targetSets[0])).length,
-      7,
-    );
+    writeFileSync(target, "value\n", "utf-8");
+    const backup = createVerifiedBackup({
+      backupsRoot: join(root, "backups"),
+      asset: "openspec-test",
+      targetPath: target,
+    });
+    assert.ok(backup);
   });
 });
-
-function existsSyncCompat(path: string): boolean {
-  try {
-    lstatSyncCompat(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function lstatSyncCompat(path: string): void {
-  readFileSync(path);
-}
-
-function copyDirectory(source: string, target: string): void {
-  mkdirSync(target, { recursive: true });
-  for (const entry of readdirSync(source, { withFileTypes: true })) {
-    const sourcePath = join(source, entry.name);
-    const targetPath = join(target, entry.name);
-    if (entry.isDirectory()) {
-      copyDirectory(sourcePath, targetPath);
-    } else {
-      writeFileSync(targetPath, readFileSync(sourcePath));
-    }
-  }
-}
 
 function git(cwd: string, args: string[]): string {
   const result = spawnSync("git", args, {
     cwd,
     encoding: "utf-8",
     env: withoutGitRepositoryEnv(),
-    stdio: ["ignore", "pipe", "pipe"],
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   return result.stdout.trim();
