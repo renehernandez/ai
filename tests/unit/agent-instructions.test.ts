@@ -55,6 +55,17 @@ for (const file of entrypoints) {
     assert.match(text, /Readable Summary/);
     assert.match(text, /YAML or JSON|YAML\/JSON/);
   });
+
+  test(`${file} routes organizational agents through durable workspaces`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /agent-workspace/);
+    assert.match(text, /Linear and Git own durable coordination state/);
+    assert.match(text, /Delivery Executive Assistant/);
+    assert.match(text, /Executive Operations Assistant/);
+    assert.match(text, /Rene retains merge/);
+    assert.match(text, /ax agents/);
+  });
 }
 
 test("active lifecycle rules contain no retired public entrypoints", () => {

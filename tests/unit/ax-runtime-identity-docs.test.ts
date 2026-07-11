@@ -122,3 +122,18 @@ test("shim lifecycle remains distinct from runtime synchronization", () => {
   assert.match(content, /ax shim uninstall/);
   assert.match(content, /distinct from runtime/i);
 });
+
+test("AX reference documents the organizational agent surface", () => {
+  const content = readFileSync("docs/ax.md", "utf-8");
+  const workspace = readFileSync("docs/agent-workspaces.md", "utf-8");
+
+  assert.match(content, /pnpm ax agents sync/);
+  assert.match(content, /~\/\.agents\/agents/);
+  assert.match(content, /~\/\.codex\/agents/);
+  assert.match(content, /unmanaged file, directory, or wrong symlink/i);
+  assert.match(workspace, /Delivery Executive Assistant/);
+  assert.match(workspace, /Executive Operations Assistant/);
+  assert.match(workspace, /Agent Run.*before.*spawn/is);
+  assert.match(workspace, /Max and Ultra are manual-only/);
+  assert.match(workspace, /Rene must merge|merge authority/i);
+});

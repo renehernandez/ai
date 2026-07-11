@@ -42,6 +42,13 @@
         "codex": "~/.codex/hooks"
       }
     },
+    "agents": {
+      "sourceDir": "agents",
+      "canonicalDir": "~/.agents/agents",
+      "targets": {
+        "codex": "~/.codex/agents"
+      }
+    },
     "openspec": {
       "tools": ["codex", "claude"],
       "canonicalSkillsDir": ".agents/skills",
@@ -102,6 +109,7 @@
           "localPath": "skills",
           "names": [
             "ai-readiness-upkeep",
+            "agent-workspace",
             "ax-cli",
             "code-quality-review",
             "code-simplifier",

@@ -7,6 +7,7 @@ const root = process.cwd();
 
 const modes = ["execute", "explore", "finish", "plan", "review"];
 const retainedSpecialists = [
+  "agent-workspace",
   "ai-readiness-upkeep",
   "ax-cli",
   "code-quality-review",

@@ -20,9 +20,10 @@ import {
   relative,
   resolve,
 } from "node:path";
+import { renderAgentRuntime, validateAgentSource } from "./agent-runtime.ts";
 import { copyPath, SourceSnapshotManager } from "./source-snapshot.ts";
 
-export type RuntimeSurface = "skills" | "instructions" | "hooks";
+export type RuntimeSurface = "skills" | "instructions" | "hooks" | "agents";
 
 export type SkillSourceConfig =
   | { localPath: string; names: string[] }
@@ -42,6 +43,11 @@ export type AxRuntimeConfig = {
     skillSymlinkTargets: string[];
     instructionSymlinkTargets?: Record<string, string>;
     hooks?: {
+      sourceDir?: string;
+      canonicalDir?: string;
+      targets?: Record<string, string>;
+    };
+    agents?: {
       sourceDir?: string;
       canonicalDir?: string;
       targets?: Record<string, string>;
@@ -122,6 +128,7 @@ export function runtimePaths(runtimeRoot?: string): RuntimePaths {
 export function syncRuntime(options: RuntimeSyncOptions): RuntimeSyncResult {
   const sourceRoot = resolve(options.sourceRoot);
   const paths = runtimePaths(options.runtimeRoot);
+  assertAgentTargetsSafe(options.config, sourceRoot, options.surface);
   validateConfig(options.config, sourceRoot);
   assertVerifiedLiveSource(sourceRoot, paths.runtimeRoot);
   mkdirSync(paths.runtimeRoot, { recursive: true });
@@ -279,6 +286,13 @@ export function validateRuntime(input: {
   surface?: RuntimeSurface;
 }): RuntimeStatusReport {
   const report = inspectRuntime(input);
+  if (
+    input.config.runtime.agents &&
+    (!input.surface || input.surface === "agents")
+  ) {
+    const sourceDir = input.config.runtime.agents.sourceDir ?? "agents";
+    validateAgentSource(resolve(input.sourceRoot, sourceDir));
+  }
   if (!report.ok) {
     throw new Error(
       `runtime_validation_failed:\n${report.findings.map((finding) => `- ${finding}`).join("\n")}`,
@@ -562,6 +576,54 @@ function buildRuntimeCandidate(input: {
       });
     }
   }
+
+  const agents = includeSurface("agents")
+    ? input.config.runtime.agents
+    : undefined;
+  if (agents) {
+    const sourceDir = agents.sourceDir ?? "agents";
+    if (isAbsolute(sourceDir)) {
+      throw new Error(
+        "agents_source_must_be_repository_relative: runtime.agents.sourceDir",
+      );
+    }
+    const agentSource = localRelative(sourceDir);
+    const renderedAgents = join(input.stagingRoot, "rendered-agents");
+    renderAgentRuntime({ sourceDir: agentSource, outputDir: renderedAgents });
+    const canonicalAgents = expandPath(
+      agents.canonicalDir ?? "~/.agents/agents",
+      input.sourceRoot,
+    );
+    assertRuntimeAssetRoot(canonicalAgents, "runtime agent root");
+    registerCopiedCandidate(entries, {
+      stagingRoot: input.stagingRoot,
+      candidateIndex: candidateSequence++,
+      path: canonicalAgents,
+      sourcePath: renderedAgents,
+      surface: "agents",
+      asset: "agents",
+    });
+    for (const [targetName, targetPath] of Object.entries(
+      agents.targets ?? {},
+    )) {
+      if (targetName !== "codex") {
+        throw new Error(`unsupported_agent_target: ${targetName}`);
+      }
+      const expandedTarget = expandPath(targetPath, input.sourceRoot);
+      assertRuntimeAssetRoot(
+        expandedTarget,
+        `runtime agent target ${targetName}`,
+      );
+      registerSymlinkCandidate(entries, {
+        stagingRoot: input.stagingRoot,
+        candidateIndex: candidateSequence++,
+        path: expandedTarget,
+        target: join(canonicalAgents, targetName),
+        surface: "agents",
+        asset: `agent-link/${targetName}`,
+      });
+    }
+  }
   return { entries, sources: deduplicateSources(sources) };
 }
 
@@ -699,6 +761,20 @@ function expectedRuntimeLinks(
     );
     for (const target of Object.values(hooks.targets ?? {})) {
       links.set(expandPath(target, sourceRoot), canonicalHooks);
+    }
+  }
+
+  const agents = config.runtime.agents;
+  if (agents) {
+    const canonicalAgents = expandPath(
+      agents.canonicalDir ?? "~/.agents/agents",
+      sourceRoot,
+    );
+    for (const [targetName, target] of Object.entries(agents.targets ?? {})) {
+      links.set(
+        expandPath(target, sourceRoot),
+        join(canonicalAgents, targetName),
+      );
     }
   }
 
@@ -850,6 +926,17 @@ function configuredDesiredPaths(
       paths.add(expandPath(target, sourceRoot));
     }
   }
+  if (config.runtime.agents) {
+    paths.add(
+      expandPath(
+        config.runtime.agents.canonicalDir ?? "~/.agents/agents",
+        sourceRoot,
+      ),
+    );
+    for (const target of Object.values(config.runtime.agents.targets ?? {})) {
+      paths.add(expandPath(target, sourceRoot));
+    }
+  }
   return paths;
 }
 
@@ -887,15 +974,20 @@ function pathBelongsToSurface(
   const absolute = resolve(path);
   const skillRoots = runtimeSkillRoots(config, sourceRoot);
   const hookRoots = runtimeHookRoots(config, sourceRoot);
+  const agentRoots = runtimeAgentRoots(config, sourceRoot);
   if (surface === "skills") {
     return skillRoots.some((root) => isDirectChild(absolute, root));
   }
   if (surface === "hooks") {
     return hookRoots.some((root) => absolute === root);
   }
+  if (surface === "agents") {
+    return agentRoots.some((root) => absolute === root);
+  }
   if (
     skillRoots.some((root) => pathWithin(absolute, root)) ||
-    hookRoots.some((root) => pathWithin(absolute, root))
+    hookRoots.some((root) => pathWithin(absolute, root)) ||
+    agentRoots.some((root) => pathWithin(absolute, root))
   ) {
     return false;
   }
@@ -1055,6 +1147,21 @@ function validateConfig(config: AxRuntimeConfig, sourceRoot: string): void {
       true,
     );
   }
+  const agents = config.runtime.agents;
+  if (agents) {
+    if (agents.sourceDir !== undefined) {
+      assertSafeRelativePath(
+        agents.sourceDir,
+        "agents_source_must_be_repository_relative: runtime.agents.sourceDir",
+        true,
+      );
+    }
+    for (const targetName of Object.keys(agents.targets ?? {})) {
+      if (targetName !== "codex") {
+        throw new Error(`unsupported_agent_target: ${targetName}`);
+      }
+    }
+  }
 }
 
 function validateRuntimeAssetRoots(
@@ -1072,9 +1179,11 @@ function validateRuntimeAssetRoots(
     config.runtime.instructionSymlinkTargets ?? {},
   ).map((root) => expandPath(root, sourceRoot));
   const hookRoots = runtimeHookRoots(config, sourceRoot);
+  const agentRoots = runtimeAgentRoots(config, sourceRoot);
   validateIndependentRuntimeRoots(skillRoots, "skills");
   validateIndependentRuntimeRoots(instructionRoots, "instructions");
   validateIndependentRuntimeRoots(hookRoots, "hooks");
+  validateIndependentRuntimeRoots(agentRoots, "agents");
   for (const skillRoot of skillRoots) {
     assertRuntimeAssetRoot(skillRoot, "runtime skill root");
     for (const hookRoot of hookRoots) {
@@ -1084,12 +1193,32 @@ function validateRuntimeAssetRoots(
         );
       }
     }
+    for (const agentRoot of agentRoots) {
+      if (
+        pathWithin(skillRoot, agentRoot) ||
+        pathWithin(agentRoot, skillRoot)
+      ) {
+        throw new Error(
+          `runtime_root_overlap: skill root ${skillRoot} conflicts with agent root ${agentRoot}`,
+        );
+      }
+    }
   }
   for (const instructionRoot of instructionRoots) {
     assertRuntimeAssetRoot(instructionRoot, "runtime instruction root");
   }
   for (const hookRoot of hookRoots) {
     assertRuntimeAssetRoot(hookRoot, "runtime hook root");
+  }
+  for (const agentRoot of agentRoots) {
+    assertRuntimeAssetRoot(agentRoot, "runtime agent root");
+    for (const hookRoot of hookRoots) {
+      if (pathWithin(agentRoot, hookRoot) || pathWithin(hookRoot, agentRoot)) {
+        throw new Error(
+          `runtime_root_overlap: agent root ${agentRoot} conflicts with hook root ${hookRoot}`,
+        );
+      }
+    }
   }
 }
 
@@ -1113,6 +1242,19 @@ function runtimeHookRoots(
   return [
     config.runtime.hooks.canonicalDir ?? "~/.agents/hooks",
     ...Object.values(config.runtime.hooks.targets ?? {}),
+  ].map((root) => expandPath(root, sourceRoot));
+}
+
+function runtimeAgentRoots(
+  config: AxRuntimeConfig,
+  sourceRoot: string,
+): string[] {
+  if (!config.runtime.agents) {
+    return [];
+  }
+  return [
+    config.runtime.agents.canonicalDir ?? "~/.agents/agents",
+    ...Object.values(config.runtime.agents.targets ?? {}),
   ].map((root) => expandPath(root, sourceRoot));
 }
 
@@ -1240,23 +1382,65 @@ function assertInstructionTargetIsIndependent(
     ),
     basename(absoluteTarget),
   );
+  const agentRoots = new Set(runtimeAgentRoots(config, sourceRoot));
   const conflictingRoot = [
     ...runtimeSkillRoots(config, sourceRoot),
     ...runtimeHookRoots(config, sourceRoot),
+    ...runtimeAgentRoots(config, sourceRoot),
   ].find((root) => {
     if (pathWithin(absoluteTarget, root)) {
       return true;
     }
-    const physicalRoot = resolveThroughExistingAncestors(
-      root,
-      "runtime_root_invalid",
-    );
+    let physicalRoot: string;
+    try {
+      physicalRoot = resolveThroughExistingAncestors(
+        root,
+        "runtime_root_invalid",
+      );
+    } catch (error) {
+      if (agentRoots.has(root) && pathKind(root) === "symlink") {
+        return false;
+      }
+      throw error;
+    }
     return pathWithin(physicalTarget, physicalRoot);
   });
   if (conflictingRoot) {
     throw new Error(
       `instruction_target_surface_conflict: ${relativeTarget} resolves inside ${conflictingRoot}`,
     );
+  }
+}
+
+function assertAgentTargetsSafe(
+  config: AxRuntimeConfig,
+  sourceRoot: string,
+  surface?: RuntimeSurface,
+): void {
+  const agents = config.runtime.agents;
+  if (!agents || (surface && surface !== "agents")) {
+    return;
+  }
+  const canonical = expandPath(
+    agents.canonicalDir ?? "~/.agents/agents",
+    sourceRoot,
+  );
+  for (const [targetName, target] of Object.entries(agents.targets ?? {})) {
+    const path = expandPath(target, sourceRoot);
+    const kind = pathKind(path);
+    if (kind === "missing") {
+      continue;
+    }
+    if (kind !== "symlink") {
+      throw new Error(`unmanaged_agent_target: ${path} is ${kind}`);
+    }
+    const observed = resolve(dirname(path), readlinkSync(path));
+    const expected = resolve(join(canonical, targetName));
+    if (observed !== expected) {
+      throw new Error(
+        `unmanaged_agent_target: ${path} points to ${observed}, expected ${expected}`,
+      );
+    }
   }
 }
 

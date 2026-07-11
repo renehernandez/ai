@@ -34,6 +34,26 @@ Use repo-visible instructions for background-agent PR review rubrics, security e
 
 If a conclusion depends on a surface-specific capability, name the surface in the answer. For example, say "the local desktop agent can use the local skill" or "the background reviewer needs this in repo-visible docs".
 
+## Organizational agent routing
+
+Local pinned organizational agents use generated descriptors under the managed
+agent runtime. Their durable coordination state remains in Linear and Git; the
+Codex task is a conversational surface, not a private state store.
+
+- Route software-portfolio requests through the Delivery Executive Assistant.
+- Route calendar, email, Slack, and follow-up drafting through the Executive
+  Operations Assistant.
+- Use one Linear Project Manager per Linear Project and one GitLab Project
+  Manager per GitLab Project.
+- Use a Squad Lead for one delivery scope, including scopes that cross several
+  GitLab Projects.
+- Create an Agent Run before spawning an ephemeral implementer, reviewer,
+  researcher, or operations specialist.
+
+Use the `agent-workspace` skill for activation, resume, delegation, messaging,
+opening, and deactivation mechanics. Generated prompts do not replace provider,
+lifecycle, handoff, review, or repository policy.
+
 ## Lifecycle modes across surfaces
 
 Explore, Plan, Execute, Review, and Finish remain the public lifecycle on every

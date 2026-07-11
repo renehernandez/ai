@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rene.local/agents/activation-context.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "activation_phase",
+    "agent_role",
+    "agent_key",
+    "activation_nonce",
+    "root_record_id",
+    "memory_epoch_id",
+    "codex_task_id",
+    "reports_to",
+    "linear_team_id",
+    "portfolio_project_id",
+    "owned_scope",
+    "canonical_sources",
+    "authority_grant",
+    "model_profile",
+    "sandbox_mode",
+    "automatic_ceiling",
+    "next_check_at",
+    "privacy_policy_ref",
+    "tool_policy_attestation",
+    "prompt_contract_version",
+    "rendered_prompt_sha256",
+    "workspace_generation"
+  ],
+  "properties": {
+    "activation_phase": { "enum": ["pre_create", "post_create"] },
+    "agent_role": { "$ref": "#/$defs/id" },
+    "agent_key": { "type": "string", "minLength": 1 },
+    "activation_nonce": { "type": "string", "minLength": 8 },
+    "root_record_id": { "type": "string", "minLength": 1 },
+    "memory_epoch_id": { "type": "string", "minLength": 1 },
+    "codex_task_id": { "type": ["string", "null"] },
+    "reports_to": { "type": "string", "minLength": 1 },
+    "linear_team_id": { "type": "string", "minLength": 1 },
+    "portfolio_project_id": { "type": "string", "minLength": 1 },
+    "owned_scope": { "type": "string", "minLength": 1 },
+    "canonical_sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/source" }
+    },
+    "authority_grant": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "model_profile": { "$ref": "#/$defs/id" },
+    "sandbox_mode": { "enum": ["read-only", "workspace-write"] },
+    "automatic_ceiling": { "enum": ["low", "medium", "high", "xhigh"] },
+    "next_check_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2})$"
+    },
+    "privacy_policy_ref": { "type": "string", "minLength": 1 },
+    "tool_policy_attestation": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "prompt_contract_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "rendered_prompt_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "workspace_generation": { "type": "integer", "minimum": 1 }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "activation_phase": { "const": "pre_create" } } },
+      "then": { "properties": { "codex_task_id": { "type": "null" } } }
+    },
+    {
+      "if": {
+        "properties": { "activation_phase": { "const": "post_create" } }
+      },
+      "then": {
+        "properties": { "codex_task_id": { "type": "string", "minLength": 1 } }
+      }
+    }
+  ],
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id", "url"],
+      "properties": {
+        "type": {
+          "enum": [
+            "linear",
+            "git",
+            "gitlab",
+            "calendar",
+            "email",
+            "slack",
+            "follow-up"
+          ]
+        },
+        "id": { "type": "string", "minLength": 1 },
+        "url": { "type": "string", "pattern": "^[a-zA-Z][a-zA-Z0-9+.-]*:.+$" }
+      }
+    }
+  }
+}
