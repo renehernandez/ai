@@ -297,7 +297,7 @@ function renderConfig(apps: string[]): string {
       "",
       `[apps.${JSON.stringify(app)}]`,
       "enabled = true",
-      "destructive_enabled = false",
+      `destructive_enabled = ${app === "linear" ? "true" : "false"}`,
       "open_world_enabled = false",
       'default_tools_approval_mode = "auto"',
     );

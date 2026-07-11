@@ -140,6 +140,35 @@ function matchesControlValue(
   return value === name || value === id;
 }
 
+function hasOnlyKeys(
+  input: Record<string, unknown>,
+  allowedKeys: readonly string[],
+): boolean {
+  const allowed = new Set(allowedKeys);
+  return Object.keys(input).every((key) => allowed.has(key));
+}
+
+function isControlIssueId(value: unknown, prefix: string): value is string {
+  return (
+    typeof value === "string" &&
+    value.startsWith(prefix) &&
+    /^[1-9][0-9]*$/u.test(value.slice(prefix.length))
+  );
+}
+
+function isControlLabelArray(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    new Set(value).size === value.length &&
+    value.every(
+      (item) =>
+        typeof item === "string" &&
+        /^(?:record|role|attention|domain):[a-z0-9][a-z0-9-]*$/u.test(item),
+    )
+  );
+}
+
 function typedRecordBody(value: unknown, policy: CoordinatorPolicy): boolean {
   if (typeof value !== "string") {
     return false;
@@ -171,28 +200,16 @@ function linearIssueDecision(
 ): CoordinatorToolDecision {
   const id = input.id;
   if (typeof id === "string") {
-    if (!id.startsWith(policy.linear.issuePrefix)) {
+    if (!hasOnlyKeys(input, ["id", "description", "labels"])) {
+      return denied(
+        "Linear updates may change only the typed record body or labels.",
+      );
+    }
+    if (!isControlIssueId(id, policy.linear.issuePrefix)) {
       return denied("Linear updates must target a RENE control-plane issue.");
     }
-    if (
-      input.team !== undefined &&
-      !matchesControlValue(input.team, policy.linear.team, policy.linear.teamId)
-    ) {
-      return denied(
-        "Linear updates cannot move an issue outside the Rene team.",
-      );
-    }
-    if (
-      input.project !== undefined &&
-      !matchesControlValue(
-        input.project,
-        policy.linear.project,
-        policy.linear.projectId,
-      )
-    ) {
-      return denied(
-        "Linear updates cannot move an issue outside the personal control project.",
-      );
+    if (input.description === undefined && input.labels === undefined) {
+      return denied("Linear updates require a typed record body or labels.");
     }
     if (
       input.description !== undefined &&
@@ -202,7 +219,26 @@ function linearIssueDecision(
         "Linear record bodies must use a tracked typed-record shape.",
       );
     }
+    if (input.labels !== undefined && !isControlLabelArray(input.labels)) {
+      return denied(
+        "Linear labels must use the record, role, attention, or domain vocabulary.",
+      );
+    }
     return allowed("Typed update to an existing Rene control-plane issue.");
+  }
+
+  if (
+    !hasOnlyKeys(input, [
+      "title",
+      "team",
+      "project",
+      "parentId",
+      "assignee",
+      "description",
+      "labels",
+    ])
+  ) {
+    return denied("Linear creation contains unsupported issue fields.");
   }
 
   if (
@@ -223,9 +259,24 @@ function linearIssueDecision(
   }
   if (
     typeof input.title !== "string" ||
+    input.title.trim() === "" ||
     !typedRecordBody(input.description, policy)
   ) {
     return denied("Linear creation requires a title and typed record body.");
+  }
+  if (
+    input.parentId !== undefined &&
+    !isControlIssueId(input.parentId, policy.linear.issuePrefix)
+  ) {
+    return denied("Linear child records require a RENE parent issue.");
+  }
+  if (input.assignee !== undefined && input.assignee !== "me") {
+    return denied("Linear control records may only be assigned to the caller.");
+  }
+  if (input.labels !== undefined && !isControlLabelArray(input.labels)) {
+    return denied(
+      "Linear labels must use the record, role, attention, or domain vocabulary.",
+    );
   }
   return allowed("Typed creation in the Rene control plane.");
 }
@@ -234,25 +285,14 @@ function linearCommentDecision(
   input: Record<string, unknown>,
   policy: CoordinatorPolicy,
 ): CoordinatorToolDecision {
-  if (
-    typeof input.issueId !== "string" ||
-    !input.issueId.startsWith(policy.linear.issuePrefix)
-  ) {
+  if (!hasOnlyKeys(input, ["issueId", "body"])) {
+    return denied("Only issueId and body are allowed for new comments.");
+  }
+  if (!isControlIssueId(input.issueId, policy.linear.issuePrefix)) {
     return denied("Linear comments must name a RENE control-plane issue.");
   }
   if (typeof input.body !== "string" || input.body.trim() === "") {
     return denied("Linear comments require a non-empty body.");
-  }
-  if (
-    input.id !== undefined ||
-    input.parentId !== undefined ||
-    input.projectId !== undefined ||
-    input.initiativeId !== undefined ||
-    input.documentId !== undefined ||
-    input.milestoneId !== undefined ||
-    input.statusUpdateId !== undefined
-  ) {
-    return denied("Only new issue comments are allowed in the control plane.");
   }
   return allowed("New comment on a Rene control-plane issue.");
 }
@@ -396,7 +436,7 @@ function renderCoordinatorPolicyEngineSource(): string {
       "function evaluateCoordinatorTool",
       "function evaluateCoordinatorTool",
     );
-  return `const RECORD_TYPES = new Set(${JSON.stringify([...RECORD_TYPES])});\nconst LINEAR_READ_TOOLS = new Set(${JSON.stringify([...LINEAR_READ_TOOLS])});\nconst OPERATIONS_READ_TOOLS = new Set(${JSON.stringify([...OPERATIONS_READ_TOOLS])});\nconst DELIVERY_TASK_READS = new Set(${JSON.stringify([...DELIVERY_TASK_READS])});\nconst DELIVERY_TASK_WRITES = new Set(${JSON.stringify([...DELIVERY_TASK_WRITES])});\n${asObject.toString()}\n${allowed.toString()}\n${denied.toString()}\n${matchesControlValue.toString()}\n${typedRecordBody.toString()}\n${linearIssueDecision.toString()}\n${linearCommentDecision.toString()}\n${preCreateActivationContext.toString()}\n${taskWriteDecision.toString()}\n${source}`;
+  return `const RECORD_TYPES = new Set(${JSON.stringify([...RECORD_TYPES])});\nconst LINEAR_READ_TOOLS = new Set(${JSON.stringify([...LINEAR_READ_TOOLS])});\nconst OPERATIONS_READ_TOOLS = new Set(${JSON.stringify([...OPERATIONS_READ_TOOLS])});\nconst DELIVERY_TASK_READS = new Set(${JSON.stringify([...DELIVERY_TASK_READS])});\nconst DELIVERY_TASK_WRITES = new Set(${JSON.stringify([...DELIVERY_TASK_WRITES])});\n${asObject.toString()}\n${allowed.toString()}\n${denied.toString()}\n${matchesControlValue.toString()}\n${hasOnlyKeys.toString()}\n${isControlIssueId.toString()}\n${isControlLabelArray.toString()}\n${typedRecordBody.toString()}\n${linearIssueDecision.toString()}\n${linearCommentDecision.toString()}\n${preCreateActivationContext.toString()}\n${taskWriteDecision.toString()}\n${source}`;
 }
 
 export function renderCoordinatorPolicyHook(policy: CoordinatorPolicy): string {
