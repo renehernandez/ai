@@ -174,7 +174,7 @@ function typedRecordBody(value: unknown, policy: CoordinatorPolicy): boolean {
     return false;
   }
   const fields = new Map<string, string>();
-  for (const match of value.matchAll(/^- `([a-z_]+)`:\s*(.*)$/gmu)) {
+  for (const match of value.matchAll(/^- `([a-z0-9_]+)`:\s*(.*)$/gmu)) {
     const [, field, fieldValue] = match;
     if (!field || fieldValue === undefined || fields.has(field)) {
       return false;

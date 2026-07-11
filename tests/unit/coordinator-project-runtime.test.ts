@@ -39,7 +39,14 @@ function policy(kind: "delivery" | "operations"): CoordinatorPolicy {
       projectId: "project-id",
       issuePrefix: "RENE-",
       recordFields: {
-        root: ["record_type", "id", "created_at", "classification", "summary"],
+        root: [
+          "record_type",
+          "id",
+          "created_at",
+          "classification",
+          "summary",
+          "rendered_prompt_sha256",
+        ],
         memory: [
           "record_type",
           "id",
@@ -136,6 +143,26 @@ test("renders both exact coordinator projects with pinned prompt bundles", () =>
     const deliveryApps = config.apps as Record<string, Record<string, unknown>>;
     assert.equal(deliveryApps.linear.destructive_enabled, true);
     assert.equal(deliveryApps._default.destructive_enabled, false);
+    const deliveryPolicy = JSON.parse(
+      readFileSync(join(projects, "delivery", "policy.json"), "utf-8"),
+    ) as {
+      policy: { linear: { recordFields: Record<string, string[]> } };
+    };
+    assert.ok(
+      deliveryPolicy.policy.linear.recordFields.root.includes(
+        "rendered_prompt_sha256",
+      ),
+    );
+    assert.ok(
+      deliveryPolicy.policy.linear.recordFields.root.includes(
+        "control_policy_sha256",
+      ),
+    );
+    assert.ok(
+      deliveryPolicy.policy.linear.recordFields.root.includes(
+        "control_source_sha256",
+      ),
+    );
     const operationsConfig = parse(
       readFileSync(
         join(projects, "operations", ".codex", "config.toml"),
@@ -225,6 +252,7 @@ test("delivery policy allows typed control records and denies authority expansio
     "- `created_at`: 2026-07-11T20:00:00Z",
     "- `classification`: internal",
     "- `summary`: Delivery root",
+    `- \`rendered_prompt_sha256\`: ${"a".repeat(64)}`,
   ].join("\n");
   assert.equal(
     evaluateCoordinatorTool(
