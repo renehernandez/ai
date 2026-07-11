@@ -35,14 +35,17 @@ modes.
   and no `--no-verify`.
 - Use native hook-enabled Git commits. Fix hook failures and restage before
   retrying; never bypass repository hooks.
-- Do not install dependencies or run destructive commands without explicit
-  authorization from the user or accepted implementation contract.
+- Run documented automated setup and install dependencies already declared by
+  the project without separate permission. Adding, updating, downgrading, or
+  removing dependencies, or accepting dependency manifest or lockfile changes,
+  requires explicit user authorization or an accepted implementation contract.
+  Destructive commands still require explicit authorization.
 - Do not force-push ordinary follow-up, feedback, or CI-fix commits. Reserve
   force-push for an authorized history rewrite or required history repair.
 - Before pushing a non-default branch, inspect live hosted state. Do not reuse a
   branch whose only review artifact is closed or merged without user direction.
 - Request narrow reusable approval prefixes for recurring safe commands. Avoid
-  broad approvals for destructive commands, dependency installation,
+  broad approvals for destructive commands, dependency graph changes,
   publication, credentials, or interpreters.
 - For JavaScript and TypeScript, use `pnpm exec`, `pnpm dlx`, or `pnpm run`;
   never invoke `node_modules/.bin` directly.

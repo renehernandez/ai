@@ -19,7 +19,13 @@ These rules apply to command execution, network access, and tool installation ac
 - Issue each command as a separate tool call so permission rules and failures are easy to diagnose.
 - Prefer purpose-built command flags over shell pipelines when possible.
 - Do not run destructive commands unless the user explicitly asks or approves the exact action.
-- Do not install dependencies unless the user explicitly asks or the approved implementation plan requires it.
+- Run the project's documented automated setup command, and install the
+  dependency graph already declared by its manifests and lockfiles, without
+  separate permission.
+- Do not add, update, downgrade, or remove dependencies, or accept changes to
+  dependency manifests or lockfiles, unless the user explicitly asks or the
+  accepted implementation contract requires it. If setup would make one of
+  those changes, stop and request authority instead of accepting the change.
 - Route package-management file changes through the owning package manager CLI
   whenever it provides a command for the change. This includes dependency
   additions, removals, upgrades, downgrades, semver range changes,
