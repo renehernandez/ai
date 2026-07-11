@@ -23,6 +23,18 @@ test("agent-workspace exposes the full workspace lifecycle", () => {
   assert.match(skill, /post-create `ASSIGN`/i);
   assert.match(skill, /scripts\/runtime-context-cli\.mjs/i);
   assert.match(skill, /length-prefixed untrusted-data framing/i);
+  assert.match(skill, /pinned roles require a prompt bundle/i);
+  assert.match(skill, /current coordinator registration/i);
+  assert.match(skill, /registered saved-project ID/i);
+  assert.match(skill, /control-policy hash/i);
+  assert.match(skill, /rene:delivery-portfolio/);
+  assert.match(skill, /rene:executive-operations/);
+  assert.match(skill, /control_project_registration_unavailable/);
+  assert.match(skill, /source fingerprint, permission profile/i);
+  assert.match(skill, /control-plane:activation-writer/);
+  assert.match(skill, /starts no concurrent bootstrap attempt/i);
+  assert.match(skill, /exact control-project path/i);
+  assert.match(skill, /deactivation and archival of that exact orphan/i);
 });
 
 test("agent-workspace preserves authority and privacy boundaries", () => {

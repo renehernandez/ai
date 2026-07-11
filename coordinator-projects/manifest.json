@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "policy_version": "1.0.0",
+  "linear_control_plane": {
+    "team": "Rene",
+    "team_id": "6847d0fa-de7a-4029-aff5-0c0470247041",
+    "project": "Rene — Work Portfolio",
+    "project_id": "dbb8f8a7-eef0-4654-85f8-8db0ec9611bc",
+    "issue_prefix": "RENE-"
+  },
+  "projects": [
+    {
+      "kind": "delivery",
+      "display_name": "Delivery Coordination",
+      "prompt_roles": [
+        "delivery-ea",
+        "gitlab-project-manager",
+        "linear-project-manager",
+        "squad-lead"
+      ],
+      "apps": ["linear"]
+    },
+    {
+      "kind": "operations",
+      "display_name": "Executive Operations",
+      "prompt_roles": ["operations-ea"],
+      "apps": ["linear", "gmail", "slack", "google-calendar"]
+    }
+  ]
+}

@@ -49,6 +49,12 @@ researchers, and operations specialists are ephemeral Agent Runs. A Squad Lead
 may end when its delivery scope closes even though it can remain active for
 months.
 
+Pinned tasks run in two generated saved Codex projects. Delivery coordinators
+run under `agent-control/delivery`; the Executive Operations Assistant runs
+under `agent-control/operations`. Their project-local read-only permissions and
+tool-policy hooks form the mechanical authority boundary. Ephemeral agents keep
+using generated Codex custom-agent descriptors.
+
 ## Durable state
 
 Every pinned workspace uses schema-defined Linear record conventions. These are
@@ -112,8 +118,9 @@ Find the Slack and email threads that need a response.
 
 Use the Delivery Executive Assistant as the default route to another delivery
 agent. Direct contact remains available through `agent-workspace open`. Direct
-messages still use the same correlated invocation envelope and reporting line.
-The envelope carries a message and correlation ID so retries remain one logical
+user messages after `open` remain authenticated user input. Agent-to-agent
+`message` operations use the correlated invocation envelope and reporting line;
+the envelope carries message and correlation IDs so retries remain one logical
 assignment.
 
 ## Activate a pinned workspace
@@ -122,25 +129,96 @@ Ask an active Delivery Executive Assistant to activate a manager or invoke the
 `agent-workspace` skill from a local Codex task. The skill performs the provider
 writes; these are not manual API steps.
 
+Before the first activation, synchronize both coordinator projects from clean
+merged `main`, add each exact child directory as a trusted saved Codex project,
+and record the two IDs with `ax coordinators register`. Missing, stale, or
+ambiguous registration blocks before any Linear or task write.
+
+Bootstrap the first assistants in this order:
+
+1. From a trusted local Codex task where the synchronized `agent-workspace`
+   skill is available, run `ax coordinators validate` and resolve both exact
+   ID-to-path associations with the Codex app `list_projects` tool.
+2. Rene sends this explicit request in that same task:
+
+   ```text
+   Use $agent-workspace activate to create the Delivery Executive Assistant.
+   Stable key: rene:delivery-portfolio.
+   Owned scope: Rene's global software-delivery portfolio.
+   Reporting line: rene.
+   Use the AX-registered Delivery Coordination project and stop before any write
+   if its path, trust, source fingerprint, permission profile, policy hash, or
+   task-tool surface cannot be verified.
+   ```
+
+3. Rene designates that task as the only bootstrap attempt and starts no other
+   activation concurrently. Before any Root write, the task creates or reads a
+   typed Decision keyed `control-plane:activation-writer` in the personal
+   control project. It stores the bootstrap task ID and workspace generation;
+   a different or duplicate claim blocks. After the Delivery Executive
+   Assistant reaches `active`, persist a transfer Decision naming its task ID
+   and increment the workspace generation.
+4. Rene asks the active Delivery Executive Assistant:
+
+   ```text
+   Use $agent-workspace activate to create the Executive Operations Assistant.
+   Stable key: rene:executive-operations.
+   Owned scope: Rene's calendar, email, Slack, and follow-up coordination.
+   Reporting line: rene.
+   Use the AX-registered Executive Operations project.
+   ```
+
+Every later activation routes through the recorded Delivery Executive
+Assistant writer. A local task may request or forward activation, but cannot
+perform the writes after the transfer.
+
 Activation is idempotent. The stable key is the canonical Linear Project ID,
 canonical GitLab
 Project ID, or Linear Project plus delivery-scope key.
 
+The two bootstrap keys are fixed above. A Squad Lead key is
+`<linear-project-id>:<delivery-scope-key>`; the Linear Project Manager allocates
+one lowercase kebab-case scope key and reuses it for every retry.
+
 1. Search for an existing Root Agent Record with the stable key.
 2. Create the Root in `reserved` and create its Current Memory Epoch.
-3. Persist `task_pending` with the role, stable key, nonce, scope, reporting
-   line, generation, contract version, and prompt hash. Supply that immutable
-   tuple as the initial `pre_create` task-creation prompt. The new task must
-   reply `PENDING_CONTEXT`.
-4. Persist and read back the returned Codex task ID.
-5. Send the complete `post_create` context as the first follow-up.
-6. Persist the task's attestation, pin the task, and mark the Root `active`.
+3. Resolve the role's control-project kind, unique saved project ID/path,
+   current trust, source fingerprint, permission profile, and policy hash.
+   Verify the generated prompt bundle, required tools, and prohibited mutation
+   surfaces.
+4. Persist `task_pending` with the role, stable key, nonce, scope, reporting
+   line, generation, contract version, prompt hash, control-project kind, ID,
+   exact path, control-policy hash, source fingerprint, and permission profile.
+   Re-read all writer, generation, project, trust, and policy evidence
+   immediately before `create_thread`. Supply the immutable tuple plus the exact
+   pinned prompt bundle path/hash as the initial `pre_create` prompt with the
+   registered saved project ID. The project contract loads the bundle, and the
+   new task may reply only `PENDING_CONTEXT`.
+5. Persist and read back the returned Codex task ID.
+6. Read and verify the sole `PENDING_CONTEXT` response, then pin the task.
+7. Send the complete `post_create` context as the first follow-up, persist and
+   read back the task's full attestation, then mark the Root `active`.
 
 If task creation succeeds but persisting its ID fails, preserve the task and
 Root in `task_pending`. Recovery lists Codex tasks and reads their initial
 creation prompts. Adopt exactly one task only when trusted creation provenance
-and the complete tuple match the Root. Zero, multiple, or mismatched candidates
-block recovery. Never create a replacement to hide a partial transition.
+and the complete tuple match the Root. Creation provenance includes the creator
+task, exact saved project ID/path, creation response, initial prompt tuple,
+prompt-bundle hash, and task creation time. Zero, multiple, stale-registration,
+or mismatched candidates block recovery. Never create a replacement to hide a
+partial transition.
+
+Resume always starts from the first incomplete state in the recorded sequence:
+reconcile task ID, verify `PENDING_CONTEXT`, pin, deliver `post_create`, persist
+and read back the complete attestation, then mark `active`. A task or Root that
+is ahead of the other is repaired forward only after the exact task, project,
+generation, prompt, source, permission, and policy identities still match. If a
+coordinator sync invalidates registration during recovery, re-register and
+revalidate first; a changed immutable tuple blocks orphan adoption rather than
+creating a replacement. Record a blocked Escalation. Rene may then authorize
+deactivation and archival of that exact orphan: mark the Root `inactive`,
+increment generation, preserve its history, archive the verified task, and
+reactivate the same stable Root under the new tuple.
 
 ## Delegate implementation
 
@@ -198,9 +276,11 @@ exact active lifecycle policy.
 | Term | Meaning |
 | --- | --- |
 | Workspace generation | Monotonic fencing value; stale generations may report but cannot mutate |
-| Prompt fingerprint | SHA-256 of the rendered static role contract |
+| Prompt fingerprint | SHA-256 of role identity, charter, reporting line, capabilities, required skills, model profile, sandbox, overlays, and rendered prompt body |
+| Control policy fingerprint | SHA-256 of the generated logical tool allow/deny policy bound into activation and invocation |
+| Control source fingerprint | SHA-256 of the complete generated project inventory, including permission config, hook registration and source, prompts, and instructions |
 | Activation nonce | Retry correlation value, not authentication |
-| Attestation | Persisted ACK of role, scope, reporting line, prompt, tools, and generation |
+| Attestation | Persisted ACK of role, scope, reporting line, prompt, saved project, source fingerprint, permission profile, tools, policy, and generation |
 | Canonical source | Authoritative Linear, Git, GitLab, or operations record linked by ID |
 | Exact artifact | Source HEAD plus resolved target-base identity reviewed together |
 | Git predecessor order | Total order of related changes within a repository; it does not create ancestry across repositories |

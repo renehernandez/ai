@@ -95,10 +95,45 @@ function assertCoherentContext(input: RuntimeContextInput): void {
   if (input.invocation.workspace_generation !== generation) {
     throw new Error("agent_runtime_generation_mismatch: invocation");
   }
+  if (
+    input.invocation.control_project_kind !==
+    input.activation.control_project_kind
+  ) {
+    throw new Error("agent_runtime_control_project_kind_mismatch");
+  }
+  if (
+    input.invocation.control_project_path !==
+    input.activation.control_project_path
+  ) {
+    throw new Error("agent_runtime_control_project_path_mismatch");
+  }
+  if (
+    input.invocation.control_policy_sha256 !==
+    input.activation.control_policy_sha256
+  ) {
+    throw new Error("agent_runtime_control_policy_mismatch");
+  }
+  if (
+    input.invocation.control_source_sha256 !==
+    input.activation.control_source_sha256
+  ) {
+    throw new Error("agent_runtime_control_source_mismatch");
+  }
+  if (
+    input.invocation.control_permission_profile !==
+    input.activation.control_permission_profile
+  ) {
+    throw new Error("agent_runtime_control_permission_profile_mismatch");
+  }
   const coordinatorRole = String(input.activation.agent_role);
   const coordinatorPolicy = rolePolicies[coordinatorRole];
   if (!coordinatorPolicy) {
     throw new Error(`agent_runtime_unknown_role: ${coordinatorRole}`);
+  }
+  const expectedControlProject =
+    coordinatorRole === "operations-ea" ? "operations" : "delivery";
+  if (input.activation.control_project_kind !== expectedControlProject) {
+    throw new Error("agent_runtime_role_control_project_mismatch");
   }
   if (
     !coordinatorPolicy.allowed_profiles.includes(

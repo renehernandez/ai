@@ -15,12 +15,14 @@ OpenSpec target the current working directory.
 
 Tracked `ax.config.json` is authoritative runtime state. It declares source
 refs, `runtime.installedProfiles`, `runtime.policyProfile`, exact targets,
-instructions, hooks, agents, and `runtime.retiredSkills`.
+instructions, hooks, agents, coordinator projects, and `runtime.retiredSkills`.
 
 AX replaces declared targets on every sync and leaves unrelated filesystem
 paths untouched. It stores only a disposable remote-source cache under
-`~/.agents/runtime/cache`; runtime synchronization has no ownership manifest,
-content ledger, backup store, or recovery journal.
+`~/.agents/runtime/cache`. The two coordinator targets carry local ownership
+markers, and their saved-project IDs live in
+`~/.agents/runtime/control-projects.json`; neither file is an orchestration
+database or canonical work state.
 
 ## Synchronize runtime profiles
 
@@ -37,6 +39,7 @@ pnpm ax skills sync
 pnpm ax instructions sync
 pnpm ax hooks sync
 pnpm ax agents sync
+pnpm ax coordinators sync
 ```
 
 Each distinct configured source/ref pair resolves once per invocation. Every
@@ -65,17 +68,18 @@ When offline inspection includes OpenSpec, AX locates the configured
 checks. Status and validate never execute that CLI or probe its version. Only
 `ax openspec sync` runs `openspec --version`.
 
-Scoped `skills`, `instructions`, `hooks`, and `agents` status/validate commands
-apply the same offline boundary to one surface. Agent validation additionally
-compiles every JSON schema, checks the exact generated-agent inventory, validates
-role/profile references, enforces the xhigh automatic ceiling, and verifies the
-generated standalone validators.
+Scoped `skills`, `instructions`, `hooks`, `agents`, and `coordinators`
+status/validate commands apply the same offline boundary to one surface. Agent
+validation additionally compiles every JSON schema, checks the exact generated
+output inventory, validates role/profile references, enforces the xhigh
+automatic ceiling, and verifies the generated standalone validators.
 
 ## Synchronize organizational agents
 
 The tracked `agents/` tree is the canonical source for role charters, reviewer
-overlays, schemas, Linear templates, and model profiles. AX compiles that source
-into Codex custom-agent TOML while building the candidate:
+overlays, schemas, Linear templates, and model profiles. AX compiles ephemeral
+outputs into Codex custom-agent TOML and pinned outputs into versioned prompt
+bundles while building the candidate:
 
 ```bash
 pnpm ax agents sync
@@ -85,13 +89,84 @@ pnpm ax agents validate
 
 The canonical runtime directory is `~/.agents/agents`. The Codex target
 `~/.codex/agents` is an exact symlink to its `codex/` directory. Agent sync
-refuses an unmanaged file, directory, or wrong symlink at either configured
-target before replacing canonical content. An interrupted run with the exact
-expected symlink is recoverable by rerunning sync.
+replaces the canonical generated directory and refuses an unmanaged file, directory, or wrong symlink at the Codex link target. Keep custom agent source
+in this repository, not in the generated canonical directory. An interrupted
+run with the exact expected symlink is recoverable by rerunning sync.
 
 Status remains structural: it verifies the canonical directory and exact link.
 Validate also checks the tracked semantic source contract. Use sync to re-render
 content after changing the manifest, schemas, role files, or shared contract.
+
+## Synchronize coordinator projects
+
+The tracked `coordinator-projects/` source renders two non-Git saved-project
+roots:
+
+- `~/work/projects/rene.hernandez/agent-control/delivery`
+- `~/work/projects/rene.hernandez/agent-control/operations`
+
+Generate and inspect them with:
+
+```bash
+pnpm ax coordinators sync
+pnpm ax coordinators status
+pnpm ax coordinators validate
+```
+
+AX owns only those exact child directories. It preserves sibling paths under
+`agent-control` and refuses a child whose hashed inventory differs from its AX
+ownership marker. Each project contains a read-only permission profile,
+project-local coordinator instructions, pinned prompt bundles, and a standalone
+fail-closed `PreToolUse` policy hook. Project-local hooks run only after Codex
+marks the saved project trusted.
+
+AX builds both complete candidates before replacing either child. Each child is
+published through a temporary sibling path; an interruption leaves the prior
+valid child or a missing child, both recoverable by rerunning sync. An inventory
+mismatch indicates content changed outside that publication path and requires
+the drift procedure below.
+
+After the post-merge live sync, add each child directory as a saved local Codex
+project:
+
+1. In Codex Desktop, use the local-project/open-folder action and select the
+   exact `delivery` child path, then repeat for `operations`. UI labels can vary
+   by app version; verify the canonical path rather than the displayed folder
+   name.
+2. Mark each project trusted and review the project-local hook when Codex asks.
+   Project config and hooks are inactive until that trust is recorded.
+3. From the existing bootstrap task, ask: `Use list_projects and return the
+   unique projectId and canonical path for the delivery and operations control
+   projects.` `list_projects` is a Codex app task tool, not an AX shell command.
+   Zero or multiple matches for either exact path block registration.
+4. Record the two returned IDs with one explicit command:
+
+```bash
+pnpm ax coordinators register \
+  --delivery-project-id <delivery-id> \
+  --operations-project-id <operations-id>
+```
+
+Registration validates both AX markers and records canonical path, project ID,
+source fingerprint, policy hash, and registration time. AX cannot query Codex
+Desktop from the shell command, so the bootstrap task must first prove each
+ID-to-path association with `list_projects`; activation repeats that live check.
+
+Finish with `pnpm ax coordinators validate`. Missing registration is a warning
+before first setup; a stale or mismatched registration is a finding and exits
+non-zero. A later sync whose generated fingerprint is unchanged preserves the
+registration. When the fingerprint changes, rerun `list_projects`, confirm the
+same unique path associations, rerun `coordinators register`, and validate
+again. If `control-projects.json` is deleted, reconstruct it through this same
+procedure; Linear and the generated local markers remain canonical.
+
+If coordinator sync refuses a changed ownership inventory, do not force or
+hand-edit the marker. Run `ax coordinators validate`, preserve the complete
+changed child by renaming it outside the exact `delivery` or `operations`
+target, rerun coordinator sync to regenerate the missing child, and compare the
+preserved copy manually. Move any legitimate source change into this
+repository's `coordinator-projects/` source or renderer. AX never deletes the
+preserved copy.
 
 ## Synchronize repo-local OpenSpec
 
@@ -152,7 +227,7 @@ managed assets.
 ## Prove changes without touching live runtime
 
 Before merge, run AX behavior only with isolated HOME, cache, skill,
-instruction, hook, and profile roots. Feature
+instruction, hook, profile, and coordinator roots. Feature
 branches, dirty source, and disposable worktrees cannot target canonical live
 runtime roots.
 

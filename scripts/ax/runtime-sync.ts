@@ -5,6 +5,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
+  readFileSync,
   readlinkSync,
   realpathSync,
   renameSync,
@@ -20,10 +21,23 @@ import {
   relative,
   resolve,
 } from "node:path";
+import { parse } from "smol-toml";
 import { renderAgentRuntime, validateAgentSource } from "./agent-runtime.ts";
+import {
+  type CoordinatorTargets,
+  coordinatorManagedEntries,
+  readCoordinatorRegistration,
+  renderCoordinatorProjects,
+  validateCoordinatorRegistration,
+} from "./coordinator-project-runtime.ts";
 import { copyPath, SourceSnapshotManager } from "./source-snapshot.ts";
 
-export type RuntimeSurface = "skills" | "instructions" | "hooks" | "agents";
+export type RuntimeSurface =
+  | "skills"
+  | "instructions"
+  | "hooks"
+  | "agents"
+  | "coordinators";
 
 export type SkillSourceConfig =
   | { localPath: string; names: string[] }
@@ -51,6 +65,10 @@ export type AxRuntimeConfig = {
       sourceDir?: string;
       canonicalDir?: string;
       targets?: Record<string, string>;
+    };
+    coordinatorProjects?: {
+      sourceDir?: string;
+      targets: CoordinatorTargets;
     };
     openspec?: Record<string, unknown>;
   };
@@ -129,6 +147,7 @@ export function syncRuntime(options: RuntimeSyncOptions): RuntimeSyncResult {
   const sourceRoot = resolve(options.sourceRoot);
   const paths = runtimePaths(options.runtimeRoot);
   assertAgentTargetsSafe(options.config, sourceRoot, options.surface);
+  assertCoordinatorTargetsSafe(options.config, sourceRoot, options.surface);
   validateConfig(options.config, sourceRoot);
   assertVerifiedLiveSource(sourceRoot, paths.runtimeRoot);
   mkdirSync(paths.runtimeRoot, { recursive: true });
@@ -264,6 +283,27 @@ export function inspectRuntime(input: {
   warnings.push(
     "remote_ref_freshness_unknown: run ax sync to resolve configured refs",
   );
+  if (
+    selection &&
+    input.config.runtime.coordinatorProjects &&
+    (!input.surface || input.surface === "coordinators")
+  ) {
+    const registration = readCoordinatorRegistration(paths.runtimeRoot);
+    if (registration === undefined) {
+      warnings.push(
+        "coordinator_registration_missing: register both saved Codex project IDs before activation",
+      );
+    } else {
+      const targets = Object.fromEntries(
+        Object.entries(input.config.runtime.coordinatorProjects.targets).map(
+          ([kind, target]) => [kind, expandPath(target, sourceRoot)],
+        ),
+      ) as CoordinatorTargets;
+      findings.push(
+        ...validateCoordinatorRegistration({ registration, targets }),
+      );
+    }
+  }
   return {
     ok: findings.length === 0,
     sourceRoot,
@@ -292,6 +332,12 @@ export function validateRuntime(input: {
   ) {
     const sourceDir = input.config.runtime.agents.sourceDir ?? "agents";
     validateAgentSource(resolve(input.sourceRoot, sourceDir));
+  }
+  if (
+    input.config.runtime.coordinatorProjects &&
+    (!input.surface || input.surface === "coordinators")
+  ) {
+    validateCoordinatorTargets(input.config, input.sourceRoot);
   }
   if (!report.ok) {
     throw new Error(
@@ -624,6 +670,46 @@ function buildRuntimeCandidate(input: {
       });
     }
   }
+
+  const coordinators = includeSurface("coordinators")
+    ? input.config.runtime.coordinatorProjects
+    : undefined;
+  if (coordinators) {
+    const coordinatorSourceDir =
+      coordinators.sourceDir ?? "coordinator-projects";
+    const coordinatorSource = localRelative(coordinatorSourceDir);
+    const agentSourceDir = input.config.runtime.agents?.sourceDir ?? "agents";
+    const agentSource = localRelative(agentSourceDir);
+    const renderedAgents = join(
+      input.stagingRoot,
+      "coordinator-rendered-agents",
+    );
+    renderAgentRuntime({ sourceDir: agentSource, outputDir: renderedAgents });
+    const renderedProjects = join(input.stagingRoot, "rendered-coordinators");
+    const targets = Object.fromEntries(
+      Object.entries(coordinators.targets).map(([kind, target]) => [
+        kind,
+        expandPath(target, input.sourceRoot),
+      ]),
+    ) as CoordinatorTargets;
+    renderCoordinatorProjects({
+      sourceDir: coordinatorSource,
+      agentSourceDir: agentSource,
+      renderedAgentsDir: renderedAgents,
+      outputDir: renderedProjects,
+      targets,
+    });
+    for (const kind of ["delivery", "operations"] as const) {
+      registerCopiedCandidate(entries, {
+        stagingRoot: input.stagingRoot,
+        candidateIndex: candidateSequence++,
+        path: targets[kind],
+        sourcePath: join(renderedProjects, kind),
+        surface: "coordinators",
+        asset: `coordinator-project/${kind}`,
+      });
+    }
+  }
   return { entries, sources: deduplicateSources(sources) };
 }
 
@@ -937,6 +1023,13 @@ function configuredDesiredPaths(
       paths.add(expandPath(target, sourceRoot));
     }
   }
+  if (config.runtime.coordinatorProjects) {
+    for (const target of Object.values(
+      config.runtime.coordinatorProjects.targets,
+    )) {
+      paths.add(expandPath(target, sourceRoot));
+    }
+  }
   return paths;
 }
 
@@ -975,6 +1068,7 @@ function pathBelongsToSurface(
   const skillRoots = runtimeSkillRoots(config, sourceRoot);
   const hookRoots = runtimeHookRoots(config, sourceRoot);
   const agentRoots = runtimeAgentRoots(config, sourceRoot);
+  const coordinatorRoots = runtimeCoordinatorRoots(config, sourceRoot);
   if (surface === "skills") {
     return skillRoots.some((root) => isDirectChild(absolute, root));
   }
@@ -984,10 +1078,14 @@ function pathBelongsToSurface(
   if (surface === "agents") {
     return agentRoots.some((root) => absolute === root);
   }
+  if (surface === "coordinators") {
+    return coordinatorRoots.some((root) => absolute === root);
+  }
   if (
     skillRoots.some((root) => pathWithin(absolute, root)) ||
     hookRoots.some((root) => pathWithin(absolute, root)) ||
-    agentRoots.some((root) => pathWithin(absolute, root))
+    agentRoots.some((root) => pathWithin(absolute, root)) ||
+    coordinatorRoots.some((root) => pathWithin(absolute, root))
   ) {
     return false;
   }
@@ -1162,6 +1260,22 @@ function validateConfig(config: AxRuntimeConfig, sourceRoot: string): void {
       }
     }
   }
+  const coordinators = config.runtime.coordinatorProjects;
+  if (coordinators) {
+    if (coordinators.sourceDir !== undefined) {
+      assertSafeRelativePath(
+        coordinators.sourceDir,
+        "coordinator_source_must_be_repository_relative: runtime.coordinatorProjects.sourceDir",
+        true,
+      );
+    }
+    const kinds = Object.keys(coordinators.targets).sort();
+    if (kinds.join("\0") !== "delivery\0operations") {
+      throw new Error(
+        `coordinator_target_inventory_invalid: ${kinds.join(",")}`,
+      );
+    }
+  }
 }
 
 function validateRuntimeAssetRoots(
@@ -1180,10 +1294,12 @@ function validateRuntimeAssetRoots(
   ).map((root) => expandPath(root, sourceRoot));
   const hookRoots = runtimeHookRoots(config, sourceRoot);
   const agentRoots = runtimeAgentRoots(config, sourceRoot);
+  const coordinatorRoots = runtimeCoordinatorRoots(config, sourceRoot);
   validateIndependentRuntimeRoots(skillRoots, "skills");
   validateIndependentRuntimeRoots(instructionRoots, "instructions");
   validateIndependentRuntimeRoots(hookRoots, "hooks");
   validateIndependentRuntimeRoots(agentRoots, "agents");
+  validateIndependentRuntimeRoots(coordinatorRoots, "coordinators");
   for (const skillRoot of skillRoots) {
     assertRuntimeAssetRoot(skillRoot, "runtime skill root");
     for (const hookRoot of hookRoots) {
@@ -1216,6 +1332,24 @@ function validateRuntimeAssetRoots(
       if (pathWithin(agentRoot, hookRoot) || pathWithin(hookRoot, agentRoot)) {
         throw new Error(
           `runtime_root_overlap: agent root ${agentRoot} conflicts with hook root ${hookRoot}`,
+        );
+      }
+    }
+  }
+  for (const coordinatorRoot of coordinatorRoots) {
+    assertRuntimeAssetRoot(coordinatorRoot, "runtime coordinator root");
+    for (const otherRoot of [
+      ...skillRoots,
+      ...instructionRoots,
+      ...hookRoots,
+      ...agentRoots,
+    ]) {
+      if (
+        pathWithin(coordinatorRoot, otherRoot) ||
+        pathWithin(otherRoot, coordinatorRoot)
+      ) {
+        throw new Error(
+          `runtime_root_overlap: coordinator root ${coordinatorRoot} conflicts with ${otherRoot}`,
         );
       }
     }
@@ -1256,6 +1390,15 @@ function runtimeAgentRoots(
     config.runtime.agents.canonicalDir ?? "~/.agents/agents",
     ...Object.values(config.runtime.agents.targets ?? {}),
   ].map((root) => expandPath(root, sourceRoot));
+}
+
+function runtimeCoordinatorRoots(
+  config: AxRuntimeConfig,
+  sourceRoot: string,
+): string[] {
+  return Object.values(config.runtime.coordinatorProjects?.targets ?? {}).map(
+    (root) => expandPath(root, sourceRoot),
+  );
 }
 
 function validateIndependentRuntimeRoots(
@@ -1441,6 +1584,92 @@ function assertAgentTargetsSafe(
         `unmanaged_agent_target: ${path} points to ${observed}, expected ${expected}`,
       );
     }
+  }
+}
+
+function assertCoordinatorTargetsSafe(
+  config: AxRuntimeConfig,
+  sourceRoot: string,
+  surface?: RuntimeSurface,
+): void {
+  const coordinators = config.runtime.coordinatorProjects;
+  if (!coordinators || (surface && surface !== "coordinators")) {
+    return;
+  }
+  for (const [kind, configuredTarget] of Object.entries(coordinators.targets)) {
+    const target = expandPath(configuredTarget, sourceRoot);
+    const targetKind = pathKind(target);
+    if (targetKind === "missing") {
+      continue;
+    }
+    if (targetKind !== "directory") {
+      throw new Error(
+        `unmanaged_coordinator_target: ${target} is ${targetKind}`,
+      );
+    }
+    const markerPath = join(target, ".ax-managed.json");
+    if (!existsSync(markerPath)) {
+      throw new Error(
+        `unmanaged_coordinator_target: ${target} has no AX ownership marker`,
+      );
+    }
+    let marker: Record<string, unknown>;
+    try {
+      marker = JSON.parse(readFileSync(markerPath, "utf-8")) as Record<
+        string,
+        unknown
+      >;
+    } catch {
+      throw new Error(
+        `unmanaged_coordinator_target: ${target} has an invalid AX ownership marker`,
+      );
+    }
+    if (
+      marker.asset !== "coordinator-project" ||
+      marker.kind !== kind ||
+      resolve(String(marker.target)) !== resolve(target)
+    ) {
+      throw new Error(
+        `unmanaged_coordinator_target: ${target} ownership marker does not match`,
+      );
+    }
+    if (
+      JSON.stringify(marker.managed_entries) !==
+      JSON.stringify(coordinatorManagedEntries(target))
+    ) {
+      throw new Error(
+        `unmanaged_coordinator_target: ${target} content differs from its AX ownership marker`,
+      );
+    }
+  }
+}
+
+function validateCoordinatorTargets(
+  config: AxRuntimeConfig,
+  sourceRoot: string,
+): void {
+  for (const [kind, configuredTarget] of Object.entries(
+    config.runtime.coordinatorProjects?.targets ?? {},
+  )) {
+    const target = expandPath(configuredTarget, sourceRoot);
+    if (pathKind(target) === "missing") {
+      continue;
+    }
+    const marker = JSON.parse(
+      readFileSync(join(target, ".ax-managed.json"), "utf-8"),
+    ) as Record<string, unknown>;
+    const policy = JSON.parse(
+      readFileSync(join(target, "policy.json"), "utf-8"),
+    ) as Record<string, unknown>;
+    if (
+      marker.kind !== kind ||
+      marker.policy_sha256 !== policy.policy_sha256 ||
+      JSON.stringify(marker.managed_entries) !==
+        JSON.stringify(coordinatorManagedEntries(target))
+    ) {
+      throw new Error(`coordinator_policy_attestation_invalid: ${target}`);
+    }
+    parse(readFileSync(join(target, ".codex", "config.toml"), "utf-8"));
   }
 }
 

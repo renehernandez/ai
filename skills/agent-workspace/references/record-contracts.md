@@ -5,16 +5,20 @@
 Stable identity keyed by Linear Project ID, canonical GitLab Project ID, or
 Linear Project plus delivery scope. Stores role, reporting line, owned scope,
 workspace generation, activation state, task ID, current Memory Epoch, prompt
-version/hash, model profile, canonical links, and `next_check_at`.
+version/hash, model profile, control-project kind and ID, control-policy hash,
+canonical links, and `next_check_at`.
 
 Before task creation, `task_pending` stores an immutable creation tuple:
 canonical role ID, stable agent key, activation nonce, owned scope, reporting
 line, workspace generation, prompt contract version, and rendered prompt hash.
-Canonicalize the tuple with the prompt-contract helper and embed the same value
-in the task title and initial activation context. Codex task listing plus
-initial-task readback is the recovery source when the create response cannot be
-persisted. No matching task, multiple matches, or missing provenance blocks
-adoption.
+It also binds the AX-registered saved-project ID and generated control-policy
+hash, exact saved-project path, complete generated-project source fingerprint,
+and active permission profile. Canonicalize the tuple with the prompt-contract
+helper and embed the same value in the task title and initial activation
+context. Codex task listing
+plus initial-task readback is the recovery source when the create response
+cannot be persisted. No matching task, multiple matches, stale project
+registration, or missing provenance blocks adoption.
 
 ## Current Memory Epoch
 

@@ -33,15 +33,22 @@ Assistant, Linear Project Manager, GitLab Project Manager, and Squad Lead.
 Before any write:
 
 1. Confirm the connected Linear team/project and Codex Desktop task capabilities.
-2. Resolve the generated role descriptor and verify its model, sandbox, and
-   exact `TOOL_POLICY_SHA256` attestation. If descriptors are not synchronized, stop with
-   `agent_descriptors_unavailable` and route repair to the runtime owner.
-3. Verify required canonical sources exist, are accessible, and match the
+2. Resolve the generated role output. Pinned roles require a prompt bundle in
+   the correct generated coordinator project; ephemeral roles require a Codex
+   custom-agent descriptor. Verify model, sandbox, and exact
+   `TOOL_POLICY_SHA256` attestation. A lifecycle/output-kind mismatch blocks.
+3. Resolve the current coordinator registration for a pinned role. Verify the exact
+   saved-project ID, canonical path, source fingerprint, active permission mode,
+   project trust, generated control-policy hash, required tool surfaces, and
+   absence of usable prohibited mutation surfaces. Missing, ambiguous, or stale
+   registration blocks with `control_project_registration_unavailable` before
+   any provider write.
+4. Verify required canonical sources exist, are accessible, and match the
    requested scope.
-4. Read the control-plane activation writer and workspace generation. Forward
+5. Read the control-plane activation writer and workspace generation. Forward
    the request when this task is not the writer; fail closed on mismatch.
-5. Search the stable idempotency key before creating anything.
-6. Confirm privacy evidence before ingesting restricted-source content.
+6. Search the stable idempotency key before creating anything.
+7. Confirm privacy evidence before ingesting restricted-source content.
 
 No preflight failure may leave a partial write.
 
@@ -73,12 +80,20 @@ dynamic context.
 ## Activate
 
 1. Derive the idempotency key:
+   - Delivery Executive Assistant: `rene:delivery-portfolio`.
+   - Executive Operations Assistant: `rene:executive-operations`.
    - Linear Project Manager: Linear Project ID.
    - GitLab Project Manager: canonical GitLab Project ID.
-   - Squad Lead: Linear Project ID plus delivery-scope key.
-2. Route through the sole activation writer. The current bootstrap task owns
-   activation until the Delivery Executive Assistant becomes active and the
-   transfer Decision records its task ID.
+   - Squad Lead: `<linear-project-id>:<delivery-scope-key>`, where the recorded
+     Linear Project Manager allocates one lowercase kebab-case scope key and
+     reuses it for every retry.
+2. Route through the sole activation writer. Rene designates one local task for
+   bootstrap and starts no concurrent bootstrap attempt. Before any Root write,
+   that task creates or reads the typed Decision keyed
+   `control-plane:activation-writer`, which records its task ID and workspace
+   generation in the personal control project. A different or duplicate claim
+   blocks. After the Delivery Executive Assistant becomes active, a transfer
+   Decision records its task ID and increments the generation.
 3. Create or resume the Root Agent Record in `reserved`; never create a second
    Root for the same key.
 4. Create the Current Memory Epoch and initial Workstream, then link both from
@@ -87,32 +102,51 @@ dynamic context.
    `reserved`, `linear_ready`, `task_pending`, `task_created`,
    `task_pinned`, `post_create_sent`, `attested`, `active`.
 6. Persist `task_pending` with the complete immutable creation tuple before the
-   create call. Embed that tuple in the task title and initial `pre_create`
-   activation context. The task ID is null in that context, and the task may
-   reply only `PENDING_CONTEXT`.
-7. Create once, persist the returned task ID as `task_created`, then read and
+   create call. Call Codex `create_thread` with the registered saved-project ID
+   and a local environment. Embed the tuple in the task title and initial
+   `pre_create` activation context. The initial prompt names the exact pinned
+   prompt-bundle path and hash; the project contract loads that bundle before
+   replying. The task ID is null in that context, and the task may reply only
+   `PENDING_CONTEXT`.
+7. Immediately before `create_thread`, re-read the workspace generation,
+   activation writer, saved-project ID/path association, trust state, source
+   fingerprint, permission profile, and control-policy hash. Any drift returns
+   the Root to reconciliation without creating a task.
+8. Create once, persist the returned task ID as `task_created`, then read and
    verify `PENDING_CONTEXT`. Any other response blocks activation. Pin the exact
    task, deliver a post-create `ASSIGN` envelope as the first follow-up, and
    require a persisted ACK of role, scope, reporting line, contract
-   version/hash, tool policy, and workspace generation.
-8. Mark `active` only after the ACK is persisted and read back both Linear and
+   version/hash, control-project ID, source fingerprint, permission profile,
+   tool policy, and workspace generation.
+9. Mark `active` only after the ACK is persisted and read back both Linear and
    task identities.
 
 The immutable creation tuple is canonical role ID, stable agent key, activation
 nonce, owned scope, reporting line, workspace generation, prompt contract
-version, and rendered prompt hash. The activation nonce correlates retries; it
-does not authenticate a task. Recovery uses Codex task listing and initial-task
-readback to find the tuple persisted in `task_pending`. Adopt an orphan only
-when trusted Codex creation provenance and the complete tuple match. Missing,
-mismatched, or multiple candidates BLOCK. If Codex cannot list and read task
-creation provenance, activation preflight blocks before any write.
+version, rendered prompt hash, control-project kind and ID, control-policy hash,
+exact control-project path, control-project source fingerprint, and permission
+profile. The activation nonce correlates retries; it does not authenticate a
+task.
+Recovery uses Codex task listing and initial-task readback to find the tuple
+persisted in `task_pending`. Adopt an orphan only when trusted Codex creation
+provenance, saved project, and the complete tuple match. Missing, mismatched, or
+multiple candidates BLOCK. If Codex cannot list and read task creation
+provenance, activation preflight blocks before any write.
+
+If project drift changes the immutable tuple after an orphan task exists,
+persist a blocked Escalation and do not adopt or replace it. Rene may authorize
+deactivation and archival of that exact orphan. Mark the Root `inactive`,
+increment generation, preserve its history, archive the verified task, then
+reactivate the same stable Root under the new tuple.
 
 ## Resume
 
 Reconstruct state from Root, Current Memory Epoch, active Workstreams,
-Decisions/Escalations, task identity, and live Git/provider evidence. Compare the
-static prompt hash and contract version. Security-sensitive context changes
-increment workspace generation and require re-attestation before work resumes.
+Decisions/Escalations, task identity, coordinator registration, and live
+Git/provider evidence. Compare the static prompt hash, contract version,
+control-project identity, and control-policy hash. Security-sensitive context
+changes increment workspace generation and require re-attestation before work
+resumes.
 
 Repair from the first incomplete activation state. Preserve evidence and never
 delete a partial task or create a duplicate to hide failure.
@@ -189,6 +223,7 @@ archive the task only when authorized.
 | Stale writer wakes after failover | Generation mismatch blocks mutation |
 | Green CI and `proceed` | Leave draft; merge still requires Rene |
 | Missing sandbox/tool attestation | Block activation; prompt text is not enforcement |
+| Missing or stale saved-project registration | Block before Linear or task writes; revalidate both exact project IDs |
 
 ## Test Evidence
 
@@ -196,9 +231,12 @@ archive the task only when authorized.
   required Root/Memory/Workstream structure.
 - RED delivery explicitly refused to create Agent Runs before spawning because
   no workspace contract existed.
+- RED pinned activation could proceed from a generated directory without a
+  verified saved-project registration or control-policy fingerprint.
 - GREEN scenarios must create typed records, reconcile partial activation, keep
   external operations draft-only, create Runs before spawn, preserve draft MRs,
-  and refuse merge without Rene.
+  refuse merge without Rene, and block pinned activation until the exact saved
+  project, trust, source fingerprint, permission profile, and policy hash pass.
 - REFACTOR closes pressure-test ambiguity around slot accounting, delayed Runs,
   spawn retries, changed-head review, cross-repository order, and the boundary
   between Linear coordination writes and external operations.

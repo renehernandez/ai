@@ -47,6 +47,7 @@ type ReviewerOverlay = { id: string; path: string };
 type AgentOutput = {
   name: string;
   role: string;
+  kind: "pinned_prompt_bundle" | "codex_custom_agent";
   model_profile?: string;
   reviewer_overlays?: string[];
 };
@@ -72,6 +73,7 @@ export type AgentManifest = {
 export type AgentValidationResult = {
   promptContractVersion: string;
   agentNames: string[];
+  pinnedPromptNames: string[];
   automaticCeiling: "xhigh";
   manifest: AgentManifest;
 };
@@ -227,6 +229,15 @@ export function validateAgentSource(
         `agent_output_manual_profile: ${output.name} -> ${profileName}`,
       );
     }
+    const expectedKind =
+      role.lifecycle === "pinned"
+        ? "pinned_prompt_bundle"
+        : "codex_custom_agent";
+    if (output.kind !== expectedKind) {
+      throw new Error(
+        `agent_output_lifecycle_kind_mismatch: ${output.name} -> ${output.kind}`,
+      );
+    }
     for (const overlay of output.reviewer_overlays ?? []) {
       if (!overlays.has(overlay)) {
         throw new Error(
@@ -238,7 +249,14 @@ export function validateAgentSource(
 
   return {
     promptContractVersion: manifest.prompt_contract_version,
-    agentNames: [...outputs.keys()].sort(),
+    agentNames: [...outputs.values()]
+      .filter((output) => output.kind === "codex_custom_agent")
+      .map((output) => output.name)
+      .sort(),
+    pinnedPromptNames: [...outputs.values()]
+      .filter((output) => output.kind === "pinned_prompt_bundle")
+      .map((output) => output.name)
+      .sort(),
     automaticCeiling: "xhigh",
     manifest,
   };
@@ -247,7 +265,11 @@ export function validateAgentSource(
 export function renderAgentRuntime(input: {
   sourceDir: string;
   outputDir: string;
-}): { agentNames: string[]; staticHash: string } {
+}): {
+  agentNames: string[];
+  pinnedPromptNames: string[];
+  staticHash: string;
+} {
   const sourceDir = resolve(input.sourceDir);
   const outputDir = resolve(input.outputDir);
   const validated = validateAgentSource(sourceDir);
@@ -258,6 +280,8 @@ export function renderAgentRuntime(input: {
   }
   const codexDir = join(outputDir, "codex");
   mkdirSync(codexDir, { recursive: true });
+  const pinnedDir = join(outputDir, "pinned");
+  mkdirSync(pinnedDir, { recursive: true });
 
   const roles = new Map(
     validated.manifest.roles.map((role) => [role.id, role]),
@@ -330,16 +354,24 @@ export function renderAgentRuntime(input: {
       "",
       body,
     ].join("\n");
-    const toml = stringify({
-      name: output.name,
-      description: role.description,
-      developer_instructions: developerInstructions,
-      model: profile.model,
-      model_reasoning_effort: profile.reasoning_effort,
-      sandbox_mode: role.sandbox_mode,
-    });
-    validateGeneratedToml(output.name, toml);
-    writeFileSync(join(codexDir, `${output.name}.toml`), toml, "utf-8");
+    if (output.kind === "codex_custom_agent") {
+      const toml = stringify({
+        name: output.name,
+        description: role.description,
+        developer_instructions: developerInstructions,
+        model: profile.model,
+        model_reasoning_effort: profile.reasoning_effort,
+        sandbox_mode: role.sandbox_mode,
+      });
+      validateGeneratedToml(output.name, toml);
+      writeFileSync(join(codexDir, `${output.name}.toml`), toml, "utf-8");
+    } else {
+      writeFileSync(
+        join(pinnedDir, `${output.name}.md`),
+        `${developerInstructions}\n`,
+        "utf-8",
+      );
+    }
     hashes[output.name] = promptHash;
   }
   writeFileSync(
@@ -349,6 +381,11 @@ export function renderAgentRuntime(input: {
         schema_version: 1,
         prompt_contract_version: validated.promptContractVersion,
         prompts: hashes,
+        outputs: Object.fromEntries(
+          [...validated.manifest.outputs]
+            .sort((left, right) => left.name.localeCompare(right.name))
+            .map((output) => [output.name, output.kind]),
+        ),
       },
       null,
       2,
@@ -357,6 +394,7 @@ export function renderAgentRuntime(input: {
   );
   return {
     agentNames: validated.agentNames,
+    pinnedPromptNames: validated.pinnedPromptNames,
     staticHash: sha256(canonicalJson(hashes)),
   };
 }

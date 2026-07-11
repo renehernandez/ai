@@ -18,6 +18,12 @@ Use these exact schema fields in the normalized record body:
 - `prompt_contract_version`:
 - `rendered_prompt_sha256`:
 - `model_profile`:
+- `control_project_kind`:
+- `control_project_id`:
+- `control_project_path`:
+- `control_policy_sha256`:
+- `control_source_sha256`:
+- `control_permission_profile`:
 - `authority_exclusions`:
 - `activation_nonce`:
 - `codex_task_id`:
