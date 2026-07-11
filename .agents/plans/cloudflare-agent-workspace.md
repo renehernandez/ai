@@ -67,9 +67,10 @@ repository checkout in this iteration. Rene retains merge, deployment, cleanup,
 external-send, calendar-mutation, and other provider-mutation authority unless
 an exact active policy grants it.
 
-## Linear output
+## Linear integration output
 
-The Worker projects redacted Memory, Decision, Escalation, completed
+Linear is the integration output for the workspace. The Worker projects
+redacted Memory, Decision, Escalation, completed
 Workstream/Run, and operation-result records. `ax workspace linear export`
 returns pending projections. `ax workspace linear acknowledge --file <file>`
 marks only provider writes that have already succeeded. Agents may read Linear
@@ -109,8 +110,8 @@ legacy systems as part of implementation.
 4. A manager Root created in a structured result is immediately routable.
 5. A local one-shot Flue run claims, validates, completes, and records work with
    claim-token and generation fencing.
-6. Linear export contains only durable output projections and requires explicit
-   acknowledgement after provider success.
+6. The Linear integration output contains only durable projections and requires
+   explicit acknowledgement after provider success.
 7. Worker auth fails closed, production cannot use the development token, and
    request bodies are bounded.
 8. Unit, integration, Worker, TypeScript, schema drift, Worker dry-run, Flue

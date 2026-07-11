@@ -303,7 +303,7 @@ export function buildWorkspaceBootstrap(
         constraints: [
           "Cloudflare owns operational coordination state.",
           "Work executes on Rene's local machine through Codex and Flue.",
-          "Linear is readable context and receives durable memory and results.",
+          "Linear is readable context and the durable integration output.",
         ],
         decisions: ["Start from a fresh Cloudflare-native workspace."],
         workstream_ids: [workstreamId],

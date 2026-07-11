@@ -90,10 +90,11 @@ Use direct `--to` routing for diagnostics or explicit operator control. Normal
 delivery enters through `delivery-ea`; that agent delegates to Project Managers
 and Squad Leads by returning messages in its structured result.
 
-## Linear projection
+## Linear integration output
 
-Linear is durable memory and results output, plus a readable canonical source
-for project and issue context. It is not the workspace queue or authority.
+Linear is the integration output for durable memory and results. Its issues and
+projects are also readable canonical context, but it is not the workspace queue
+or authority.
 Export pending projections, apply them through the connected Linear surface,
 then acknowledge only the IDs whose writes succeeded.
 

@@ -146,7 +146,9 @@ The first cut has no daemon, timer, autonomous scheduler, or remote execution.
 Run the command again to process the next message. A failed Flue process records
 a failed result so the queue does not retain a false running state.
 
-## Project outputs to Linear
+## Linear integration output
+
+Linear is the workspace's integration output for durable memory and results.
 
 Export unacknowledged outputs:
 
@@ -190,7 +192,7 @@ ideas without adopting its runtime or UI.
 | `ax workspace run --once` | Execute at most one operation locally |
 | `ax workspace records list` | List authoritative records, optionally by type |
 | `ax workspace records show` | Read one authoritative record |
-| `ax workspace linear export` | Read pending Linear projections |
+| `ax workspace linear export` | Read pending Linear integration output |
 | `ax workspace linear acknowledge` | Mark successful projection writes |
 
 ## See also
