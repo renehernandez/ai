@@ -1,5 +1,9 @@
 # Root Agent Record
 
+Linear issue title: use the agent's purpose, optionally qualified by its owned
+scope. Add a two-digit suffix only when another concurrent agent has the same
+purpose and scope. Do not use `RENE-<number>` or `Root Agent` as the name.
+
 Use these exact schema fields in the normalized record body:
 
 - `record_type`: root

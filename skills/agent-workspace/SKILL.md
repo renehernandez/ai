@@ -77,6 +77,29 @@ limits, then emits length-prefixed untrusted-data framing. If the current
 harness cannot execute that helper, block the dispatch rather than hand-compose
 dynamic context.
 
+## Linear titles
+
+Treat `RENE-<number>` as a Linear address, never as an agent name. Name pinned
+agent issues after their purpose:
+
+- `Delivery Executive Assistant`
+- `Executive Operations Assistant`
+- `Linear Project Manager — <Linear project>`
+- `GitLab Project Manager — <GitLab project>`
+- `Squad Lead — <delivery scope>`
+
+Add a two-digit suffix only when concurrent agents would otherwise have the
+same purpose and scope, for example `Squad Lead 02 — Checkout migration`.
+Within each Squad or Workstream, assign ephemeral agents a monotonic two-digit
+sequence and a short scope: `Implementer 01 — API contract`, `Reviewer 01 —
+Security`, or `Worker 01 — Repository inventory`. Never reuse a sequence after
+a Run completes. Keep the stable semantic key in the typed body; do not copy
+Linear's issue identifier into the title to manufacture uniqueness.
+
+Name supporting records purpose-first as well: `<Agent purpose> — Memory 03`
+and `<Agent purpose> — <workstream outcome>`. Decisions and Escalations describe
+their decision or impact rather than pretending to be agents.
+
 ## Activate
 
 1. Derive the idempotency key:

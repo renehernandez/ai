@@ -1,5 +1,10 @@
 # Agent Run
 
+Linear issue title: `<Role purpose> <NN> — <short scope>`, where `<NN>` is a
+monotonic two-digit sequence within the parent Squad or Workstream. Examples:
+`Implementer 01 — API contract`, `Reviewer 01 — Security`, and `Worker 01 —
+Repository inventory`. Never reuse a completed sequence.
+
 Use these exact schema fields in the normalized record body:
 
 - `record_type`: run
