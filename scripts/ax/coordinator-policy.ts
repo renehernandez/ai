@@ -348,7 +348,7 @@ function taskWriteDecision(
   if (
     activation?.activation_phase !== "pre_create" ||
     activation.codex_task_id !== null ||
-    activation.prompt_contract_version !== "2.0.0" ||
+    activation.prompt_contract_version !== "3.0.0" ||
     activation.control_project_kind !== policy.kind ||
     activation.control_permission_profile !== "coordinator-readonly" ||
     typeof activation.control_project_id !== "string" ||

@@ -34,6 +34,11 @@ import {
   syncRuntime,
   validateRuntime,
 } from "./ax/runtime-sync.ts";
+import {
+  addWorkspaceCommands,
+  executeWorkspaceCommand,
+  type WorkspaceExecutor,
+} from "./ax/workspace-client.ts";
 
 type Scope = RuntimeSurface | "openspec";
 type RuntimeCommand = "sync" | "status" | "validate";
@@ -77,17 +82,18 @@ const SHIM_PATH = "~/.local/bin/ax";
 const SHIM_MARKER = "# AX_MANAGED_SHIM";
 const SHIM_SOURCE_ROOT_PREFIX = "# AX_SOURCE_ROOT=";
 
-export function main(): void {
+export async function main(): Promise<void> {
   const program = createProgram();
   if (process.argv.length <= 2) {
     program.outputHelp();
     return;
   }
-  program.parse(process.argv);
+  await program.parseAsync(process.argv);
 }
 
 export function createProgram(
   execute: CommandExecutor = executeParsedCommand,
+  executeWorkspace: WorkspaceExecutor = executeWorkspaceCommand,
 ): Command {
   const program = new Command();
   program
@@ -109,6 +115,7 @@ export function createProgram(
   addCoordinatorCommands(program, execute);
   addOpenSpecCommands(program, execute);
   addShimCommands(program, execute);
+  addWorkspaceCommands(program, executeWorkspace);
   return program;
 }
 
@@ -580,7 +587,7 @@ if (
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 ) {
   try {
-    main();
+    await main();
   } catch (error) {
     console.error(error instanceof Error ? error.message : error);
     process.exit(1);

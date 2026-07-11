@@ -133,7 +133,7 @@ test("AX reference documents the organizational agent surface", () => {
   assert.match(content, /unmanaged file, directory, or wrong symlink/i);
   assert.match(workspace, /Delivery Executive Assistant/);
   assert.match(workspace, /Executive Operations Assistant/);
-  assert.match(workspace, /Agent Run.*before.*spawn/is);
-  assert.match(workspace, /Max and Ultra are manual-only/);
-  assert.match(workspace, /Rene must merge|merge authority/i);
+  assert.match(workspace, /operation.*Run.*before.*execut/is);
+  assert.match(workspace, /one-shot local Flue/i);
+  assert.match(workspace, /Rene.*authoriz.*merge|merge authority/i);
 });

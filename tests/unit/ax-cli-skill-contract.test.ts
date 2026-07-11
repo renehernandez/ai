@@ -71,3 +71,18 @@ test("ax-cli skill retrieves source, isolation, shim, and activation rules", () 
   assert.match(metadata, /ax sync/i);
   assert.doesNotMatch(metadata, /install and update|install\|update/i);
 });
+
+test("ax-cli skill retrieves the Cloudflare workspace operations", () => {
+  assert.match(
+    skill,
+    /runtime sync.*workspace operations|workspace operations.*runtime sync/is,
+  );
+  assert.match(skill, /`ax workspace configure/);
+  assert.match(skill, /`ax workspace import/);
+  assert.match(skill, /`ax workspace activate/);
+  assert.match(skill, /`ax workspace send/);
+  assert.match(skill, /`ax workspace run --once`/);
+  assert.match(skill, /`ax workspace linear export`/);
+  assert.match(skill, /Cloudflare Access/i);
+  assert.match(skill, /AX_FLUE_MODEL/);
+});

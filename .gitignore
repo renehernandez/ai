@@ -3,7 +3,11 @@ automations/**/memory.md
 automations/**/state.json
 automations/**/*.log
 .ax/cache/
+workspace/.ax/
 agents/claude/
 agents/codex/
 agents/opencode/
 node_modules/
+.dev.vars
+.wrangler/
+workspace/flue/dist/

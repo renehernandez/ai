@@ -1,0 +1,15 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "ax-agent-workspace",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-01",
+  "observability": { "enabled": true },
+  "durable_objects": {
+    "bindings": [{ "name": "WORKSPACES", "class_name": "AgentWorkspace" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AgentWorkspace"] }],
+  "vars": {
+    "AX_WORKSPACE_ENVIRONMENT": "production",
+    "AX_WORKSPACE_KEY": "rene"
+  }
+}

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "prompt_contract_version": "2.0.0",
+  "prompt_contract_version": "3.0.0",
   "shared_contract": "shared-contract.md",
   "model_profiles": {
     "exceptional-max": {

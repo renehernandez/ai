@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rene.local/agents/workspace-result.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "operation_id",
+    "workspace_generation",
+    "state",
+    "response",
+    "checkpoints",
+    "record_mutations",
+    "messages",
+    "projection_record_ids"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "operation_id": { "type": "string", "minLength": 1 },
+    "workspace_generation": { "type": "integer", "minimum": 1 },
+    "state": { "enum": ["complete", "waiting", "blocked", "failed"] },
+    "response": { "type": "string" },
+    "checkpoints": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "record_mutations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["action"],
+        "properties": {
+          "action": { "enum": ["upsert", "delete"] },
+          "record": { "type": "object" },
+          "record_id": { "type": "string", "minLength": 1 }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": { "action": { "const": "upsert" } },
+              "required": ["action"]
+            },
+            "then": {
+              "properties": { "record": true },
+              "required": ["record"],
+              "not": {
+                "properties": { "record_id": true },
+                "required": ["record_id"]
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": { "action": { "const": "delete" } },
+              "required": ["action"]
+            },
+            "then": {
+              "properties": { "record_id": true },
+              "required": ["record_id"],
+              "not": {
+                "properties": { "record": true },
+                "required": ["record"]
+              }
+            }
+          }
+        ]
+      }
+    },
+    "messages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["to", "message_type", "objective"],
+        "properties": {
+          "to": { "type": "string", "minLength": 1 },
+          "message_type": {
+            "enum": [
+              "ASSIGN",
+              "CHECKPOINT",
+              "DECISION_REQUEST",
+              "BLOCKED",
+              "URGENT",
+              "HANDOFF",
+              "COMPLETE",
+              "CANCEL"
+            ]
+          },
+          "objective": { "type": "string", "minLength": 1 },
+          "correlation_id": { "type": ["string", "null"] },
+          "idempotency_id": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "projection_record_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

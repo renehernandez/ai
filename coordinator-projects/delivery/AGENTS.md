@@ -4,12 +4,13 @@ This saved Codex project hosts persistent delivery coordinators. Begin work only
 from a validated Agent Workspace activation or invocation envelope and load the
 matching prompt under `.agents/prompts/`.
 
-- Linear and Git are canonical state; do not create a private orchestration
-  store.
+- Before cutover, follow the legacy activation contract. After a Root records
+  `cloudflare-flue-v1`, Cloudflare is authoritative and this saved project is
+  migration evidence only.
 - Local files and shell execution are read-only. Obtain repository context
   through a read-only Agent Run in the applicable saved repository project.
-- Linear writes are limited to typed Agent Workspace records in the `Rene` team
-  and `Rene — Work Portfolio` project.
+- Linear writes are limited to acknowledged memory and result projections in
+  the `Rene` team and `Rene — Work Portfolio` project.
 - Provider publication belongs to a repository-bound Finish Run. Merge,
   deployment, cleanup, ready-state transition, and pinned deactivation require
   Rene's explicit authority.

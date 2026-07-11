@@ -1,16 +1,14 @@
 # Messages and invocation
 
-Every message carries message ID, type, correlation ID, sender, recipient,
-workspace generation, mode, objective, authority, canonical sources,
-acceptance, verification, stop condition, model profile, escalation route, and
-`next_check_at`. Every invocation also binds the control-project kind and
-exact path, control-policy hash, generated-project source fingerprint, and
-active permission profile. Agent Run messages carry Run ID.
+Every operation carries operation ID, type, correlation and idempotency IDs,
+recipient, workspace generation, mode, objective, authority, canonical sources,
+acceptance, verification, stop condition, model profile, sandbox mode,
+repository path when authorized, escalation route, and creation time. Agent Run
+messages carry the Run ID in their durable record or correlation chain.
 
 Use:
 
 - `ASSIGN` for accepted bounded work.
-- `ACK` to confirm identity, scope, authority, and contract.
 - `CHECKPOINT` for meaningful progress, forecast, evidence, and next action.
 - `DECISION_REQUEST` for a material choice outside current authority.
 - `BLOCKED` or `URGENT` for attention with impact and deadline.
@@ -20,11 +18,13 @@ Use:
 - `CANCEL` to terminate an Agent Run and increment generation when authority is
   revoked.
 
-Retry with the same correlation ID and incremented attempt. Do not produce a
-second logical assignment.
+Retry with the same correlation and idempotency IDs. Do not produce a second
+logical assignment. Cloudflare admits and orders messages before local Flue
+execution. Completion applies only when the operation generation still matches
+the target agent.
 
-Activation `pre_create` context is not an invocation message because no task ID
-exists yet. It contains the immutable creation tuple, null task ID, and
-`activation_phase: pre_create`. After the ID is persisted and the sole allowed
-`PENDING_CONTEXT` response is verified, the first follow-up is a normal `ASSIGN`
-envelope with `activation_phase: post_create` context.
+The local runner receives the target Root and directly linked authoritative
+records. Restricted records are reduced to identity and a redaction notice.
+The structured result may contain checkpoints, typed record mutations, and
+messages to other stable agent keys. Projection IDs are assigned by the control
+plane, not the model.

@@ -1,6 +1,6 @@
 ---
 name: ax-cli
-description: Use when managing local Agents Experience assets with the ax CLI, including authoritative runtime sync, shared skills, instructions, hooks, organizational agents, coordinator control projects, profiles, repo-local OpenSpec scaffolding, or runtime validation.
+description: Use when managing Agents Experience assets or Cloudflare agent workspaces with the ax CLI, including runtime sync, organizational agents, local Flue runs, Linear projections, OpenSpec scaffolding, or validation.
 allowed-tools: Read, Grep, Bash(ax:*), Bash(git:*), Bash(pnpm:*)
 ---
 
@@ -13,6 +13,10 @@ repo, use `pnpm ax ...`; from another project, use the AX-managed
 `~/.local/bin/ax` shim. `sync` is the only runtime-content mutation command;
 `coordinators register` records manually resolved saved-project IDs. `status`
 and `validate` are offline and read-only.
+
+Keep runtime sync and workspace operations distinct. Runtime commands converge
+local assets. `ax workspace` operates the authenticated Cloudflare control
+plane and invokes Flue locally.
 
 Shim `install`, `status`, and `uninstall` manage only the executable shim. They
 never synchronize runtime content.
@@ -31,6 +35,10 @@ never synchronize runtime content.
 | Repo-local OpenSpec | `pnpm ax openspec sync` | `ax openspec sync` |
 | Inspect runtime structure | `pnpm ax status` / `pnpm ax validate` | `ax status` / `ax validate` |
 | Manage the executable shim | `pnpm ax shim <command>` | Use the durable AI repo |
+| Configure workspace | `pnpm ax workspace configure --url <url> --workspace <key>` | `ax workspace configure --url <url> --workspace <key>` |
+| Import and activate workspace | `pnpm ax workspace import --file <file>` / `pnpm ax workspace activate` | `ax workspace import --file <file>` / `ax workspace activate` |
+| Send and run local work | `pnpm ax workspace send --message <text>` / `pnpm ax workspace run --once` | `ax workspace send --message <text>` / `ax workspace run --once` |
+| Project Linear outputs | `pnpm ax workspace linear export` | `ax workspace linear export` |
 
 Run the matching `validate` command after a scoped sync. Top-level `ax sync`
 validates every installed runtime surface before returning success.
@@ -84,7 +92,8 @@ For the coordinator surface, sync renders pinned prompt bundles into the exact
 `delivery` and `operations` saved-project roots with read-only permissions and
 a standalone policy hook. AX preserves siblings of those child roots. After
 post-merge sync and manual saved-project creation, resolve both IDs with Codex
-`list_projects`, then run `ax coordinators register` before activation.
+`list_projects`, then run `ax coordinators register` before legacy pinned-task
+activation. Cloudflare workspace activation does not use saved-project IDs.
 
 ## Repo-local OpenSpec
 
@@ -100,6 +109,39 @@ OpenSpec remains repository-scoped and transactionally managed. Run
 
 AX resolves `openspec` from PATH and does not manage that package. Finish with
 `ax openspec validate`.
+
+## Cloudflare workspace operations
+
+Configure the endpoint once. Cloudflare Access service-token values come from
+`AX_WORKSPACE_ACCESS_CLIENT_ID` and `AX_WORKSPACE_ACCESS_CLIENT_SECRET`, not the
+connection file:
+
+```bash
+ax workspace configure --url https://<worker-host> --workspace rene
+```
+
+Stage and activate a complete legacy snapshot:
+
+```bash
+ax workspace import --file records.json
+ax workspace activate
+ax workspace status
+```
+
+The Delivery Executive Assistant is the default `send` target. Set
+`AX_FLUE_MODEL` as the fallback model, then process one operation locally.
+Override a profile with `AX_FLUE_MODEL_<NORMALIZED_PROFILE>` when needed:
+
+```bash
+ax workspace send --message "Summarize the delivery portfolio."
+AX_FLUE_MODEL=<provider/model> ax workspace run --once
+```
+
+Use `ax workspace records list|show` for authoritative state. Use
+`ax workspace linear export` to read pending output and `ax workspace linear
+acknowledge --file <file>` only after the corresponding Linear writes succeed.
+Workspace commands are networked operational commands; top-level runtime
+`status` and `validate` remain offline.
 
 ## Feature work and activation
 
@@ -131,6 +173,8 @@ dependency.
   coordinators register` and requires coordinator validation before activation.
 - REFACTOR keeps feature-branch proof under isolated HOME/runtime roots and
   forbids editing generated children or registration state directly.
+- RED workspace retrieval had no Cloudflare command path. GREEN distinguishes
+  runtime sync from authenticated workspace operations and local Flue runs.
 
 ## Common mistakes
 
@@ -143,6 +187,6 @@ dependency.
 | Editing generated Codex agent TOML | Edit `agents/` in the AI repo and run agent sync. |
 | Editing a generated coordinator child | Edit `coordinator-projects/` or the renderer, then run coordinator sync. |
 | Hand-editing `control-projects.json` | Resolve unique ID/path matches with `list_projects`, then use `ax coordinators register`. |
-| Activating before saved-project registration | Register both current project IDs and validate the coordinator surface first. |
+| Legacy pinned activation before saved-project registration | Register both current project IDs and validate the coordinator surface first. |
 | Running raw upstream OpenSpec setup | Use repo-local `ax openspec sync`. |
 | Activating live roots from feature work | Use isolated roots and activate after merge. |

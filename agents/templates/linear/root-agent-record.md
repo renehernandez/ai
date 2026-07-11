@@ -22,6 +22,10 @@ Use these exact schema fields in the normalized record body:
 - `prompt_contract_version`:
 - `rendered_prompt_sha256`:
 - `model_profile`:
+- `runtime_backend`:
+- `workspace_key`:
+- `runtime_agent_id`:
+- `legacy_runtime_provenance`:
 - `control_project_kind`:
 - `control_project_id`:
 - `control_project_path`:

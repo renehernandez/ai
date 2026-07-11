@@ -11,6 +11,10 @@ From another project, use the managed `~/.local/bin/ax` shim. The shim keeps the
 durable AI repository as its source/config root. Repo-local scopes such as
 OpenSpec target the current working directory.
 
+AX also exposes `ax workspace` for the Cloudflare organizational-agent control
+plane. Those commands are networked operations and are separate from runtime
+asset synchronization.
+
 ## State model
 
 Tracked `ax.config.json` is authoritative runtime state. It declares source
@@ -99,6 +103,10 @@ content after changing the manifest, schemas, role files, or shared contract.
 
 ## Synchronize coordinator projects
 
+Coordinator projects support legacy `linear-codex-v1` migration and rollback.
+After a Root activates as `cloudflare-flue-v1`, they no longer own operational
+state.
+
 The tracked `coordinator-projects/` source renders two non-Git saved-project
 roots:
 
@@ -158,7 +166,8 @@ non-zero. A later sync whose generated fingerprint is unchanged preserves the
 registration. When the fingerprint changes, rerun `list_projects`, confirm the
 same unique path associations, rerun `coordinators register`, and validate
 again. If `control-projects.json` is deleted, reconstruct it through this same
-procedure; Linear and the generated local markers remain canonical.
+procedure. Before Cloudflare cutover, the legacy records and generated local
+markers remain the recovery evidence.
 
 If coordinator sync refuses a changed ownership inventory, do not force or
 hand-edit the marker. Run `ax coordinators validate`, preserve the complete
@@ -167,6 +176,45 @@ target, rerun coordinator sync to regenerate the missing child, and compare the
 preserved copy manually. Move any legitimate source change into this
 repository's `coordinator-projects/` source or renderer. AX never deletes the
 preserved copy.
+
+## Operate the Cloudflare agent workspace
+
+Store only the endpoint and personal workspace key in the local connection
+file. Supply Cloudflare Access credentials through the environment:
+
+```bash
+export AX_WORKSPACE_ACCESS_CLIENT_ID=<service-token-id>
+export AX_WORKSPACE_ACCESS_CLIENT_SECRET=<service-token-secret>
+ax workspace configure --url https://<worker-host> --workspace rene
+```
+
+Import and activate the complete legacy record snapshot:
+
+```bash
+ax workspace import --file records.json
+ax workspace status --json
+ax workspace activate --json
+```
+
+Send to the Delivery Executive Assistant by default and execute one operation
+locally through Flue:
+
+```bash
+ax workspace send --message "Summarize the delivery portfolio."
+AX_FLUE_MODEL=<provider/model> ax workspace run --once
+```
+
+Add `--repo <absolute-path> --workspace-write` to `send` only for explicitly
+authorized repository changes. Inspect state with `ax workspace records list`
+and `ax workspace records show <id>`.
+
+Export durable outputs for Linear, perform the provider writes, and acknowledge
+only successful projection IDs:
+
+```bash
+ax workspace linear export --json
+ax workspace linear acknowledge --file projection-ids.json
+```
 
 ## Synchronize repo-local OpenSpec
 

@@ -1,6 +1,6 @@
 # Agent Workspace record contracts
 
-## Linear naming
+## Linear projection naming
 
 Linear's `RENE-<number>` identifier is an address assigned by the team and is
 not the agent's name. Root titles are purpose-first: `Delivery Executive
@@ -16,25 +16,21 @@ sequence. Supporting titles remain purpose-first, such as `<Agent purpose> —
 Memory 03` and `<Agent purpose> — <workstream outcome>`. Stable semantic keys
 remain in the normalized record body.
 
+Linear receives projections of these records. Cloudflare stores their
+authoritative normalized bodies after activation.
+
 ## Root Agent Record
 
-Stable identity keyed by Linear Project ID, canonical GitLab Project ID, or
-Linear Project plus delivery scope. Stores role, reporting line, owned scope,
-workspace generation, activation state, task ID, current Memory Epoch, prompt
-version/hash, model profile, control-project kind and ID, control-policy hash,
-canonical links, and `next_check_at`.
+Stable identity keyed by portfolio, Linear Project ID, canonical GitLab Project
+ID, or Linear Project plus delivery scope. Stores role, reporting line, owned
+scope, workspace generation, activation state, current Memory Epoch, prompt
+version/hash, model profile, canonical links, and `next_check_at`.
 
-Before task creation, `task_pending` stores an immutable creation tuple:
-canonical role ID, stable agent key, activation nonce, owned scope, reporting
-line, workspace generation, prompt contract version, and rendered prompt hash.
-It also binds the AX-registered saved-project ID and generated control-policy
-hash, exact saved-project path, complete generated-project source fingerprint,
-and active permission profile. Canonicalize the tuple with the prompt-contract
-helper and embed the same value in the task title and initial activation
-context. Codex task listing
-plus initial-task readback is the recovery source when the create response
-cannot be persisted. No matching task, multiple matches, stale project
-registration, or missing provenance blocks adoption.
+Legacy roots use `runtime_backend: linear-codex-v1`. Cloudflare activation
+increments the generation, sets `runtime_backend: cloudflare-flue-v1`, records
+`workspace_key` and `runtime_agent_id`, clears `codex_task_id`, and moves the
+old task/control-project tuple under `legacy_runtime_provenance`. A Cloudflare
+root must not retain live top-level control-project fields.
 
 ## Current Memory Epoch
 
@@ -65,5 +61,5 @@ Escalations classify `blocked`, `urgent`, or `waiting_on_rene` and include
 impact, evidence, attempted mitigation, required action, owner, deadline, and
 next check.
 
-Apply record-type, role, attention, and domain labels explicitly; subissues do
-not inherit labels.
+When projecting to Linear, apply record-type, role, attention, and domain labels
+explicitly; subissues do not inherit labels.

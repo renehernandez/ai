@@ -147,7 +147,7 @@ test("renders the required Codex agents deterministically", () => {
 
 test("validates the canonical source inventory and model ceilings", () => {
   const result = validateAgentSource(resolve("agents"));
-  assert.equal(result.promptContractVersion, "2.0.0");
+  assert.equal(result.promptContractVersion, "3.0.0");
   assert.deepEqual(result.agentNames, EXPECTED_AGENTS);
   assert.deepEqual(result.pinnedPromptNames, EXPECTED_PINNED_PROMPTS);
   assert.equal(result.automaticCeiling, "xhigh");
@@ -204,7 +204,7 @@ test("serializes runtime context as deterministic untrusted data", () => {
     control_policy_sha256: "c".repeat(64),
     control_source_sha256: "d".repeat(64),
     control_permission_profile: "coordinator-readonly",
-    prompt_contract_version: "2.0.0",
+    prompt_contract_version: "3.0.0",
     rendered_prompt_sha256: "a".repeat(64),
     workspace_generation: 4,
   };
@@ -273,7 +273,7 @@ test("serializes runtime context as deterministic untrusted data", () => {
 
   assert.equal(first.contextHash, second.contextHash);
   assert.equal(first.serialized, second.serialized);
-  assert.match(first.serialized, /^AGENT_CONTEXT_V2\n/);
+  assert.match(first.serialized, /^AGENT_CONTEXT_V3\n/);
   assert.match(first.serialized, /BEGIN_UNTRUSTED_AGENT_CONTEXT/);
   assert.match(first.serialized, /END_UNTRUSTED_AGENT_CONTEXT/);
   assert.match(first.serialized, /RENE-8/);
@@ -614,7 +614,7 @@ test("workspace migration requires control identity from task_pending onward", (
     owned_scope: "delivery-portfolio",
     workspace_generation: 1,
     activation_state: "reserved",
-    prompt_contract_version: "2.0.0",
+    prompt_contract_version: "3.0.0",
     rendered_prompt_sha256: "a".repeat(64),
     model_profile: "pinned-delivery-standard",
   };
@@ -637,6 +637,82 @@ test("workspace migration requires control identity from task_pending onward", (
       control_policy_sha256: "c".repeat(64),
       control_source_sha256: "d".repeat(64),
       control_permission_profile: "coordinator-readonly",
+    }),
+  );
+});
+
+test("Cloudflare workspace roots use runtime identity without live Codex control fields", () => {
+  const root = {
+    record_type: "root",
+    id: "RENE-2",
+    created_at: "2026-07-11T20:00:00Z",
+    classification: "internal",
+    summary: "Delivery Executive Assistant",
+    agent_key: "delivery-ea",
+    agent_role: "delivery-ea",
+    reports_to: "rene",
+    owned_scope: "delivery-portfolio",
+    workspace_generation: 2,
+    activation_state: "active",
+    prompt_contract_version: "3.0.0",
+    rendered_prompt_sha256: "a".repeat(64),
+    model_profile: "pinned-delivery-standard",
+    runtime_backend: "cloudflare-flue-v1",
+    workspace_key: "rene",
+    runtime_agent_id: "rene:delivery-ea",
+    codex_task_id: null,
+  };
+  assert.doesNotThrow(() => assertSchemaValid("workspaceRecord", root));
+  assert.throws(
+    () =>
+      assertSchemaValid("workspaceRecord", {
+        ...root,
+        control_project_kind: "delivery",
+      }),
+    /workspaceRecord_invalid/,
+  );
+});
+
+test("workspace operation and result schemas enforce generation-safe envelopes", () => {
+  const operation = {
+    schema_version: 1,
+    operation_id: "operation-1",
+    workspace_key: "rene",
+    agent_key: "delivery-ea",
+    workspace_generation: 2,
+    message_type: "ASSIGN",
+    objective: "Review the portfolio",
+    mode: "Explore",
+    authority_grant: [],
+    canonical_sources: [],
+    acceptance: [],
+    verification: [],
+    stop_condition: "Return a result",
+    escalation_route: "delivery-ea",
+    model_profile: "pinned-delivery-standard",
+    sandbox_mode: "read-only",
+    created_at: "2026-07-11T20:00:00Z",
+  };
+  assert.doesNotThrow(() => assertSchemaValid("workspaceOperation", operation));
+  assert.throws(
+    () =>
+      assertSchemaValid("workspaceOperation", {
+        ...operation,
+        workspace_generation: 0,
+      }),
+    /workspaceOperation_invalid/,
+  );
+  assert.doesNotThrow(() =>
+    assertSchemaValid("workspaceResult", {
+      schema_version: 1,
+      operation_id: "operation-1",
+      workspace_generation: 2,
+      state: "complete",
+      response: "Done",
+      checkpoints: [],
+      record_mutations: [],
+      messages: [],
+      projection_record_ids: [],
     }),
   );
 });
@@ -716,7 +792,7 @@ test("portable runtime-context CLI serializes validated input", () => {
     control_policy_sha256: "c".repeat(64),
     control_source_sha256: "d".repeat(64),
     control_permission_profile: "coordinator-readonly",
-    prompt_contract_version: "2.0.0",
+    prompt_contract_version: "3.0.0",
     rendered_prompt_sha256: "a".repeat(64),
     workspace_generation: 4,
   };

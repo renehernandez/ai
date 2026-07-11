@@ -8,7 +8,9 @@ const SCHEMAS = {
   activationContext: "activation-context.schema.json",
   invocationEnvelope: "invocation-envelope.schema.json",
   manifest: "manifest.schema.json",
+  workspaceOperation: "workspace-operation.schema.json",
   workspaceRecord: "workspace-record.schema.json",
+  workspaceResult: "workspace-result.schema.json",
 } as const;
 
 type RolePolicyInput = {

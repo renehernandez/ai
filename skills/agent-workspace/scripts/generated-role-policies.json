@@ -1,5 +1,5 @@
 {
-  "prompt_contract_version": "2.0.0",
+  "prompt_contract_version": "3.0.0",
   "roles": {
     "delivery-ea": {
       "allowed_profiles": [

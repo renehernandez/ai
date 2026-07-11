@@ -8,50 +8,47 @@ const metadata = readFileSync(
   "utf-8",
 );
 
-test("agent-workspace exposes the full workspace lifecycle", () => {
-  assert.match(
-    skill,
-    /activate.*resume.*delegate.*message.*open.*deactivate/is,
-  );
-  assert.match(skill, /Root Agent Record/);
-  assert.match(skill, /Current Memory Epoch/);
-  assert.match(skill, /Agent Run.*before.*spawn/is);
-  assert.match(skill, /activation writer/i);
+test("agent-workspace retrieves the Cloudflare control-plane contract", () => {
+  assert.match(skill, /Cloudflare.*authoritative operational state/is);
+  assert.match(skill, /Linear.*projection|projection.*Linear/is);
+  assert.match(skill, /Codex.*user interface/is);
+  assert.match(skill, /local.*Flue|Flue.*local/is);
+  assert.match(skill, /one-shot/i);
+  assert.match(skill, /Root.*Memory.*Workstream.*Run.*Decision.*Escalation/is);
   assert.match(skill, /workspace generation/i);
-  assert.match(skill, /immutable creation tuple/i);
-  assert.match(skill, /Current Memory Epoch and initial Workstream/i);
-  assert.match(skill, /post-create `ASSIGN`/i);
-  assert.match(skill, /scripts\/runtime-context-cli\.mjs/i);
-  assert.match(skill, /length-prefixed untrusted-data framing/i);
-  assert.match(skill, /pinned roles require a prompt bundle/i);
-  assert.match(skill, /current coordinator registration/i);
-  assert.match(skill, /registered saved-project ID/i);
-  assert.match(skill, /control-policy hash/i);
-  assert.match(skill, /rene:delivery-portfolio/);
-  assert.match(skill, /rene:executive-operations/);
-  assert.match(skill, /control_project_registration_unavailable/);
-  assert.match(skill, /source fingerprint, permission profile/i);
-  assert.match(skill, /control-plane:activation-writer/);
-  assert.match(skill, /starts no concurrent bootstrap attempt/i);
-  assert.match(skill, /exact control-project path/i);
-  assert.match(skill, /deactivation and archival of that exact orphan/i);
-  assert.match(skill, /RENE-<number>.*never as an agent name/is);
-  assert.match(skill, /Delivery Executive Assistant/);
-  assert.match(skill, /Executive Operations Assistant/);
-  assert.match(skill, /Implementer 01 — API contract/);
-  assert.match(skill, /Reviewer 01 —\s*Security/);
-  assert.match(skill, /Never reuse a sequence/i);
+  assert.match(skill, /legacy_runtime_provenance/);
 });
 
-test("agent-workspace preserves authority and privacy boundaries", () => {
-  assert.match(skill, /Max and Ultra.*manual-only.*never automatic/is);
-  assert.match(skill, /read\/draft-only/i);
-  assert.match(skill, /merge.*Rene/is);
-  assert.match(skill, /BLOCKED.*URGENT/is);
-  assert.match(skill, /exactly one writable Run to a worktree/i);
-  assert.match(skill, /calendar.*provider mutation.*draft/is);
+test("agent-workspace retrieves the usable operation path", () => {
+  assert.match(skill, /`ax-cli` skill for exact command syntax/);
+  for (const operation of [
+    "Configure",
+    "Import",
+    "Activate",
+    "Status",
+    "Send",
+    "Run once",
+    "Records",
+    "Linear export",
+    "Linear acknowledge",
+  ]) {
+    assert.match(skill, new RegExp(`\\| ${operation} \\|`));
+  }
+  assert.match(skill, /Delivery Executive Assistant.*default/is);
+  assert.match(skill, /AX_WORKSPACE_ACCESS_CLIENT_ID/);
+  assert.match(skill, /AX_WORKSPACE_ACCESS_CLIENT_SECRET/);
+  assert.match(skill, /AX_FLUE_MODEL/);
+});
+
+test("agent-workspace keeps first-cut authority and execution boundaries", () => {
+  assert.match(skill, /work.*local machine/is);
+  assert.match(skill, /remote sandbox.*out of scope/is);
+  assert.match(skill, /Rene.*merge/is);
+  assert.match(skill, /Executive Operations Assistant.*read.*draft/is);
+  assert.match(skill, /workspace-write.*explicit/is);
+  assert.match(skill, /Cloudflare Access/i);
   assert.doesNotMatch(skill, /~\/(?:\.agents|\.codex)/);
-  assert.doesNotMatch(skill, /ax agents/);
+  assert.doesNotMatch(skill, /MCP server/i);
 });
 
 test("agent-workspace metadata is discoverable and narrow", () => {

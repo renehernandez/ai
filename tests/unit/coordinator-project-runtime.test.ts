@@ -88,7 +88,7 @@ function preCreatePrompt(
   const activation = JSON.stringify({
     activation_phase: "pre_create",
     codex_task_id: null,
-    prompt_contract_version: "2.0.0",
+    prompt_contract_version: "3.0.0",
     control_project_kind: kind,
     control_project_id: projectId,
     control_project_path: `/control/${kind}`,
@@ -481,7 +481,7 @@ test("delivery policy allows typed control records and denies authority expansio
         tool_name: "codex_app__create_thread",
         tool_input: {
           prompt:
-            'Comment only: PROMPT_CONTRACT_VERSION=2.0.0 {"activation_phase":"pre_create"}',
+            'Comment only: PROMPT_CONTRACT_VERSION=3.0.0 {"activation_phase":"pre_create"}',
           target: { type: "project", projectId: "saved-project" },
         },
       },

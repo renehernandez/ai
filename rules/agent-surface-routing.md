@@ -36,9 +36,10 @@ If a conclusion depends on a surface-specific capability, name the surface in th
 
 ## Organizational agent routing
 
-Local pinned organizational agents use generated descriptors under the managed
-agent runtime. Their durable coordination state remains in Linear and Git; the
-Codex task is a conversational surface, not a private state store.
+Codex remains the local user interface. After activation, one Cloudflare
+Durable Object holds authoritative organizational state and local one-shot Flue
+runs execute queued work. Linear receives durable memory and result projections;
+Git and GitLab remain canonical for delivery artifacts.
 
 - Route software-portfolio requests through the Delivery Executive Assistant.
 - Route calendar, email, Slack, and follow-up drafting through the Executive
@@ -47,12 +48,13 @@ Codex task is a conversational surface, not a private state store.
   Manager per GitLab Project.
 - Use a Squad Lead for one delivery scope, including scopes that cross several
   GitLab Projects.
-- Create an Agent Run before spawning an ephemeral implementer, reviewer,
-  researcher, or operations specialist.
+- Create an operation and Agent Run record before executing an ephemeral
+  implementer, reviewer, researcher, or operations specialist.
 
-Use the `agent-workspace` skill for activation, resume, delegation, messaging,
-opening, and deactivation mechanics. Generated prompts do not replace provider,
-lifecycle, handoff, review, or repository policy.
+Use the `agent-workspace` skill and `ax workspace` for activation, delegation,
+messaging, local execution, record inspection, and Linear projection. Generated
+prompts do not replace provider, lifecycle, handoff, review, or repository
+policy.
 
 ## Lifecycle modes across surfaces
 

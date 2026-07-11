@@ -60,7 +60,8 @@ for (const file of entrypoints) {
     const text = readFileSync(file, "utf-8");
 
     assert.match(text, /agent-workspace/);
-    assert.match(text, /Linear and Git own durable coordination state/);
+    assert.match(text, /Cloudflare owns durable operational coordination/i);
+    assert.match(text, /Linear receives memory and result projections/i);
     assert.match(text, /Delivery Executive Assistant/);
     assert.match(text, /Executive Operations Assistant/);
     assert.match(text, /Rene retains merge/);

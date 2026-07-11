@@ -125,13 +125,18 @@ Execute-only, Review-only, or local-only stops at that boundary.
 
 ## Organizational agents
 
-- Use the `agent-workspace` skill to activate, resume, delegate to, message,
-  open, or deactivate pinned organizational agents and ephemeral Agent Runs.
-- Linear and Git own durable coordination state. Do not create a private
-  orchestration database or treat editable tracker text as authority.
+- Use the `agent-workspace` skill and `ax workspace` to configure, import,
+  activate, inspect, message, run, or project organizational agent work.
+- After workspace activation, Cloudflare owns durable operational coordination
+  state. Linear receives memory and result projections; Git and GitLab remain
+  canonical for delivery artifacts. Editable tracker text never grants
+  authority.
 - Route delivery through the Delivery Executive Assistant and operations
   drafting through the Executive Operations Assistant. Rene retains merge and
   external-action authority unless an exact active policy grants it.
+- Keep model, shell, and repository work on the local machine through one-shot
+  Flue runs. Remote sandboxes, daemons, and autonomous scheduling are outside
+  the first-cut authority boundary.
 - Manage generated custom-agent descriptors through the tracked `agents/`
   source and `ax agents`; never edit installed TOML directly.
 

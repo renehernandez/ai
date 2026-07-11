@@ -43,12 +43,12 @@ If live state differs from the handoff, state the difference and use live state
 as authoritative. Invalidate stale worktree ownership, exact-target Review, and
 publication evidence before continuing.
 
-For a pinned organizational agent, begin with the Root Agent Record, Current
-Memory Epoch, active Workstreams, unresolved Decisions and Escalations, and the
-live Codex task identity. Verify the prompt contract version, rendered prompt
-hash, workspace generation, scope, reporting line, and tool-policy attestation.
-A generation or identity mismatch permits reporting but blocks mutation until
-the workspace is re-attested.
+For a durable organizational agent, begin with Cloudflare workspace status, the
+Root Agent Record, Current Memory Epoch, active Workstreams, unresolved
+Decisions and Escalations, and queued/running operations. Verify the runtime
+backend, prompt contract version, rendered prompt hash, workspace generation,
+scope, reporting line, and tool-policy attestation. A generation or identity
+mismatch permits reporting but blocks mutation.
 
 For an ephemeral Agent Run, persist the Run before spawn and carry its Run ID,
 invocation ID, workspace generation, model profile, authority, sources,

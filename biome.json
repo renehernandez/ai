@@ -5,7 +5,9 @@
     "includes": [
       "**",
       "!.ax",
+      "!**/.ax",
       "!node_modules",
+      "!workspace/worker-configuration.d.ts",
       "!skills/agent-workspace/scripts/generated-validators.cjs",
       "!skills/agent-workspace/scripts/generated-role-policies.json"
     ]

@@ -20,6 +20,17 @@ function parse(args: string[]): Parsed[] {
   return parsed;
 }
 
+function parseWorkspace(args: string[]): Array<Record<string, unknown>> {
+  const parsed: Array<Record<string, unknown>> = [];
+  const program = createProgram(
+    () => undefined,
+    (input) => parsed.push(input),
+  );
+  configure(program);
+  program.parse(["node", "ax", ...args], { from: "node" });
+  return parsed;
+}
+
 function parseError(args: string[]): Error {
   const program = createProgram(() => undefined);
   configure(program);
@@ -100,6 +111,34 @@ test("agents is a scoped runtime surface", () => {
   assert.equal(parsed.scope, "agents");
   assert.equal(parsed.command, "validate");
   assert.match(parseError(["agents", "install"]).message, /Use ax agents sync/);
+});
+
+test("workspace is an operational AX surface with executive-first defaults", () => {
+  const [configured] = parseWorkspace([
+    "workspace",
+    "configure",
+    "--url",
+    "https://workspace.example.com",
+    "--workspace",
+    "rene",
+  ]);
+  assert.deepEqual(configured, {
+    command: "configure",
+    url: "https://workspace.example.com",
+    workspace: "rene",
+  });
+
+  const [sent] = parseWorkspace([
+    "workspace",
+    "send",
+    "--message",
+    "Review the portfolio",
+  ]);
+  assert.equal(sent.command, "send");
+  assert.equal(sent.to, "delivery-ea");
+
+  const [run] = parseWorkspace(["workspace", "run", "--once"]);
+  assert.equal(run.command, "run-once");
 });
 
 test("OpenSpec sync parses convergence and config-review inputs", () => {

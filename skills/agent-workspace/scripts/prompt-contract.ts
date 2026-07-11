@@ -1,13 +1,15 @@
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 
-export const PROMPT_CONTRACT_VERSION = "2.0.0";
+export const PROMPT_CONTRACT_VERSION = "3.0.0";
 
 type SchemaName =
   | "activationContext"
   | "invocationEnvelope"
   | "manifest"
-  | "workspaceRecord";
+  | "workspaceOperation"
+  | "workspaceRecord"
+  | "workspaceResult";
 
 type StandaloneValidator = {
   (value: unknown): boolean;

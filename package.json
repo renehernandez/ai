@@ -15,17 +15,29 @@
     "test:unit": "node --import tsx --test tests/unit/*.test.ts",
     "test:integration": "node --import tsx --test tests/integration/*.test.ts",
     "agents:validate": "tsx scripts/agent-validate.ts",
-    "agent-schemas:render": "tsx scripts/agent-schema-render.ts"
+    "agent-schemas:render": "tsx scripts/agent-schema-render.ts",
+    "workspace:typecheck": "tsc -p workspace/tsconfig.json",
+    "workspace:types:render": "wrangler types workspace/worker-configuration.d.ts --config workspace/wrangler.jsonc",
+    "workspace:types:validate": "wrangler types workspace/worker-configuration.d.ts --config workspace/wrangler.jsonc --check",
+    "workspace:worker-test": "vitest run --config workspace/vitest.config.ts",
+    "workspace:worker-build": "wrangler deploy --dry-run --config workspace/wrangler.jsonc --outdir .ax/cache/workspace-worker",
+    "workspace:flue-build": "flue build --target node --root workspace/flue --output .ax/cache/workspace-flue"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.16",
+    "@cloudflare/vitest-pool-workers": "0.18.0",
     "tsx": "^4.20.6",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "4.1.9",
+    "wrangler": "4.107.0"
   },
   "packageManager": "pnpm@11.5.3",
   "dependencies": {
+    "@flue/cli": "1.0.0-beta.9",
+    "@flue/runtime": "1.0.0-beta.9",
     "ajv": "^8.20.0",
     "commander": "^15.0.0",
-    "smol-toml": "^1.7.0"
+    "smol-toml": "^1.7.0",
+    "valibot": "1.4.2"
   }
 }
