@@ -23,6 +23,7 @@ Planning or OpenSpec targets always run:
 2. `edge-cases-and-risk`
 3. `simplification-and-scope`
 4. `refactoring-opportunities`
+5. `delivery-shape`
 
 POC or final implementation targets always run:
 
@@ -35,6 +36,16 @@ Add affected-domain specialists such as security, documentation/agent
 alignment, AX/skill compatibility, data, infrastructure, or UI. Reviewers stay
 read-only and return `passed`, `finding`, or `blocked` with file/line evidence
 where applicable.
+
+For `delivery-shape`, challenge both under-splitting and over-splitting. Each
+top-level OpenSpec unit must produce one reviewable outcome, remain correct and
+safe when merged before its successors, own objective proof, and have coherent
+reviewer, risk, rollback, and deployment boundaries. Split units that combine
+materially different shared prerequisites, feature behavior, proof
+infrastructure, activation, repository ownership, security, rollback, or
+deployment seams. Combine proposed units that only create unused plumbing,
+unverifiable intermediate states, or checkbox-only PRs/MRs. Existing headings
+and tidy nested task lists are not evidence that the parent unit is mergeable.
 
 An in-scope planning finding returns to Plan. An in-scope implementation
 finding returns to the same Execute owner. A material scope, architecture,

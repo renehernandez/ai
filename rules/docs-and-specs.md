@@ -42,6 +42,22 @@ An OpenSpec `tasks.md` top-level heading is a delivery unit. Each top-level
 delivery unit maps to one final implementation PR/MR. Nested checkboxes are work
 items delivered cohesively inside that PR/MR, usually as focused commits.
 
+Derive top-level units from behavior, ownership, deployment, security,
+migration, rollback, verification, and repository boundaries before mapping
+tasks onto them. Existing headings are hypotheses, not accepted delivery
+boundaries. When earlier implementation, POC, PR/MR, or incident evidence
+exists, use its actual footprint and findings to challenge the proposed split.
+
+Each unit must provide one reviewable outcome, a safe merged intermediate state,
+owned objective proof, a coherent reviewer/risk/rollback/deployment boundary,
+and declared predecessor output and integration hotspots. Split materially
+different shared prerequisites, feature behavior, proof infrastructure,
+activation, repositories or owners, security boundaries, rollback paths, and
+deployment mechanisms. Combine candidates that would otherwise leave unused
+plumbing, an unverifiable or unsafe intermediate state, or checkbox-only
+PRs/MRs with the same review and rollback boundary. File count and diff size are
+evidence, not delivery-shape thresholds.
+
 - Use headings for reviewable implementation outcomes, never workflow phases.
 - Put documentation, linting, testing, review, validation, verification, proof,
   cleanup, and archival inside the work item that owns the behavior. They are
@@ -56,6 +72,9 @@ items delivered cohesively inside that PR/MR, usually as focused commits.
   reviewability explains the separate delivery boundary.
 - The last final unit carries task completion and required OpenSpec archival.
   Planning reviewers inspect resulting canonical-spec and archive changes.
+- Re-run delivery decomposition after the POC using its actual implementation
+  and review evidence. A material top-level-unit change returns to the user
+  before final implementation; do not silently rewrite the accepted shape.
 
 Do not publish a separate planning PR/MR or reconciliation-only PR/MR. The
 initial locally reviewed OpenSpec enters the POC. Reconciled planning state then

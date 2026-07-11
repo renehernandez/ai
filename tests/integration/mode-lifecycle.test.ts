@@ -128,7 +128,21 @@ test("Plan keeps atomic delivery in one change set and rehearses OpenSpec", () =
   assert.match(skill, /no planning-only MR, POC phase, or POC MR/);
   assert.match(skill, /If rehearsal is required, select\s+OpenSpec/);
   assert.match(skill, /one final MR per top-level delivery unit/);
-  assert.match(skill, /Do not start another POC automatically/);
+  assert.match(skill, /Do not start another POC\s+automatically/);
+  assert.match(skill, /existing top-level headings as hypotheses/);
+  assert.match(skill, /safe merged intermediate state/);
+  assert.match(
+    skill,
+    /Split a candidate unit when it combines materially different/,
+  );
+  assert.match(
+    skill,
+    /Combine\s+candidate units when a split would create unused plumbing/,
+  );
+  assert.match(
+    skill,
+    /rerun the delivery decomposition against the actual POC\s+footprint/,
+  );
 });
 
 test("Execute enforces one writer and preserves total Git order", () => {
@@ -191,12 +205,13 @@ test("mode skills coordinate parallel draft stacks through hosted readiness", ()
   );
 });
 
-test("Review uses target-specific four-lane baselines", () => {
+test("Review uses a five-lane planning baseline and four implementation lanes", () => {
   assert.deepEqual(baselineFor("planning"), [
     "implementation-readiness",
     "edge-cases-and-risk",
     "simplification-and-scope",
     "refactoring-opportunities",
+    "delivery-shape",
   ]);
   assert.deepEqual(baselineFor("poc"), [
     "correctness",

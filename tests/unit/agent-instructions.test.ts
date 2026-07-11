@@ -234,6 +234,40 @@ test("multi-unit guidance supports parallel owners with ordered ancestry", () =>
   assert.match(gitRules, /exact expected remote-head lease/);
 });
 
+test("OpenSpec guidance challenges delivery-unit cohesion before writing", () => {
+  const implementationRules = readFileSync(
+    "rules/investigation-and-implementation.md",
+    "utf-8",
+  );
+  const docsRules = readFileSync("rules/docs-and-specs.md", "utf-8");
+  const testingRules = readFileSync(
+    "rules/testing-and-verification.md",
+    "utf-8",
+  );
+  const reviewAdapter = readFileSync(
+    "skills/review/agents/openai.yaml",
+    "utf-8",
+  );
+
+  for (const text of [implementationRules, docsRules]) {
+    assert.match(text, /existing\s+headings (?:are|as) hypotheses/i);
+    assert.match(
+      text,
+      /(?:safe.*merged.*intermediate state|safe.*when merged before)/is,
+    );
+    assert.match(
+      text,
+      /shared prerequisites.*feature behavior.*proof infrastructure.*activation/is,
+    );
+    assert.match(text, /unused.*unverifiable.*checkbox-only/is);
+    assert.match(text, /POC.*actual/is);
+  }
+
+  assert.match(testingRules, /delivery-shape reviewers/);
+  assert.match(reviewAdapter, /target-specific baseline/);
+  assert.doesNotMatch(reviewAdapter, /four-lane/);
+});
+
 test("only primary Markdown plans are tracked", () => {
   const planEntries = readdirSync(".agents/plans", { withFileTypes: true });
 

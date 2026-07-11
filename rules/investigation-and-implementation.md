@@ -37,6 +37,16 @@ Plan selects one artifact:
 - Use one OpenSpec change for independently reviewable delivery units, a durable
   cross-component contract, migration design, or work requiring the full POC.
 
+Before writing an OpenSpec, derive its top-level units from behavior, ownership,
+deployment, security, migration, rollback, verification, and repository
+boundaries. Treat existing headings as hypotheses and inspect prior
+implementation or POC evidence when available. Each unit must be safe and
+correct when merged before its successors, own objective proof, and have a
+coherent reviewer, risk, rollback, and deployment boundary. Split distinct
+shared prerequisites, feature behavior, proof infrastructure, activation,
+repositories or owners, security, rollback, and deployment seams. Combine
+unused-foundation, unverifiable-intermediate, and checkbox-only candidates.
+
 Only primary atomic-plan Markdown belongs under `.agents/plans`. Reviewer
 requests, selections, blueprints, handoffs, ledgers, fingerprints, command
 proof, and other private workflow evidence remain task-local. Do not commit a
@@ -90,6 +100,12 @@ specs, tasks, and required tracker content once per authorized cycle. Local-only
 implementation observations remain transient. A materially unproved
 reconciliation delta returns to the user before another POC cycle.
 
+Reconciliation also reruns top-level delivery decomposition against the POC's
+actual footprint, owners, findings, proof, rollback needs, and deployment seams.
+If a unit proved broader than planned, split it before final implementation.
+Any material top-level-unit change returns to the user instead of silently
+rewriting the accepted delivery contract.
+
 ## Deliver final artifacts by top-level unit
 
 - There is no separate planning MR and no reconciliation-only MR.
@@ -118,9 +134,9 @@ reconciliation delta returns to the user before another POC cycle.
 ## Review and publication boundary
 
 Review inspects every changed planning artifact with implementation-readiness,
-edge-case/risk, simplification/scope, and refactoring reviewers. It inspects POC
-and final implementation targets with correctness, regression, maintainability,
-and verification reviewers. Add affected-domain specialists.
+edge-case/risk, simplification/scope, refactoring, and delivery-shape reviewers.
+It inspects POC and final implementation targets with correctness, regression,
+maintainability, and verification reviewers. Add affected-domain specialists.
 
 Review evidence is task-local and bound to an artifact fingerprint or exact
 target-base/HEAD pair. Before any push or hosted artifact mutation, Review emits
