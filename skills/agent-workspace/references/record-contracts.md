@@ -17,7 +17,7 @@ Memory 03` and `<Agent purpose> — <workstream outcome>`. Stable semantic keys
 remain in the normalized record body.
 
 Linear receives projections of these records. Cloudflare stores their
-authoritative normalized bodies after activation.
+authoritative normalized bodies.
 
 ## Root Agent Record
 
@@ -26,11 +26,10 @@ ID, or Linear Project plus delivery scope. Stores role, reporting line, owned
 scope, workspace generation, activation state, current Memory Epoch, prompt
 version/hash, model profile, canonical links, and `next_check_at`.
 
-Legacy roots use `runtime_backend: linear-codex-v1`. Cloudflare activation
-increments the generation, sets `runtime_backend: cloudflare-flue-v1`, records
-`workspace_key` and `runtime_agent_id`, clears `codex_task_id`, and moves the
-old task/control-project tuple under `legacy_runtime_provenance`. A Cloudflare
-root must not retain live top-level control-project fields.
+Every Root is Cloudflare-native: `runtime_backend` is `cloudflare-flue-v1`,
+`workspace_key` and `runtime_agent_id` identify its Durable Object workspace,
+and `codex_task_id` is null. Bootstrap creates only the two executive Roots;
+executive results create manager Roots when a real scope needs one.
 
 ## Current Memory Epoch
 

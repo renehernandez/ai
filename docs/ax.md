@@ -103,9 +103,8 @@ content after changing the manifest, schemas, role files, or shared contract.
 
 ## Synchronize coordinator projects
 
-Coordinator projects support legacy `linear-codex-v1` migration and rollback.
-After a Root activates as `cloudflare-flue-v1`, they no longer own operational
-state.
+Coordinator projects support the existing local Codex coordinator workflow.
+They are separate from the Cloudflare workspace and do not provide its state.
 
 The tracked `coordinator-projects/` source renders two non-Git saved-project
 roots:
@@ -166,8 +165,7 @@ non-zero. A later sync whose generated fingerprint is unchanged preserves the
 registration. When the fingerprint changes, rerun `list_projects`, confirm the
 same unique path associations, rerun `coordinators register`, and validate
 again. If `control-projects.json` is deleted, reconstruct it through this same
-procedure. Before Cloudflare cutover, the legacy records and generated local
-markers remain the recovery evidence.
+procedure. The generated local markers remain coordinator registration evidence.
 
 If coordinator sync refuses a changed ownership inventory, do not force or
 hand-edit the marker. Run `ax coordinators validate`, preserve the complete
@@ -188,12 +186,11 @@ export AX_WORKSPACE_ACCESS_CLIENT_SECRET=<service-token-secret>
 ax workspace configure --url https://<worker-host> --workspace rene
 ```
 
-Import and activate the complete legacy record snapshot:
+Bootstrap a fresh hierarchy from the tracked executive roles:
 
 ```bash
-ax workspace import --file records.json
+ax workspace bootstrap
 ax workspace status --json
-ax workspace activate --json
 ```
 
 Send to the Delivery Executive Assistant by default and execute one operation

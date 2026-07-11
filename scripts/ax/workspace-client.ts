@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   chmodSync,
   existsSync,
@@ -15,8 +16,7 @@ import { assertSchemaValid } from "../../skills/agent-workspace/scripts/prompt-c
 export type WorkspaceCommandInput = {
   command:
     | "configure"
-    | "import"
-    | "activate"
+    | "bootstrap"
     | "status"
     | "send"
     | "records-list"
@@ -58,19 +58,11 @@ export function addWorkspaceCommands(
       execute({ command: "configure", ...options }),
     );
   workspace
-    .command("import")
-    .description("Import a non-authoritative workspace record snapshot")
-    .requiredOption("--file <path>", "JSON file containing records")
+    .command("bootstrap")
+    .description("Create a fresh workspace from the tracked executive roles")
     .option("--json", "Emit structured JSON")
     .action((options: WorkspaceCommandInput) =>
-      execute({ command: "import", ...options }),
-    );
-  workspace
-    .command("activate")
-    .description("Atomically activate an imported workspace hierarchy")
-    .option("--json", "Emit structured JSON")
-    .action((options: WorkspaceCommandInput) =>
-      execute({ command: "activate", ...options }),
+      execute({ command: "bootstrap", ...options }),
     );
   workspace
     .command("status")
@@ -150,26 +142,17 @@ export async function executeWorkspaceCommand(
     return;
   }
   const connection = readConnection();
-  if (input.command === "import") {
-    const body = readJsonFile(input.file);
-    const records = Array.isArray(body)
-      ? body
-      : (body as { records?: unknown[] }).records;
-    if (!Array.isArray(records))
-      throw new Error("workspace_import_records_invalid");
+  if (input.command === "bootstrap") {
+    const records = buildWorkspaceBootstrap(
+      connection.workspace,
+      new Date().toISOString(),
+    );
     for (const record of records) assertSchemaValid("workspaceRecord", record);
     print(
-      await request(connection, "/import", {
+      await request(connection, "/bootstrap", {
         method: "POST",
         body: { records },
       }),
-      input.json,
-    );
-    return;
-  }
-  if (input.command === "activate") {
-    print(
-      await request(connection, "/activate", { method: "POST", body: {} }),
       input.json,
     );
     return;
@@ -232,6 +215,117 @@ export async function executeWorkspaceCommand(
   if (input.command === "run-once") {
     print(await runOnce(connection), input.json);
   }
+}
+
+export function buildWorkspaceBootstrap(
+  workspaceKey: string,
+  createdAt: string,
+): Array<Record<string, unknown>> {
+  const sourceRoot = resolve(import.meta.dirname, "../..");
+  const manifest = JSON.parse(
+    readFileSync(resolve(sourceRoot, "agents/manifest.json"), "utf-8"),
+  ) as {
+    prompt_contract_version: string;
+    shared_contract: string;
+    roles: Array<{
+      id: string;
+      description: string;
+      lifecycle: string;
+      reports_to: string;
+      charter: string;
+      model_profile: string;
+      required_skills: string[];
+    }>;
+  };
+  const scopes: Record<string, string> = {
+    "delivery-ea": "global-software-delivery-portfolio",
+    "operations-ea": "executive-operations",
+  };
+  return manifest.roles
+    .filter((role) => ["delivery-ea", "operations-ea"].includes(role.id))
+    .flatMap((role) => {
+      const rootId = `${workspaceKey}:${role.id}`;
+      const memoryId = `${rootId}:memory:1`;
+      const workstreamId = `${rootId}:bootstrap`;
+      const renderedPrompt = [
+        readFileSync(
+          resolve(sourceRoot, "agents", manifest.shared_contract),
+          "utf-8",
+        ),
+        readFileSync(resolve(sourceRoot, "agents", role.charter), "utf-8"),
+        ...role.required_skills.map((skill) =>
+          readFileSync(
+            resolve(sourceRoot, "skills", skill, "SKILL.md"),
+            "utf-8",
+          ),
+        ),
+      ].join("\n\n");
+      const root = {
+        record_type: "root",
+        id: rootId,
+        created_at: createdAt,
+        classification: "internal",
+        summary: role.description,
+        agent_key: role.id,
+        agent_role: role.id,
+        reports_to: role.reports_to,
+        owned_scope: scopes[role.id],
+        workspace_generation: 1,
+        activation_state: "active",
+        prompt_contract_version: manifest.prompt_contract_version,
+        rendered_prompt_sha256: createHash("sha256")
+          .update(renderedPrompt)
+          .digest("hex"),
+        model_profile: role.model_profile,
+        runtime_backend: "cloudflare-flue-v1",
+        workspace_key: workspaceKey,
+        runtime_agent_id: rootId,
+        codex_task_id: null,
+        memory_epoch_id: memoryId,
+        authority_exclusions: [
+          "merge",
+          "deploy",
+          "cleanup",
+          "ready-state",
+          "external-provider-mutation",
+        ],
+      };
+      const memory = {
+        record_type: "memory",
+        id: memoryId,
+        created_at: createdAt,
+        classification: "internal",
+        summary: `Initial ${role.id} memory.`,
+        epoch: 1,
+        current: true,
+        prompt_contract_version: manifest.prompt_contract_version,
+        charter_summary: role.description,
+        constraints: [
+          "Cloudflare owns operational coordination state.",
+          "Work executes on Rene's local machine through Codex and Flue.",
+          "Linear receives memory and results only.",
+        ],
+        decisions: ["Start from a fresh Cloudflare-native workspace."],
+        workstream_ids: [workstreamId],
+        prior_epoch_id: null,
+      };
+      const workstream = {
+        record_type: "workstream",
+        id: workstreamId,
+        created_at: createdAt,
+        classification: "internal",
+        summary: `Bootstrap the ${role.id} workspace.`,
+        outcome: `${role.id} is ready for new intake.`,
+        status: "complete",
+        owner: role.id,
+        scope: scopes[role.id],
+        acceptance: ["Root and memory are authoritative in Cloudflare."],
+        dependencies: [],
+        risks: [],
+        next_action: "Accept new intake.",
+      };
+      return [root, memory, workstream];
+    });
 }
 
 async function runOnce(connection: WorkspaceConnection): Promise<unknown> {

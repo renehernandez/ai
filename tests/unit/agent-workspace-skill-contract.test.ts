@@ -16,15 +16,15 @@ test("agent-workspace retrieves the Cloudflare control-plane contract", () => {
   assert.match(skill, /one-shot/i);
   assert.match(skill, /Root.*Memory.*Workstream.*Run.*Decision.*Escalation/is);
   assert.match(skill, /workspace generation/i);
-  assert.match(skill, /legacy_runtime_provenance/);
+  assert.match(skill, /does not read or\s+copy Linear state/is);
+  assert.doesNotMatch(skill, /legacy_runtime_provenance/);
 });
 
 test("agent-workspace retrieves the usable operation path", () => {
   assert.match(skill, /`ax-cli` skill for exact command syntax/);
   for (const operation of [
     "Configure",
-    "Import",
-    "Activate",
+    "Bootstrap",
     "Status",
     "Send",
     "Run once",

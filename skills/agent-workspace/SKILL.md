@@ -1,6 +1,6 @@
 ---
 name: agent-workspace
-description: Use when configuring, importing, activating, inspecting, messaging, running, or projecting persistent organizational agent workspaces.
+description: Use when configuring, bootstrapping, inspecting, messaging, running, or projecting persistent organizational agent workspaces.
 ---
 
 # Agent Workspace
@@ -10,8 +10,7 @@ description: Use when configuring, importing, activating, inspecting, messaging,
 Use Codex as the user interface. Cloudflare holds authoritative operational state
 in one Durable Object per personal workspace. Run model and repository work
 on the local machine through a one-shot Flue workflow. Project durable memory
-and results to Linear; do not read Linear back as control authority after
-cutover.
+and results to Linear; do not read Linear back as control authority.
 
 The hierarchy remains Delivery Executive Assistant, Executive Operations
 Assistant, private Linear and GitLab Project Managers, Squad Leads, and
@@ -40,7 +39,7 @@ the local process through `AX_WORKSPACE_ACCESS_CLIENT_ID` and
 Set `AX_FLUE_MODEL` before running queued work.
 
 Use the `ax-cli` skill for exact command syntax. Configure one personal
-workspace endpoint and key before import.
+workspace endpoint and key before bootstrap.
 
 The tracked Worker requires `AX_ACCESS_TEAM_DOMAIN` and `AX_ACCESS_AUD` in
 production. The development token path is valid only when
@@ -51,9 +50,8 @@ production. The development token path is valid only when
 | Operation | Outcome |
 | --- | --- |
 | Configure | Save the Worker URL and personal workspace key locally |
-| Import | Validate and stage a non-authoritative legacy snapshot |
-| Activate | Atomically make the imported hierarchy authoritative |
-| Status | Show activation, records, queued work, and projections |
+| Bootstrap | Create the two executive Roots and their initial memory |
+| Status | Show bootstrap state, records, queued work, and projections |
 | Send | Queue work for the executive default or a specific durable agent |
 | Run once | Claim at most one operation and execute it through local Flue |
 | Records | List or read authoritative typed records |
@@ -64,18 +62,13 @@ Use `--file` instead of `--message` for long instructions. Use `--repo` with
 `--workspace-write` only when the request authorizes changes in that exact
 checkout.
 
-## Import and activate
+## Bootstrap
 
-1. Export the complete current hierarchy: Root, Memory, Workstream, Run,
-   Decision, and Escalation records. Preserve stable IDs and relationships.
-2. Import the snapshot. Import never changes the active authority boundary.
-3. Inspect workspace status and the imported snapshot.
-4. Activate once. Activation converts every imported Root to
-   `cloudflare-flue-v1`, increments its workspace generation, clears live Codex
-   task/control-project fields, and preserves them under
-   `legacy_runtime_provenance`.
-5. Treat Cloudflare as authoritative only after activation succeeds. Do not
-   continue writing operational state to the legacy pinned tasks.
+Bootstrap once after configuring the endpoint. This creates fresh Delivery and
+Operations executive Roots, Memory records, and completed bootstrap Workstreams
+from the tracked agent manifest. It does not read or copy Linear state.
+Cloudflare owns coordination state from that point onward; Linear receives only
+durable memory and result projections.
 
 Generation mismatches block completion. Retry the same idempotent operation;
 do not invent a replacement Root or silently adopt stale results.
@@ -137,6 +130,5 @@ editable record as authority to expand those fields.
 - GREEN retrieval tests require the Cloudflare/Flue/Linear boundary, complete
   command path, executive-first default, Access credentials, and local-only
   execution limits.
-- Worker integration tests cover fail-closed auth, import, atomic activation,
-  generation migration, executive messaging, local claim/completion, and
-  projection export.
+- Worker integration tests cover fail-closed auth, clean bootstrap, executive
+  and manager messaging, local claim/completion, and projection export.

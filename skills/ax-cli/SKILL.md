@@ -36,7 +36,7 @@ never synchronize runtime content.
 | Inspect runtime structure | `pnpm ax status` / `pnpm ax validate` | `ax status` / `ax validate` |
 | Manage the executable shim | `pnpm ax shim <command>` | Use the durable AI repo |
 | Configure workspace | `pnpm ax workspace configure --url <url> --workspace <key>` | `ax workspace configure --url <url> --workspace <key>` |
-| Import and activate workspace | `pnpm ax workspace import --file <file>` / `pnpm ax workspace activate` | `ax workspace import --file <file>` / `ax workspace activate` |
+| Bootstrap workspace | `pnpm ax workspace bootstrap` | `ax workspace bootstrap` |
 | Send and run local work | `pnpm ax workspace send --message <text>` / `pnpm ax workspace run --once` | `ax workspace send --message <text>` / `ax workspace run --once` |
 | Project Linear outputs | `pnpm ax workspace linear export` | `ax workspace linear export` |
 
@@ -120,11 +120,11 @@ connection file:
 ax workspace configure --url https://<worker-host> --workspace rene
 ```
 
-Stage and activate a complete legacy snapshot:
+Create a fresh Cloudflare-native executive hierarchy from the tracked agent
+manifest:
 
 ```bash
-ax workspace import --file records.json
-ax workspace activate
+ax workspace bootstrap
 ax workspace status
 ```
 

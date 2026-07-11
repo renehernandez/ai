@@ -40,11 +40,8 @@ export class AgentWorkspace extends DurableObject<WorkspaceEnv> {
       if (request.method === "GET" && path === "/status") {
         return json(this.status(workspaceKey));
       }
-      if (request.method === "POST" && path === "/import") {
-        return json(await this.importRecords(request, workspaceKey), 201);
-      }
-      if (request.method === "POST" && path === "/activate") {
-        return json(this.activate(workspaceKey));
+      if (request.method === "POST" && path === "/bootstrap") {
+        return json(await this.bootstrap(request, workspaceKey), 201);
       }
       if (request.method === "POST" && path === "/messages") {
         return json(await this.send(request, workspaceKey), 202);
@@ -108,7 +105,6 @@ export class AgentWorkspace extends DurableObject<WorkspaceEnv> {
         id TEXT PRIMARY KEY,
         record_type TEXT NOT NULL,
         json TEXT NOT NULL,
-        imported INTEGER NOT NULL DEFAULT 0,
         authoritative INTEGER NOT NULL DEFAULT 0,
         updated_at TEXT NOT NULL
       )`);
@@ -175,10 +171,9 @@ export class AgentWorkspace extends DurableObject<WorkspaceEnv> {
       workspace_key: workspaceKey,
       backend: WORKSPACE_BACKEND,
       active: this.metadata("active") === "true",
-      activated_at: this.metadata("activated_at"),
+      bootstrapped_at: this.metadata("bootstrapped_at"),
       agents: count("agents"),
       records: count("records", "WHERE authoritative = 1"),
-      imported_records: count("records", "WHERE imported = 1"),
       queued_operations: count("operations", "WHERE status = 'queued'"),
       running_operations: count("operations", "WHERE status = 'running'"),
       pending_projections: count(
@@ -188,127 +183,70 @@ export class AgentWorkspace extends DurableObject<WorkspaceEnv> {
     };
   }
 
-  private async importRecords(
+  private async bootstrap(
     request: Request,
     workspaceKey: string,
   ): Promise<Record<string, unknown>> {
     if (this.metadata("active") === "true")
-      throw new Error("workspace_already_active_conflict");
+      throw new Error("workspace_already_bootstrapped_conflict");
     const body = await readJson<{ records?: unknown[] } | unknown[]>(request);
     const records = Array.isArray(body) ? body : body.records;
     if (!Array.isArray(records) || records.length === 0)
-      throw new Error("import_records_invalid");
+      throw new Error("bootstrap_records_invalid");
     const invalid = records.find((record) => !isRecord(record));
-    if (invalid) throw new Error("import_record_invalid");
+    if (invalid) throw new Error("bootstrap_record_invalid");
     const ids = new Set<string>();
     for (const record of records as WorkspaceRecord[]) {
       if (ids.has(record.id))
-        throw new Error("import_record_duplicate_conflict");
+        throw new Error("bootstrap_record_duplicate_conflict");
       ids.add(record.id);
+    }
+    const roots = (records as WorkspaceRecord[]).filter(
+      (record) => record.record_type === "root",
+    ) as Array<WorkspaceRecord & Record<string, unknown>>;
+    if (roots.length === 0) throw new Error("bootstrap_roots_not_found");
+    const agentKeys = new Set<string>();
+    for (const root of roots) {
+      const agentKey = String(root.agent_key ?? "");
+      if (!agentKey) throw new Error("root_agent_key_invalid");
+      if (agentKeys.has(agentKey))
+        throw new Error("root_agent_key_duplicate_conflict");
+      agentKeys.add(agentKey);
+      if (
+        root.runtime_backend !== WORKSPACE_BACKEND ||
+        root.workspace_key !== workspaceKey ||
+        root.runtime_agent_id !== `${workspaceKey}:${agentKey}` ||
+        root.workspace_generation !== 1 ||
+        root.activation_state !== "active" ||
+        root.codex_task_id !== null
+      ) {
+        throw new Error("root_bootstrap_contract_conflict");
+      }
     }
     const now = new Date().toISOString();
     this.ctx.storage.transactionSync(() => {
-      this.sql.exec(
-        "DELETE FROM records WHERE imported = 1 AND authoritative = 0",
-      );
       for (const record of records as WorkspaceRecord[]) {
         this.sql.exec(
-          `INSERT INTO records(id, record_type, json, imported, authoritative, updated_at)
-           VALUES (?, ?, ?, 1, 0, ?)
+          `INSERT INTO records(id, record_type, json, authoritative, updated_at)
+           VALUES (?, ?, ?, 1, ?)
            ON CONFLICT(id) DO UPDATE SET record_type=excluded.record_type, json=excluded.json,
-             imported=1, authoritative=0, updated_at=excluded.updated_at`,
+             authoritative=1, updated_at=excluded.updated_at`,
           record.id,
           record.record_type,
           JSON.stringify(record),
           now,
         );
       }
-      this.setMetadata("workspace_key", workspaceKey);
-      this.setMetadata("imported_at", now);
-    });
-    return { imported: records.length, authoritative: false };
-  }
-
-  private activate(workspaceKey: string): Record<string, unknown> {
-    if (this.metadata("active") === "true") return this.status(workspaceKey);
-    const roots = this.sql
-      .exec<JsonRow>(
-        "SELECT id, json FROM records WHERE imported = 1 AND record_type = 'root'",
-      )
-      .toArray();
-    if (roots.length === 0) throw new Error("imported_roots_not_found");
-    const now = new Date().toISOString();
-    this.ctx.storage.transactionSync(() => {
-      this.sql.exec("UPDATE records SET authoritative = 1 WHERE imported = 1");
-      const agentKeys = new Set<string>();
-      for (const row of roots) {
-        const legacy = JSON.parse(row.json) as WorkspaceRecord &
-          Record<string, unknown>;
-        if (
-          legacy.runtime_backend !== undefined &&
-          legacy.runtime_backend !== "linear-codex-v1"
-        ) {
-          throw new Error("root_runtime_backend_conflict");
-        }
-        const agentKey = String(legacy.agent_key ?? "");
-        if (!agentKey) throw new Error("root_agent_key_invalid");
-        if (agentKeys.has(agentKey))
-          throw new Error("root_agent_key_duplicate_conflict");
-        agentKeys.add(agentKey);
-        const priorGeneration = Number(legacy.workspace_generation ?? 0);
-        if (!Number.isInteger(priorGeneration) || priorGeneration < 1)
-          throw new Error("root_workspace_generation_invalid");
-        const generation = priorGeneration + 1;
-        const provenance = {
-          runtime_backend: "linear-codex-v1",
-          workspace_generation: Math.max(priorGeneration, 1),
-          codex_task_id: legacy.codex_task_id ?? null,
-          ...copyFields(legacy, [
-            "control_project_kind",
-            "control_project_id",
-            "control_project_path",
-            "control_policy_sha256",
-            "control_source_sha256",
-            "control_permission_profile",
-          ]),
-        };
-        const root = removeFields(
-          {
-            ...legacy,
-            runtime_backend: WORKSPACE_BACKEND,
-            workspace_key: workspaceKey,
-            runtime_agent_id: `${workspaceKey}:${agentKey}`,
-            workspace_generation: generation,
-            activation_state: "active",
-            codex_task_id: null,
-            legacy_runtime_provenance: provenance,
-          },
-          [
-            "control_project_kind",
-            "control_project_id",
-            "control_project_path",
-            "control_policy_sha256",
-            "control_source_sha256",
-            "control_permission_profile",
-          ],
-        );
-        const encoded = JSON.stringify(root);
+      for (const root of roots) {
         this.sql.exec(
-          "UPDATE records SET json = ?, updated_at = ? WHERE id = ?",
-          encoded,
-          now,
-          row.id,
-        );
-        this.sql.exec(
-          `INSERT INTO agents(agent_key, generation, root_json) VALUES (?, ?, ?)
-           ON CONFLICT(agent_key) DO UPDATE SET generation=excluded.generation, root_json=excluded.root_json`,
-          agentKey,
-          generation,
-          encoded,
+          `INSERT INTO agents(agent_key, generation, root_json) VALUES (?, 1, ?)`,
+          String(root.agent_key),
+          JSON.stringify(root),
         );
       }
+      this.setMetadata("workspace_key", workspaceKey);
       this.setMetadata("active", "true");
-      this.setMetadata("activated_at", now);
+      this.setMetadata("bootstrapped_at", now);
     });
     return this.status(workspaceKey);
   }
@@ -522,7 +460,7 @@ export class AgentWorkspace extends DurableObject<WorkspaceEnv> {
         }
         if (!mutation.record || !isRecord(mutation.record))
           throw new Error("record_upsert_invalid");
-        this.upsertRecord(mutation.record, now);
+        this.upsertRecord(mutation.record, now, workspaceKey);
         if (shouldProject(mutation.record)) {
           this.addProjection(
             mutation.record.record_type,
@@ -704,10 +642,14 @@ export class AgentWorkspace extends DurableObject<WorkspaceEnv> {
     );
   }
 
-  private upsertRecord(record: WorkspaceRecord, now: string): void {
+  private upsertRecord(
+    record: WorkspaceRecord,
+    now: string,
+    workspaceKey: string,
+  ): void {
     this.sql.exec(
-      `INSERT INTO records(id, record_type, json, imported, authoritative, updated_at)
-       VALUES (?, ?, ?, 0, 1, ?)
+      `INSERT INTO records(id, record_type, json, authoritative, updated_at)
+       VALUES (?, ?, ?, 1, ?)
        ON CONFLICT(id) DO UPDATE SET record_type=excluded.record_type, json=excluded.json,
          authoritative=1, updated_at=excluded.updated_at`,
       record.id,
@@ -715,6 +657,30 @@ export class AgentWorkspace extends DurableObject<WorkspaceEnv> {
       JSON.stringify(record),
       now,
     );
+    if (record.record_type === "root") {
+      const root = record as WorkspaceRecord & Record<string, unknown>;
+      const agentKey = String(root.agent_key ?? "");
+      const generation = Number(root.workspace_generation);
+      if (
+        !agentKey ||
+        !Number.isInteger(generation) ||
+        generation < 1 ||
+        root.runtime_backend !== WORKSPACE_BACKEND ||
+        root.workspace_key !== workspaceKey ||
+        root.runtime_agent_id !== `${workspaceKey}:${agentKey}` ||
+        root.activation_state !== "active" ||
+        root.codex_task_id !== null
+      ) {
+        throw new Error("root_runtime_contract_conflict");
+      }
+      this.sql.exec(
+        `INSERT INTO agents(agent_key, generation, root_json) VALUES (?, ?, ?)
+         ON CONFLICT(agent_key) DO UPDATE SET generation=excluded.generation, root_json=excluded.root_json`,
+        agentKey,
+        generation,
+        JSON.stringify(root),
+      );
+    }
   }
 
   private addProjection(
@@ -917,15 +883,6 @@ function copyFields(
       .filter((field) => source[field] !== undefined)
       .map((field) => [field, source[field]]),
   );
-}
-
-function removeFields<T extends Record<string, unknown>>(
-  source: T,
-  fields: string[],
-): T {
-  const copy = { ...source };
-  for (const field of fields) delete copy[field];
-  return copy;
 }
 
 function stringArray(value: unknown): string[] {

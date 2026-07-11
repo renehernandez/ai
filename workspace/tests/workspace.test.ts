@@ -81,15 +81,15 @@ describe("agent workspace", () => {
     expect(await malformed.json()).toEqual({ error: "access_denied" });
   });
 
-  it("imports, activates, routes work, and exports durable results", async () => {
-    const oversized = await SELF.fetch(`${base}/import`, {
+  it("bootstraps, routes work, and exports durable results", async () => {
+    const oversized = await SELF.fetch(`${base}/bootstrap`, {
       method: "POST",
       headers,
       body: JSON.stringify({ records: [], padding: "x".repeat(1_000_000) }),
     });
     expect(oversized.status).toBe(413);
 
-    const incompleteImport = await SELF.fetch(`${base}/import`, {
+    const incompleteBootstrap = await SELF.fetch(`${base}/bootstrap`, {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -104,11 +104,11 @@ describe("agent workspace", () => {
         ],
       }),
     });
-    expect(incompleteImport.status).toBe(400);
+    expect(incompleteBootstrap.status).toBe(400);
 
     const root = {
       record_type: "root",
-      id: "RENE-2",
+      id: "rene:delivery-ea",
       created_at: "2026-07-11T20:00:00Z",
       classification: "internal",
       summary: "Delivery Executive Assistant",
@@ -121,45 +121,63 @@ describe("agent workspace", () => {
       prompt_contract_version: "3.0.0",
       rendered_prompt_sha256: "a".repeat(64),
       model_profile: "pinned-delivery-standard",
-      codex_task_id: "legacy-task",
-      control_project_kind: "delivery",
-      control_project_id: "legacy-project",
-      control_project_path: "/legacy/delivery",
-      control_policy_sha256: "b".repeat(64),
-      control_source_sha256: "c".repeat(64),
-      control_permission_profile: "coordinator-readonly",
-    };
-    const imported = await SELF.fetch(`${base}/import`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ records: [root] }),
-    });
-    expect(imported.status).toBe(201);
-    expect(await imported.json()).toMatchObject({
-      imported: 1,
-      authoritative: false,
-    });
-
-    const activated = await SELF.fetch(`${base}/activate`, {
-      method: "POST",
-      headers,
-      body: "{}",
-    });
-    expect(activated.status).toBe(200);
-    expect(await activated.json()).toMatchObject({
-      active: true,
-      agents: 1,
-      records: 1,
-    });
-
-    const storedRoot = await SELF.fetch(`${base}/records/RENE-2`, { headers });
-    expect(await storedRoot.json()).toMatchObject({
       runtime_backend: "cloudflare-flue-v1",
-      workspace_generation: 2,
       workspace_key: "rene",
       runtime_agent_id: "rene:delivery-ea",
       codex_task_id: null,
-      legacy_runtime_provenance: { codex_task_id: "legacy-task" },
+      memory_epoch_id: "rene:delivery-ea:memory:1",
+    };
+    const memory = {
+      record_type: "memory",
+      id: "rene:delivery-ea:memory:1",
+      created_at: "2026-07-11T20:00:00Z",
+      classification: "internal",
+      summary: "Initial Delivery Executive Assistant memory.",
+      epoch: 1,
+      current: true,
+      prompt_contract_version: "3.0.0",
+      charter_summary: "Coordinate the delivery portfolio.",
+      constraints: ["Cloudflare owns operational state."],
+      decisions: ["Linear is output-only."],
+      workstream_ids: ["rene:delivery-ea:bootstrap"],
+      prior_epoch_id: null,
+    };
+    const workstream = {
+      record_type: "workstream",
+      id: "rene:delivery-ea:bootstrap",
+      created_at: "2026-07-11T20:00:00Z",
+      classification: "internal",
+      summary: "Bootstrap the Cloudflare-native delivery workspace.",
+      outcome: "Delivery Executive Assistant is ready for new intake.",
+      status: "complete",
+      owner: "delivery-ea",
+      scope: "Create fresh workspace state.",
+      acceptance: ["Root and memory are authoritative."],
+      dependencies: [],
+      risks: [],
+      next_action: "Accept delivery intake.",
+    };
+    const bootstrapped = await SELF.fetch(`${base}/bootstrap`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ records: [root, memory, workstream] }),
+    });
+    expect(bootstrapped.status).toBe(201);
+    expect(await bootstrapped.json()).toMatchObject({
+      active: true,
+      agents: 1,
+      records: 3,
+    });
+
+    const storedRoot = await SELF.fetch(`${base}/records/rene:delivery-ea`, {
+      headers,
+    });
+    expect(await storedRoot.json()).toMatchObject({
+      runtime_backend: "cloudflare-flue-v1",
+      workspace_generation: 1,
+      workspace_key: "rene",
+      runtime_agent_id: "rene:delivery-ea",
+      codex_task_id: null,
     });
 
     const sent = await SELF.fetch(`${base}/messages`, {
@@ -197,7 +215,7 @@ describe("agent workspace", () => {
       claim_token: string;
       context: Array<{ record_type: string; agent_key?: string }>;
     };
-    expect(claim.operation.workspace_generation).toBe(2);
+    expect(claim.operation.workspace_generation).toBe(1);
     expect(claim.operation).toMatchObject({ sandbox_mode: "read-only" });
     expect(claim.context).toEqual(
       expect.arrayContaining([
@@ -216,7 +234,7 @@ describe("agent workspace", () => {
         body: JSON.stringify({
           schema_version: 1,
           operation_id: receipt.operation_id,
-          workspace_generation: 2,
+          workspace_generation: 1,
           state: "complete",
           response: "Invalid record",
           checkpoints: [],
@@ -247,7 +265,7 @@ describe("agent workspace", () => {
         body: JSON.stringify({
           schema_version: 1,
           operation_id: receipt.operation_id,
-          workspace_generation: 1,
+          workspace_generation: 2,
           state: "complete",
           response: "Stale result",
           checkpoints: [],
@@ -267,7 +285,7 @@ describe("agent workspace", () => {
         body: JSON.stringify({
           schema_version: 1,
           operation_id: receipt.operation_id,
-          workspace_generation: 2,
+          workspace_generation: 1,
           state: "complete",
           response: "Wrong claim",
           checkpoints: [],
@@ -287,11 +305,35 @@ describe("agent workspace", () => {
         body: JSON.stringify({
           schema_version: 1,
           operation_id: receipt.operation_id,
-          workspace_generation: 2,
+          workspace_generation: 1,
           state: "complete",
           response: "Portfolio summarized.",
           checkpoints: ["Read current workstreams"],
           record_mutations: [
+            {
+              action: "upsert",
+              record: {
+                record_type: "root",
+                id: "rene:gitlab-manager:ai",
+                created_at: "2026-07-11T20:01:00Z",
+                classification: "internal",
+                summary: "AI repository manager",
+                agent_key: "gitlab-manager:ai",
+                agent_role: "gitlab-project-manager",
+                reports_to: "delivery-ea",
+                owned_scope: "renehernandez/ai",
+                workspace_generation: 1,
+                activation_state: "active",
+                prompt_contract_version: "3.0.0",
+                rendered_prompt_sha256: "b".repeat(64),
+                model_profile: "pinned-delivery-standard",
+                runtime_backend: "cloudflare-flue-v1",
+                workspace_key: "rene",
+                runtime_agent_id: "rene:gitlab-manager:ai",
+                codex_task_id: null,
+                memory_epoch_id: "rene:gitlab-manager:ai:memory:1",
+              },
+            },
             {
               action: "upsert",
               record: {
@@ -302,7 +344,7 @@ describe("agent workspace", () => {
                 summary: "Repository inventory",
                 invocation_id: "inventory-1",
                 state: "reserved",
-                workspace_generation: 2,
+                workspace_generation: 1,
                 role_variant: "researcher",
                 model_profile: "research-standard",
                 model_routing_reason: "Bounded repository research",
@@ -392,7 +434,7 @@ describe("agent workspace", () => {
         body: JSON.stringify({
           schema_version: 1,
           operation_id: delegatedClaim.operation.operation_id,
-          workspace_generation: 2,
+          workspace_generation: 1,
           state: "failed",
           response: "Repository path unavailable",
           checkpoints: [],
@@ -408,6 +450,25 @@ describe("agent workspace", () => {
       headers,
     });
     expect(await settledRun.json()).toMatchObject({ state: "failed" });
+
+    const managerMessage = await SELF.fetch(`${base}/messages`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        to: "gitlab-manager:ai",
+        objective: "Review the AI repository delivery state.",
+      }),
+    });
+    expect(managerMessage.status).toBe(202);
+    const managerClaim = await SELF.fetch(`${base}/operations/claim`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ runner_id: "test-runner" }),
+    });
+    const managerOperation = (await managerClaim.json()) as {
+      operation: { agent_key: string };
+    };
+    expect(managerOperation.operation.agent_key).toBe("gitlab-manager:ai");
 
     const exported = await SELF.fetch(`${base}/linear/export`, { headers });
     const bundle = (await exported.json()) as {

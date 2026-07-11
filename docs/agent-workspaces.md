@@ -26,7 +26,7 @@ flowchart LR
   Repo --> Git["Git and GitLab delivery state"]
 ```
 
-The Durable Object owns activation, agent generations, inbox messages,
+The Durable Object owns bootstrap state, agent generations, inbox messages,
 operations, typed records, results, and projection acknowledgements. Git and
 GitLab remain authoritative for commits, branches, merge requests, pipelines,
 and hosted review. Rene authorizes merge, deployment, cleanup, and external
@@ -70,7 +70,7 @@ must open an authorized canonical source before using restricted content.
 
 Every operation includes a workspace generation. Completion fails when that
 generation no longer matches the target agent. This prevents a stale local
-process from mutating state after activation or authority changes.
+process from mutating state after an authority change.
 Create the operation and its Agent Run record before executing ephemeral work.
 
 ## Configure access
@@ -89,27 +89,20 @@ The Worker validates the Access JWT issuer, audience, `RS256` algorithm,
 signature, activation time, and expiry. An explicit development token works
 only when `AX_WORKSPACE_ENVIRONMENT` is not `production`.
 
-## Import and cut over
+## Bootstrap
 
-Export one complete snapshot of the current Root, Memory, Workstream, Run,
-Decision, and Escalation hierarchy. Then run:
+Create a fresh workspace from the tracked Delivery and Operations executive
+roles:
 
 ```bash
-ax workspace import --file records.json
+ax workspace bootstrap
 ax workspace status --json
-ax workspace activate --json
 ```
 
-Import is non-authoritative. Activation performs one Durable Object
-transaction, makes the staged hierarchy authoritative, and increments every
-Root generation. Each Root changes to `cloudflare-flue-v1`; old Codex task and
-control-project identity moves under `legacy_runtime_provenance`.
-
-Do not deactivate the legacy pinned tasks before activation succeeds and the
-new hierarchy has passed a real message/run/result cycle. After that proof,
-stop writing operational state through those tasks. Their saved projects remain
-migration and rollback evidence until a later cleanup receives explicit
-authority.
+Bootstrap writes two Roots, their initial Memory epochs, and completed bootstrap
+Workstreams in one Durable Object transaction. It does not read, export, or copy
+Linear state. Later manager Roots are Cloudflare-native record mutations and
+become routable as soon as their result is accepted.
 
 ## Send and run work
 
@@ -190,9 +183,8 @@ ideas without adopting its runtime or UI.
 | Command | Use |
 | --- | --- |
 | `ax workspace configure` | Save endpoint and personal workspace key |
-| `ax workspace import` | Stage a validated legacy snapshot |
-| `ax workspace activate` | Cut over atomically and fence old generations |
-| `ax workspace status` | Inspect activation, queues, records, and projections |
+| `ax workspace bootstrap` | Create the fresh executive hierarchy |
+| `ax workspace status` | Inspect bootstrap state, queues, records, and projections |
 | `ax workspace send` | Queue an executive or direct-agent message |
 | `ax workspace run --once` | Execute at most one operation locally |
 | `ax workspace records list` | List authoritative records, optionally by type |

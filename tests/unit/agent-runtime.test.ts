@@ -601,7 +601,7 @@ test("standalone schemas enforce activation phases", () => {
   );
 });
 
-test("workspace migration requires control identity from task_pending onward", () => {
+test("workspace roots reject non-Cloudflare runtime identity", () => {
   const root = {
     record_type: "root",
     id: "RENE-2",
@@ -613,31 +613,24 @@ test("workspace migration requires control identity from task_pending onward", (
     reports_to: "rene",
     owned_scope: "delivery-portfolio",
     workspace_generation: 1,
-    activation_state: "reserved",
+    activation_state: "active",
     prompt_contract_version: "3.0.0",
     rendered_prompt_sha256: "a".repeat(64),
     model_profile: "pinned-delivery-standard",
+    runtime_backend: "cloudflare-flue-v1",
+    workspace_key: "rene",
+    runtime_agent_id: "rene:delivery-ea",
+    codex_task_id: null,
+    memory_epoch_id: "rene:delivery-ea:memory:1",
   };
   assert.doesNotThrow(() => assertSchemaValid("workspaceRecord", root));
   assert.throws(
     () =>
       assertSchemaValid("workspaceRecord", {
         ...root,
-        activation_state: "task_pending",
+        runtime_backend: "linear-codex-v1",
       }),
-    /control_project_kind|workspaceRecord_invalid/,
-  );
-  assert.doesNotThrow(() =>
-    assertSchemaValid("workspaceRecord", {
-      ...root,
-      activation_state: "task_pending",
-      control_project_kind: "delivery",
-      control_project_id: "desktop-delivery",
-      control_project_path: "/control/delivery",
-      control_policy_sha256: "c".repeat(64),
-      control_source_sha256: "d".repeat(64),
-      control_permission_profile: "coordinator-readonly",
-    }),
+    /workspaceRecord_invalid/,
   );
 });
 
@@ -661,6 +654,7 @@ test("Cloudflare workspace roots use runtime identity without live Codex control
     workspace_key: "rene",
     runtime_agent_id: "rene:delivery-ea",
     codex_task_id: null,
+    memory_epoch_id: "rene:delivery-ea:memory:1",
   };
   assert.doesNotThrow(() => assertSchemaValid("workspaceRecord", root));
   assert.throws(

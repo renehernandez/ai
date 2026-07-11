@@ -166,12 +166,12 @@ test("renders both exact coordinator projects with pinned prompt bundles", () =>
     );
     assert.ok(
       deliveryPolicy.policy.linear.recordFields.root.includes(
-        "control_policy_sha256",
+        "runtime_agent_id",
       ),
     );
     assert.ok(
       deliveryPolicy.policy.linear.recordFields.root.includes(
-        "control_source_sha256",
+        "memory_epoch_id",
       ),
     );
     const operationsConfig = parse(

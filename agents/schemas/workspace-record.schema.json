@@ -63,7 +63,12 @@
             "activation_state",
             "prompt_contract_version",
             "rendered_prompt_sha256",
-            "model_profile"
+            "model_profile",
+            "runtime_backend",
+            "workspace_key",
+            "runtime_agent_id",
+            "codex_task_id",
+            "memory_epoch_id"
           ],
           "properties": {
             "record_type": { "const": "root" },
@@ -78,156 +83,24 @@
             "reports_to": { "type": "string" },
             "owned_scope": { "type": "string" },
             "workspace_generation": { "type": "integer", "minimum": 1 },
-            "activation_state": {
-              "enum": [
-                "reserved",
-                "linear_ready",
-                "task_pending",
-                "task_created",
-                "task_pinned",
-                "post_create_sent",
-                "attested",
-                "active",
-                "inactive"
-              ]
-            },
+            "activation_state": { "enum": ["active", "inactive"] },
             "prompt_contract_version": { "type": "string" },
             "rendered_prompt_sha256": {
               "type": "string",
               "pattern": "^[a-f0-9]{64}$"
             },
             "model_profile": { "type": "string" },
-            "runtime_backend": {
-              "enum": ["linear-codex-v1", "cloudflare-flue-v1"]
-            },
+            "runtime_backend": { "const": "cloudflare-flue-v1" },
             "workspace_key": { "type": "string", "minLength": 1 },
             "runtime_agent_id": { "type": "string", "minLength": 1 },
-            "legacy_runtime_provenance": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["runtime_backend", "workspace_generation"],
-              "properties": {
-                "runtime_backend": { "const": "linear-codex-v1" },
-                "workspace_generation": { "type": "integer", "minimum": 1 },
-                "codex_task_id": { "type": ["string", "null"] },
-                "control_project_kind": {
-                  "enum": ["delivery", "operations"]
-                },
-                "control_project_id": { "type": "string", "minLength": 1 },
-                "control_project_path": { "type": "string", "minLength": 1 },
-                "control_policy_sha256": {
-                  "type": "string",
-                  "pattern": "^[a-f0-9]{64}$"
-                },
-                "control_source_sha256": {
-                  "type": "string",
-                  "pattern": "^[a-f0-9]{64}$"
-                },
-                "control_permission_profile": {
-                  "const": "coordinator-readonly"
-                }
-              }
-            },
-            "control_project_kind": {
-              "enum": ["delivery", "operations"]
-            },
-            "control_project_id": { "type": "string", "minLength": 1 },
-            "control_project_path": { "type": "string", "minLength": 1 },
-            "control_policy_sha256": {
-              "type": "string",
-              "pattern": "^[a-f0-9]{64}$"
-            },
-            "control_source_sha256": {
-              "type": "string",
-              "pattern": "^[a-f0-9]{64}$"
-            },
-            "control_permission_profile": {
-              "const": "coordinator-readonly"
-            },
             "authority_exclusions": {
               "type": "array",
               "uniqueItems": true,
               "items": { "type": "string" }
             },
-            "activation_nonce": { "type": ["string", "null"] },
-            "codex_task_id": { "type": ["string", "null"] },
-            "memory_epoch_id": { "type": ["string", "null"] }
-          },
-          "allOf": [
-            {
-              "if": {
-                "allOf": [
-                  {
-                    "properties": {
-                      "activation_state": {
-                        "enum": [
-                          "task_pending",
-                          "task_created",
-                          "task_pinned",
-                          "post_create_sent",
-                          "attested",
-                          "active"
-                        ]
-                      }
-                    },
-                    "required": ["activation_state"]
-                  },
-                  {
-                    "not": {
-                      "properties": {
-                        "runtime_backend": { "const": "cloudflare-flue-v1" }
-                      },
-                      "required": ["runtime_backend"]
-                    }
-                  }
-                ]
-              },
-              "then": {
-                "properties": {
-                  "control_project_kind": true,
-                  "control_project_id": true,
-                  "control_project_path": true,
-                  "control_policy_sha256": true,
-                  "control_source_sha256": true,
-                  "control_permission_profile": true
-                },
-                "required": [
-                  "control_project_kind",
-                  "control_project_id",
-                  "control_project_path",
-                  "control_policy_sha256",
-                  "control_source_sha256",
-                  "control_permission_profile"
-                ]
-              }
-            },
-            {
-              "if": {
-                "properties": {
-                  "runtime_backend": { "const": "cloudflare-flue-v1" }
-                },
-                "required": ["runtime_backend"]
-              },
-              "then": {
-                "required": ["workspace_key", "runtime_agent_id"],
-                "properties": {
-                  "workspace_key": true,
-                  "runtime_agent_id": true,
-                  "codex_task_id": { "type": "null" }
-                },
-                "not": {
-                  "anyOf": [
-                    { "required": ["control_project_kind"] },
-                    { "required": ["control_project_id"] },
-                    { "required": ["control_project_path"] },
-                    { "required": ["control_policy_sha256"] },
-                    { "required": ["control_source_sha256"] },
-                    { "required": ["control_permission_profile"] }
-                  ]
-                }
-              }
-            }
-          ]
+            "codex_task_id": { "type": "null" },
+            "memory_epoch_id": { "type": "string", "minLength": 1 }
+          }
         }
       ]
     },
