@@ -362,22 +362,23 @@ test("serializes runtime context as deterministic untrusted data", () => {
     escalation_route: "squad-lead:RENE-2",
     attempt: 1,
   };
+  const runInvocation = {
+    ...invocation,
+    agent_run_id: "RUN-1",
+    acceptance: run.acceptance,
+    authority_grant: run.authority_grant,
+    canonical_sources: run.canonical_sources,
+    escalation_route: run.escalation_route,
+    mode: run.mode,
+    model_profile: run.model_profile,
+    objective: run.objective,
+    stop_condition: run.stop_condition,
+    verification: run.verification,
+  };
   assert.doesNotThrow(() =>
     serializeRuntimeContext({
       activation: base,
-      invocation: {
-        ...invocation,
-        agent_run_id: "RUN-1",
-        acceptance: run.acceptance,
-        authority_grant: ["repository:write"],
-        canonical_sources: run.canonical_sources,
-        escalation_route: run.escalation_route,
-        mode: run.mode,
-        model_profile: "standard-implementation",
-        objective: run.objective,
-        stop_condition: run.stop_condition,
-        verification: run.verification,
-      },
+      invocation: runInvocation,
       records: [run],
     }),
   );
@@ -385,22 +386,55 @@ test("serializes runtime context as deterministic untrusted data", () => {
     () =>
       serializeRuntimeContext({
         activation: base,
-        invocation: {
-          ...invocation,
-          agent_run_id: "RUN-1",
-          acceptance: run.acceptance,
-          authority_grant: run.authority_grant,
-          canonical_sources: run.canonical_sources,
-          escalation_route: run.escalation_route,
-          mode: run.mode,
-          model_profile: run.model_profile,
-          objective: run.objective,
-          stop_condition: run.stop_condition,
-          verification: run.verification,
-        },
+        invocation: runInvocation,
         records: [{ ...run, tool_policy_attestation: "b".repeat(64) }],
       }),
     /agent_runtime_run_tool_policy_mismatch/,
+  );
+  assert.throws(
+    () =>
+      serializeRuntimeContext({
+        activation: {
+          ...base,
+          agent_role: "researcher",
+          authority_grant: ["provider:read"],
+          model_profile: "research-efficient",
+          tool_policy_attestation: toolPolicy("researcher"),
+        },
+        invocation: runInvocation,
+        records: [run],
+      }),
+    /agent_runtime_delegation_not_allowed/,
+  );
+  const pinnedRoleRun = {
+    ...run,
+    authority_grant: ["linear:coordinate"],
+    model_profile: "pinned-delivery-standard",
+    role_variant: "squad-lead",
+    sandbox_mode: "read-only",
+    tool_policy_attestation: toolPolicy("squad-lead"),
+  };
+  assert.throws(
+    () =>
+      serializeRuntimeContext({
+        activation: base,
+        invocation: {
+          ...runInvocation,
+          authority_grant: pinnedRoleRun.authority_grant,
+          model_profile: pinnedRoleRun.model_profile,
+        },
+        records: [pinnedRoleRun],
+      }),
+    /agent_runtime_run_role_invalid/,
+  );
+  assert.throws(
+    () =>
+      serializeRuntimeContext({
+        activation: base,
+        invocation: runInvocation,
+        records: [{ ...run, sandbox_mode: "read-only" }],
+      }),
+    /agent_runtime_run_sandbox_mismatch/,
   );
 });
 
