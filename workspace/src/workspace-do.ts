@@ -980,9 +980,32 @@ function redactRestrictedRecord(record: WorkspaceRecord): WorkspaceRecord {
 }
 
 async function readJson<T>(request: Request, empty?: T): Promise<T> {
-  const text = await request.text();
-  if (new TextEncoder().encode(text).byteLength > 1_000_000)
+  const limit = 1_000_000;
+  const declaredLength = Number(request.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > limit)
     throw new Error("request_body_too_large");
+  const reader = request.body?.getReader();
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  if (reader) {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      length += value.byteLength;
+      if (length > limit) {
+        await reader.cancel();
+        throw new Error("request_body_too_large");
+      }
+      chunks.push(value);
+    }
+  }
+  const bytes = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  const text = new TextDecoder().decode(bytes);
   if (!text && empty !== undefined) return empty;
   try {
     return JSON.parse(text) as T;
