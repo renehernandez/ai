@@ -35,6 +35,12 @@ test("agent-workspace exposes the full workspace lifecycle", () => {
   assert.match(skill, /starts no concurrent bootstrap attempt/i);
   assert.match(skill, /exact control-project path/i);
   assert.match(skill, /deactivation and archival of that exact orphan/i);
+  assert.match(skill, /RENE-<number>.*never as an agent name/is);
+  assert.match(skill, /Delivery Executive Assistant/);
+  assert.match(skill, /Executive Operations Assistant/);
+  assert.match(skill, /Implementer 01 — API contract/);
+  assert.match(skill, /Reviewer 01 —\s*Security/);
+  assert.match(skill, /Never reuse a sequence/i);
 });
 
 test("agent-workspace preserves authority and privacy boundaries", () => {

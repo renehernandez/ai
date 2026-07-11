@@ -1,5 +1,8 @@
 # Workstream
 
+Linear issue title: `<Agent purpose> — <workstream outcome>`. Use a short
+purpose phrase such as `Executive Operations Assistant — Bootstrap`.
+
 Use these exact schema fields in the normalized record body:
 
 - `record_type`: workstream

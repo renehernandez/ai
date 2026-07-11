@@ -658,6 +658,35 @@ test("rejects Linear template fields that drift from the workspace schema", () =
   });
 });
 
+test("Linear templates keep agent titles purpose-first and sequences scoped", () => {
+  const root = readFileSync(
+    "agents/templates/linear/root-agent-record.md",
+    "utf-8",
+  );
+  const run = readFileSync("agents/templates/linear/agent-run.md", "utf-8");
+  const memory = readFileSync(
+    "agents/templates/linear/memory-epoch.md",
+    "utf-8",
+  );
+  const workstream = readFileSync(
+    "agents/templates/linear/workstream.md",
+    "utf-8",
+  );
+  const contracts = readFileSync(
+    "skills/agent-workspace/references/record-contracts.md",
+    "utf-8",
+  );
+
+  assert.match(root, /agent's purpose/i);
+  assert.match(root, /Do not use `RENE-<number>` or `Root Agent` as the name/);
+  assert.match(run, /<Role purpose> <NN> — <short scope>/);
+  assert.match(run, /monotonic two-digit sequence/i);
+  assert.match(memory, /<Agent purpose> — Memory <NN>/);
+  assert.match(workstream, /<Agent purpose> — <workstream outcome>/);
+  assert.match(contracts, /RENE-<number>.*not the agent's name/is);
+  assert.match(contracts, /monotonic two-digit sequence/i);
+});
+
 test("portable runtime-context CLI serializes validated input", () => {
   const activation = {
     activation_phase: "post_create",

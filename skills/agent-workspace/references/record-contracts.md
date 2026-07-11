@@ -1,5 +1,21 @@
 # Agent Workspace record contracts
 
+## Linear naming
+
+Linear's `RENE-<number>` identifier is an address assigned by the team and is
+not the agent's name. Root titles are purpose-first: `Delivery Executive
+Assistant`, `Executive Operations Assistant`, `Linear Project Manager —
+<Linear project>`, `GitLab Project Manager — <GitLab project>`, or `Squad Lead
+— <delivery scope>`. Add a two-digit suffix only to disambiguate concurrent
+agents with the same purpose and scope.
+
+Ephemeral Run titles use a monotonic two-digit sequence scoped to their parent
+Squad or Workstream: `Implementer 01 — <scope>`, `Reviewer 01 — <review type>`,
+`Worker 01 — <task>`, or the corresponding role purpose. Never reuse a Run
+sequence. Supporting titles remain purpose-first, such as `<Agent purpose> —
+Memory 03` and `<Agent purpose> — <workstream outcome>`. Stable semantic keys
+remain in the normalized record body.
+
 ## Root Agent Record
 
 Stable identity keyed by Linear Project ID, canonical GitLab Project ID, or
