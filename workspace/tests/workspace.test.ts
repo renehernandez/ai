@@ -138,7 +138,7 @@ describe("agent workspace", () => {
       prompt_contract_version: "3.0.0",
       charter_summary: "Coordinate the delivery portfolio.",
       constraints: ["Cloudflare owns operational state."],
-      decisions: ["Linear is output-only."],
+      decisions: ["Linear is readable context and durable output."],
       workstream_ids: ["rene:delivery-ea:bootstrap"],
       prior_epoch_id: null,
     };

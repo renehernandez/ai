@@ -100,9 +100,10 @@ ax workspace status --json
 ```
 
 Bootstrap writes two Roots, their initial Memory epochs, and completed bootstrap
-Workstreams in one Durable Object transaction. It does not read, export, or copy
-Linear state. Later manager Roots are Cloudflare-native record mutations and
-become routable as soon as their result is accepted.
+Workstreams in one Durable Object transaction. It does not export or copy
+existing Linear state into those records. Agents may still read Linear issues
+and projects as canonical work context. Later manager Roots are Cloudflare-native
+record mutations and become routable as soon as their result is accepted.
 
 ## Send and run work
 

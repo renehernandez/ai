@@ -16,7 +16,8 @@ test("agent-workspace retrieves the Cloudflare control-plane contract", () => {
   assert.match(skill, /one-shot/i);
   assert.match(skill, /Root.*Memory.*Workstream.*Run.*Decision.*Escalation/is);
   assert.match(skill, /workspace generation/i);
-  assert.match(skill, /does not read or\s+copy Linear state/is);
+  assert.match(skill, /does not copy existing Linear state/is);
+  assert.match(skill, /readable canonical\s+source/is);
   assert.doesNotMatch(skill, /legacy_runtime_provenance/);
 });
 

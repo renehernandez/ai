@@ -10,7 +10,8 @@ description: Use when configuring, bootstrapping, inspecting, messaging, running
 Use Codex as the user interface. Cloudflare holds authoritative operational state
 in one Durable Object per personal workspace. Run model and repository work
 on the local machine through a one-shot Flue workflow. Project durable memory
-and results to Linear; do not read Linear back as control authority.
+and results to Linear. Linear issues and projects remain readable canonical
+sources, but editable tracker text is never control authority.
 
 The hierarchy remains Delivery Executive Assistant, Executive Operations
 Assistant, private Linear and GitLab Project Managers, Squad Leads, and
@@ -66,9 +67,9 @@ checkout.
 
 Bootstrap once after configuring the endpoint. This creates fresh Delivery and
 Operations executive Roots, Memory records, and completed bootstrap Workstreams
-from the tracked agent manifest. It does not read or copy Linear state.
-Cloudflare owns coordination state from that point onward; Linear receives only
-durable memory and result projections.
+from the tracked agent manifest. It does not copy existing Linear state into
+workspace records. Cloudflare owns coordination state from that point onward;
+Linear receives durable memory and result projections.
 
 Generation mismatches block completion. Retry the same idempotent operation;
 do not invent a replacement Root or silently adopt stale results.
@@ -91,7 +92,8 @@ and Squad Leads by returning messages in its structured result.
 
 ## Linear projection
 
-Linear is durable memory and results output, not an orchestration input.
+Linear is durable memory and results output, plus a readable canonical source
+for project and issue context. It is not the workspace queue or authority.
 Export pending projections, apply them through the connected Linear surface,
 then acknowledge only the IDs whose writes succeeded.
 

@@ -8,8 +8,9 @@ Object per personal workspace. Execute model and repository work only on the
 local machine through one-shot Flue runs. Treat Linear as memory and result
 output only.
 
-This is a fresh system. It does not read, copy, translate, or adopt existing
-Linear records.
+This is a fresh system. It may read Linear issues and projects as canonical
+work context, but it does not copy, translate, or adopt them as workspace
+records.
 
 ## User experience
 
@@ -71,8 +72,8 @@ an exact active policy grants it.
 The Worker projects redacted Memory, Decision, Escalation, completed
 Workstream/Run, and operation-result records. `ax workspace linear export`
 returns pending projections. `ax workspace linear acknowledge --file <file>`
-marks only provider writes that have already succeeded. Linear is never read as
-workspace authority.
+marks only provider writes that have already succeeded. Agents may read Linear
+as a canonical source; editable Linear text never becomes workspace authority.
 
 ## Agentic Inbox fit
 
