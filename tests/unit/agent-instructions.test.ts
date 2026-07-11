@@ -316,6 +316,32 @@ test("dependency changes remain package-manager mediated", () => {
   assert.match(dependencyRules, /Use the owning package manager CLI/);
 });
 
+test("automated setup is allowed while dependency graph changes remain permission-gated", () => {
+  const repoAgents = readFileSync("AGENTS.md", "utf-8");
+  const portableAgents = readFileSync("instructions/AGENTS.md", "utf-8");
+  const commandRules = readFileSync("rules/command-and-tools.md", "utf-8");
+
+  for (const text of [repoAgents, portableAgents]) {
+    assert.match(text, /documented automated setup/);
+    assert.match(text, /dependencies already declared/);
+    assert.match(text, /without separate permission/);
+    assert.match(
+      text,
+      /Adding, updating, downgrading, or\s+removing dependencies/,
+    );
+    assert.match(text, /manifest or lockfile changes/);
+  }
+
+  assert.match(commandRules, /documented automated setup command/);
+  assert.match(commandRules, /dependency graph already declared/);
+  assert.match(commandRules, /without\s+separate permission/);
+  assert.match(commandRules, /Do not add, update, downgrade, or remove/);
+  assert.match(
+    commandRules,
+    /If setup would make one of\s+those changes, stop/,
+  );
+});
+
 test("CI and hook automation uses behavior-specific names", () => {
   const repoAgents = readFileSync("AGENTS.md", "utf-8");
   const portableAgents = readFileSync("instructions/AGENTS.md", "utf-8");

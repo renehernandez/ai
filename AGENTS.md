@@ -10,8 +10,11 @@ live in [instructions/AGENTS.md](instructions/AGENTS.md).
   and the relevant rule files.
 - If a named tool is unavailable, use the closest safe equivalent and report
   any behavioral or verification difference.
-- Do not install dependencies or run destructive commands unless the user or an
-  approved implementation contract explicitly authorizes them.
+- Run documented automated setup and install dependencies already declared by
+  the project without separate permission. Adding, updating, downgrading, or
+  removing dependencies, or accepting dependency manifest or lockfile changes,
+  requires explicit user authorization or an accepted implementation contract.
+  Destructive commands still require explicit authorization.
 
 ## Five-mode workflow
 
@@ -50,7 +53,7 @@ Execute-only, Review-only, or local-only stops at that boundary.
   branch whose only review artifact is closed or merged without user direction.
 - Ask for narrowly scoped reusable approval prefixes for recurring safe
   commands. Never request broad reusable approval for destructive commands,
-  dependency installation, publication, credentials, or interpreters.
+  dependency graph changes, publication, credentials, or interpreters.
 - For JavaScript and TypeScript, run project binaries through `pnpm exec`,
   `pnpm dlx`, or `pnpm run`; never call `node_modules/.bin` directly.
 - Across all projects, do not use generic `check` terminology for CI jobs,
