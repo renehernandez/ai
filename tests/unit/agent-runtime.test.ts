@@ -387,6 +387,41 @@ test("serializes runtime context as deterministic untrusted data", () => {
       serializeRuntimeContext({
         activation: base,
         invocation: runInvocation,
+        records: [],
+      }),
+    /agent_runtime_run_missing/,
+  );
+  assert.throws(
+    () =>
+      serializeRuntimeContext({
+        activation: base,
+        invocation: {
+          ...runInvocation,
+          objective: "Expand the delegated unit",
+        },
+        records: [run],
+      }),
+    /agent_runtime_run_envelope_mismatch: objective/,
+  );
+  assert.throws(() => {
+    const expandedRun = {
+      ...run,
+      canonical_sources: ["UNKNOWN-1"],
+    };
+    serializeRuntimeContext({
+      activation: base,
+      invocation: {
+        ...runInvocation,
+        canonical_sources: expandedRun.canonical_sources,
+      },
+      records: [expandedRun],
+    });
+  }, /agent_runtime_source_expansion: UNKNOWN-1/);
+  assert.throws(
+    () =>
+      serializeRuntimeContext({
+        activation: base,
+        invocation: runInvocation,
         records: [{ ...run, tool_policy_attestation: "b".repeat(64) }],
       }),
     /agent_runtime_run_tool_policy_mismatch/,
