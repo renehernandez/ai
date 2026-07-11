@@ -3,6 +3,7 @@ export const planningBaseline = [
   "edge-cases-and-risk",
   "simplification-and-scope",
   "refactoring-opportunities",
+  "delivery-shape",
 ] as const;
 
 export const implementationBaseline = [

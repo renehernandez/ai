@@ -37,6 +37,36 @@ the complete proposal, design, specification deltas, and top-level delivery
 units. Local review evidence and handoffs remain task-local; no YAML or JSON
 sidecars belong beside the artifact.
 
+## Decompose OpenSpec Delivery Before Writing
+
+Treat existing top-level headings as hypotheses, not accepted delivery
+boundaries. Before creating or materially revising an OpenSpec, inventory the
+change's behavior, ownership, deployment, security, migration, rollback,
+verification, and repository boundaries. Inspect existing implementations,
+POCs, PRs/MRs, and incident evidence when available. Derive candidate units
+from that evidence before mapping existing tasks onto them.
+
+Every proposed top-level unit must have:
+
+- one reviewable implementation outcome;
+- a safe merged intermediate state that does not rely on an unmerged future
+  unit for correctness;
+- objective proof owned by the unit;
+- one coherent reviewer, risk, rollback, and deployment boundary;
+- declared predecessor output and integration hotspots; and
+- a concrete reason its nested work belongs in one PR/MR.
+
+Split a candidate unit when it combines materially different shared
+prerequisites, feature behavior, proof infrastructure, activation, repositories,
+owners, security boundaries, rollback paths, or deployment mechanisms. Combine
+candidate units when a split would create unused plumbing, an unverifiable or
+unsafe intermediate state, or checkbox-only PRs/MRs with the same review and
+rollback boundary. File count and diff size are evidence, never thresholds.
+
+Keep resolving the delivery shape conversationally when these tests expose a
+material choice. Do not write an artifact and leave its top-level split for a
+later planning-review correction.
+
 ## Planning Review
 
 After every material artifact write, invoke Review read-only against the exact
@@ -46,6 +76,7 @@ artifact fingerprint with these baseline lanes:
 2. `edge-cases-and-risk`
 3. `simplification-and-scope`
 4. `refactoring-opportunities`
+5. `delivery-shape`
 
 Add affected-domain specialists. Plan repairs findings that preserve the
 accepted contract. Return material scope, architecture, safety, or delivery
@@ -71,7 +102,13 @@ clean final implementation. The POC:
 
 Personal acceptance is exact-SHA task-local evidence. A changed POC head makes
 it stale. After acceptance, reconcile durable findings into the OpenSpec once
-for that authorized cycle and rerun planning Review. Do not start another POC automatically; ask if reconciliation introduces materially unproved behavior.
+for that authorized cycle and rerun planning Review. Do not start another POC
+automatically; ask if reconciliation introduces materially unproved behavior.
+During reconciliation, rerun the delivery decomposition against the actual POC
+footprint, affected owners, review findings, operational proof, rollback needs,
+and deployment seams. Split a unit that proved broader than planned before
+final implementation. Return material top-level-unit changes to the user; do
+not silently rewrite the accepted delivery contract.
 
 ## Delivery Shape And Policy
 
@@ -102,5 +139,6 @@ artifacts.
 | Temporary atomic plan before OpenSpec | Create only the semantically selected OpenSpec. |
 | Adding a POC to an atomic plan | Select OpenSpec when rehearsal is part of the accepted contract. |
 | Treating the POC as optional or partial | Build and review the complete disposable implementation. |
+| Accepting tidy nested tasks as proof of one mergeable unit | Derive units from implementation and ownership boundaries, then map tasks onto them. |
 | Publishing a planning MR | Keep planning local and include it in the owning final unit. |
 | Automatically rerunning POC after reconciliation | Present materially unproved deltas for explicit direction. |

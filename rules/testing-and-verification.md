@@ -39,8 +39,8 @@ external blockers, and CI-only coverage as verification gaps.
 ## Planning, POC, and final targets
 
 - Planning artifacts use implementation-readiness, edge-case/risk,
-  simplification/scope, and refactoring reviewers against one artifact
-  fingerprint.
+  simplification/scope, refactoring, and delivery-shape reviewers against one
+  artifact fingerprint.
 - POC and final implementation use correctness, regression, maintainability,
   and verification reviewers against one target-base diff and exact HEAD.
 - Every OpenSpec POC proves the complete accepted contract, including applicable
