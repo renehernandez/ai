@@ -95,6 +95,13 @@ test("scoped runtime sync exposes no ownership or selection flags", () => {
   assert.equal(parsed.command, "sync");
 });
 
+test("agents is a scoped runtime surface", () => {
+  const [parsed] = parse(["agents", "validate"]);
+  assert.equal(parsed.scope, "agents");
+  assert.equal(parsed.command, "validate");
+  assert.match(parseError(["agents", "install"]).message, /Use ax agents sync/);
+});
+
 test("OpenSpec sync parses convergence and config-review inputs", () => {
   const [parsed] = parse([
     "openspec",

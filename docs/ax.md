@@ -15,7 +15,7 @@ OpenSpec target the current working directory.
 
 Tracked `ax.config.json` is authoritative runtime state. It declares source
 refs, `runtime.installedProfiles`, `runtime.policyProfile`, exact targets,
-instructions, hooks, and `runtime.retiredSkills`.
+instructions, hooks, agents, and `runtime.retiredSkills`.
 
 AX replaces declared targets on every sync and leaves unrelated filesystem
 paths untouched. It stores only a disposable remote-source cache under
@@ -36,6 +36,7 @@ Scoped synchronization uses the same config without initialization state:
 pnpm ax skills sync
 pnpm ax instructions sync
 pnpm ax hooks sync
+pnpm ax agents sync
 ```
 
 Each distinct configured source/ref pair resolves once per invocation. Every
@@ -64,8 +65,33 @@ When offline inspection includes OpenSpec, AX locates the configured
 checks. Status and validate never execute that CLI or probe its version. Only
 `ax openspec sync` runs `openspec --version`.
 
-Scoped `skills`, `instructions`, and `hooks` status/validate commands apply the
-same offline boundary to one surface.
+Scoped `skills`, `instructions`, `hooks`, and `agents` status/validate commands
+apply the same offline boundary to one surface. Agent validation additionally
+compiles every JSON schema, checks the exact generated-agent inventory, validates
+role/profile references, enforces the xhigh automatic ceiling, and verifies the
+generated standalone validators.
+
+## Synchronize organizational agents
+
+The tracked `agents/` tree is the canonical source for role charters, reviewer
+overlays, schemas, Linear templates, and model profiles. AX compiles that source
+into Codex custom-agent TOML while building the candidate:
+
+```bash
+pnpm ax agents sync
+pnpm ax agents status
+pnpm ax agents validate
+```
+
+The canonical runtime directory is `~/.agents/agents`. The Codex target
+`~/.codex/agents` is an exact symlink to its `codex/` directory. Agent sync
+refuses an unmanaged file, directory, or wrong symlink at either configured
+target before replacing canonical content. An interrupted run with the exact
+expected symlink is recoverable by rerunning sync.
+
+Status remains structural: it verifies the canonical directory and exact link.
+Validate also checks the tracked semantic source contract. Use sync to re-render
+content after changing the manifest, schemas, role files, or shared contract.
 
 ## Synchronize repo-local OpenSpec
 
@@ -149,4 +175,5 @@ The shim manages only the `~/.local/bin/ax` executable entrypoint.
 ## See also
 
 - [Hook runtime](../hooks/README.md)
+- [Agent workspaces](agent-workspaces.md)
 - [Repository agent instructions](../AGENTS.md)

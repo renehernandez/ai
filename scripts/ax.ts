@@ -99,6 +99,7 @@ export function createProgram(
   addRuntimeScope(program, "skills", execute);
   addRuntimeScope(program, "instructions", execute);
   addRuntimeScope(program, "hooks", execute);
+  addRuntimeScope(program, "agents", execute);
   addOpenSpecCommands(program, execute);
   addShimCommands(program, execute);
   return program;

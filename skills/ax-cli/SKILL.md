@@ -1,6 +1,6 @@
 ---
 name: ax-cli
-description: Use when managing local Agents Experience assets with the ax CLI, including authoritative runtime sync, shared skills, instructions, hooks, profiles, repo-local OpenSpec scaffolding, or runtime validation.
+description: Use when managing local Agents Experience assets with the ax CLI, including authoritative runtime sync, shared skills, instructions, hooks, organizational agents, profiles, repo-local OpenSpec scaffolding, or runtime validation.
 allowed-tools: Read, Grep, Bash(ax:*), Bash(git:*), Bash(pnpm:*)
 ---
 
@@ -24,6 +24,7 @@ never synchronize runtime content.
 | Skills only | `pnpm ax skills sync` | `ax skills sync` |
 | Instructions and rules only | `pnpm ax instructions sync` | `ax instructions sync` |
 | Hooks only | `pnpm ax hooks sync` | `ax hooks sync` |
+| Organizational agents only | `pnpm ax agents sync` | `ax agents sync` |
 | Repo-local OpenSpec | `pnpm ax openspec sync` | `ax openspec sync` |
 | Inspect runtime structure | `pnpm ax status` / `pnpm ax validate` | `ax status` / `ax validate` |
 | Manage the executable shim | `pnpm ax shim <command>` | Use the durable AI repo |
@@ -40,7 +41,7 @@ has no selection, adoption, or ownership flags.
 
 AX builds and validates every candidate before touching live targets. It then:
 
-- replaces every exact skill, instruction, and hook target declared by the
+- replaces every exact skill, instruction, hook, and agent target declared by the
   selected profiles;
 - removes exact skill names listed in `runtime.retiredSkills`;
 - recreates configured Codex and Claude symlinks; and
@@ -64,6 +65,12 @@ does not control later synchronization.
 
 They do not fetch remote refs or compare installed file contents. Run `ax sync`
 to restore the authoritative source content.
+
+For the agents surface, sync compiles the tracked manifest, shared contract,
+role charters, reviewer overlays, and schemas into Codex TOML. The configured
+canonical directory owns the rendered tree. AX refuses unmanaged agent targets
+before apply. Agent validate checks source semantics in addition to runtime
+structure; agent status remains structural.
 
 ## Repo-local OpenSpec
 
@@ -109,5 +116,6 @@ dependency.
 | Passing profile flags to sync | Update `runtime.installedProfiles` and `runtime.policyProfile`. |
 | Expecting status to fetch a remote | Run sync when remote freshness matters. |
 | Expecting validate to detect content drift | Run sync to restore source content; validate checks structure. |
+| Editing generated Codex agent TOML | Edit `agents/` in the AI repo and run agent sync. |
 | Running raw upstream OpenSpec setup | Use repo-local `ax openspec sync`. |
 | Activating live roots from feature work | Use isolated roots and activate after merge. |

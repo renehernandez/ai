@@ -1,0 +1,146 @@
+{
+  "prompt_contract_version": "1.0.0",
+  "roles": {
+    "delivery-ea": {
+      "allowed_profiles": [
+        "high-risk-review",
+        "pinned-delivery-deep",
+        "pinned-delivery-standard"
+      ],
+      "capabilities": [
+        "codex:coordinate",
+        "finish:draft",
+        "linear:coordinate",
+        "provider:read"
+      ],
+      "lifecycle": "pinned",
+      "model_profile": "pinned-delivery-standard",
+      "sandbox_mode": "read-only",
+      "tool_policy_sha256": "ca69c0fa512a234996c00d2de42e5049a343af8606dc6d9b121cb933cb29f8c0"
+    },
+    "gitlab-project-manager": {
+      "allowed_profiles": [
+        "high-risk-review",
+        "pinned-delivery-deep",
+        "pinned-delivery-standard"
+      ],
+      "capabilities": [
+        "codex:coordinate",
+        "finish:draft",
+        "linear:coordinate",
+        "provider:read"
+      ],
+      "lifecycle": "pinned",
+      "model_profile": "pinned-delivery-standard",
+      "sandbox_mode": "read-only",
+      "tool_policy_sha256": "edaefc9e8507bf9ed2683cb348c9c235367e1c7e69f9d235c753ce6ed9d63229"
+    },
+    "implementer": {
+      "allowed_profiles": [
+        "high-risk-review",
+        "quick-bounded",
+        "standard-implementation"
+      ],
+      "capabilities": [
+        "repository:write"
+      ],
+      "lifecycle": "ephemeral",
+      "model_profile": "standard-implementation",
+      "sandbox_mode": "workspace-write",
+      "tool_policy_sha256": "f4fb7b2b1e80b46206749df36280c02d1b64179a3a985e937ffb8b6144cf8ba2"
+    },
+    "linear-project-manager": {
+      "allowed_profiles": [
+        "high-risk-review",
+        "pinned-delivery-deep",
+        "pinned-delivery-standard"
+      ],
+      "capabilities": [
+        "codex:coordinate",
+        "finish:draft",
+        "linear:coordinate",
+        "provider:read"
+      ],
+      "lifecycle": "pinned",
+      "model_profile": "pinned-delivery-standard",
+      "sandbox_mode": "read-only",
+      "tool_policy_sha256": "c03d055f3954e77e66423c082a33f43a539e25f4b45d72818fbad82e410593a3"
+    },
+    "operations-ea": {
+      "allowed_profiles": [
+        "high-risk-review",
+        "pinned-operations-judgment",
+        "pinned-operations-routine"
+      ],
+      "capabilities": [
+        "codex:coordinate",
+        "linear:coordinate",
+        "provider:draft",
+        "provider:read"
+      ],
+      "lifecycle": "pinned",
+      "model_profile": "pinned-operations-routine",
+      "sandbox_mode": "read-only",
+      "tool_policy_sha256": "dcfd7cbf0502f26d28094fbd0746ee293ac4ff70cbfc6f1bd3011b5dbd0112b6"
+    },
+    "operations-specialist": {
+      "allowed_profiles": [
+        "pinned-operations-judgment",
+        "pinned-operations-routine"
+      ],
+      "capabilities": [
+        "provider:draft",
+        "provider:read"
+      ],
+      "lifecycle": "ephemeral",
+      "model_profile": "pinned-operations-routine",
+      "sandbox_mode": "read-only",
+      "tool_policy_sha256": "10cb35998f3c97a5e1ea86f2aee83e196e952888b59cea9d2d721f67f1981e29"
+    },
+    "researcher": {
+      "allowed_profiles": [
+        "research-efficient",
+        "standard-review"
+      ],
+      "capabilities": [
+        "provider:read",
+        "review:read"
+      ],
+      "lifecycle": "ephemeral",
+      "model_profile": "research-efficient",
+      "sandbox_mode": "read-only",
+      "tool_policy_sha256": "c1a15c8cb91805fb77f1f143b866316858f73258c4b38af12d816325c806cefd"
+    },
+    "reviewer": {
+      "allowed_profiles": [
+        "high-risk-review",
+        "standard-review"
+      ],
+      "capabilities": [
+        "provider:read",
+        "review:read"
+      ],
+      "lifecycle": "ephemeral",
+      "model_profile": "standard-review",
+      "sandbox_mode": "read-only",
+      "tool_policy_sha256": "88571bd7f70da1111b9eeeb9be40c3c3ddc9541525c1ce354d8a0f06e8f8825c"
+    },
+    "squad-lead": {
+      "allowed_profiles": [
+        "high-risk-review",
+        "pinned-delivery-deep",
+        "pinned-delivery-standard"
+      ],
+      "capabilities": [
+        "codex:coordinate",
+        "finish:draft",
+        "linear:coordinate",
+        "provider:read"
+      ],
+      "lifecycle": "pinned",
+      "model_profile": "pinned-delivery-standard",
+      "sandbox_mode": "read-only",
+      "tool_policy_sha256": "3406e646070fa273f4d968bb63c4ba3de515fe1bbfd74fb8abde671430309ec8"
+    }
+  }
+}

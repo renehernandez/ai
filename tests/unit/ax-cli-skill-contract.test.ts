@@ -33,6 +33,7 @@ test("ax-cli skill retrieves the single-sync runtime contract", () => {
   assert.match(skill, /`pnpm ax skills sync`/);
   assert.match(skill, /`pnpm ax instructions sync`/);
   assert.match(skill, /`pnpm ax hooks sync`/);
+  assert.match(skill, /`pnpm ax agents sync`/);
   assert.match(skill, /`ax openspec sync`/);
 
   assert.match(skill, /`ax\.config\.json`[^\n]+desired state/i);
@@ -48,6 +49,8 @@ test("ax-cli skill retrieves the single-sync runtime contract", () => {
   assert.doesNotMatch(skill, /--recovery-file/);
   assert.doesNotMatch(skill, /sha256-tree-v1/);
   assert.match(skill, /status[^\n]+validate[^\n]+offline[^\n]+read-only/i);
+  assert.match(skill, /agents surface/i);
+  assert.match(skill, /refuses unmanaged agent targets/i);
 });
 
 test("ax-cli skill retrieves source, isolation, shim, and activation rules", () => {
