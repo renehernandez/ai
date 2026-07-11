@@ -177,7 +177,7 @@ function readRecordFields(agentSourceDir: string): Record<string, string[]> {
     }
     const fields = [
       ...readFileSync(join(templatesDir, filename), "utf-8").matchAll(
-        /^- `([a-z_]+)`:/gmu,
+        /^- `([a-z0-9_]+)`:/gmu,
       ),
     ]
       .map((match) => match[1])
