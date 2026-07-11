@@ -133,6 +133,23 @@ test("renders both exact coordinator projects with pinned prompt bundles", () =>
     ) as Record<string, unknown>;
     assert.equal(config.default_permissions, "coordinator-readonly");
     assert.equal(config.approval_policy, "never");
+    const deliveryApps = config.apps as Record<string, Record<string, unknown>>;
+    assert.equal(deliveryApps.linear.destructive_enabled, true);
+    assert.equal(deliveryApps._default.destructive_enabled, false);
+    const operationsConfig = parse(
+      readFileSync(
+        join(projects, "operations", ".codex", "config.toml"),
+        "utf-8",
+      ),
+    ) as Record<string, unknown>;
+    const operationsApps = operationsConfig.apps as Record<
+      string,
+      Record<string, unknown>
+    >;
+    assert.equal(operationsApps.linear.destructive_enabled, true);
+    assert.equal(operationsApps.gmail.destructive_enabled, false);
+    assert.equal(operationsApps.slack.destructive_enabled, false);
+    assert.equal(operationsApps["google-calendar"].destructive_enabled, false);
     const marker = JSON.parse(
       readFileSync(join(projects, "delivery", ".ax-managed.json"), "utf-8"),
     ) as Record<string, unknown>;
@@ -223,6 +240,110 @@ test("delivery policy allows typed control records and denies authority expansio
       delivery,
     ).decision,
     "allow",
+  );
+  assert.equal(
+    evaluateCoordinatorTool(
+      {
+        tool_name: "mcp__codex_apps__linear_save_issue",
+        tool_input: { id: "RENE-3", description: rootBody },
+      },
+      delivery,
+    ).decision,
+    "allow",
+  );
+  assert.equal(
+    evaluateCoordinatorTool(
+      {
+        tool_name: "mcp__codex_apps__linear_save_issue",
+        tool_input: { id: "RENE-3", labels: ["record:root"] },
+      },
+      delivery,
+    ).decision,
+    "allow",
+  );
+  assert.equal(
+    evaluateCoordinatorTool(
+      {
+        tool_name: "mcp__codex_apps__linear_save_issue",
+        tool_input: { id: "RENE-3", labels: ["priority:urgent"] },
+      },
+      delivery,
+    ).decision,
+    "deny",
+  );
+  assert.equal(
+    evaluateCoordinatorTool(
+      {
+        tool_name: "mcp__codex_apps__linear_save_issue",
+        tool_input: { id: "RENE-3", labels: [] },
+      },
+      delivery,
+    ).decision,
+    "deny",
+  );
+  assert.equal(
+    evaluateCoordinatorTool(
+      {
+        tool_name: "mcp__codex_apps__linear_save_issue",
+        tool_input: {
+          id: "RENE-3",
+          labels: ["record:root", "record:root"],
+        },
+      },
+      delivery,
+    ).decision,
+    "deny",
+  );
+  assert.equal(
+    evaluateCoordinatorTool(
+      {
+        tool_name: "mcp__codex_apps__linear_save_issue",
+        tool_input: { id: "RENE-not-an-id", description: rootBody },
+      },
+      delivery,
+    ).decision,
+    "deny",
+  );
+  assert.equal(
+    evaluateCoordinatorTool(
+      {
+        tool_name: "mcp__codex_apps__linear_save_issue",
+        tool_input: { id: "RENE-3", state: "Canceled" },
+      },
+      delivery,
+    ).decision,
+    "deny",
+  );
+  assert.equal(
+    evaluateCoordinatorTool(
+      {
+        tool_name: "mcp__codex_apps__linear_save_issue",
+        tool_input: {
+          team: "Rene",
+          project: "project-id",
+          title: "Root Agent Record",
+          description: rootBody,
+          blockedBy: ["RENE-1"],
+        },
+      },
+      delivery,
+    ).decision,
+    "deny",
+  );
+  assert.equal(
+    evaluateCoordinatorTool(
+      {
+        tool_name: "mcp__codex_apps__linear_save_issue",
+        tool_input: {
+          team: "Rene",
+          project: "project-id",
+          title: " ",
+          description: rootBody,
+        },
+      },
+      delivery,
+    ).decision,
+    "deny",
   );
   assert.equal(
     evaluateCoordinatorTool(
@@ -393,6 +514,17 @@ test("coordinator policies fail closed across declared tool classes", () => {
       kind: "delivery",
       tool_name: "mcp__codex_apps__linear_save_comment",
       tool_input: { issueId: "ENG-12", body: "Escape" },
+      expected: "deny",
+    },
+    {
+      name: "delivery Linear comment with unsupported field",
+      kind: "delivery",
+      tool_name: "mcp__codex_apps__linear_save_comment",
+      tool_input: {
+        issueId: "RENE-12",
+        body: "Activation evidence",
+        id: "comment-1",
+      },
       expected: "deny",
     },
     {
