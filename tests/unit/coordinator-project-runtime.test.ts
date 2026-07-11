@@ -141,7 +141,18 @@ test("renders both exact coordinator projects with pinned prompt bundles", () =>
     assert.equal(config.default_permissions, "coordinator-readonly");
     assert.equal(config.approval_policy, "never");
     const deliveryApps = config.apps as Record<string, Record<string, unknown>>;
-    assert.equal(deliveryApps.linear.destructive_enabled, true);
+    const linear = deliveryApps.asdk_app_69a089a326dc8191b32a3f2553f5be2c;
+    assert.equal(linear.destructive_enabled, true);
+    assert.equal(
+      (linear.tools as Record<string, Record<string, unknown>>)
+        .linear_save_issue.approval_mode,
+      "auto",
+    );
+    assert.equal(
+      (linear.tools as Record<string, Record<string, unknown>>)
+        .linear_save_comment.approval_mode,
+      "auto",
+    );
     assert.equal(deliveryApps._default.destructive_enabled, false);
     const deliveryPolicy = JSON.parse(
       readFileSync(join(projects, "delivery", "policy.json"), "utf-8"),
@@ -173,10 +184,26 @@ test("renders both exact coordinator projects with pinned prompt bundles", () =>
       string,
       Record<string, unknown>
     >;
-    assert.equal(operationsApps.linear.destructive_enabled, true);
-    assert.equal(operationsApps.gmail.destructive_enabled, false);
-    assert.equal(operationsApps.slack.destructive_enabled, false);
-    assert.equal(operationsApps["google-calendar"].destructive_enabled, false);
+    assert.equal(
+      operationsApps.asdk_app_69a089a326dc8191b32a3f2553f5be2c
+        .destructive_enabled,
+      true,
+    );
+    assert.equal(
+      operationsApps.connector_2128aebfecb84f64a069897515042a44
+        .destructive_enabled,
+      false,
+    );
+    assert.equal(
+      operationsApps.asdk_app_69a1d78e929881919bba0dbda1f6436d
+        .destructive_enabled,
+      false,
+    );
+    assert.equal(
+      operationsApps.connector_947e0d954944416db111db556030eea6
+        .destructive_enabled,
+      false,
+    );
     const marker = JSON.parse(
       readFileSync(join(projects, "delivery", ".ax-managed.json"), "utf-8"),
     ) as Record<string, unknown>;

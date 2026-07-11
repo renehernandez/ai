@@ -26,6 +26,7 @@ import { hashPath } from "./source-snapshot.ts";
 type CoordinatorSourceManifest = {
   schema_version: 1;
   policy_version: string;
+  app_config_ids: Record<string, string>;
   linear_control_plane: {
     team: string;
     team_id: string;
@@ -101,7 +102,7 @@ export function renderCoordinatorProjects(input: {
     mkdirSync(join(codexRoot, "hooks"), { recursive: true });
     writeFileSync(
       join(codexRoot, "config.toml"),
-      renderConfig(project.apps),
+      renderConfig(project.apps, manifest.app_config_ids),
       "utf-8",
     );
     const hookPath = join(
@@ -263,6 +264,11 @@ function validateManifest(
     if (project.prompt_roles.length === 0) {
       throw new Error(`coordinator_prompt_inventory_empty: ${project.kind}`);
     }
+    for (const app of project.apps) {
+      if (!manifest.app_config_ids[app]) {
+        throw new Error(`coordinator_app_config_id_missing: ${app}`);
+      }
+    }
     for (const role of project.prompt_roles) {
       if (!existsSync(join(renderedAgentsDir, "pinned", `${role}.md`))) {
         throw new Error(`coordinator_pinned_prompt_missing: ${role}`);
@@ -271,7 +277,10 @@ function validateManifest(
   }
 }
 
-function renderConfig(apps: string[]): string {
+function renderConfig(
+  apps: string[],
+  appConfigIds: Record<string, string>,
+): string {
   const lines = [
     'default_permissions = "coordinator-readonly"',
     'approval_policy = "never"',
@@ -293,14 +302,27 @@ function renderConfig(apps: string[]): string {
     'default_tools_approval_mode = "auto"',
   ];
   for (const app of [...apps].sort()) {
+    const appConfigId = appConfigIds[app];
+    if (!appConfigId) {
+      throw new Error(`coordinator_app_config_id_missing: ${app}`);
+    }
     lines.push(
       "",
-      `[apps.${JSON.stringify(app)}]`,
+      `[apps.${JSON.stringify(appConfigId)}]`,
       "enabled = true",
       `destructive_enabled = ${app === "linear" ? "true" : "false"}`,
       "open_world_enabled = false",
       'default_tools_approval_mode = "auto"',
     );
+    if (app === "linear") {
+      for (const tool of ["linear_save_comment", "linear_save_issue"]) {
+        lines.push(
+          "",
+          `[apps.${JSON.stringify(appConfigId)}.tools.${tool}]`,
+          'approval_mode = "auto"',
+        );
+      }
+    }
   }
   const config = `${lines.join("\n")}\n`;
   parse(config);
