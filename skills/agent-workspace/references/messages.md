@@ -3,7 +3,9 @@
 Every message carries message ID, type, correlation ID, sender, recipient,
 workspace generation, mode, objective, authority, canonical sources,
 acceptance, verification, stop condition, model profile, escalation route, and
-`next_check_at`. Agent Run messages also carry Run ID.
+`next_check_at`. Every invocation also binds the control-project kind and
+exact path, control-policy hash, generated-project source fingerprint, and
+active permission profile. Agent Run messages carry Run ID.
 
 Use:
 

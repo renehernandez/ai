@@ -49,6 +49,13 @@
         "codex": "~/.codex/agents"
       }
     },
+    "coordinatorProjects": {
+      "sourceDir": "coordinator-projects",
+      "targets": {
+        "delivery": "~/work/projects/rene.hernandez/agent-control/delivery",
+        "operations": "~/work/projects/rene.hernandez/agent-control/operations"
+      }
+    },
     "openspec": {
       "tools": ["codex", "claude"],
       "canonicalSkillsDir": ".agents/skills",

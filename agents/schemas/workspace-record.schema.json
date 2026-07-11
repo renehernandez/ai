@@ -97,6 +97,22 @@
               "pattern": "^[a-f0-9]{64}$"
             },
             "model_profile": { "type": "string" },
+            "control_project_kind": {
+              "enum": ["delivery", "operations"]
+            },
+            "control_project_id": { "type": "string", "minLength": 1 },
+            "control_project_path": { "type": "string", "minLength": 1 },
+            "control_policy_sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "control_source_sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "control_permission_profile": {
+              "const": "coordinator-readonly"
+            },
             "authority_exclusions": {
               "type": "array",
               "uniqueItems": true,
@@ -105,7 +121,44 @@
             "activation_nonce": { "type": ["string", "null"] },
             "codex_task_id": { "type": ["string", "null"] },
             "memory_epoch_id": { "type": ["string", "null"] }
-          }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "activation_state": {
+                    "enum": [
+                      "task_pending",
+                      "task_created",
+                      "task_pinned",
+                      "post_create_sent",
+                      "attested",
+                      "active"
+                    ]
+                  }
+                },
+                "required": ["activation_state"]
+              },
+              "then": {
+                "properties": {
+                  "control_project_kind": true,
+                  "control_project_id": true,
+                  "control_project_path": true,
+                  "control_policy_sha256": true,
+                  "control_source_sha256": true,
+                  "control_permission_profile": true
+                },
+                "required": [
+                  "control_project_kind",
+                  "control_project_id",
+                  "control_project_path",
+                  "control_policy_sha256",
+                  "control_source_sha256",
+                  "control_permission_profile"
+                ]
+              }
+            }
+          ]
         }
       ]
     },

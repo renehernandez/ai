@@ -126,8 +126,12 @@ modes.
 - Route delivery through the Delivery Executive Assistant and operations
   drafting through the Executive Operations Assistant. Rene retains merge and
   external-action authority unless an exact active policy grants it.
-- Manage generated custom-agent descriptors through the tracked `agents/`
-  source and `ax agents`; never edit installed TOML directly.
+- Manage pinned prompt bundles and ephemeral custom-agent descriptors through
+  the tracked `agents/` source and `ax agents`; never edit installed outputs
+  directly.
+- Generate the two persistent coordinator project roots through `ax
+  coordinators`. Activation requires their current saved-project IDs and policy
+  fingerprints from AX registration.
 
 ## AX runtime
 
@@ -135,8 +139,9 @@ modes.
   profiles, one policy profile, exact managed targets, and retired skills.
 - Use `ax sync` for runtime convergence. It replaces declared targets and
   removes explicitly retired skills without adoption or ownership prompts.
-- Scoped `skills sync`, `instructions sync`, and `hooks sync` use the same
-  tracked selection. Unrelated paths remain untouched.
+- Scoped `skills sync`, `instructions sync`, `hooks sync`, `agents sync`, and
+  `coordinators sync` use the same tracked selection. Unrelated paths remain
+  untouched.
 - Use `ax status` and `ax validate` for offline, read-only inspection with no
   network access, content comparison, or mutation.
 - Exercise feature-branch AX behavior only with isolated HOME and runtime roots.

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "prompt_contract_version": "1.0.0",
+  "prompt_contract_version": "2.0.0",
   "shared_contract": "shared-contract.md",
   "model_profiles": {
     "exceptional-max": {
@@ -239,46 +239,80 @@
     { "id": "security", "path": "reviewers/security.md" }
   ],
   "outputs": [
-    { "name": "delivery-ea", "role": "delivery-ea" },
-    { "name": "operations-ea", "role": "operations-ea" },
-    { "name": "linear-project-manager", "role": "linear-project-manager" },
-    { "name": "gitlab-project-manager", "role": "gitlab-project-manager" },
-    { "name": "squad-lead", "role": "squad-lead" },
+    {
+      "name": "delivery-ea",
+      "role": "delivery-ea",
+      "kind": "pinned_prompt_bundle"
+    },
+    {
+      "name": "operations-ea",
+      "role": "operations-ea",
+      "kind": "pinned_prompt_bundle"
+    },
+    {
+      "name": "linear-project-manager",
+      "role": "linear-project-manager",
+      "kind": "pinned_prompt_bundle"
+    },
+    {
+      "name": "gitlab-project-manager",
+      "role": "gitlab-project-manager",
+      "kind": "pinned_prompt_bundle"
+    },
+    {
+      "name": "squad-lead",
+      "role": "squad-lead",
+      "kind": "pinned_prompt_bundle"
+    },
     {
       "name": "implementer-quick",
       "role": "implementer",
+      "kind": "codex_custom_agent",
       "model_profile": "quick-bounded"
     },
     {
       "name": "implementer-standard",
       "role": "implementer",
+      "kind": "codex_custom_agent",
       "model_profile": "standard-implementation"
     },
     {
       "name": "reviewer-standard",
       "role": "reviewer",
+      "kind": "codex_custom_agent",
       "model_profile": "standard-review",
       "reviewer_overlays": ["correctness"]
     },
     {
       "name": "reviewer-security",
       "role": "reviewer",
+      "kind": "codex_custom_agent",
       "model_profile": "high-risk-review",
       "reviewer_overlays": ["correctness", "security"]
     },
     {
       "name": "reviewer-migration-data",
       "role": "reviewer",
+      "kind": "codex_custom_agent",
       "model_profile": "high-risk-review",
       "reviewer_overlays": ["correctness", "migration-data"]
     },
     {
       "name": "reviewer-production",
       "role": "reviewer",
+      "kind": "codex_custom_agent",
       "model_profile": "high-risk-review",
       "reviewer_overlays": ["correctness", "production"]
     },
-    { "name": "researcher", "role": "researcher" },
-    { "name": "operations-specialist", "role": "operations-specialist" }
+    {
+      "name": "researcher",
+      "role": "researcher",
+      "kind": "codex_custom_agent"
+    },
+    {
+      "name": "operations-specialist",
+      "role": "operations-specialist",
+      "kind": "codex_custom_agent"
+    }
   ]
 }

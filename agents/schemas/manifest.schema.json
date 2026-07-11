@@ -130,10 +130,13 @@
     "output": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "role"],
+      "required": ["name", "role", "kind"],
       "properties": {
         "name": { "$ref": "#/$defs/identifier" },
         "role": { "$ref": "#/$defs/identifier" },
+        "kind": {
+          "enum": ["pinned_prompt_bundle", "codex_custom_agent"]
+        },
         "model_profile": { "$ref": "#/$defs/identifier" },
         "reviewer_overlays": {
           "type": "array",

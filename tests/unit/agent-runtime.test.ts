@@ -22,18 +22,21 @@ import { assertSchemaValid } from "../../skills/agent-workspace/scripts/prompt-c
 import { serializeRuntimeContext } from "../../skills/agent-workspace/scripts/runtime-context.ts";
 
 const EXPECTED_AGENTS = [
-  "delivery-ea",
-  "gitlab-project-manager",
   "implementer-quick",
   "implementer-standard",
-  "linear-project-manager",
-  "operations-ea",
   "operations-specialist",
   "researcher",
   "reviewer-migration-data",
   "reviewer-production",
   "reviewer-security",
   "reviewer-standard",
+];
+
+const EXPECTED_PINNED_PROMPTS = [
+  "delivery-ea",
+  "gitlab-project-manager",
+  "linear-project-manager",
+  "operations-ea",
   "squad-lead",
 ];
 
@@ -85,10 +88,15 @@ test("renders the required Codex agents deterministically", () => {
       const secondResult = renderAgentRuntime({ sourceDir, outputDir: second });
 
       assert.deepEqual(firstResult.agentNames, EXPECTED_AGENTS);
+      assert.deepEqual(firstResult.pinnedPromptNames, EXPECTED_PINNED_PROMPTS);
       assert.equal(firstResult.staticHash, secondResult.staticHash);
       assert.deepEqual(
         readdirSync(join(first, "codex")).sort(),
         EXPECTED_AGENTS.map((name) => `${name}.toml`),
+      );
+      assert.deepEqual(
+        readdirSync(join(first, "pinned")).sort(),
+        EXPECTED_PINNED_PROMPTS.map((name) => `${name}.md`),
       );
 
       for (const name of EXPECTED_AGENTS) {
@@ -139,8 +147,9 @@ test("renders the required Codex agents deterministically", () => {
 
 test("validates the canonical source inventory and model ceilings", () => {
   const result = validateAgentSource(resolve("agents"));
-  assert.equal(result.promptContractVersion, "1.0.0");
+  assert.equal(result.promptContractVersion, "2.0.0");
   assert.deepEqual(result.agentNames, EXPECTED_AGENTS);
+  assert.deepEqual(result.pinnedPromptNames, EXPECTED_PINNED_PROMPTS);
   assert.equal(result.automaticCeiling, "xhigh");
 });
 
@@ -189,7 +198,13 @@ test("serializes runtime context as deterministic untrusted data", () => {
     next_check_at: "2026-07-11T16:00:00Z",
     privacy_policy_ref: "internal-v1",
     tool_policy_attestation: toolPolicy("squad-lead"),
-    prompt_contract_version: "1.0.0",
+    control_project_kind: "delivery",
+    control_project_id: "project-delivery",
+    control_project_path: "/control/delivery",
+    control_policy_sha256: "c".repeat(64),
+    control_source_sha256: "d".repeat(64),
+    control_permission_profile: "coordinator-readonly",
+    prompt_contract_version: "2.0.0",
     rendered_prompt_sha256: "a".repeat(64),
     workspace_generation: 4,
   };
@@ -236,6 +251,11 @@ test("serializes runtime context as deterministic untrusted data", () => {
     verification: ["Run agent runtime unit tests"],
     stop_condition: "Stop before merge",
     model_profile: "pinned-delivery-standard",
+    control_project_kind: "delivery",
+    control_project_path: "/control/delivery",
+    control_policy_sha256: "c".repeat(64),
+    control_source_sha256: "d".repeat(64),
+    control_permission_profile: "coordinator-readonly",
     escalation_route: "delivery-ea",
     next_check_at: "2026-07-11T16:00:00Z",
   };
@@ -253,7 +273,7 @@ test("serializes runtime context as deterministic untrusted data", () => {
 
   assert.equal(first.contextHash, second.contextHash);
   assert.equal(first.serialized, second.serialized);
-  assert.match(first.serialized, /^AGENT_CONTEXT_V1\n/);
+  assert.match(first.serialized, /^AGENT_CONTEXT_V2\n/);
   assert.match(first.serialized, /BEGIN_UNTRUSTED_AGENT_CONTEXT/);
   assert.match(first.serialized, /END_UNTRUSTED_AGENT_CONTEXT/);
   assert.match(first.serialized, /RENE-8/);
@@ -279,6 +299,27 @@ test("serializes runtime context as deterministic untrusted data", () => {
         records,
       }),
     /agent_runtime_activation_tool_policy_mismatch/,
+  );
+  assert.throws(
+    () =>
+      serializeRuntimeContext({
+        activation: { ...base, control_project_kind: "operations" },
+        invocation: { ...invocation, control_project_kind: "operations" },
+        records,
+      }),
+    /agent_runtime_role_control_project_mismatch/,
+  );
+  assert.throws(
+    () =>
+      serializeRuntimeContext({
+        activation: base,
+        invocation: {
+          ...invocation,
+          control_source_sha256: "e".repeat(64),
+        },
+        records,
+      }),
+    /agent_runtime_control_source_mismatch/,
   );
   assert.throws(
     () =>
@@ -501,6 +542,18 @@ test("rejects manual-only output profiles and duplicate roles", () => {
     );
   });
   withTempSource((root, manifest, persist) => {
+    const outputs = manifest.outputs as Array<Record<string, unknown>>;
+    outputs[0].kind = "codex_custom_agent";
+    persist();
+    assert.throws(
+      () =>
+        validateAgentSource(root, {
+          generatedPolicies: generateAgentRolePoliciesSource(root),
+        }),
+      /agent_output_lifecycle_kind_mismatch/,
+    );
+  });
+  withTempSource((root, manifest, persist) => {
     const roles = manifest.roles as Array<Record<string, unknown>>;
     roles.push({ ...roles[0] });
     persist();
@@ -548,6 +601,46 @@ test("standalone schemas enforce activation phases", () => {
   );
 });
 
+test("workspace migration requires control identity from task_pending onward", () => {
+  const root = {
+    record_type: "root",
+    id: "RENE-2",
+    created_at: "2026-07-11T20:00:00Z",
+    classification: "internal",
+    summary: "Delivery Executive Assistant",
+    agent_key: "delivery-ea",
+    agent_role: "delivery-ea",
+    reports_to: "rene",
+    owned_scope: "delivery-portfolio",
+    workspace_generation: 1,
+    activation_state: "reserved",
+    prompt_contract_version: "2.0.0",
+    rendered_prompt_sha256: "a".repeat(64),
+    model_profile: "pinned-delivery-standard",
+  };
+  assert.doesNotThrow(() => assertSchemaValid("workspaceRecord", root));
+  assert.throws(
+    () =>
+      assertSchemaValid("workspaceRecord", {
+        ...root,
+        activation_state: "task_pending",
+      }),
+    /control_project_kind|workspaceRecord_invalid/,
+  );
+  assert.doesNotThrow(() =>
+    assertSchemaValid("workspaceRecord", {
+      ...root,
+      activation_state: "task_pending",
+      control_project_kind: "delivery",
+      control_project_id: "desktop-delivery",
+      control_project_path: "/control/delivery",
+      control_policy_sha256: "c".repeat(64),
+      control_source_sha256: "d".repeat(64),
+      control_permission_profile: "coordinator-readonly",
+    }),
+  );
+});
+
 test("rejects Linear template fields that drift from the workspace schema", () => {
   withTempSource((root) => {
     const templatePath = join(root, "templates", "linear", "workstream.md");
@@ -588,7 +681,13 @@ test("portable runtime-context CLI serializes validated input", () => {
     next_check_at: "2026-07-11T16:00:00Z",
     privacy_policy_ref: "internal-v1",
     tool_policy_attestation: toolPolicy("squad-lead"),
-    prompt_contract_version: "1.0.0",
+    control_project_kind: "delivery",
+    control_project_id: "project-delivery",
+    control_project_path: "/control/delivery",
+    control_policy_sha256: "c".repeat(64),
+    control_source_sha256: "d".repeat(64),
+    control_permission_profile: "coordinator-readonly",
+    prompt_contract_version: "2.0.0",
     rendered_prompt_sha256: "a".repeat(64),
     workspace_generation: 4,
   };
@@ -607,6 +706,11 @@ test("portable runtime-context CLI serializes validated input", () => {
     verification: ["Run unit tests"],
     stop_condition: "Stop before merge",
     model_profile: "pinned-delivery-standard",
+    control_project_kind: "delivery",
+    control_project_path: "/control/delivery",
+    control_policy_sha256: "c".repeat(64),
+    control_source_sha256: "d".repeat(64),
+    control_permission_profile: "coordinator-readonly",
     escalation_route: "delivery-ea",
     next_check_at: "2026-07-11T16:00:00Z",
   };

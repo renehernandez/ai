@@ -18,6 +18,11 @@
     "verification",
     "stop_condition",
     "model_profile",
+    "control_project_kind",
+    "control_project_path",
+    "control_policy_sha256",
+    "control_source_sha256",
+    "control_permission_profile",
     "escalation_route",
     "next_check_at"
   ],
@@ -68,6 +73,17 @@
     },
     "stop_condition": { "type": "string", "minLength": 1 },
     "model_profile": { "type": "string", "minLength": 1 },
+    "control_project_kind": { "enum": ["delivery", "operations"] },
+    "control_project_path": { "type": "string", "minLength": 1 },
+    "control_policy_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "control_source_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "control_permission_profile": { "const": "coordinator-readonly" },
     "escalation_route": { "type": "string", "minLength": 1 },
     "next_check_at": {
       "type": "string",

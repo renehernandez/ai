@@ -216,7 +216,11 @@ test("scoped agents sync renders the canonical tree and Codex link", () => {
     assert.equal(result.status, "synchronized");
     const canonical = join(input.installRoot, "agents", "agents");
     const codex = join(input.installRoot, "codex", "agents");
-    assert.equal(existsSync(join(canonical, "codex", "squad-lead.toml")), true);
+    assert.equal(existsSync(join(canonical, "pinned", "squad-lead.md")), true);
+    assert.equal(
+      existsSync(join(canonical, "codex", "implementer-standard.toml")),
+      true,
+    );
     assert.equal(
       resolve(join(codex, ".."), readlinkSync(codex)),
       join(canonical, "codex"),
@@ -333,7 +337,7 @@ test("agents sync recovers an exact dangling managed link", () => {
       syncRuntime({ ...input, surface: "agents" }).status,
       "synchronized",
     );
-    assert.equal(existsSync(join(codex, "squad-lead.toml")), true);
+    assert.equal(existsSync(join(codex, "implementer-standard.toml")), true);
   });
 });
 
