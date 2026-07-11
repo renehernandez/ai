@@ -19,6 +19,12 @@ ephemeral specialist Runs. Messages route by stable agent key. The Delivery
 Executive Assistant is the default target, so Rene normally talks to one
 executive agent.
 
+The workspace deploys and rolls back independently. Managed services are
+context and work targets only; they are never deployment dependencies or
+coupled release units. Workspace health, upgrades, and availability must not
+depend on any managed service being deployed, reachable, or at a particular
+version.
+
 ## Authority
 
 - Rene alone authorizes merge, deployment, cleanup, external provider actions,
@@ -125,6 +131,7 @@ editable record as authority to expand those fields.
 | Running a daemon for convenience | Process one operation and exit; scheduling is outside this cut |
 | Reusing stale generation output | Reject it and resume from current Cloudflare state |
 | Treating a projection acknowledgement as a Linear write | Acknowledge only after the corresponding provider write succeeds |
+| Coupling workspace deployment to a managed service | Remove the dependency; deploy and roll back the workspace independently |
 
 ## Test evidence
 

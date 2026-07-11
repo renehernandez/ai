@@ -52,6 +52,12 @@ test("agent-workspace keeps first-cut authority and execution boundaries", () =>
   assert.doesNotMatch(skill, /MCP server/i);
 });
 
+test("agent-workspace remains deployment-independent from managed services", () => {
+  assert.match(skill, /deploys.*independently/is);
+  assert.match(skill, /managed services.*context.*work targets/is);
+  assert.match(skill, /never.*deployment dependenc|never.*coupled release/is);
+});
+
 test("agent-workspace metadata is discoverable and narrow", () => {
   assert.match(metadata, /display_name: "Agent Workspace"/);
   assert.match(metadata, /default_prompt: "Use \$agent-workspace/);

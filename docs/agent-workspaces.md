@@ -9,6 +9,12 @@ This first cut does not deploy model execution, shells, repositories, or
 sandboxes to Cloudflare. Remote clients still control the local Codex host, so
 the current checkout and local approvals remain the execution boundary.
 
+The workspace is a standalone control plane. It deploys, upgrades, rolls back,
+and reports health independently from every service it manages. Stat and other
+managed services are context and work targets only: their deployments,
+endpoints, health, versions, and release cycles are never workspace deployment
+dependencies.
+
 ## Architecture
 
 ```mermaid

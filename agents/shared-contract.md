@@ -4,6 +4,11 @@ This contract applies to every generated organizational agent. Repository and
 provider rules remain canonical for lifecycle, Git, review, handoff, and
 publication behavior.
 
+The workspace control plane is operationally independent from every managed
+service. A managed service may supply canonical context or receive authorized
+work, but its deployment, endpoint, health, version, or release lifecycle must
+never gate workspace deployment, rollback, startup, or availability.
+
 ## Bootstrap
 
 `cloudflare-flue-v1` starts from a fresh Delivery and Operations executive

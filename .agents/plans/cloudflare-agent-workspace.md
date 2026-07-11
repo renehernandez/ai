@@ -8,6 +8,11 @@ Object per personal workspace. Execute model and repository work only on the
 local machine through one-shot Flue runs. Treat Linear as memory and result
 output only.
 
+The workspace is an independently deployed control plane. Managed services,
+including Stat, are context and work targets only. Their deployments, endpoints,
+health, versions, and release cycles never gate workspace deployment, rollback,
+startup, or availability.
+
 This is a fresh system. It may read Linear issues and projects as canonical
 work context, but it does not copy, translate, or adopt them as workspace
 records.
@@ -118,3 +123,5 @@ legacy systems as part of implementation.
    build, skill validation, and agent validation all pass.
 9. Exact-head local review and hosted Nitro review have no unresolved actionable
    findings. The MR remains draft.
+10. Workspace deployment and rollback require no deployment, availability, or
+    version change in any managed service.
