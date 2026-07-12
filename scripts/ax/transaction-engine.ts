@@ -1252,7 +1252,7 @@ function relocateRetainedPath(
   return join(transactionRoot, relative(preparationRoot, path));
 }
 
-function acquireMutationLock(
+export function acquireMutationLock(
   lockPath: string,
   domain: string,
   root: string,
@@ -1343,7 +1343,7 @@ function tryCreateLockFile(
   }
 }
 
-function releaseMutationLock(
+export function releaseMutationLock(
   lockPath: string,
   identity: { pid: number; processStartIdentity: string },
 ): void {

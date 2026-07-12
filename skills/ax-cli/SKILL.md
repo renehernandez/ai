@@ -1,6 +1,6 @@
 ---
 name: ax-cli
-description: Use when managing Agents Experience assets or Cloudflare agent workspaces with the ax CLI, including runtime sync, organizational agents, local Flue runs, Linear projections, OpenSpec scaffolding, or validation.
+description: Use when managing Agents Experience assets or Cloudflare agent workspaces with the ax CLI, including runtime sync, model authentication, organizational agents, local Flue runs, Linear projections, OpenSpec scaffolding, or validation.
 allowed-tools: Read, Grep, Bash(ax:*), Bash(git:*), Bash(pnpm:*)
 ---
 
@@ -35,6 +35,8 @@ never synchronize runtime content.
 | Repo-local OpenSpec | `pnpm ax openspec sync` | `ax openspec sync` |
 | Inspect runtime structure | `pnpm ax status` / `pnpm ax validate` | `ax status` / `ax validate` |
 | Manage the executable shim | `pnpm ax shim <command>` | Use the durable AI repo |
+| Authenticate OpenAI Codex | `pnpm ax auth login openai-codex` | `ax auth login openai-codex` |
+| Inspect, test, or remove OpenAI Codex auth | `pnpm ax auth status openai-codex` / `pnpm ax auth test openai-codex` / `pnpm ax auth logout openai-codex` | `ax auth status openai-codex` / `ax auth test openai-codex` / `ax auth logout openai-codex` |
 | Configure workspace | `pnpm ax workspace configure --url <url> --workspace <key>` | `ax workspace configure --url <url> --workspace <key>` |
 | Bootstrap workspace | `pnpm ax workspace bootstrap` | `ax workspace bootstrap` |
 | Send and run local work | `pnpm ax workspace send --message <text>` / `pnpm ax workspace run --once` | `ax workspace send --message <text>` / `ax workspace run --once` |
@@ -112,6 +114,23 @@ AX resolves `openspec` from PATH and does not manage that package. Finish with
 
 ## Cloudflare workspace operations
 
+Use Pi's provider-owned OAuth through AX before selecting an
+`openai-codex/<model>` model:
+
+```bash
+ax auth login openai-codex
+ax auth status openai-codex
+ax auth test openai-codex --model openai-codex/gpt-5.6-sol --reasoning low
+ax auth logout openai-codex
+```
+
+AX persists the ChatGPT subscription credential through a Pi CredentialStore,
+resolves it for each one-shot Flue run, refreshes it when expired, and passes
+only the short-lived access token to the Flue host process. This path does not
+use the Codex CLI. The local Flue shell environment does not inherit the token.
+Explicit trusted-host work remains able to access Rene's local files and is not
+an isolation boundary.
+
 Configure the endpoint once. Cloudflare Access service-token values come from
 `AX_WORKSPACE_ACCESS_CLIENT_ID` and `AX_WORKSPACE_ACCESS_CLIENT_SECRET`, not the
 connection file:
@@ -175,6 +194,9 @@ dependency.
   forbids editing generated children or registration state directly.
 - RED workspace retrieval had no Cloudflare command path. GREEN distinguishes
   runtime sync from authenticated workspace operations and local Flue runs.
+- RED subscription retrieval had no AX login, status, or live-test path. GREEN
+  routes ChatGPT subscription OAuth through Pi and keeps the token outside the
+  model-visible sandbox environment.
 
 ## Common mistakes
 
@@ -188,5 +210,6 @@ dependency.
 | Editing a generated coordinator child | Edit `coordinator-projects/` or the renderer, then run coordinator sync. |
 | Hand-editing `control-projects.json` | Resolve unique ID/path matches with `list_projects`, then use `ax coordinators register`. |
 | Legacy pinned activation before saved-project registration | Register both current project IDs and validate the coordinator surface first. |
+| Passing Codex OAuth through `OPENAI_API_KEY` or copying `~/.codex/auth.json` | Run `ax auth login openai-codex`; AX owns a separate Pi credential. |
 | Running raw upstream OpenSpec setup | Use repo-local `ax openspec sync`. |
 | Activating live roots from feature work | Use isolated roots and activate after merge. |

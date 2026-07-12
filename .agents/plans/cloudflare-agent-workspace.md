@@ -22,10 +22,12 @@ records.
 The usable path is one `ax` command surface:
 
 ```bash
+ax auth login openai-codex
+ax auth test openai-codex --model openai-codex/gpt-5.6-sol --reasoning low
 ax workspace configure --url https://<worker-host> --workspace rene
 ax workspace bootstrap
 ax workspace send --message "Summarize the delivery portfolio."
-AX_FLUE_MODEL=<provider/model> ax workspace run --once
+AX_FLUE_MODEL=openai-codex/gpt-5.4 ax workspace run --once
 ```
 
 Rene normally talks only to `delivery-ea`. Direct `--to <agent-key>` routing is
@@ -63,9 +65,12 @@ generation. Dynamic record content cannot expand authority.
 
 Cloudflare stores coordination state and never receives repository bytes or
 model credentials. Cloudflare Access protects the Worker. The local AX process
-holds Access service-token credentials and a model credential. Read-only work
-uses the Flue virtual workspace. Explicit write work uses a trusted-host adapter
-against the named absolute local repository path.
+holds Access service-token credentials and owns a separate Pi CredentialStore
+for ChatGPT subscription OAuth. It resolves that credential for each one-shot
+Flue run and refreshes it when expired, without invoking the Codex CLI or
+copying Codex auth state.
+Read-only work uses the Flue virtual workspace. Explicit write work uses a
+trusted-host adapter against the named absolute local repository path.
 
 There is no daemon, remote sandbox, autonomous timer, hosted shell, or remote
 repository checkout in this iteration. Rene retains merge, deployment, cleanup,
@@ -99,6 +104,8 @@ Implement in one final draft MR:
 - fresh tracked-manifest bootstrap for the two executive agents;
 - immediate routing registration for valid manager Root mutations;
 - one-shot local Flue workflow and narrow child-process environment;
+- `ax auth` login, status, and live subscription test through Pi's native
+  OpenAI Codex provider and the pinned Flue beta;
 - typed schemas, generated validators, redaction, claim fencing, idempotency,
   documentation, and retrieval tests.
 
@@ -125,3 +132,6 @@ legacy systems as part of implementation.
    findings. The MR remains draft.
 10. Workspace deployment and rollback require no deployment, availability, or
     version change in any managed service.
+11. A live `ax auth test openai-codex` proves current OAuth resolution, model
+    selection, process restart, and a Flue nonce round trip without an OpenAI
+    API key or Codex runtime. Pi refreshes only genuinely expired credentials.

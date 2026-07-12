@@ -113,11 +113,27 @@ record mutations and become routable as soon as their result is accepted.
 
 ## Send and run work
 
+Authenticate and verify subscription-backed OpenAI Codex execution once on the
+local machine:
+
+```bash
+ax auth login openai-codex
+ax auth test openai-codex --model openai-codex/gpt-5.6-sol --reasoning low
+```
+
+Pi supplies the direct ChatGPT subscription OAuth and model provider; AX owns
+its persistent credential store. Each one-shot Flue process receives a current
+access token through an allowlisted host environment. Flue's local shell
+environment does not inherit that token or unrelated provider credentials.
+This is a narrow environment boundary, not general host isolation: an explicit
+`--workspace-write` run still uses the trusted-host adapter and can access files
+available to Rene. This path does not invoke the Codex CLI.
+
 Queue ordinary work for the executive agent:
 
 ```bash
 ax workspace send --message "Summarize the active delivery portfolio."
-export AX_FLUE_MODEL=<provider/model>
+export AX_FLUE_MODEL=openai-codex/gpt-5.4
 ax workspace run --once
 ```
 
@@ -191,6 +207,10 @@ ideas without adopting its runtime or UI.
 
 | Command | Use |
 | --- | --- |
+| `ax auth login openai-codex` | Authenticate Pi with the ChatGPT subscription |
+| `ax auth status openai-codex` | Inspect stored OAuth state without refreshing it |
+| `ax auth test openai-codex` | Resolve current OAuth state and run a live Flue subscription test |
+| `ax auth logout openai-codex` | Delete the locally stored Pi credential |
 | `ax workspace configure` | Save endpoint and personal workspace key |
 | `ax workspace bootstrap` | Create the fresh executive hierarchy |
 | `ax workspace status` | Inspect bootstrap state, queues, records, and projections |

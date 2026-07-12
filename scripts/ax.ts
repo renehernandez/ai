@@ -22,6 +22,11 @@ import {
   writeCoordinatorRegistration,
 } from "./ax/coordinator-project-runtime.ts";
 import {
+  type AuthExecutor,
+  addAuthCommands,
+  executeAuthCommand,
+} from "./ax/openai-codex-auth.ts";
+import {
   inspectOpenSpec,
   type OpenSpecConfig,
   syncOpenSpec,
@@ -94,6 +99,7 @@ export async function main(): Promise<void> {
 export function createProgram(
   execute: CommandExecutor = executeParsedCommand,
   executeWorkspace: WorkspaceExecutor = executeWorkspaceCommand,
+  executeAuth: AuthExecutor = executeAuthCommand,
 ): Command {
   const program = new Command();
   program
@@ -115,6 +121,7 @@ export function createProgram(
   addCoordinatorCommands(program, execute);
   addOpenSpecCommands(program, execute);
   addShimCommands(program, execute);
+  addAuthCommands(program, executeAuth);
   addWorkspaceCommands(program, executeWorkspace);
   return program;
 }

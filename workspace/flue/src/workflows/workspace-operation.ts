@@ -1,6 +1,7 @@
 import { defineAgent, defineWorkflow } from "@flue/runtime";
 import { local } from "@flue/runtime/node";
 import * as v from "valibot";
+import { registerOpenAICodexSubscription } from "../openai-codex-provider.ts";
 
 const operationSchema = v.object({
   schema_version: v.literal(1),
@@ -63,6 +64,7 @@ const resultSchema = v.object({
 
 const model = process.env.AX_FLUE_MODEL;
 if (!model) throw new Error("AX_FLUE_MODEL is required");
+registerOpenAICodexSubscription(model);
 const writable = process.env.AX_WORKSPACE_SANDBOX_MODE === "workspace-write";
 const repoPath = process.env.AX_WORKSPACE_REPO_PATH;
 

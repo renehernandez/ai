@@ -12,6 +12,11 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, resolve } from "node:path";
 import type { Command } from "commander";
 import { assertSchemaValid } from "../../skills/agent-workspace/scripts/prompt-contract.ts";
+import { modelRunnerEnvironment } from "./model-runner-environment.ts";
+import {
+  resolveOpenAICodexAccessToken,
+  subscriptionRunnerEnvironment,
+} from "./openai-codex-auth.ts";
 
 export type WorkspaceCommandInput = {
   command:
@@ -366,6 +371,13 @@ async function runOnce(connection: WorkspaceConnection): Promise<unknown> {
     }
     const instructions = loadAgentInstructions(claimed.context ?? []);
     const root = resolve(import.meta.dirname, "../../workspace/flue");
+    const baseEnvironment = workspaceRunnerEnvironment(process.env);
+    const runnerEnvironment = model.startsWith("openai-codex/")
+      ? subscriptionRunnerEnvironment(
+          baseEnvironment,
+          await resolveOpenAICodexAccessToken({ model }),
+        )
+      : baseEnvironment;
     const result = spawnSync(
       "pnpm",
       [
@@ -387,7 +399,7 @@ async function runOnce(connection: WorkspaceConnection): Promise<unknown> {
       {
         cwd: root,
         env: {
-          ...workspaceRunnerEnvironment(process.env),
+          ...runnerEnvironment,
           AX_FLUE_MODEL: model,
           AX_WORKSPACE_REPO_PATH: String(operation.repo_path ?? process.cwd()),
           AX_WORKSPACE_SANDBOX_MODE: String(
@@ -471,47 +483,7 @@ async function settleFailure(
 export function workspaceRunnerEnvironment(
   source: NodeJS.ProcessEnv,
 ): NodeJS.ProcessEnv {
-  const allowed = [
-    "ANTHROPIC_API_KEY",
-    "AWS_ACCESS_KEY_ID",
-    "AWS_DEFAULT_REGION",
-    "AWS_PROFILE",
-    "AWS_REGION",
-    "AWS_SECRET_ACCESS_KEY",
-    "AWS_SESSION_TOKEN",
-    "AZURE_OPENAI_API_KEY",
-    "AZURE_OPENAI_ENDPOINT",
-    "COHERE_API_KEY",
-    "DEEPSEEK_API_KEY",
-    "FIREWORKS_API_KEY",
-    "GOOGLE_API_KEY",
-    "GOOGLE_GENERATIVE_AI_API_KEY",
-    "GROQ_API_KEY",
-    "HOME",
-    "HTTPS_PROXY",
-    "HTTP_PROXY",
-    "LANG",
-    "LC_ALL",
-    "MISTRAL_API_KEY",
-    "NODE_EXTRA_CA_CERTS",
-    "NO_PROXY",
-    "OPENAI_API_KEY",
-    "OPENROUTER_API_KEY",
-    "PATH",
-    "PERPLEXITY_API_KEY",
-    "SHELL",
-    "SSL_CERT_FILE",
-    "TERM",
-    "TMPDIR",
-    "TOGETHER_AI_API_KEY",
-    "USER",
-    "XAI_API_KEY",
-  ];
-  return Object.fromEntries(
-    allowed.flatMap((name) =>
-      source[name] === undefined ? [] : [[name, source[name]]],
-    ),
-  );
+  return modelRunnerEnvironment(source);
 }
 
 async function request(

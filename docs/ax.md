@@ -177,6 +177,34 @@ preserved copy.
 
 ## Operate the Cloudflare agent workspace
 
+Authenticate Pi's OpenAI Codex provider with the ChatGPT subscription before
+using an `openai-codex/<model>` model:
+
+```bash
+ax auth login openai-codex
+ax auth status openai-codex
+ax auth test openai-codex --model openai-codex/gpt-5.6-sol --reasoning low
+ax auth logout openai-codex
+```
+
+AX stores a separate Pi OAuth credential at
+`~/.config/ax/credentials.json` with file mode `0600`; set
+`AX_CREDENTIALS_FILE` to use an alternate path. The file contains plaintext
+OAuth material, so do not place it in a shared home or backup it as ordinary
+configuration. Browser login is the default; pass `--device-code` for a
+headless flow. A new login replaces the stored credential, and `logout` removes
+it locally.
+
+For the `openai-codex` provider, AX does not copy Codex CLI authentication or
+use `OPENAI_API_KEY`. `status` reports only locally stored state and does not
+contact OpenAI. The live `test` resolves the current credential through Pi,
+which refreshes it only when genuinely expired, starts the repository-pinned
+Flue `1.0.0-beta.9` runtime, and verifies a nonce returned by the selected
+model. It uses subscription allowance and requires network access. Model
+availability still depends on the signed-in account. AX can pass an
+`openai-codex/<model>` identifier newer than Pi's static catalog to Flue; the
+provider remains the authority on whether that account can use it.
+
 Store only the endpoint and personal workspace key in the local connection
 file. Supply Cloudflare Access credentials through the environment:
 
@@ -198,7 +226,7 @@ locally through Flue:
 
 ```bash
 ax workspace send --message "Summarize the delivery portfolio."
-AX_FLUE_MODEL=<provider/model> ax workspace run --once
+AX_FLUE_MODEL=openai-codex/gpt-5.4 ax workspace run --once
 ```
 
 Add `--repo <absolute-path> --workspace-write` to `send` only for explicitly

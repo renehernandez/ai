@@ -31,6 +31,18 @@ function parseWorkspace(args: string[]): Array<Record<string, unknown>> {
   return parsed;
 }
 
+function parseAuth(args: string[]): Array<Record<string, unknown>> {
+  const parsed: Array<Record<string, unknown>> = [];
+  const program = createProgram(
+    () => undefined,
+    () => undefined,
+    (input) => parsed.push(input),
+  );
+  configure(program);
+  program.parse(["node", "ax", ...args], { from: "node" });
+  return parsed;
+}
+
 function parseError(args: string[]): Error {
   const program = createProgram(() => undefined);
   configure(program);
@@ -139,6 +151,45 @@ test("workspace is an operational AX surface with executive-first defaults", () 
 
   const [run] = parseWorkspace(["workspace", "run", "--once"]);
   assert.equal(run.command, "run-once");
+});
+
+test("auth exposes the OpenAI Codex subscription login and live Flue test", () => {
+  const [login] = parseAuth(["auth", "login", "openai-codex", "--device-code"]);
+  assert.deepEqual(login, {
+    command: "login",
+    provider: "openai-codex",
+    deviceCode: true,
+  });
+
+  const [logout] = parseAuth(["auth", "logout", "openai-codex"]);
+  assert.deepEqual(logout, {
+    command: "logout",
+    provider: "openai-codex",
+  });
+
+  const [smoke] = parseAuth([
+    "auth",
+    "test",
+    "openai-codex",
+    "--model",
+    "openai-codex/gpt-5.4",
+    "--reasoning",
+    "high",
+  ]);
+  assert.deepEqual(smoke, {
+    command: "test",
+    provider: "openai-codex",
+    model: "openai-codex/gpt-5.4",
+    reasoning: "high",
+  });
+
+  const [defaultSmoke] = parseAuth(["auth", "test", "openai-codex"]);
+  assert.deepEqual(defaultSmoke, {
+    command: "test",
+    provider: "openai-codex",
+    model: "openai-codex/gpt-5.6-sol",
+    reasoning: "low",
+  });
 });
 
 test("OpenSpec sync parses convergence and config-review inputs", () => {

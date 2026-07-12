@@ -87,3 +87,13 @@ test("ax-cli skill retrieves the Cloudflare workspace operations", () => {
   assert.match(skill, /Cloudflare Access/i);
   assert.match(skill, /AX_FLUE_MODEL/);
 });
+
+test("ax-cli skill retrieves subscription-backed OpenAI Codex authentication", () => {
+  assert.match(skill, /`ax auth login openai-codex`/);
+  assert.match(skill, /`ax auth status openai-codex`/);
+  assert.match(skill, /`ax auth logout openai-codex`/);
+  assert.match(skill, /`ax auth test openai-codex/);
+  assert.match(skill, /Pi CredentialStore/i);
+  assert.match(skill, /ChatGPT subscription/i);
+  assert.match(skill, /does not use.*Codex CLI|without.*Codex CLI/is);
+});
