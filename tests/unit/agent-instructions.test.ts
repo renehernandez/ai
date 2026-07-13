@@ -13,8 +13,6 @@ const lifecycleRules = [
 const modeNames = ["Explore", "Plan", "Execute", "Review", "Finish"] as const;
 
 const retiredLifecycleReferences = [
-  /\bbrainstorming\b/,
-  /\bstart-project\b/,
   /\bsession-start\b/,
   /\bplan-ready\b/,
   /\bplan-review\b/,
@@ -23,7 +21,6 @@ const retiredLifecycleReferences = [
   /\bplan-unit-sequencer\b/,
   /\bplan-unit-delivery\b/,
   /\breview-feedback-routing\b/,
-  /\bchange-request-create\b/,
   /\bmerge-followthrough\b/,
 ] as const;
 
@@ -68,12 +65,25 @@ for (const file of entrypoints) {
   });
 }
 
-test("active lifecycle rules contain no retired public entrypoints", () => {
+test("active lifecycle rules contain no retired lifecycle entrypoints", () => {
   for (const file of lifecycleRules) {
     const text = readFileSync(file, "utf-8");
     for (const retired of retiredLifecycleReferences) {
       assert.doesNotMatch(text, retired, `${file} still references ${retired}`);
     }
+  }
+});
+
+test("entrypoints route bounded specialists through the five mode owners", () => {
+  for (const file of entrypoints) {
+    const text = readFileSync(file, "utf-8");
+    assert.match(text, /Explore uses `brainstorming` and\s+`start-project`/);
+    assert.match(text, /Plan uses `openspec-tasks`/);
+    assert.match(text, /Review uses the GitHub\/GitLab\s+host adapters/);
+    assert.match(text, /Finish\s+uses `change-request-create`/);
+    assert.match(text, /`codex-review-feedback` remains retired/);
+    assert.match(text, /No mandatory frontend-design skill/);
+    assert.doesNotMatch(text, /`hallmark`/);
   }
 });
 

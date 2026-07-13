@@ -1,0 +1,4 @@
+interface:
+  display_name: "Nitro Review Feedback"
+  short_description: "Normalize latest-head Nitro feedback"
+  default_prompt: "Use $nitro-review-feedback within Review for Fullscript GitLab MRs to inspect complete Nitro-authored notes and discussions, reject stale feedback, and return normalized read-only findings."

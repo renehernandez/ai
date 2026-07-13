@@ -67,6 +67,13 @@ Keep resolving the delivery shape conversationally when these tests expose a
 material choice. Do not write an artifact and leave its top-level split for a
 later planning-review correction.
 
+After an OpenSpec exists, invoke `openspec-tasks` before implementation handoff.
+Its self-contained audit validates native checkbox structure, delivery-unit and
+work-item identity, lifecycle-only groups, manual or external work, sizing
+shape, and earliest objective proof. A `needs_spec_redesign` or
+`needs_human_action` result blocks Execute handoff. Plan owns any accepted
+artifact repair; the specialist never rewrites `tasks.md` automatically.
+
 ## Planning Review
 
 After every material artifact write, invoke Review read-only against the exact
@@ -140,5 +147,6 @@ artifacts.
 | Adding a POC to an atomic plan | Select OpenSpec when rehearsal is part of the accepted contract. |
 | Treating the POC as optional or partial | Build and review the complete disposable implementation. |
 | Accepting tidy nested tasks as proof of one mergeable unit | Derive units from implementation and ownership boundaries, then map tasks onto them. |
+| Handing an unaudited OpenSpec task list to Execute | Run `openspec-tasks` and resolve structured blockers first. |
 | Publishing a planning MR | Keep planning local and include it in the owning final unit. |
 | Automatically rerunning POC after reconciliation | Present materially unproved deltas for explicit direction. |

@@ -74,8 +74,9 @@ Execute-only, Review-only, or local-only stops at that boundary.
 - Troubleshooting remains read-only through diagnosis and report. Enter Execute
   only after the user requests a fix.
 - Use confidence scores as defined in [rules/confidence.md](rules/confidence.md).
-- Use `doc-smith` for non-trivial documentation, `scrutinize` for adversarial
-  validation, and `hallmark` for frontend design work.
+- Use `doc-smith` for non-trivial documentation and `scrutinize` for
+  adversarial validation. No mandatory frontend-design skill is currently
+  selected.
 - Prefer authenticated organization-aware CLIs: `gh`, `glab`, and `wrangler`.
 - Do not use vague verification labels. Name the exact unit, integration,
   browser, route, console, deployment, or other verification performed.
@@ -83,6 +84,14 @@ Execute-only, Review-only, or local-only stops at that boundary.
 - Before machine-readable YAML or JSON, include a concise `## Readable Summary`.
 
 ## Planning and delivery shape
+
+- The five modes remain the only lifecycle authority owners. Bounded
+  specialists operate inside them: Explore uses `brainstorming` and
+  `start-project`; Plan uses `openspec-tasks`; Review uses the GitHub/GitLab
+  host adapters and `nitro-review-feedback` when policy selects Nitro; Finish
+  uses `change-request-create` plus the selected creation adapter.
+- `codex-review-feedback` remains retired. GitHub PR review does not request,
+  poll, normalize, or gate on Codex-authored review feedback.
 
 - Plan stays conversational until scope, design, delivery shape, risk,
   acceptance, proof, and policy decisions are coherent.

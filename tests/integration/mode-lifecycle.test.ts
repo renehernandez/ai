@@ -19,7 +19,9 @@ import {
 import {
   baselineFor,
   normalizeHostedFinding,
+  reviewerContractFor,
   validatePublicationCheckpoint,
+  validateReviewerCatalog,
 } from "../../skills/review/scripts/review-contract.ts";
 
 const root = process.cwd();
@@ -220,6 +222,37 @@ test("Review uses a five-lane planning baseline and four implementation lanes", 
     "verification-quality",
   ]);
   assert.deepEqual(baselineFor("final_implementation"), baselineFor("poc"));
+});
+
+test("every baseline Review lane resolves to a complete reviewer contract", () => {
+  assert.doesNotThrow(() => validateReviewerCatalog());
+
+  for (const target of ["planning", "poc", "final_implementation"] as const) {
+    for (const id of baselineFor(target)) {
+      const contract = reviewerContractFor(id);
+      assert.ok(contract.objective.length > 0, id);
+      assert.ok(contract.targets.includes(target), `${id}:${target}`);
+      assert.ok(contract.evidenceQuestions.length > 0, id);
+      assert.match(contract.output, /passed \| finding \| blocked/);
+    }
+  }
+});
+
+test("modes route to bounded specialists without restoring Codex PR feedback", () => {
+  const explore = read("skills/explore/SKILL.md");
+  const plan = read("skills/plan/SKILL.md");
+  const review = read("skills/review/SKILL.md");
+  const finish = read("skills/finish/SKILL.md");
+
+  assert.match(explore, /Invoke `brainstorming`/);
+  assert.match(explore, /Invoke `start-project`/);
+  assert.match(plan, /invoke `openspec-tasks` before implementation handoff/);
+  assert.match(review, /Use `github-adapter-review`/);
+  assert.match(review, /`gitlab-adapter-review`/);
+  assert.match(review, /`nitro-review-feedback`/);
+  assert.match(review, /`codex-review-feedback` remains retired/);
+  assert.match(finish, /invoke\s+`change-request-create`/);
+  assert.match(finish, /`github-pr-create` or `glab-mr-create`/);
 });
 
 test("Review rejects stale checkpoints and hosted feedback", () => {

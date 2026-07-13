@@ -6,10 +6,23 @@ import test from "node:test";
 const root = process.cwd();
 
 const modes = ["execute", "explore", "finish", "plan", "review"];
+const restoredSpecialists = [
+  "brainstorming",
+  "change-request-create",
+  "github-adapter-review",
+  "github-pr-create",
+  "gitlab-adapter-review",
+  "glab-mr-create",
+  "nitro-review-feedback",
+  "openspec-tasks",
+  "start-project",
+];
 const retainedSpecialists = [
   "agent-workspace",
   "ai-readiness-upkeep",
   "ax-cli",
+  "brainstorming",
+  "change-request-create",
   "code-quality-review",
   "code-simplifier",
   "compound",
@@ -17,27 +30,26 @@ const retainedSpecialists = [
   "diff-review",
   "doc-smith",
   "docs-alignment-review",
+  "github-adapter-review",
+  "github-pr-create",
+  "gitlab-adapter-review",
+  "glab-mr-create",
   "handoff-brief",
   "linear-breakdown",
+  "nitro-review-feedback",
+  "openspec-tasks",
   "project-health-brief",
   "research",
   "research-content",
   "research-technical",
   "scrutinize",
   "security-review",
+  "start-project",
   "writing-skills",
 ];
 const retiredLifecycleSkills = [
-  "brainstorming",
-  "change-request-create",
   "codex-review-feedback",
-  "github-adapter-review",
-  "github-pr-create",
-  "gitlab-adapter-review",
-  "glab-mr-create",
   "merge-followthrough",
-  "nitro-review-feedback",
-  "openspec-tasks",
   "plan-orchestrator",
   "plan-poc",
   "plan-ready",
@@ -46,7 +58,6 @@ const retiredLifecycleSkills = [
   "plan-unit-sequencer",
   "review-feedback-routing",
   "session-start",
-  "start-project",
 ];
 const retiredRootHelpers = [
   "nitro-feedback-gate.ts",
@@ -57,7 +68,7 @@ const retiredRootHelpers = [
   "stack-state.ts",
 ];
 
-test("runtime profiles install only the five modes and retained specialists", () => {
+test("runtime profiles install five modes and bounded retained specialists", () => {
   const config = JSON.parse(
     readFileSync(join(root, "ax.config.json"), "utf8"),
   ) as {
@@ -87,6 +98,32 @@ test("review routing is owned by Review and Finish without orphaned policy data"
   );
 });
 
+test("restored specialists declare one five-mode owner without expanding authority", () => {
+  const owners: Record<string, string> = {
+    brainstorming: "Explore",
+    "start-project": "Explore",
+    "openspec-tasks": "Plan",
+    "github-adapter-review": "Review",
+    "gitlab-adapter-review": "Review",
+    "nitro-review-feedback": "Review",
+    "change-request-create": "Finish",
+    "github-pr-create": "Finish",
+    "glab-mr-create": "Finish",
+  };
+
+  for (const [name, owner] of Object.entries(owners)) {
+    const skill = readFileSync(join(root, "skills", name, "SKILL.md"), "utf8");
+    assert.match(
+      skill,
+      new RegExp(`bounded ${owner} (?:specialist|provider adapter)`),
+      name,
+    );
+  }
+
+  const codex = join(root, "skills", "codex-review-feedback");
+  assert.equal(existsSync(codex), false);
+});
+
 test("retired lifecycle packages and root workflow state are absent", () => {
   for (const name of modes) {
     assert.equal(
@@ -102,6 +139,20 @@ test("retired lifecycle packages and root workflow state are absent", () => {
   }
   for (const name of retiredLifecycleSkills) {
     assert.equal(existsSync(join(root, "skills", name)), false, name);
+  }
+  for (const name of retainedSpecialists) {
+    assert.equal(
+      existsSync(join(root, "skills", name, "SKILL.md")),
+      true,
+      name,
+    );
+  }
+  for (const name of restoredSpecialists) {
+    assert.equal(
+      existsSync(join(root, "skills", name, "agents", "openai.yaml")),
+      true,
+      `${name} OpenAI metadata`,
+    );
   }
   for (const name of retiredRootHelpers) {
     assert.equal(existsSync(join(root, "scripts", name)), false, name);

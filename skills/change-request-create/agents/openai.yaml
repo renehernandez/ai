@@ -1,0 +1,4 @@
+interface:
+  display_name: "Change Request Create"
+  short_description: "Author reviewer-facing PR and MR bodies"
+  default_prompt: "Use $change-request-create within Finish to select the host-neutral description policy, preserve template ownership and manual content, and delegate provider mechanics only after the body is reviewer-facing."
