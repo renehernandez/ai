@@ -27,3 +27,16 @@ test("brainstorming keeps mixed implementation prompts read-only", () => {
     /Plan owns creation of an atomic plan or OpenSpec artifact/,
   );
 });
+
+test("brainstorming scans for reuse without prompt trigger phrases", () => {
+  assert.match(
+    skill,
+    /For every non-trivial design, find the closest existing implementations/,
+  );
+  assert.match(skill, /only narrow this required scan; they do not trigger it/);
+  assert.match(skill, /Existing precedent/);
+  assert.match(skill, /No applicable precedent found/);
+  assert.match(skill, /reuse the canonical implementation directly/);
+  assert.match(skill, /extend its canonical owner/);
+  assert.match(skill, /extract a shared boundary/);
+});

@@ -13,12 +13,17 @@ Run a strict, findings-only review focused on maintainability, structure, and lo
 - The user asks for a strict code quality review, maintainability review, structural review, thermonuclear review, or quality audit.
 - A branch works functionally but may worsen architecture, readability, ownership, or type boundaries.
 - The user wants review findings before a follow-up implementation pass.
+- An OpenSpec POC reaches its first objective proof or its complete exact head;
+  use this strict pass before expansion and again before publication.
 
 For ordinary correctness/security/performance review, use the repo's normal review path first. This skill is a stricter maintainability lens.
 
 ## Review Scope
 
 Start with the branch diff, then follow references across the codebase when needed to validate ownership, canonical helpers, existing abstractions, or architectural precedent.
+For a POC, read its reuse and deviation contract and treat a functionally
+working parallel implementation as a finding unless repository evidence
+justifies the deviation.
 
 ```bash
 git merge-base HEAD main

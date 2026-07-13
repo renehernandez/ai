@@ -21,8 +21,12 @@ brainstorming outcome is accepted.
 
 ## Default Flow
 
-1. **Inspect context first.** Read relevant files, docs, recent plans, glossary
-   files, and code before asking questions the project can answer.
+1. **Inspect context and precedent first.** Read relevant files, docs, recent
+   plans, glossary files, and code before asking questions the project can
+   answer. For every non-trivial design, find the closest existing
+   implementations and their canonical owners without waiting for the user to
+   request reuse. Phrases such as "same approach as" only narrow this required
+   scan; they do not trigger it.
 2. **Open with an orientation map.** Show the full decision shape up front:
    objective, domain terms, approach options, recommended defaults, discussion
    queue, and likely capture artifact.
@@ -50,6 +54,7 @@ Use this structure unless the user asks for a different format:
 |---|---|---|---|
 | Objective | ... | ... | Yes/No |
 | Domain terms | ... | ... | Yes/No |
+| Existing precedent | ... | ... | Yes/No |
 | Approach | ... | ... | Yes/No |
 | First slice | ... | ... | Yes/No |
 | Capture | ... | ... | Yes/No |
@@ -67,6 +72,11 @@ Use this structure unless the user asks for a different format:
 
 Keep the first question tied to the discussion queue. Do not ask about mechanics
 that can be inferred later, such as task-audit workflow details.
+
+For non-trivial designs, the orientation map must name the closest applicable
+implementations and canonical owners, what can be reused or extended, what is
+genuinely new, and any material deviation. Report `No applicable precedent
+found` only after showing the inspected paths or searches that support it.
 
 ## Domain Terms
 
@@ -137,6 +147,14 @@ Prefer the approach that proves a real outcome soonest, unless safety, data
 migration, compliance, or operational risk requires foundation first. If the
 first slice is thin, the recommended approach must also be the thin-slice
 approach.
+
+Choose ownership in this order unless evidence justifies a deviation:
+
+1. reuse the canonical implementation directly;
+2. extend its canonical owner;
+3. extract a shared boundary used by both paths; or
+4. add a new mechanism and state why the earlier options are unsafe or
+   insufficient.
 
 ## Slices
 
@@ -214,6 +232,9 @@ inspect them and present the finding.
 
 Check that:
 - the orientation map showed recommended defaults and the discussion queue,
+- the closest implementations and canonical owners were inspected and shown,
+- reused or extended elements, new concepts, and material deviations were
+  explicit,
 - domain terms were included,
 - the discussion queue stayed at 1-3 items unless the user asked for more,
 - accepted defaults were not re-litigated,
@@ -236,6 +257,8 @@ Check that:
 | Walking every branch of the decision tree | Show the whole tree, then drill into 1-3 high-leverage decisions |
 | Treating every "agree" as a chance to restate the design | Accept the defaults and move to the next unresolved item |
 | Skipping vocabulary because the topic feels obvious | Include a lightweight domain-terms pass every time |
+| Waiting for the user to ask for reuse | Scan for precedent for every non-trivial design; prompt wording only narrows the scan |
+| Claiming there is no precedent without evidence | Name the inspected paths or searches before accepting a new mechanism |
 | Promoting future requirements into v1 | Keep them as future shape unless they address a concrete first-slice risk |
 | Recommending a platform while implementing a thin slice | Recommend the thin-slice approach and name the platform as future extraction |
 | Making Slice 1 a package, runtime, schema, or config foundation | Reshape Slice 1 around the smallest real end-to-end outcome |
@@ -264,4 +287,11 @@ Check that:
 - RED: thread `019ec851-0d15-74e0-ab86-1f105de1c358` planned the PR-review migration with an early runtime/package slice and cautious enablement flag before the first real hosted review proof, causing later correction around direct end-to-end evidence and unnecessary variables.
 - RED: thread `019ed2b5-6e2e-7581-8fc5-e776bde1c1ec` treated the selected feature direction as the first slice until user correction forced a true objective / feature / implementation-slice breakdown.
 - RED: this session found that the prior skill forced section-by-section validation, which made defaultable decisions feel like required discussion.
+- RED: the automatic risk-scoring rehearsal proved its behavior while missing
+  repository equivalents and proposing parallel owners until repeated user
+  steering exposed the duplication.
+- GREEN: the `unprompted-precedent-scan-passes-reviewed-first-proof` fixture
+  requires precedent evidence even when the request contains no reuse phrase.
+- REFACTOR: the missing-precedent fixture blocks progress, while a documented
+  `No applicable precedent found` result remains eligible for review.
 - GREEN: brainstorming now opens with a compact orientation map, always includes domain terms, caps the discussion queue, treats agreement as accepting defaults, and routes artifacts to OpenSpec, single plan files, ADRs, glossary/context updates, or no artifact.

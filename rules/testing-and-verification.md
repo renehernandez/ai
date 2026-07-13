@@ -40,9 +40,12 @@ external blockers, and CI-only coverage as verification gaps.
 
 - Planning artifacts use implementation-readiness, edge-case/risk,
   simplification/scope, refactoring, and delivery-shape reviewers against one
-  artifact fingerprint.
+  artifact fingerprint. Reviewers verify the artifact's reuse and deviation
+  contract against live repository evidence.
 - POC and final implementation use correctness, regression, maintainability,
-  and verification reviewers against one target-base diff and exact HEAD.
+  verification, and architecture-fit/reuse reviewers against one target-base
+  diff and exact HEAD. POCs additionally require the strict code-quality-review
+  specialist at first objective proof and complete exact HEAD.
 - Every OpenSpec POC proves the complete accepted contract, including applicable
   operational, migration, rollback, compatibility, security, performance, and
   accessibility concerns. Explicit requirements cannot be waived by a receipt.

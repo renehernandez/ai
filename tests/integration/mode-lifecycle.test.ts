@@ -4,8 +4,10 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  assertPocExpansionAllowed,
   assertWriterOwnership,
   finalDeliveryOrder,
+  type PocArchitectureCheckpoint,
   type WorktreeIdentity,
 } from "../../skills/execute/scripts/execution-contract.ts";
 import {
@@ -145,6 +147,9 @@ test("Plan keeps atomic delivery in one change set and rehearses OpenSpec", () =
     skill,
     /rerun the delivery decomposition against the actual POC\s+footprint/,
   );
+  assert.match(skill, /Reuse And Deviation Contract/);
+  assert.match(skill, /inspected precedents and their canonical owners/);
+  assert.match(skill, /never a\s+prerequisite for it/);
 });
 
 test("Execute enforces one writer and preserves total Git order", () => {
@@ -169,6 +174,40 @@ test("Execute enforces one writer and preserves total Git order", () => {
     () => finalDeliveryOrder(["contract", "contract"]),
     /invalid_delivery_unit/,
   );
+});
+
+test("Execute blocks POC expansion until the exact architecture checkpoint passes", () => {
+  const scenarios =
+    fixture<
+      Array<{
+        id: string;
+        checkpoint: PocArchitectureCheckpoint;
+        expected: "pass" | string;
+      }>
+    >("reuse-first");
+
+  for (const scenario of scenarios) {
+    const run = () =>
+      assertPocExpansionAllowed(scenario.checkpoint, {
+        targetBaseSha: "base-a",
+        diffFingerprint: "sha256:first-objective-proof",
+      });
+
+    if (scenario.expected === "pass") {
+      assert.doesNotThrow(run, scenario.id);
+    } else {
+      assert.throws(run, new RegExp(scenario.expected), scenario.id);
+    }
+  }
+
+  const execute = read("skills/execute/SKILL.md");
+  assert.match(
+    execute,
+    /Direct Execute without a planning artifact performs the same read-only\s+precedent scan/,
+  );
+  assert.match(execute, /feature-specific branch inside shared infrastructure/);
+  assert.match(execute, /pause when the first objective proof exists/);
+  assert.match(execute, /architecture-affecting change invalidates it/);
 });
 
 test("mode skills coordinate parallel draft stacks through hosted readiness", () => {
@@ -207,7 +246,7 @@ test("mode skills coordinate parallel draft stacks through hosted readiness", ()
   );
 });
 
-test("Review uses a five-lane planning baseline and four implementation lanes", () => {
+test("Review uses distinct planning, POC, and final implementation baselines", () => {
   assert.deepEqual(baselineFor("planning"), [
     "implementation-readiness",
     "edge-cases-and-risk",
@@ -220,8 +259,16 @@ test("Review uses a five-lane planning baseline and four implementation lanes", 
     "regression-risk",
     "maintainability",
     "verification-quality",
+    "architecture-fit-and-reuse",
+    "code-quality-review",
   ]);
-  assert.deepEqual(baselineFor("final_implementation"), baselineFor("poc"));
+  assert.deepEqual(baselineFor("final_implementation"), [
+    "correctness",
+    "regression-risk",
+    "maintainability",
+    "verification-quality",
+    "architecture-fit-and-reuse",
+  ]);
 });
 
 test("every baseline Review lane resolves to a complete reviewer contract", () => {
@@ -270,10 +317,10 @@ test("Review rejects stale checkpoints and hosted feedback", () => {
           blockers: [],
         },
         {
+          target: "final_implementation",
           targetBase: "main",
           targetBaseSha: "base-a",
           head: "new",
-          requiredReviewers: baselineFor("final_implementation"),
         },
       ),
     /publication_checkpoint_stale/,
@@ -292,12 +339,12 @@ test("Review rejects stale checkpoints and hosted feedback", () => {
   assert.throws(
     () =>
       validatePublicationCheckpoint(currentCheckpoint, {
+        target: "final_implementation",
         targetBase: "main",
         targetBaseSha: "base-a",
         head: "new",
-        requiredReviewers: baselineFor("final_implementation"),
       }),
-    /publication_checkpoint_reviewers_missing:regression-risk,maintainability,verification-quality/,
+    /publication_checkpoint_reviewers_missing:regression-risk,maintainability,verification-quality,architecture-fit-and-reuse/,
   );
   validatePublicationCheckpoint(
     {
@@ -305,10 +352,37 @@ test("Review rejects stale checkpoints and hosted feedback", () => {
       reviewersPassed: [...baselineFor("final_implementation")],
     },
     {
+      target: "final_implementation",
       targetBase: "main",
       targetBaseSha: "base-a",
       head: "new",
-      requiredReviewers: baselineFor("final_implementation"),
+    },
+  );
+
+  const pocCheckpoint = {
+    ...currentCheckpoint,
+    reviewersPassed: [...baselineFor("final_implementation")],
+  };
+  assert.throws(
+    () =>
+      validatePublicationCheckpoint(pocCheckpoint, {
+        target: "poc",
+        targetBase: "main",
+        targetBaseSha: "base-a",
+        head: "new",
+      }),
+    /publication_checkpoint_reviewers_missing:code-quality-review/,
+  );
+  validatePublicationCheckpoint(
+    {
+      ...pocCheckpoint,
+      reviewersPassed: [...baselineFor("poc")],
+    },
+    {
+      target: "poc",
+      targetBase: "main",
+      targetBaseSha: "base-a",
+      head: "new",
     },
   );
 
@@ -320,10 +394,10 @@ test("Review rejects stale checkpoints and hosted feedback", () => {
           reviewersPassed: [...baselineFor("final_implementation")],
         },
         {
+          target: "final_implementation",
           targetBase: "main",
           targetBaseSha: "base-b",
           head: "new",
-          requiredReviewers: baselineFor("final_implementation"),
         },
       ),
     /publication_checkpoint_stale/,

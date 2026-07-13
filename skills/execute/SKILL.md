@@ -35,6 +35,29 @@ integration hotspots whose normal restack conflicts belong to the descendant
 owner. A handoff identifies branch, worktree, HEAD, changed and untracked paths,
 and diff fingerprint; the previous writer stops first.
 
+## Reuse Preflight And Tripwires
+
+Before implementation writes, verify the accepted reuse and deviation contract
+against the current repository. Locate the named precedents and canonical
+owners, confirm the planned reuse path still exists, and search the affected
+area for sibling helpers, parsers, handlers, services, renderers, policies,
+schemas, constants, identities, formatting, routing, and lifecycle invariants.
+Direct Execute without a planning artifact performs the same read-only
+precedent scan and records its conclusion in the task.
+
+Pause implementation and inspect the exact diff whenever it introduces:
+
+- a sibling helper, parser, handler, service, renderer, or policy;
+- a repeated schema, constant, identity, formatting, routing, or lifecycle
+  invariant;
+- a feature-specific branch inside shared infrastructure;
+- a second durable source of truth; or
+- evidence that the planned precedent cannot support the implementation path.
+
+Resolve a scoped duplication or boundary finding in Execute. Return to Plan
+when the evidence changes canonical ownership, the accepted reuse path, or
+another material architecture decision.
+
 ## Implementation Routes
 
 - Direct work implements one coherent final MR. Atomic work keeps the plan and
@@ -68,6 +91,14 @@ Implement the smallest cohesive boundary, verify it, stage only intended files,
 and use native hook-enabled Git commit behavior. Never use `--no-verify`. Fix a
 hook failure before starting the next boundary.
 
+For every OpenSpec POC, pause when the first objective proof exists: slice 1,
+or slice 2 after at most one setup-only slice. Before broadening the POC, run an
+exact-diff architecture checkpoint against the reviewed reuse contract,
+target-base SHA, diff fingerprint, inspected precedents, and triggered semantic
+tripwires. The checkpoint must pass both `architecture-fit-and-reuse` and
+`code-quality-review`. A later architecture-affecting change invalidates it.
+Keep the checkpoint task-local; create no repository ledger or sidecar.
+
 Automatically invoke Review read-only for the exact implementation diff/head.
 Execute fixes in-scope implementation findings, then refreshes Review. A
 finding that changes the contract returns to Plan. When local Review passes,
@@ -88,5 +119,19 @@ authorizes merge.
 | Continuing after a material decision appears | Freeze writes and return to Plan. |
 | Letting several agents edit one worktree | Select one writer; keep reviewers read-only. |
 | Promoting POC code into final work | Reimplement from reconciled planning state. |
+| Broadening a POC after its first proof without architecture review | Stop and pass the target-specific architecture checkpoint first. |
+| Treating working end-to-end behavior as proof of architecture fit | Trace the exact diff to canonical owners and resolve parallel paths. |
 | Treating logical independence as missing Git order | Preserve one total predecessor chain. |
 | Publishing or merging from Execute | Hand a current checkpoint to Finish. |
+
+## Test Evidence
+
+- RED: a production-complete rehearsal reached working behavior before review
+  exposed sibling services, repeated invariants, and feature branches in shared
+  infrastructure.
+- GREEN: the reuse-first fixture permits expansion only when precedent evidence,
+  semantic tripwires, architecture fit, strict code quality, target base, and
+  diff identity all pass.
+- REFACTOR: fixture variants reject missing evidence, unresolved tripwires,
+  stale fingerprints, missing reviewers, and later architecture changes without
+  adding persistent workflow state.

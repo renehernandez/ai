@@ -13,6 +13,9 @@ ownership, and the mandatory OpenSpec rehearsal boundary.
   inspect the relevant local state before assuming the repository is at fault.
 - Agreement on a design confirms the decision; it does not authorize artifact
   or implementation writes.
+- Every non-trivial design starts with a repository precedent scan. Reuse is
+  the default even when the request does not mention an existing approach;
+  similarity wording narrows the scan but never triggers it.
 - If the user rejects a name, structure, taxonomy, folder layout, API shape, or
   other design choice, present alternatives and tradeoffs before changing it.
 
@@ -36,6 +39,13 @@ Plan selects one artifact:
   one final PR/MR.
 - Use one OpenSpec change for independently reviewable delivery units, a durable
   cross-component contract, migration design, or work requiring the full POC.
+
+The primary plan or OpenSpec records a reuse and deviation contract with
+inspected precedents, canonical owners, direct reuse or extension, genuinely new
+mechanisms, justified deviations, and their proof. Execute verifies that
+contract before writing and pauses on sibling implementations, repeated
+invariants, feature branches in shared infrastructure, or a second source of
+truth.
 
 Before writing an OpenSpec, derive its top-level units from behavior, ownership,
 deployment, security, migration, rollback, verification, and repository
@@ -91,6 +101,12 @@ The POC:
 7. Refreshes every exact-head gate after any POC HEAD change.
 8. Freezes after acceptance, closes unmerged, and removes its local worktree.
 
+At the POC's first objective proof, in slice 1 or slice 2 after at most one
+setup-only slice, Execute pauses before broadening. Review runs the exact-diff
+POC baseline, including architecture fit/reuse and the strict
+`code-quality-review` specialist. Any later architecture-affecting change
+invalidates that checkpoint. Keep its evidence task-local.
+
 The POC rehearses task completion and archival in a disposable repository copy
 without checking the source `tasks.md` or archiving the live change. POC commits
 must never be merged, rebased, cherry-picked, or applied into final delivery.
@@ -136,7 +152,9 @@ rewriting the accepted delivery contract.
 Review inspects every changed planning artifact with implementation-readiness,
 edge-case/risk, simplification/scope, refactoring, and delivery-shape reviewers.
 It inspects POC and final implementation targets with correctness, regression,
-maintainability, and verification reviewers. Add affected-domain specialists.
+maintainability, verification, and architecture-fit/reuse reviewers. POCs also
+require the strict code-quality-review specialist. Add affected-domain
+specialists.
 
 Review evidence is task-local and bound to an artifact fingerprint or exact
 target-base/HEAD pair. Before any push or hosted artifact mutation, Review emits

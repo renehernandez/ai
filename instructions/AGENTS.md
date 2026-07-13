@@ -58,6 +58,9 @@ modes.
   `writing-skills` against the changed agent behavior before committing.
   Portable shared skills keep runnable helpers in the owning skill folder or a
   real package dependency.
+- Default every non-trivial design and implementation to repository precedent
+  discovery and canonical-owner reuse, even when the request does not mention
+  an existing approach. New mechanisms require repository-backed justification.
 - Keep reviewer scratch, fingerprints, handoffs, ledgers, command proof, and
   other private workflow evidence in the task. Under `.agents/plans`, commit
   only a primary atomic-plan Markdown file.

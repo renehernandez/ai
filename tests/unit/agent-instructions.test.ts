@@ -46,6 +46,16 @@ for (const file of entrypoints) {
     assert.match(text, /real package dependency/);
   });
 
+  test(`${file} defaults non-trivial work to precedent discovery and reuse`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /every non-trivial design and implementation/);
+    assert.match(text, /repository precedent/);
+    assert.match(text, /canonical-owner reuse/);
+    assert.match(text, /request does not mention\s+an existing approach/);
+    assert.match(text, /repository-backed justification/);
+  });
+
   test(`${file} requires readable summaries for structured thread contracts`, () => {
     const text = readFileSync(file, "utf-8");
 
@@ -129,6 +139,14 @@ test("implementation rules route semantically and enforce the full OpenSpec POC"
     /no separate planning (?:PR|MR)|no planning-only (?:PR|MR)/i,
   );
   assert.match(text, /POC commits.*not.*merge|never.*cherry-pick.*POC/is);
+  assert.match(
+    text,
+    /similarity wording narrows the scan but never triggers it/,
+  );
+  assert.match(text, /reuse and deviation contract/);
+  assert.match(text, /first objective proof/);
+  assert.match(text, /architecture fit\/reuse/);
+  assert.match(text, /strict\s+`code-quality-review` specialist/);
 });
 
 test("documentation rules keep OpenSpec adapters explicit and task-shaped", () => {
@@ -140,6 +158,8 @@ test("documentation rules keep OpenSpec adapters explicit and task-shaped", () =
   assert.match(text, /nested work items/i);
   assert.match(text, /complete.*POC/i);
   assert.match(text, /only primary.*Markdown.*\.agents\/plans/is);
+  assert.match(text, /Every non-trivial primary plan or OpenSpec/);
+  assert.match(text, /No applicable precedent found/);
 });
 
 test("Git rules separate Review from Finish and use native hook-enabled commits", () => {

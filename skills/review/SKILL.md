@@ -31,6 +31,13 @@ POC or final implementation targets always run:
 2. `regression-risk`
 3. `maintainability`
 4. `verification-quality`
+5. `architecture-fit-and-reuse`
+
+POC targets additionally run `code-quality-review`. At the first objective
+proof, run the complete POC baseline as the architecture checkpoint before the
+implementation broadens. Run it again for the complete exact POC head before
+publication. A later architecture-affecting change invalidates the first
+checkpoint.
 
 Add affected-domain specialists such as security, documentation/agent
 alignment, AX/skill compatibility, data, infrastructure, or UI. Reviewers stay
@@ -40,6 +47,10 @@ where applicable.
 Every baseline reviewer ID resolves through the catalog in
 `scripts/review-contract.ts`. Do not launch a named lane without its objective,
 target, evidence questions, decision criteria, and normalized output contract.
+Planning review verifies the artifact's reuse and deviation contract against
+the live repository. `architecture-fit-and-reuse` traces the exact code diff to
+those precedents and canonical owners; working end-to-end behavior alone does
+not pass that lane.
 
 For `delivery-shape`, challenge both under-splitting and over-splitting. Each
 top-level OpenSpec unit must produce one reviewable outcome, remain correct and
@@ -102,9 +113,21 @@ resume, rerun it; do not reconstruct persisted gate state.
 | Mistake | Required response |
 | --- | --- |
 | Using planning reviewers on implementation code | Run the implementation baseline. |
+| Using the final baseline for a POC | Add the POC-only strict `code-quality-review` lane. |
 | Treating Nitro or CI as local Review | Evaluate it as a separate hosted gate. |
 | Fixing a finding from Review | Return it to Plan or the Execute owner. |
 | Reusing evidence after the target changes | Rerun affected lanes and checkpoint inputs. |
 | Persisting reviewer ledgers or gate state | Keep evidence task-local and recomputable. |
 | Treating provider metadata as review judgment | Use the host adapter for context and the Review lanes for findings. |
 | Requesting Codex PR review | Do not; GitHub review covers host state without a Codex gate. |
+
+## Test Evidence
+
+- RED: POC and final implementation previously shared one generic four-lane
+  baseline, so behavior and verification could pass without repository
+  precedent tracing.
+- GREEN: catalog validation resolves every target-specific reviewer contract,
+  and the POC baseline adds both `architecture-fit-and-reuse` and
+  `code-quality-review`.
+- REFACTOR: publication-checkpoint fixtures reject stale identity and every
+  missing target-specific reviewer while preserving the smaller final baseline.

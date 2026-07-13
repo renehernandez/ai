@@ -52,11 +52,14 @@ selected provider's mechanics. A direct provider CLI/API body update never
 bypasses this specialist pass.
 
 For OpenSpec POC publication, create one draft PR/MR titled `POC: ...` against
-the normal target and state that it is review-only and must close unmerged. For
-atomic-plan delivery, publish the plan and implementation together as one
-change set in one final PR/MR, with no planning-only or POC artifact. For final
-OpenSpec delivery, create one mergeable PR/MR per top-level delivery unit and
-no planning or reconciliation-only artifact.
+the normal target and state that it is review-only and must close unmerged.
+Consume the POC-specific Review baseline, including `architecture-fit-and-reuse`
+and `code-quality-review`; CI, hosted review, and operational proof cannot
+substitute for either local lane. For atomic-plan delivery, publish the plan and
+implementation together as one change set in one final PR/MR, with no
+planning-only or POC artifact. For final OpenSpec delivery, create one mergeable
+PR/MR per top-level delivery unit and no planning or reconciliation-only
+artifact.
 
 Create every final MR as draft and verify its live provider state after
 creation or update. Local Review, CI, approvals, hosted review, and technical
@@ -120,4 +123,5 @@ before cleanup; never force-delete as ordinary follow-through.
 | Letting provider choice follow the first remote | Apply policy precedence and block ambiguity. |
 | Writing a PR/MR body directly in Finish | Invoke `change-request-create`, then delegate provider mechanics. |
 | Splitting an atomic plan from its implementation | Publish both as one change set in one final PR/MR. |
+| Treating green POC CI as architecture approval | Require the current POC-specific local Review checkpoint. |
 | Merging because all gates are green | Require explicit merge authority or activated policy. |

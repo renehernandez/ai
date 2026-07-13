@@ -6,16 +6,23 @@ export const planningBaseline = [
   "delivery-shape",
 ] as const;
 
-export const implementationBaseline = [
+export const finalImplementationBaseline = [
   "correctness",
   "regression-risk",
   "maintainability",
   "verification-quality",
+  "architecture-fit-and-reuse",
+] as const;
+
+export const pocBaseline = [
+  ...finalImplementationBaseline,
+  "code-quality-review",
 ] as const;
 
 export type ReviewerId =
   | (typeof planningBaseline)[number]
-  | (typeof implementationBaseline)[number];
+  | (typeof finalImplementationBaseline)[number]
+  | (typeof pocBaseline)[number];
 
 export type ReviewerContract = {
   objective: string;
@@ -34,9 +41,10 @@ export const reviewerCatalog: Readonly<Record<ReviewerId, ReviewerContract>> = {
     targets: ["planning"],
     evidenceQuestions: [
       "Are scope, behavior, acceptance, verification, ownership, and handoff concrete?",
+      "Does the primary artifact contain an evidence-backed reuse and deviation contract for the affected repository owners?",
     ],
     passedWhen:
-      "The implementer can proceed without inventing contract decisions.",
+      "The implementer can proceed without inventing contract decisions or rediscovering canonical ownership.",
     findingWhen: "A scoped repair can make the artifact implementation-ready.",
     blockedWhen:
       "A material product, architecture, safety, migration, or ownership decision is unresolved.",
@@ -158,6 +166,38 @@ export const reviewerCatalog: Readonly<Record<ReviewerId, ReviewerContract>> = {
       "Required verification cannot run or its result cannot be trusted.",
     output: "passed | finding | blocked with source evidence",
   },
+  "architecture-fit-and-reuse": {
+    objective:
+      "Trace the exact diff to repository precedent and verify that canonical owners absorb the change without avoidable parallel architecture.",
+    targets: ["poc", "final_implementation"],
+    evidenceQuestions: [
+      "Which inspected implementations and canonical owners does the diff reuse, extend, or deliberately deviate from?",
+      "Does the diff duplicate a helper, schema, constant, identity, formatting, routing, lifecycle invariant, or durable source of truth?",
+    ],
+    passedWhen:
+      "The exact diff follows the accepted reuse contract and every new mechanism or deviation has repository-backed justification.",
+    findingWhen:
+      "A concrete canonical owner, reusable path, or parallel implementation requires a scoped correction.",
+    blockedWhen:
+      "The reuse contract, exact diff, or relevant repository precedent cannot be inspected.",
+    output: "passed | finding | blocked with source evidence",
+  },
+  "code-quality-review": {
+    objective:
+      "Run the strict code-quality-review specialist against the POC exact diff to challenge abstraction quality, ownership, sprawl, and duplication before expansion or publication.",
+    targets: ["poc"],
+    evidenceQuestions: [
+      "Does the strict structural review find a simpler existing owner or an avoidable near-duplicate?",
+      "Would extending this POC deepen a parallel architecture or scattered feature-specific path?",
+    ],
+    passedWhen:
+      "The code-quality-review specialist reports no blocking structural or maintainability finding for the exact diff.",
+    findingWhen:
+      "The specialist identifies a scoped structural repair required before the POC broadens or publishes.",
+    blockedWhen:
+      "The specialist cannot inspect the exact diff or the relevant owning code.",
+    output: "passed | finding | blocked with source evidence",
+  },
 };
 
 export type ReviewTarget = "planning" | "poc" | "final_implementation";
@@ -167,7 +207,13 @@ export function reviewerContractFor(id: ReviewerId): ReviewerContract {
 }
 
 export function validateReviewerCatalog(): void {
-  const required = [...planningBaseline, ...implementationBaseline];
+  const required = [
+    ...new Set([
+      ...planningBaseline,
+      ...finalImplementationBaseline,
+      ...pocBaseline,
+    ]),
+  ];
   for (const id of required) {
     const contract = reviewerCatalog[id];
     if (
@@ -184,7 +230,10 @@ export function validateReviewerCatalog(): void {
 }
 
 export function baselineFor(target: ReviewTarget): readonly string[] {
-  return target === "planning" ? planningBaseline : implementationBaseline;
+  if (target === "planning") {
+    return planningBaseline;
+  }
+  return target === "poc" ? pocBaseline : finalImplementationBaseline;
 }
 
 export type PublicationCheckpoint = {
@@ -201,10 +250,10 @@ export type PublicationCheckpoint = {
 export function validatePublicationCheckpoint(
   checkpoint: PublicationCheckpoint,
   expected: {
+    target: ReviewTarget;
     targetBase: string;
     targetBaseSha: string;
     head: string;
-    requiredReviewers: readonly string[];
   },
 ): void {
   if (
@@ -221,7 +270,7 @@ export function validatePublicationCheckpoint(
     throw new Error("provider_route_unresolved");
   }
   const passedReviewers = new Set(checkpoint.reviewersPassed);
-  const missingReviewers = expected.requiredReviewers.filter(
+  const missingReviewers = baselineFor(expected.target).filter(
     (reviewer) => !passedReviewers.has(reviewer),
   );
   if (missingReviewers.length > 0) {

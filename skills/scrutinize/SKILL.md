@@ -28,6 +28,11 @@ Do not use for pure formatting review, prose polish, status briefs, or implement
 4. **Evidence**: report only concrete findings backed by a cited input, path, plan step, diff section, workflow state, or documented assumption.
 5. **Verdict**: end with the strict verdict line.
 
+For a POC, explicitly compare the exact diff with the planned precedents and
+canonical owners. Ask whether it reuses or extends them, or merely reproduces
+the external behavior through parallel architecture. Working end to end is
+necessary proof of behavior, but is not evidence of architecture fit.
+
 ## Freshness Rule
 
 Before scrutinizing a PR, branch diff, implementation, CI result, hosted review feedback, or merge-readiness claim, verify live state first: branch, base, diff, relevant PR metadata, checks, and current head.
@@ -97,6 +102,7 @@ Verdicts:
 - Plan adds a new policy helper while an existing helper owns the same invariant: pass only if scrutiny flags the simpler path before implementation.
 - PR claims behavior is preserved but unchanged caller paths can bypass it: pass only if scrutiny traces the real caller path before verdict.
 - Review sees plausible concurrency or CI concerns without evidence: pass only if concerns become residual risk, not findings.
+- POC reproduces the accepted behavior through a sibling helper or service instead of its planned canonical owner: pass only if scrutiny flags the parallel architecture before expansion or publication.
 
 ## Test Evidence
 
