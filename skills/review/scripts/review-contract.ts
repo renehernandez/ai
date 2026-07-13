@@ -43,12 +43,13 @@ export const reviewerCatalog: Readonly<Record<ReviewerId, ReviewerContract>> = {
       "Determine whether the artifact can be implemented without unresolved material decisions.",
     targets: ["planning"],
     evidenceQuestions: [
-      "Are scope, behavior, acceptance, verification, ownership, and handoff concrete?",
+      "Are scope, behavior, acceptance, ownership, delivery shape, and end-to-end proof concrete without prescribing repository mechanics?",
       "Does the primary artifact contain an evidence-backed reuse and deviation contract for the affected repository owners?",
     ],
     passedWhen:
-      "The implementer can proceed without inventing contract decisions or rediscovering canonical ownership.",
-    findingWhen: "A scoped repair can make the artifact implementation-ready.",
+      "The implementer can proceed without inventing a material contract decision; implementation mechanics can be rediscovered from the repository.",
+    findingWhen:
+      "A scoped repair is required for externally observable behavior, architecture or canonical ownership, safety or rollout policy, migration, delivery shape, or end-to-end acceptance.",
     blockedWhen:
       "A material product, architecture, safety, migration, or ownership decision is unresolved.",
     output: "passed | finding | blocked with source evidence",
@@ -58,11 +59,11 @@ export const reviewerCatalog: Readonly<Record<ReviewerId, ReviewerContract>> = {
       "Find missing failure modes, rollback needs, edge cases, and unsafe assumptions.",
     targets: ["planning"],
     evidenceQuestions: [
-      "Are success, failure, recovery, compatibility, and operational risks addressed?",
+      "Are material success, failure, recovery, compatibility, and operational risks addressed without expanding into an exhaustive implementation matrix?",
     ],
     passedWhen: "Material risks have an owner, control, and verification path.",
     findingWhen:
-      "A concrete risk or edge case is missing but can be repaired within scope.",
+      "A concrete risk is evidenced and can be addressed within scope; classify it as a durable artifact repair or a task-local implementation consideration using the Planning Artifact Boundary.",
     blockedWhen:
       "Safe behavior depends on an unresolved policy or unavailable evidence.",
     output: "passed | finding | blocked with source evidence",

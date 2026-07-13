@@ -31,24 +31,38 @@ Follow an explicit user route when it represents the accepted contract. Reject
 an incoherent route with the concrete contract reason. Never create both an
 atomic plan and OpenSpec for the same work.
 
-An atomic plan records context, decisions, scope, acceptance, verification,
-risks, first real confirmation, and implementation handoff. An OpenSpec records
-the complete proposal, design, specification deltas, and top-level delivery
+An atomic plan records the objective, selected high-level approach, material
+decisions and constraints, delivery shape, and the earliest real entrypoint
+with visible success or failure evidence. An OpenSpec records the proposal,
+durable design decisions, observable behavior, and outcome-oriented delivery
 units. Local review evidence and handoffs remain task-local; no YAML or JSON
 sidecars belong beside the artifact.
+
+## Durable Planning Boundary
+
+Planning artifacts preserve decisions that future implementation must not
+invent or change. Keep a detail durable only when it changes externally
+observable behavior, architecture or canonical ownership, safety or rollout
+policy, migration, a delivery-unit boundary, or end-to-end acceptance.
+
+Keep implementation mechanics task-local, including step-by-step instructions,
+file and symbol inventories, exact commands, exhaustive test or edge-case
+matrices, provider receipts, review chronology, and intermediate findings.
+Implementation readiness means no unresolved material decision; it does not
+mean turning the artifact into a prose implementation log. Execute rediscovers
+current mechanics from the repository and receives relevant implementation
+considerations in its task-local handoff.
 
 ## Reuse And Deviation Contract
 
 Every non-trivial atomic plan or OpenSpec records a concise reuse and deviation
-contract in its primary artifact. It must name:
+contract in its primary artifact. At the ownership-boundary level, it names:
 
 - the inspected precedents and their canonical owners;
-- which existing elements will be reused directly or extended;
-- any shared boundary that must be extracted;
-- every genuinely new mechanism and why direct reuse, owner extension, or
-  shared extraction is insufficient;
+- which owners will be reused, extended, or separated by a shared boundary;
+- any genuinely new mechanism and why an existing owner cannot absorb it;
 - material deviations from precedent and the evidence that requires them; and
-- the verification that will prove the chosen ownership and reuse path.
+- the end-to-end proof for the chosen ownership and reuse path.
 
 `No applicable precedent found` is valid only with the inspected repository
 evidence. User wording such as "similar to" may narrow the scan but is never a
@@ -104,10 +118,12 @@ fingerprint and rerun only the lanes invalidated by each material edit:
 5. `delivery-shape`
 
 Add affected-domain specialists. Hold edits until the review phase barrier,
-deduplicate the task-local findings batch, and let Plan repair findings that
-preserve the accepted contract. Before Execute handoff, run the complete
-planning baseline once against the final artifact fingerprint. Return material
-scope, architecture, safety, or delivery changes to the user. Publish no
+deduplicate the task-local findings batch, and let Plan repair only findings
+that change the durable planning contract. Pass implementation considerations
+to Execute task-locally instead of expanding the artifact. Before Execute
+handoff, run the complete planning baseline once against the final artifact
+fingerprint. Return material scope, architecture, safety, or delivery changes
+to the user. Publish no
 planning-only or reconciliation-only PR/MR. Planning reviewers verify the reuse
 and deviation contract against the live repository rather than accepting its
 claims at face value. Atomic plans and OpenSpec artifacts do not also run Doc

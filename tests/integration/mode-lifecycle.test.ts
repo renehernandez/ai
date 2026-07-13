@@ -216,6 +216,38 @@ test("Plan keeps atomic delivery in one change set and rehearses OpenSpec", () =
   assert.match(skill, /Reuse And Deviation Contract/);
   assert.match(skill, /inspected precedents and their canonical owners/);
   assert.match(skill, /never a\s+prerequisite for it/);
+  assert.match(skill, /Durable Planning Boundary/);
+  assert.match(
+    skill,
+    /Implementation readiness means no unresolved material decision/,
+  );
+  assert.match(
+    skill,
+    /earliest real entrypoint\s+with visible success or failure evidence/,
+  );
+  assert.match(skill, /step-by-step instructions/);
+  assert.match(skill, /exhaustive test or edge-case\s+matrices/);
+  assert.match(
+    skill,
+    /Pass implementation considerations\s+to Execute task-locally/,
+  );
+});
+
+test("OpenSpec Tasks stays a high-level delivery queue", () => {
+  const skill = read("skills/openspec-tasks/SKILL.md");
+
+  assert.match(skill, /high-level delivery queue/);
+  assert.match(skill, /not an implementation recipe or test\s+log/);
+  assert.match(skill, /delivery-boundary justification/);
+  assert.match(
+    skill,
+    /exact\s+files, symbols, commands, exhaustive\s+edge cases/,
+  );
+  assert.match(skill, /task-local implementation considerations/);
+  assert.match(
+    skill,
+    /real\s+entrypoint and visible success or failure evidence/,
+  );
 });
 
 test("Execute enforces one writer and preserves total Git order", () => {
@@ -334,6 +366,23 @@ test("Review uses distinct planning, POC, and final implementation baselines", (
     "diff-review",
     "scrutinize",
   ]);
+
+  const readiness = reviewerContractFor("implementation-readiness");
+  assert.match(readiness.passedWhen, /material contract decision/);
+  assert.match(readiness.passedWhen, /rediscovered from the repository/);
+  assert.match(readiness.findingWhen, /externally observable behavior/);
+
+  const edgeCases = reviewerContractFor("edge-cases-and-risk");
+  assert.match(edgeCases.findingWhen, /durable artifact repair/);
+  assert.match(
+    edgeCases.findingWhen,
+    /task-local implementation consideration/,
+  );
+
+  const reviewSkill = read("skills/review/SKILL.md");
+  assert.match(reviewSkill, /Planning Artifact Boundary/);
+  assert.match(reviewSkill, /task-local implementation consideration/);
+  assert.match(reviewSkill, /does not require a prose recipe/);
 });
 
 test("every baseline Review lane resolves to a complete reviewer contract", () => {

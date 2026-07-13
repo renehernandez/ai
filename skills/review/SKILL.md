@@ -30,6 +30,20 @@ do not also invoke Doc Smith reader personas. During planning convergence,
 rerun only reviewer lanes invalidated by an edit. Before Execute handoff, run
 the complete planning baseline once against the final artifact fingerprint.
 
+## Planning Artifact Boundary
+
+Classify every planning finding before returning it. It is an artifact finding
+only when it changes externally observable behavior, architecture or canonical
+ownership, safety or rollout policy, migration, a delivery-unit boundary, or
+end-to-end acceptance. Plan repairs those durable contract gaps.
+
+Everything else is a task-local implementation consideration, including exact
+files, symbols, commands, exhaustive test cases, CI wiring mechanics, provider
+receipts, review chronology, and intermediate discoveries. Pass those to
+Execute without requiring them in the artifact. Implementation readiness means
+that no material decision is unresolved; it does not require a prose recipe or
+protection from rediscovering repository mechanics after context compaction.
+
 At a POC's first objective proof, run only:
 
 1. `code-quality-review`
@@ -107,6 +121,8 @@ must not create knowingly stale review work.
 Every reviewer returns `passed`, `finding`, or `blocked` with source evidence.
 Normalize each finding with reviewer, severity, affected location, issue,
 evidence, remediation outcome, and invalidated review or verification surfaces.
+For planning targets, also classify the result as a durable artifact finding or
+a task-local implementation consideration using the boundary above.
 
 Hold mutation until the phase barrier. Deduplicate and reconcile overlapping
 results into one task-local findings batch, then return it to Plan or the single
