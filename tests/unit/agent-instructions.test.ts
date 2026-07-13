@@ -303,6 +303,15 @@ test("delivery guidance keeps final MRs draft and follows hosted gates", () => {
   assert.match(nitroRules, /worth addressing before merge/);
 });
 
+test("accepted atomic plans continue through automated draft delivery", () => {
+  const portableAgents = readFileSync("instructions/AGENTS.md", "utf-8");
+
+  assert.match(portableAgents, /complete atomic plan.*`agreed`/is);
+  assert.match(portableAgents, /dedicated\s+draft PR\/MR/);
+  assert.match(portableAgents, /no actionable automated feedback remains/);
+  assert.match(portableAgents, /does not authorize merge/);
+});
+
 test("multi-unit guidance supports parallel owners with ordered ancestry", () => {
   const implementationRules = readFileSync(
     "rules/investigation-and-implementation.md",

@@ -96,6 +96,12 @@ modes.
 
 - Plan remains conversational until scope, design, delivery shape, risk,
   acceptance, proof, and policy choices are coherent.
+- Acceptance of a complete atomic plan, including `agreed`, authorizes its
+  uninterrupted Plan, Execute, Review, and Finish sequence. In a Git repository
+  with a valid upstream, implementation is not complete until its dedicated
+  draft PR/MR is published and required CI and configured automated reviewers
+  confirm no actionable automated feedback remains. Explicit narrower mode or
+  no-push limits override this default. This does not authorize merge.
 - Use an atomic plan for one coherent implementation unit that needs no durable
   cross-component specification or mandatory rehearsal. Its plan and
   implementation form one change set in one final PR/MR; it has no POC phase.
