@@ -70,6 +70,72 @@ test("Explore is read-only and creates no planning artifact", () => {
   assert.match(skill, /Linear-ready means copyable text/);
 });
 
+test("new tasks explore before later mutation authority", () => {
+  const scenarios = fixture<
+    Array<{
+      id: string;
+      prompt: string;
+      taskState: string;
+      expectedMode: "Explore" | "Plan" | "Execute";
+      expectedSpecialist: "brainstorming" | null;
+      mutationAllowed: boolean;
+    }>
+  >("first-prompt-explore");
+  const agents = read("instructions/AGENTS.md").replace(/\s+/g, " ");
+  const rules = read("rules/investigation-and-implementation.md").replace(
+    /\s+/g,
+    " ",
+  );
+  const explore = read("skills/explore/SKILL.md").replace(/\s+/g, " ");
+
+  assert.deepEqual(
+    scenarios.map(({ id, expectedMode, mutationAllowed }) => ({
+      id,
+      expectedMode,
+      mutationAllowed,
+    })),
+    [
+      {
+        id: "opening-fix",
+        expectedMode: "Explore",
+        mutationAllowed: false,
+      },
+      {
+        id: "later-proceed-ready",
+        expectedMode: "Execute",
+        mutationAllowed: true,
+      },
+      {
+        id: "later-proceed-unresolved",
+        expectedMode: "Plan",
+        mutationAllowed: true,
+      },
+      {
+        id: "mid-execute-new-outcome",
+        expectedMode: "Explore",
+        mutationAllowed: false,
+      },
+      {
+        id: "same-task-ci-failure",
+        expectedMode: "Execute",
+        mutationAllowed: true,
+      },
+    ],
+  );
+  assert.match(agents, /Every new substantive task begins in Explore/);
+  assert.match(agents, /opening request to fix, implement, change, or build/);
+  assert.match(rules, /later explicit instruction such as "proceed"/);
+  assert.match(
+    rules,
+    /materially different requested outcome creates a new task boundary/,
+  );
+  assert.match(
+    rules,
+    /review feedback, and CI failures.*do not reset the task/,
+  );
+  assert.match(explore, /invoke `brainstorming` by default/);
+});
+
 test("GREEN Plan fixtures select one artifact semantically", () => {
   const scenarios =
     fixture<Array<{ contract: PlanContract; expectedArtifact: string }>>(

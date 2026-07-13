@@ -5,6 +5,25 @@ ownership, and the mandatory OpenSpec rehearsal boundary.
 
 ## Diagnose and explore before mutation
 
+- Every new substantive task begins in Explore before inferred mutation
+  authority can exist. `brainstorming` is the default Explore specialist for a
+  substantive change request; matching new-effort intake continues to use
+  `start-project`, and an explicitly named mode or bounded read-only specialist
+  overrides inference.
+- Opening imperatives such as "fix", "implement", "change", or "build",
+  specificity, urgency, an apparently obvious solution, and a clean owned
+  worktree do not independently authorize mutation. The first pass inspects
+  context, maps the problem and recommendation, and may report that the task is
+  ready for Execute, but it remains read-only.
+- After the initial exploration, a later explicit instruction such as
+  "proceed", "implement the accepted approach", or "make the changes" supplies
+  mutation authority for that accepted task. Semantic readiness then selects
+  Plan or Execute.
+- A materially different requested outcome creates a new task boundary and
+  resets to Explore, including during Plan, Execute, or Finish. Answers to
+  active exploration questions, refinements within the accepted outcome,
+  review feedback, and CI failures inside an already authorized delivery do not
+  reset the task by themselves.
 - Troubleshooting, investigation, debugging, research, project intake, and
   divergent design begin in Explore and remain read-only.
 - Present findings before entering Execute. Do not edit, fix, commit, publish,
@@ -21,10 +40,11 @@ ownership, and the mandatory OpenSpec rehearsal boundary.
 
 ## Route semantically
 
-Direct Execute is eligible only when the request fits one coherent final MR and
-has no unresolved behavior, architecture, migration, safety, ownership,
-ordering, cross-component contract, or verification decision. File count and
-line count may inform risk but never select the workflow.
+After the initial Explore gate and later mutation authority, Direct Execute is
+eligible only when the accepted request fits one coherent final MR and has no
+unresolved behavior, architecture, migration, safety, ownership, ordering,
+cross-component contract, or verification decision. File count and line count
+may inform risk but never select the workflow.
 
 Enter Plan when any material implementation decision remains. Plan stays
 conversational until scope, design, delivery shape, risk, acceptance, proof, and

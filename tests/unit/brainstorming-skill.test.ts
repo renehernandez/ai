@@ -8,12 +8,15 @@ const skill = readFileSync(
   "utf8",
 ).replace(/\s+/g, " ");
 
-test("brainstorming opens with a visible orientation map", () => {
+test("brainstorming opens the problem space with working hypotheses", () => {
   assert.match(skill, /\*\*Orientation Map\*\*/);
   assert.match(skill, /\*\*Discussion Queue\*\*/);
-  assert.match(skill, /\*\*Recommended Defaults\*\*/);
-  assert.match(skill, /\*\*First question\*\*/);
+  assert.match(skill, /\*\*Working Hypotheses\*\*/);
+  assert.match(skill, /\*\*Next step\*\*/);
   assert.match(skill, /Always include a lightweight domain-terms pass/);
+  assert.match(skill, /intended outcome, motivation, domain terms/);
+  assert.match(skill, /alternative framings, working hypotheses/);
+  assert.match(skill, /omit the question, recommend readiness/);
 });
 
 test("brainstorming keeps mixed implementation prompts read-only", () => {
@@ -26,6 +29,40 @@ test("brainstorming keeps mixed implementation prompts read-only", () => {
     skill,
     /Plan owns creation of an atomic plan or OpenSpec artifact/,
   );
+});
+
+test("brainstorming separates opening exploration from convergence", () => {
+  assert.match(skill, /Converge only when invited later/);
+  assert.match(
+    skill,
+    /After the opening pass, a later request to narrow, choose v1, plan, implement, or prepare delivery activates convergence/,
+  );
+  assert.match(
+    skill,
+    /Do not choose v1, implementation slices, proof location, or capture artifact during this opening phase/,
+  );
+  assert.match(
+    skill,
+    /Apply this section only after the user invites convergence/,
+  );
+  assert.match(
+    skill,
+    /Apply this section only after the user invites an implementation shape/,
+  );
+});
+
+test("brainstorming keeps agreement narrow and opening prompts read-only", () => {
+  assert.match(
+    skill,
+    /accepting only the recommendation currently being discussed/,
+  );
+  assert.match(skill, /without treating unstated downstream scope as accepted/);
+  assert.match(
+    skill,
+    /Treating an opening "fix" or "implement" request as mutation authority/,
+  );
+  assert.match(skill, /wait for a later explicit transition/);
+  assert.match(skill, /After convergence is invited, use a hard stop/);
 });
 
 test("brainstorming scans for reuse without prompt trigger phrases", () => {

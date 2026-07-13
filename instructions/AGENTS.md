@@ -22,10 +22,15 @@ authority.
   readiness. Merge, deployment, and cleanup require explicit user authority or
   activated project policy.
 
-Route from unresolved decisions and contract needs. Direct Execute is eligible
-only when one coherent MR can deliver the outcome and no material behavior,
-architecture, migration, safety, ownership, ordering, cross-component contract,
-or verification decision remains. Otherwise use Plan. Narrow language such as
+Route authority before readiness. Every new substantive task begins in Explore
+and defaults to `brainstorming`; an opening request to fix, implement, change,
+or build does not itself authorize mutation. A materially different requested
+outcome resets the task to Explore. Explicit mode wording overrides inference.
+After the initial exploration, a later explicit instruction to proceed
+authorizes Plan or Execute: Direct Execute is eligible only when one coherent
+MR can deliver the accepted outcome and no material behavior, architecture,
+migration, safety, ownership, ordering, cross-component contract, or
+verification decision remains. Otherwise use Plan. Narrow language such as
 read-only, Plan-only, Execute-only, Review-only, or local-only limits later
 modes.
 

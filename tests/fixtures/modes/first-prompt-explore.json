@@ -1,0 +1,42 @@
+[
+  {
+    "id": "opening-fix",
+    "prompt": "Fix the authentication timeout",
+    "taskState": "new",
+    "expectedMode": "Explore",
+    "expectedSpecialist": "brainstorming",
+    "mutationAllowed": false
+  },
+  {
+    "id": "later-proceed-ready",
+    "prompt": "Proceed with the accepted approach",
+    "taskState": "explored-and-ready",
+    "expectedMode": "Execute",
+    "expectedSpecialist": null,
+    "mutationAllowed": true
+  },
+  {
+    "id": "later-proceed-unresolved",
+    "prompt": "Proceed with the accepted approach",
+    "taskState": "explored-with-material-decisions",
+    "expectedMode": "Plan",
+    "expectedSpecialist": null,
+    "mutationAllowed": true
+  },
+  {
+    "id": "mid-execute-new-outcome",
+    "prompt": "Also redesign the authorization model",
+    "taskState": "execute-different-outcome",
+    "expectedMode": "Explore",
+    "expectedSpecialist": "brainstorming",
+    "mutationAllowed": false
+  },
+  {
+    "id": "same-task-ci-failure",
+    "prompt": "The accepted change now fails its unit test",
+    "taskState": "execute-same-outcome",
+    "expectedMode": "Execute",
+    "expectedSpecialist": null,
+    "mutationAllowed": true
+  }
+]
