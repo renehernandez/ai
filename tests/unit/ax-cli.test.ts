@@ -102,6 +102,16 @@ test("agents is a scoped runtime surface", () => {
   assert.match(parseError(["agents", "install"]).message, /Use ax agents sync/);
 });
 
+test("configs is a scoped managed-tool surface", () => {
+  const [parsed] = parse(["configs", "validate"]);
+  assert.equal(parsed.scope, "configs");
+  assert.equal(parsed.command, "validate");
+  assert.match(
+    parseError(["configs", "install"]).message,
+    /Use ax configs sync/,
+  );
+});
+
 test("OpenSpec sync parses convergence and config-review inputs", () => {
   const [parsed] = parse([
     "openspec",

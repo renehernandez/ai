@@ -70,6 +70,13 @@ export type AxRuntimeConfig = {
       sourceDir?: string;
       targets: CoordinatorTargets;
     };
+    configs?: Record<
+      string,
+      {
+        target: string;
+        managed: Record<string, unknown>;
+      }
+    >;
     openspec?: Record<string, unknown>;
   };
   profiles: Record<
@@ -1726,20 +1733,9 @@ function isDirectChild(path: string, root: string): boolean {
   );
 }
 
-function assertVerifiedLiveSource(
-  sourceRoot: string,
-  runtimeRoot: string,
-): void {
-  if (
-    process.env.AX_ISOLATED_RUNTIME === "1" ||
-    resolve(runtimeRoot) !== resolve(defaultRuntimeRoot())
-  ) {
-    return;
-  }
+export function sourceIsVerifiedForLiveMutation(sourceRoot: string): boolean {
   if (sourceRoot.includes(`${join(".codex", "worktrees")}`)) {
-    throw new Error(
-      "unverified_live_source: disposable worktree requires an isolated runtime root",
-    );
+    return false;
   }
   const branch = git(sourceRoot, ["branch", "--show-current"]);
   const status = git(sourceRoot, [
@@ -1749,15 +1745,36 @@ function assertVerifiedLiveSource(
   ]);
   const head = git(sourceRoot, ["rev-parse", "HEAD"]);
   const upstream = git(sourceRoot, ["rev-parse", "@{upstream}"]);
+  return (
+    branch.status === 0 &&
+    ["main", "master"].includes(branch.stdout.trim()) &&
+    status.status === 0 &&
+    status.stdout.trim() === "" &&
+    head.status === 0 &&
+    upstream.status === 0 &&
+    head.stdout.trim() === upstream.stdout.trim()
+  );
+}
+
+export function assertVerifiedLiveSource(
+  sourceRoot: string,
+  runtimeRoot: string,
+): void {
   if (
-    branch.status !== 0 ||
-    !["main", "master"].includes(branch.stdout.trim()) ||
-    status.status !== 0 ||
-    status.stdout.trim() !== "" ||
-    head.status !== 0 ||
-    upstream.status !== 0 ||
-    head.stdout.trim() !== upstream.stdout.trim()
+    process.env.AX_ISOLATED_RUNTIME === "1" ||
+    resolve(runtimeRoot) !== resolve(defaultRuntimeRoot())
   ) {
+    return;
+  }
+  if (
+    sourceRoot.includes(`${join(".codex", "worktrees")}`) &&
+    resolve(runtimeRoot) === resolve(defaultRuntimeRoot())
+  ) {
+    throw new Error(
+      "unverified_live_source: disposable worktree requires an isolated runtime root",
+    );
+  }
+  if (!sourceIsVerifiedForLiveMutation(sourceRoot)) {
     throw new Error(
       "unverified_live_source: canonical live runtime requires a clean default-branch source matching its hosted upstream",
     );

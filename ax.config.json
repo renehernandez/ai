@@ -47,6 +47,27 @@
         "operations": "~/work/projects/rene.hernandez/agent-control/operations"
       }
     },
+    "configs": {
+      "codex": {
+        "target": "~/.codex/config.toml",
+        "managed": {
+          "features": {
+            "memories": true,
+            "multi_agent_v2": {
+              "enabled": true,
+              "max_concurrent_threads_per_session": 10
+            }
+          },
+          "agents": {
+            "max_depth": 1
+          },
+          "memories": {
+            "generate_memories": true,
+            "use_memories": true
+          }
+        }
+      }
+    },
     "openspec": {
       "tools": ["codex", "claude"],
       "canonicalSkillsDir": ".agents/skills",

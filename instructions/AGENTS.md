@@ -158,14 +158,18 @@ modes.
 - Tracked `ax.config.json` is authoritative runtime state. It declares installed
   profiles, one policy profile, exact managed targets, and retired skills.
 - Use `ax sync` for runtime convergence. It replaces declared targets and
-  removes explicitly retired skills without adoption or ownership prompts.
+  removes explicitly retired skills without adoption or ownership prompts. It
+  also converges exact managed tool-config leaves while preserving unowned
+  values.
 - Scoped `skills sync`, `instructions sync`, `hooks sync`, `agents sync`, and
-  `coordinators sync` use the same tracked selection. Unrelated paths remain
+  `coordinators sync` use the same tracked selection. Use `configs sync` for
+  exact managed config leaves. Unrelated paths and unowned config values remain
   untouched.
 - Use `ax status` and `ax validate` for offline, read-only inspection with no
   network access, content comparison, or mutation.
 - Exercise feature-branch AX behavior only with isolated HOME and runtime roots.
-  Keep the live runtime unchanged before merge.
+  Keep the live runtime unchanged before merge. `--runtime-root` does not
+  redirect tool config, so config sync requires an isolated HOME too.
 - After merge, verify a clean local default-branch source and run live
   `ax sync`.
 - Use `ax openspec sync` in the invocation repository for repo-local OpenSpec.
