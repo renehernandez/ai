@@ -13,7 +13,7 @@ Create GitLab merge requests with `glab` after verifying branch, remote, and dup
 This is a bounded Finish provider adapter. It performs mechanics only after
 Finish supplies mutation authority, a current publication checkpoint, and a
 body approved by `change-request-create`. Explicitly naming this adapter does
-not grant publication or merge authority.
+not bypass `change-request-create` or grant publication or merge authority.
 
 This is the default MR creation workflow for repos hosted in the Fullscript Lab GitLab instance. Apply repo-local templates, labels, review-request routing, and merge policies when present.
 
@@ -28,8 +28,9 @@ For general GitLab CLI commands, use `glab-cli`.
 - The repo is hosted in the Fullscript Lab GitLab instance.
 
 Do not use for GitHub pull requests; use the GitHub PR creation skill instead.
-For host-neutral PR/MR/change request wording, use `change-request-create`
-first so routing and full description policy stay in one place.
+Always use `change-request-create` before this adapter, including when the user
+explicitly names GitLab, `glab`, or this skill. This adapter consumes the body;
+it does not approve it.
 
 ## Workflow
 
@@ -73,51 +74,10 @@ first so routing and full description policy stay in one place.
    git diff <target>...HEAD --stat
    ```
 
-7. Build the MR body. Prefer project templates when available.
-
-   Keep the body reviewer-facing. For neutral or mixed-host requests, apply
-   `change-request-create` before this adapter. For direct GitLab use:
-   - Explain why the change exists and where reviewers should focus.
-   - Preserve project template sections and required checklist semantics.
-   - Include only behavior-specific proof, reviewer-requested evidence, or
-     explicit gaps that help reviewers understand changed behavior or risk.
-   - Write the review focus before the Verification section, then include only
-     evidence that maps to that focus, answers a reviewer request, or explains
-     an actionable gap.
-   - Omit unnecessary author-workflow references and routine validation already
-     represented by CI, repository hooks, or workflow ledgers.
-   - Treat Verification sections as reviewer-risk evidence, not a command log
-     or gate summary. Do not list routine checks merely because they ran.
-   - Do not include a broad proof inventory merely because each item is true;
-     omit incidental pipeline fixes, broad handler coverage, note IDs, pod
-     names, and review-environment setup unless reviewers need that detail to
-     assess the current diff.
-   - Do not put clean Nitro review state, passing pipeline state, or
-     operational-verification state in Verification unless this MR changes that
-     surface, a reviewer asked for the proof, or there is an actionable gap or
-     failure.
-   - Do not expose local private support artifact paths, raw private support
-     artifacts, or private thread metadata. Use summaries, hashes, thread
-     references, note IDs, discussion IDs, or stable correlation IDs when
-     support-artifact evidence matters.
-   - Omit raw local reviewer evidence, local review-gate state, and private plan
-     support artifacts; do not present them as hosted review or Nitro evidence.
-   - Link directly to reviewer-needed issues, related MRs, or upstream resources.
-
-   Fallback body:
-   ```markdown
-   ## Why
-   [Purpose and intent]
-
-   ## How it works
-   [Reviewer-oriented explanation of the approach]
-
-   ## How to review
-   [Files, flows, or decisions worth close attention]
-
-   ## Verification
-   [Behavior-specific proof or explicit reviewer-facing gaps]
-   ```
+7. Consume the exact title and body approved by `change-request-create`.
+   Do not rebuild, fill, template-expand, or otherwise change either value in
+   this adapter. If either value is absent or needs revision, return to
+   `change-request-create` before provider mutation.
 
 8. Create a draft MR:
    ```bash
@@ -152,7 +112,8 @@ first so routing and full description policy stay in one place.
 ## GitLab Gotchas
 
 - `glab mr list` does not support `--state`, `--status`, or `--open`; use `--draft`, `--closed`, `--merged`, or `--all`.
-- `glab mr create --fill` can hide important reviewer context; use it only when commit messages already contain the needed body.
+- Do not use `glab mr create --fill`; it replaces the centrally approved title
+  and body.
 - Passing long descriptions through shell flags can be brittle. Use a temp file plus command substitution only when the harness allows it safely, or use the simplest supported `glab` path for the current shell.
 - Host-qualified commands are safer in Fullscript repos when multiple GitLab hosts are configured.
 
@@ -181,6 +142,9 @@ first so routing and full description policy stay in one place.
   and requests all reviewers through a new top-level MR note such as
   `/request_review @alice @bob` after creation.
 - User asks for a host-neutral change request: pass only if the agent routes through `change-request-create` instead of this provider adapter directly.
+- User explicitly asks for a GitLab MR or `glab mr create`: pass only if
+  `change-request-create` owns the exact final title and body and this adapter
+  consumes them unchanged.
 - Process-heavy change with local plans, pressure tests, internal review gates,
   or private plan support artifacts: pass only if the MR body includes
   self-contained reviewer evidence, omits references to excluded local

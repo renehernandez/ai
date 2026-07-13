@@ -9,7 +9,7 @@ function read(path: string): string {
   return readFileSync(join(root, path), "utf8");
 }
 
-test("change-request-create exposes host-neutral routing pressure scenarios", () => {
+test("change-request-create owns every provider route", () => {
   const skill = read("skills/change-request-create/SKILL.md");
   const rules = read("rules/git-and-review.md");
   const github = read("skills/github-pr-create/SKILL.md");
@@ -17,6 +17,7 @@ test("change-request-create exposes host-neutral routing pressure scenarios", ()
 
   assert.match(skill, /^name: change-request-create$/m);
   assert.match(skill, /^description: Use when /m);
+  assert.match(skill, /including provider-explicit requests/);
   assert.match(
     skill,
     /Existing artifact URL named by the user or current context/,
@@ -32,12 +33,18 @@ test("change-request-create exposes host-neutral routing pressure scenarios", ()
   );
   assert.match(
     github,
-    /For host-neutral PR\/MR\/change request wording, use `change-request-create`/,
+    /Always use `change-request-create` before this adapter/,
   );
   assert.match(
     gitlab,
-    /For host-neutral PR\/MR\/change request wording, use `change-request-create`/,
+    /Always use `change-request-create` before this adapter/,
   );
+  assert.match(github, /does not approve it/);
+  assert.match(gitlab, /does not approve it/);
+  assert.match(github, /Consume the exact title and body approved/);
+  assert.match(gitlab, /Consume the exact title and body approved/);
+  assert.doesNotMatch(github, /Fallback body|--fill --draft/);
+  assert.doesNotMatch(gitlab, /Fallback body|use it only/);
 });
 
 test("change-request-create protects human-owned sections and POC descriptions", () => {
@@ -78,7 +85,6 @@ test("change-request-create protects human-owned sections and POC descriptions",
 
 test("change-request-create rejects GitLab description leaks while keeping reviewer evidence", () => {
   const skill = read("skills/change-request-create/SKILL.md");
-  const gitlab = read("skills/glab-mr-create/SKILL.md");
 
   assert.match(
     skill,
@@ -95,10 +101,6 @@ test("change-request-create rejects GitLab description leaks while keeping revie
     skill,
     /failed, pending, missing, unavailable, or stale hosted checks/,
   );
-  assert.match(
-    gitlab,
-    /Omit unnecessary author-workflow references and routine validation already\s+represented by CI, repository hooks, or workflow ledgers/,
-  );
 });
 
 test("change-request-create preserves GitHub templates and asks on multi-template ambiguity", () => {
@@ -112,10 +114,7 @@ test("change-request-create preserves GitHub templates and asks on multi-templat
     skill,
     /If multiple templates match .* ask which template to use/s,
   );
-  assert.match(
-    github,
-    /Preserve the selected template shape and fill placeholders concisely/,
-  );
+  assert.match(github, /Do not rebuild, fill, template-expand/);
 });
 
 test("change-request-create preserves existing artifact bodies through managed sections", () => {
@@ -168,22 +167,9 @@ test("change-request-create keeps targeted evidence out of automatic verificatio
   assert.match(skill, /`git diff --check`/);
   assert.match(skill, /`shellcheck`/);
   assert.match(skill, /automatic local gate or CI job/);
-  assert.match(
-    gitlab,
-    /Behavior-specific proof or explicit reviewer-facing gaps/,
-  );
-  assert.match(
-    github,
-    /Behavior-specific proof or explicit reviewer-facing gaps/,
-  );
-  assert.match(
-    gitlab,
-    /Do not put clean Nitro review state, passing pipeline state, or\s+operational-verification state in Verification/,
-  );
-  assert.match(
-    github,
-    /Do not put passing check state or routine workflow-gate state in Testing or\s+Verification/,
-  );
+  assert.match(skill, /explicit gap/);
+  assert.match(gitlab, /Consume the exact title and body approved/);
+  assert.match(github, /Consume the exact title and body approved/);
 });
 
 test("change-request-create encodes thread 019edf9e verification-drift regression", () => {

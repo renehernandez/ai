@@ -1,6 +1,6 @@
 ---
 name: change-request-create
-description: Use when creating or updating a GitHub pull request or GitLab merge request from a host-neutral request, mixed-host repository, existing PR/MR URL, or review-routing policy.
+description: Use when creating or updating any GitHub pull request or GitLab merge request, including provider-explicit requests, mixed-host repositories, existing PR/MR URLs, or review-routing policy.
 ---
 
 # Change Request Create
@@ -18,12 +18,10 @@ body and delegates authorized mechanics to one provider adapter.
 
 ## When To Use
 
-Use this skill when the user asks to create, open, update, or prepare a PR, pull
-request, MR, merge request, change request, review artifact, or draft review
-without explicitly requiring a provider-only workflow.
-
-Use the provider adapter directly when the user explicitly asks for the GitHub
-or GitLab workflow and routing is already clear:
+Use this skill whenever the user asks to create, open, update, or prepare a PR,
+pull request, MR, merge request, change request, review artifact, or draft
+review. Explicit GitHub, GitLab, `gh`, or `glab` wording selects the adapter; it
+does not bypass this description-policy owner.
 
 | Provider | Adapter |
 | --- | --- |
@@ -184,7 +182,8 @@ other lifecycle-ledger content merely because the artifact is disposable.
    context.
 5. Build or update the description using the description policy and template
    preservation rules above.
-6. Delegate provider-specific mutation:
+6. Delegate the approved title and body unchanged for provider-specific
+   mutation:
    - GitHub: use `github-pr-create`.
    - GitLab: use `glab-mr-create`.
 7. Return the artifact URL, source and target branches, draft/readiness state,
@@ -200,6 +199,7 @@ flags.
 | Mistake | Fix |
 | --- | --- |
 | Choosing the first remote in a mixed-host repo | Apply route precedence and ask when ambiguous |
+| Treating explicit `gh`, `glab`, GitHub, or GitLab wording as a policy bypass | Apply this skill, then delegate mechanics to the selected adapter |
 | Duplicating provider CLI mechanics here | Delegate mutation to `github-pr-create` or `glab-mr-create` |
 | Replacing a whole existing description | Preserve manual content and update only managed sections |
 | Updating a PR/MR body directly through `gh`, `glab`, or an API call | Apply this description policy first, then use the provider command only for mutation |
@@ -216,6 +216,9 @@ flags.
 
 - Mixed GitHub/GitLab remotes with no explicit host: pass only if routing uses
   review policy or asks instead of choosing the first remote.
+- Explicit GitHub, GitLab, `gh`, or `glab` creation request: pass only if this
+  skill still owns the title and body and the provider adapter consumes them
+  unchanged.
 - Existing PR/MR URL: pass only if that provider controls the update route.
 - Existing open artifact for the branch: pass only if no duplicate is created.
 - Existing body with manual reviewer notes and managed HTML comments: pass only

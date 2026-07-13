@@ -13,7 +13,7 @@ Create GitHub pull requests with `gh` after verifying branch, remote, and duplic
 This is a bounded Finish provider adapter. It performs mechanics only after
 Finish supplies mutation authority, a current publication checkpoint, and a
 body approved by `change-request-create`. Explicitly naming this adapter does
-not grant publication or merge authority.
+not bypass `change-request-create` or grant publication or merge authority.
 
 ## When to Use
 
@@ -23,8 +23,9 @@ not grant publication or merge authority.
 - `change-request-create` selected GitHub as the provider adapter.
 
 Do not use for GitLab merge requests; use the GitLab MR creation skill instead.
-For host-neutral PR/MR/change request wording, use `change-request-create`
-first so routing and full description policy stay in one place.
+Always use `change-request-create` before this adapter, including when the user
+explicitly names GitHub, `gh`, or this skill. This adapter consumes the body; it
+does not approve it.
 
 ## Workflow
 
@@ -68,45 +69,10 @@ first so routing and full description policy stay in one place.
    git diff <base>...HEAD --stat
    ```
 
-7. Build the PR body. Prefer project templates when available:
-   - `.github/pull_request_template.md`
-   - `.github/PULL_REQUEST_TEMPLATE.md`
-   - `.github/PULL_REQUEST_TEMPLATE/*.md`
-
-   Keep the body reviewer-facing. For neutral or mixed-host requests, apply
-   `change-request-create` before this adapter. For direct GitHub use:
-   - Preserve the selected template shape and fill placeholders concisely.
-   - Include only behavior-specific proof, reviewer-requested evidence, or
-     explicit gaps that help reviewers understand changed behavior or risk.
-   - Write the review focus before the Testing or Verification section, then
-     include only evidence that maps to that focus, answers a reviewer request,
-     or explains an actionable gap.
-   - Omit unnecessary author-workflow references and routine validation already
-     represented by CI, repository hooks, or workflow ledgers.
-   - Treat Testing or Verification sections as reviewer-risk evidence, not a
-     command log or gate summary. Do not list routine checks merely because they
-     ran.
-   - Do not include a broad proof inventory merely because each item is true;
-     omit incidental pipeline fixes, broad handler coverage, note IDs, pod
-     names, and preview-environment setup unless reviewers need that detail to
-     assess the current diff.
-   - Do not put passing check state or routine workflow-gate state in Testing or
-     Verification unless this PR changes that surface, a reviewer asked for the
-     proof, or there is an actionable gap or failure.
-   - Do not expose local private support artifact paths, raw private support
-     artifacts, or private thread metadata. Use summaries, hashes, thread
-     references, note IDs, discussion IDs, or stable correlation IDs when
-     support-artifact evidence matters.
-   - Link directly to reviewer-needed issues, related PRs, or upstream resources.
-
-   Fallback body:
-   ```markdown
-   ## Summary
-   [One sentence describing the change]
-
-   ## Testing
-   [Behavior-specific proof or explicit reviewer-facing gaps]
-   ```
+7. Consume the exact title and body approved by `change-request-create`.
+   Do not rebuild, fill, template-expand, or otherwise change either value in
+   this adapter. If either value is absent or needs revision, return to
+   `change-request-create` before provider mutation.
 
 8. Create a draft PR:
    ```bash
@@ -117,7 +83,9 @@ first so routing and full description policy stay in one place.
      --body "<body>" \
      --draft
    ```
-   Add `--reviewer`, `--assignee @me`, `--label`, or `--template` when requested or required by project convention.
+   Add `--reviewer`, `--assignee @me`, or `--label` when requested or required
+   by project convention. Do not add `--template` or `--fill` after description
+   approval.
 
 9. Return the created PR URL, base/head branch, draft/readiness state, and any verification gaps.
 
@@ -128,8 +96,6 @@ first so routing and full description policy stay in one place.
 | Existing PR | `gh pr list --head "<branch>" --state open` |
 | Current upstream | `git rev-parse --abbrev-ref --symbolic-full-name @{u}` |
 | Create draft PR | `gh pr create --base "<base>" --head "<branch>" --title "<title>" --body "<body>" --draft` |
-| Use a template | `gh pr create --template ".github/pull_request_template.md"` |
-| Let commits fill title/body | `gh pr create --fill --draft` |
 | Review current PR state | `gh pr status` |
 
 ## GitHub Gotchas
@@ -158,6 +124,9 @@ first so routing and full description policy stay in one place.
 - GitHub side-project branch with no upstream: pass only if the agent pushes or verifies the intended fork/head before `gh pr create`.
 - User asks for a ready PR: pass only if the agent does not force `--draft` and reports the readiness choice.
 - User asks for a host-neutral change request: pass only if the agent routes through `change-request-create` instead of this provider adapter directly.
+- User explicitly asks for a GitHub PR or `gh pr create`: pass only if
+  `change-request-create` owns the exact final title and body and this adapter
+  consumes them unchanged.
 - Process-heavy change with local plans, pressure tests, internal review gates,
   or private plan support artifacts: pass only if the PR body includes
   self-contained reviewer evidence, omits references to excluded local
