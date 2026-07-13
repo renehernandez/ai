@@ -13,6 +13,8 @@ publication, provider policy, and explicit terminal authority.
 - Resolve provider behavior from direct user instruction, project policy, one
   workflow-policy profile, then remote inference. Ambiguous routing blocks
   provider writes without invalidating completed local work.
+- For host-neutral PR/MR creation or description updates, Finish uses
+  `change-request-create` before the selected provider adapter.
 
 ## Native commits and branch safety
 
@@ -79,6 +81,10 @@ provider delay remains under monitoring or a supported wakeup.
   reviewer-requested proof, or actionable gaps. Omit routine command logs,
   passing CI, and clean automated-review state unless they are the subject of
   the change or expose a gap.
+- Preserve template instructions and human-owned sections. A Testing section
+  that explicitly requires owner or human input is never auto-filled.
+- Read the hosted body back after creation or update; restore or block when
+  manual content, links, checklist state, or protected sections were damaged.
 - When posting a human-readable comment on the user's behalf, append
   `Co-Authored by: <harness>`. Do not add attribution to commits, PR/MR
   descriptions, service-generated bodies, or command-only review notes.
@@ -101,6 +107,9 @@ When active Fullscript project policy selects Nitro, Finish posts
 change: either the source HEAD or resolved target-base SHA. Latest-effective-diff
 Nitro feedback must complete without unresolved actionable findings. Feedback
 tied to an earlier source HEAD or target-base SHA is stale.
+
+GitHub PR review does not request, poll, normalize, or gate on Codex-authored
+review feedback. `codex-review-feedback` remains retired.
 
 ## AI repository delivery
 

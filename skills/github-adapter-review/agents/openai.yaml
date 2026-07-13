@@ -1,0 +1,4 @@
+interface:
+  display_name: "GitHub Adapter Review"
+  short_description: "Inspect complete GitHub PR state"
+  default_prompt: "Use $github-adapter-review within Review to inspect the verified GitHub PR diff, threads, approvals, and Actions state without requesting Codex review or writing to the provider."

@@ -37,6 +37,10 @@ alignment, AX/skill compatibility, data, infrastructure, or UI. Reviewers stay
 read-only and return `passed`, `finding`, or `blocked` with file/line evidence
 where applicable.
 
+Every baseline reviewer ID resolves through the catalog in
+`scripts/review-contract.ts`. Do not launch a named lane without its objective,
+target, evidence questions, decision criteria, and normalized output contract.
+
 For `delivery-shape`, challenge both under-splitting and over-splitting. Each
 top-level OpenSpec unit must produce one reviewable outcome, remain correct and
 safe when merged before its successors, own objective proof, and have coherent
@@ -59,6 +63,12 @@ Finish performs the required provider interaction. GitHub, generic GitLab, and
 Fullscript GitLab/Nitro retain their configured policies. Feedback for a stale
 source HEAD or target-base SHA never passes a latest-effective-diff gate, and
 hosted gates never replace the local baseline.
+
+Use `github-adapter-review` for GitHub PR artifact state and
+`gitlab-adapter-review` for GitLab MR artifact state. When active Fullscript
+policy selects Nitro, additionally use `nitro-review-feedback` to identify and
+normalize Nitro-authored feedback. Do not request, poll, normalize, or gate on
+Codex-authored PR review feedback; `codex-review-feedback` remains retired.
 
 Inspect the complete available feedback surface for every configured required
 reviewer, not only its summary status or opening sentence. For Nitro, read the
@@ -96,3 +106,5 @@ resume, rerun it; do not reconstruct persisted gate state.
 | Fixing a finding from Review | Return it to Plan or the Execute owner. |
 | Reusing evidence after the target changes | Rerun affected lanes and checkpoint inputs. |
 | Persisting reviewer ledgers or gate state | Keep evidence task-local and recomputable. |
+| Treating provider metadata as review judgment | Use the host adapter for context and the Review lanes for findings. |
+| Requesting Codex PR review | Do not; GitHub review covers host state without a Codex gate. |

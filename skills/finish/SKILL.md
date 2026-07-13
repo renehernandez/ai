@@ -43,6 +43,14 @@ team-relevant scope, decisions, dependency links, verification that helps assess
 the changed behavior, and actionable gaps. Omit local reviewer identities,
 fingerprints, ledgers, gate mechanics, and routine green checks.
 
+Before every PR/MR creation or description update, invoke
+`change-request-create` as the host-neutral description-policy owner. It reads
+the current template/body, protects human-owned sections and manual content,
+filters routine workflow narration, and requires hosted readback after mutation.
+After that policy pass, use `github-pr-create` or `glab-mr-create` only for the
+selected provider's mechanics. A direct provider CLI/API body update never
+bypasses this specialist pass.
+
 For OpenSpec POC publication, create one draft PR/MR titled `POC: ...` against
 the normal target and state that it is review-only and must close unmerged. For
 atomic-plan delivery, publish the plan and implementation together as one
@@ -110,5 +118,6 @@ before cleanup; never force-delete as ordinary follow-through.
 | Trusting `No findings` without reading the note | Read the full response and applicable unresolved discussions. |
 | Reusing a stale checkpoint after push or rebase | Return to Review for the new exact head/base. |
 | Letting provider choice follow the first remote | Apply policy precedence and block ambiguity. |
+| Writing a PR/MR body directly in Finish | Invoke `change-request-create`, then delegate provider mechanics. |
 | Splitting an atomic plan from its implementation | Publish both as one change set in one final PR/MR. |
 | Merging because all gates are green | Require explicit merge authority or activated policy. |

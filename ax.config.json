@@ -4,16 +4,8 @@
     "installedProfiles": ["personal", "work"],
     "policyProfile": "work",
     "retiredSkills": [
-      "brainstorming",
-      "change-request-create",
       "codex-review-feedback",
-      "github-adapter-review",
-      "github-pr-create",
-      "gitlab-adapter-review",
-      "glab-mr-create",
       "merge-followthrough",
-      "nitro-review-feedback",
-      "openspec-tasks",
       "plan-coordinate",
       "plan-delivery",
       "plan-orchestrator",
@@ -24,8 +16,7 @@
       "plan-unit-delivery",
       "plan-unit-sequencer",
       "review-feedback-routing",
-      "session-start",
-      "start-project"
+      "session-start"
     ],
     "canonicalSkillsDir": "~/.agents/skills",
     "skillSymlinkTargets": ["~/.codex/skills", "~/.claude/skills"],
@@ -118,6 +109,8 @@
             "ai-readiness-upkeep",
             "agent-workspace",
             "ax-cli",
+            "brainstorming",
+            "change-request-create",
             "code-quality-review",
             "code-simplifier",
             "compound",
@@ -128,8 +121,14 @@
             "execute",
             "explore",
             "finish",
+            "github-adapter-review",
+            "github-pr-create",
+            "gitlab-adapter-review",
+            "glab-mr-create",
             "handoff-brief",
             "linear-breakdown",
+            "nitro-review-feedback",
+            "openspec-tasks",
             "plan",
             "project-health-brief",
             "research",
@@ -138,6 +137,7 @@
             "review",
             "scrutinize",
             "security-review",
+            "start-project",
             "writing-skills"
           ]
         }

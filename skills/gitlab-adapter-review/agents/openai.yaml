@@ -1,0 +1,4 @@
+interface:
+  display_name: "GitLab Adapter Review"
+  short_description: "Inspect complete GitLab MR state"
+  default_prompt: "Use $gitlab-adapter-review within Review to inspect the verified GitLab MR diff, discussions, pipeline graph, and hosted gaps without provider writes."

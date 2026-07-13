@@ -66,8 +66,9 @@ modes.
 - Troubleshooting stays read-only through diagnosis and report. Enter Execute
   only when the user requests a fix.
 - Use confidence scores from [rules/confidence.md](../rules/confidence.md).
-- Use `doc-smith` for non-trivial documentation, `scrutinize` for adversarial
-  validation, and `hallmark` for frontend design.
+- Use `doc-smith` for non-trivial documentation and `scrutinize` for
+  adversarial validation. No mandatory frontend-design skill is currently
+  selected.
 - Prefer authenticated organization-aware CLIs: `gh`, `glab`, and `wrangler`.
 - Name the exact verification layer performed; do not use vague shorthand.
 - Avoid generic AI filler and formulaic contrast phrasing.
@@ -75,6 +76,14 @@ modes.
   `## Readable Summary`.
 
 ## Planning and delivery
+
+- The five modes remain the only lifecycle authority owners. Bounded
+  specialists operate inside them: Explore uses `brainstorming` and
+  `start-project`; Plan uses `openspec-tasks`; Review uses the GitHub/GitLab
+  host adapters and `nitro-review-feedback` when policy selects Nitro; Finish
+  uses `change-request-create` plus the selected creation adapter.
+- `codex-review-feedback` remains retired. GitHub PR review does not request,
+  poll, normalize, or gate on Codex-authored review feedback.
 
 - Plan remains conversational until scope, design, delivery shape, risk,
   acceptance, proof, and policy choices are coherent.

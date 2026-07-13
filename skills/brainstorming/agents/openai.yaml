@@ -1,0 +1,4 @@
+interface:
+  display_name: "Brainstorming"
+  short_description: "Map ideas before detailed planning"
+  default_prompt: "Use $brainstorming within Explore to inspect context, present a map-first design with recommended defaults and a short discussion queue, and stop before artifact writes."
