@@ -1,63 +1,66 @@
 ---
 name: deslop
-description: Use when cleaning AI-generated code artifacts, style drift, over-defensive logic, unnecessary comments, type-system bypasses, or branch diffs that need behavior-preserving polish before review.
-allowed-tools: Read, Glob, Grep, Bash(git:*), Bash(pnpm:*), Edit
+description: Use when reviewing a branch diff for AI-generated clutter, style drift, over-defensive logic, unnecessary comments, type-system bypasses, verbose helpers, or local-convention violations.
+allowed-tools: Read, Glob, Grep, Bash(git:*)
 ---
 
 # Deslop
 
-Remove AI-shaped clutter from a branch while keeping the intended behavior intact.
+Run a findings-only review of AI-shaped clutter and local-convention drift. Do
+not edit files. Keep the lens narrower than architectural refactoring or generic
+code quality.
 
-## When to Use
+## Scope
 
-- The user asks to deslop, clean up AI code, polish a branch, or make code review-ready.
-- A diff contains comments, abstractions, guards, casts, or structure that do not match the surrounding code.
-- Review feedback points to style drift, unnecessary complexity, or type shortcuts.
+Inspect the exact branch delta first, then nearby code that establishes the
+local convention:
 
-Do not use this as permission for a broad refactor. If the requested task is troubleshooting, diagnose and report before editing.
+```bash
+git merge-base HEAD main
+git diff --stat <base>..HEAD
+git diff <base>..HEAD
+```
 
-## Workflow
+Flag only artifacts introduced or materially worsened by the diff.
 
-1. Find the review base:
-   ```bash
-   git merge-base HEAD main
-   ```
-   If `main` is unavailable, use the project’s active base branch.
-2. Inspect only the branch delta first:
-   ```bash
-   git diff --stat <base>..HEAD
-   git diff <base>..HEAD
-   ```
-3. Read nearby code before editing so local patterns drive the cleanup.
-4. Remove only changes that are clearly slop or style drift.
-5. Run the narrowest relevant verification for touched code, using package-managed commands such as `pnpm run`, `pnpm exec`, or the project’s documented scripts.
-6. Summarize what changed and the exact verification performed.
+## Review Lens
 
-## Cleanup Targets
+Look for:
 
-| Pattern | Clean it up by |
+| Artifact | Evidence required |
 | --- | --- |
-| Obvious comments explaining ordinary code | Deleting them unless they preserve domain context |
-| Defensive checks on trusted internal paths | Removing them when surrounding code relies on the same invariants |
-| Broad `try`/`catch` wrappers | Keeping only error handling that matches local failure semantics |
-| `any`, double casts, or non-null assertions | Using the real type, narrowing, or local helper patterns |
-| New abstractions with one caller | Inlining unless the abstraction matches existing design |
-| Deep nesting from generated code | Flattening with early returns when behavior stays equivalent |
-| Generic names or verbose helpers | Renaming to match local vocabulary |
-| Unrelated formatting churn | Reverting that hunk or restoring the file’s existing style |
+| Obvious comments explaining ordinary code | Neighboring code relies on names and structure instead. |
+| Defensive checks on trusted internal paths | The same invariant is consistently trusted by existing callers. |
+| Broad `try`/`catch` wrappers | Local failure semantics are narrower and already established. |
+| `any`, double casts, or non-null assertions | A real type or existing narrowing pattern is available. |
+| One-caller generic abstractions | The abstraction adds indirection without matching an existing concept. |
+| Generated-looking nesting or verbosity | A local pattern expresses the same behavior more directly. |
+| Unrelated formatting churn | The changed hunk is not required for the accepted outcome. |
 
-## Guardrails
+Do not flag comments that preserve business rules, security assumptions,
+migration constraints, public API behavior, or non-obvious trade-offs. Do not
+replace a working local convention with generic clean-code taste.
 
-- Preserve behavior unless fixing a clear bug discovered during cleanup.
-- Prefer smaller diffs over clever rewrites.
-- Do not remove comments that explain business rules, security assumptions, data migrations, public API behavior, or non-obvious trade-offs.
-- Do not replace a working local convention with a generic “clean code” preference.
-- If a cleanup would require changing tests or public behavior, stop and report the trade-off.
+## Output
 
-## Final Response
+Return `passed`, `finding`, or `blocked` with source evidence. For each finding:
 
-Keep the close-out short:
+```markdown
+**[SEVERITY] Slop artifact** [confidence: 0.86 - high]
+Location: `path:line`
+Issue:
+Local-convention evidence:
+Behavior-preserving recommendation:
+```
 
-- What slop was removed or simplified.
-- What behavior was intentionally preserved.
-- The exact verification command or manual check performed.
+If clean, name the inspected diff and residual convention risk. Send findings
+to the Execute owner; never stage, commit, or apply cleanup.
+
+## Common Mistakes
+
+| Mistake | Required response |
+| --- | --- |
+| Treating all verbosity as slop | Require neighboring project evidence. |
+| Removing meaningful defensive behavior | Report only when the trusted invariant is proven. |
+| Expanding into architecture review | Leave ownership and structural design to `code-quality-review`. |
+| Fixing an obvious artifact directly | Return the finding to the single Execute owner. |

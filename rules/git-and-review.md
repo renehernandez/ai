@@ -43,7 +43,8 @@ Before any push, PR/MR creation, or PR/MR update, Review emits a task-local
 - target base and exact HEAD;
 - current target-base diff scope;
 - repository-hook evidence;
-- required local reviewer outcomes;
+- five distinct findings-only local reviewer outcomes and every selected
+  affected-domain specialist;
 - resolved provider route;
 - blocking findings.
 

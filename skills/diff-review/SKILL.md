@@ -7,7 +7,9 @@ description: Use when reviewing a verified implementation diff for correctness, 
 
 ## Overview
 
-Review only issues introduced or materially worsened by a verified diff. Lead with actionable findings, not summaries.
+Run a findings-only review of issues introduced or materially worsened by a
+verified diff. Never edit files, including when the user also requests fixes.
+Lead with actionable findings, not summaries.
 
 ## When To Use
 
@@ -41,7 +43,7 @@ Use for local implementation diffs and for the reviewed diff supplied by GitHub/
    - missing enforceable verification for newly exposed contracts;
    - docs, plan, PR-description, and agent-doc drift that would mislead future implementers or reviewers.
 8. Ignore formatting nits when automated tooling owns them.
-9. Report blockers and residual risk; do not edit files during a review unless the user asks for fixes.
+9. Report blockers and residual risk to the Execute owner. Do not edit files.
 
 ## Findings Format
 
@@ -70,6 +72,7 @@ Artifact-host adapters gather live host context and then use this review rubric.
 | Ignoring docs or agent-doc drift | Check docs alignment and report stale, missing, or unnecessary docs changes |
 | Accepting prose-only rules for enforceable contracts | Use `ai-readiness-upkeep` and require an implementer action for cheap verification |
 | Filing style nits owned by tools | Skip them |
+| Applying a fix because the user requested review and fixes together | Return findings first; the single Execute owner applies the accepted batch. |
 
 ## Validation Scenarios
 

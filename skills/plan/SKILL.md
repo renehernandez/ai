@@ -94,8 +94,8 @@ artifact repair; the specialist never rewrites `tasks.md` automatically.
 
 ## Planning Review
 
-After every material artifact write, invoke Review read-only against the exact
-artifact fingerprint with these baseline lanes:
+During planning convergence, invoke Review read-only against the exact artifact
+fingerprint and rerun only the lanes invalidated by each material edit:
 
 1. `implementation-readiness`
 2. `edge-cases-and-risk`
@@ -103,11 +103,15 @@ artifact fingerprint with these baseline lanes:
 4. `refactoring-opportunities`
 5. `delivery-shape`
 
-Add affected-domain specialists. Plan repairs findings that preserve the
-accepted contract. Return material scope, architecture, safety, or delivery
-changes to the user. Publish no planning-only or reconciliation-only PR/MR.
-Planning reviewers verify the reuse and deviation contract against the live
-repository rather than accepting its claims at face value.
+Add affected-domain specialists. Hold edits until the review phase barrier,
+deduplicate the task-local findings batch, and let Plan repair findings that
+preserve the accepted contract. Before Execute handoff, run the complete
+planning baseline once against the final artifact fingerprint. Return material
+scope, architecture, safety, or delivery changes to the user. Publish no
+planning-only or reconciliation-only PR/MR. Planning reviewers verify the reuse
+and deviation contract against the live repository rather than accepting its
+claims at face value. Atomic plans and OpenSpec artifacts do not also run Doc
+Smith reader personas.
 
 ## OpenSpec Requires a Full Disposable POC
 

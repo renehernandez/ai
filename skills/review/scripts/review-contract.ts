@@ -1,3 +1,5 @@
+export type ReviewTarget = "planning" | "poc" | "final_implementation";
+
 export const planningBaseline = [
   "implementation-readiness",
   "edge-cases-and-risk",
@@ -7,22 +9,23 @@ export const planningBaseline = [
 ] as const;
 
 export const finalImplementationBaseline = [
-  "correctness",
-  "regression-risk",
-  "maintainability",
-  "verification-quality",
-  "architecture-fit-and-reuse",
+  "code-simplifier",
+  "code-quality-review",
+  "deslop",
+  "diff-review",
+  "scrutinize",
 ] as const;
 
-export const pocBaseline = [
-  ...finalImplementationBaseline,
+export const pocBaseline = [...finalImplementationBaseline] as const;
+
+export const firstObjectiveProofBaseline = [
   "code-quality-review",
+  "scrutinize",
 ] as const;
 
 export type ReviewerId =
   | (typeof planningBaseline)[number]
-  | (typeof finalImplementationBaseline)[number]
-  | (typeof pocBaseline)[number];
+  | (typeof finalImplementationBaseline)[number];
 
 export type ReviewerContract = {
   objective: string;
@@ -107,100 +110,87 @@ export const reviewerCatalog: Readonly<Record<ReviewerId, ReviewerContract>> = {
       "The accepted delivery shape cannot produce safe reviewable intermediate states.",
     output: "passed | finding | blocked with source evidence",
   },
-  correctness: {
+  "code-simplifier": {
     objective:
-      "Find behavior that contradicts the accepted contract or mishandles reachable states.",
+      "Find behavior-preserving simplifications that remove avoidable branches, wrappers, nesting, duplication, or concepts.",
     targets: ["poc", "final_implementation"],
     evidenceQuestions: [
-      "Does the exact diff implement the required success and failure behavior?",
+      "Can the exact diff express the same behavior with fewer concepts or a clearer project-native flow?",
+      "Does a proposed simplification preserve every reachable success and failure state?",
     ],
     passedWhen:
-      "No introduced correctness defect is supported by the inspected code and tests.",
+      "No concrete behavior-preserving simplification would materially reduce change cost or cognitive load.",
     findingWhen:
-      "An introduced or materially worsened correctness defect has source evidence.",
+      "A scoped simplification can remove meaningful complexity without changing behavior.",
     blockedWhen:
-      "The exact diff or required runtime evidence cannot be inspected.",
-    output: "passed | finding | blocked with source evidence",
-  },
-  "regression-risk": {
-    objective:
-      "Trace changed behavior into callers, compatibility boundaries, and likely regressions.",
-    targets: ["poc", "final_implementation"],
-    evidenceQuestions: [
-      "Which unchanged consumers, states, or integrations can the diff break?",
-    ],
-    passedWhen:
-      "Material consumers are preserved or deliberately migrated with proof.",
-    findingWhen:
-      "A concrete consumer or compatibility path is left unsafe or untested.",
-    blockedWhen: "Required consumer or integration state is inaccessible.",
-    output: "passed | finding | blocked with source evidence",
-  },
-  maintainability: {
-    objective:
-      "Assess ownership, clarity, duplication, type boundaries, and future change cost.",
-    targets: ["poc", "final_implementation"],
-    evidenceQuestions: [
-      "Does the diff fit existing abstractions without avoidable sprawl or hidden coupling?",
-    ],
-    passedWhen:
-      "The implementation is cohesive, readable, and owned by the appropriate modules.",
-    findingWhen:
-      "Concrete duplication, complexity, or boundary drift materially raises maintenance cost.",
-    blockedWhen:
-      "The relevant architecture or generated source cannot be determined.",
-    output: "passed | finding | blocked with source evidence",
-  },
-  "verification-quality": {
-    objective:
-      "Determine whether the proof exercises the real changed decision boundaries.",
-    targets: ["poc", "final_implementation"],
-    evidenceQuestions: [
-      "Do tests and operational evidence prove success, failure, and the user-visible outcome?",
-    ],
-    passedWhen:
-      "Focused proof covers the changed behavior at the appropriate layer.",
-    findingWhen:
-      "A material changed path lacks direct, risk-proportionate proof.",
-    blockedWhen:
-      "Required verification cannot run or its result cannot be trusted.",
-    output: "passed | finding | blocked with source evidence",
-  },
-  "architecture-fit-and-reuse": {
-    objective:
-      "Trace the exact diff to repository precedent and verify that canonical owners absorb the change without avoidable parallel architecture.",
-    targets: ["poc", "final_implementation"],
-    evidenceQuestions: [
-      "Which inspected implementations and canonical owners does the diff reuse, extend, or deliberately deviate from?",
-      "Does the diff duplicate a helper, schema, constant, identity, formatting, routing, lifecycle invariant, or durable source of truth?",
-    ],
-    passedWhen:
-      "The exact diff follows the accepted reuse contract and every new mechanism or deviation has repository-backed justification.",
-    findingWhen:
-      "A concrete canonical owner, reusable path, or parallel implementation requires a scoped correction.",
-    blockedWhen:
-      "The reuse contract, exact diff, or relevant repository precedent cannot be inspected.",
+      "The exact diff, surrounding ownership, or behavior contract cannot be inspected.",
     output: "passed | finding | blocked with source evidence",
   },
   "code-quality-review": {
     objective:
-      "Run the strict code-quality-review specialist against the POC exact diff to challenge abstraction quality, ownership, sprawl, and duplication before expansion or publication.",
-    targets: ["poc"],
+      "Run strict structural review against the exact diff to challenge architecture, ownership, abstraction quality, boundaries, maintainability, and reuse.",
+    targets: ["poc", "final_implementation"],
     evidenceQuestions: [
-      "Does the strict structural review find a simpler existing owner or an avoidable near-duplicate?",
-      "Would extending this POC deepen a parallel architecture or scattered feature-specific path?",
+      "Does the diff extend canonical owners instead of adding a parallel implementation or scattered special cases?",
+      "Do abstractions, type boundaries, state transitions, and module ownership remain coherent?",
     ],
     passedWhen:
-      "The code-quality-review specialist reports no blocking structural or maintainability finding for the exact diff.",
+      "No blocking structural or maintainability finding is supported by the exact diff and repository precedent.",
     findingWhen:
-      "The specialist identifies a scoped structural repair required before the POC broadens or publishes.",
+      "A scoped structural repair is required before the implementation broadens or publishes.",
     blockedWhen:
-      "The specialist cannot inspect the exact diff or the relevant owning code.",
+      "The exact diff, accepted reuse contract, or relevant owning code cannot be inspected.",
+    output: "passed | finding | blocked with source evidence",
+  },
+  deslop: {
+    objective:
+      "Find AI-shaped clutter and local-convention drift without broadening into architectural refactoring.",
+    targets: ["poc", "final_implementation"],
+    evidenceQuestions: [
+      "Did the diff add unnecessary comments, defensive checks, casts, generic helpers, verbose naming, or unrelated formatting churn?",
+      "Does neighboring code establish a simpler local convention for the same concern?",
+    ],
+    passedWhen:
+      "The changed surface matches local conventions and contains no evidenced AI-shaped clutter.",
+    findingWhen:
+      "A scoped branch-delta cleanup can remove clutter or convention drift while preserving behavior.",
+    blockedWhen:
+      "The branch delta or neighboring convention cannot be determined.",
+    output: "passed | finding | blocked with source evidence",
+  },
+  "diff-review": {
+    objective:
+      "Find introduced correctness, regression, verification, security, performance, usability, and documentation-impact defects.",
+    targets: ["poc", "final_implementation"],
+    evidenceQuestions: [
+      "Does the exact diff implement the accepted success and failure behavior for every material caller and integration?",
+      "Does risk-proportionate proof exercise the real changed decision boundaries?",
+    ],
+    passedWhen:
+      "No introduced or materially worsened defect is supported by the inspected code, callers, and proof.",
+    findingWhen:
+      "An introduced defect, unsafe consumer path, or material verification gap has source evidence.",
+    blockedWhen:
+      "The exact diff, required caller path, or required runtime evidence cannot be inspected.",
+    output: "passed | finding | blocked with source evidence",
+  },
+  scrutinize: {
+    objective:
+      "Adversarially validate intent, simpler alternatives, repository precedent, and real-system-path claims end to end.",
+    targets: ["poc", "final_implementation"],
+    evidenceQuestions: [
+      "Should this implementation exist in its current shape, or does a smaller existing path solve the accepted goal?",
+      "Do the exact diff and unchanged system path prove the claimed behavior and architecture fit?",
+    ],
+    passedWhen:
+      "The goal remains valid, no evidenced smaller path supersedes the change, and the real system trace supports its claims.",
+    findingWhen:
+      "Concrete evidence requires a scoped correction before publication.",
+    blockedWhen:
+      "Required live state, repository context, or system-path evidence is unavailable.",
     output: "passed | finding | blocked with source evidence",
   },
 };
-
-export type ReviewTarget = "planning" | "poc" | "final_implementation";
 
 export function reviewerContractFor(id: ReviewerId): ReviewerContract {
   return reviewerCatalog[id];
@@ -212,6 +202,7 @@ export function validateReviewerCatalog(): void {
       ...planningBaseline,
       ...finalImplementationBaseline,
       ...pocBaseline,
+      ...firstObjectiveProofBaseline,
     ]),
   ];
   for (const id of required) {
@@ -229,12 +220,91 @@ export function validateReviewerCatalog(): void {
   }
 }
 
-export function baselineFor(target: ReviewTarget): readonly string[] {
+export function baselineFor(target: ReviewTarget): readonly ReviewerId[] {
   if (target === "planning") {
     return planningBaseline;
   }
   return target === "poc" ? pocBaseline : finalImplementationBaseline;
 }
+
+export type ReviewTaskPacket = {
+  reviewer: string;
+  target: ReviewTarget;
+  artifactPath: string;
+  artifactFingerprint: string;
+  targetBaseSha?: string;
+  head?: string;
+  changedFiles: readonly string[];
+  rules: readonly string[];
+  acceptedDecisions: readonly string[];
+  verificationEvidence: readonly string[];
+  outputContract: string;
+};
+
+export function validateReviewTaskPacket(packet: ReviewTaskPacket): void {
+  for (const field of [
+    "reviewer",
+    "artifactPath",
+    "artifactFingerprint",
+    "outputContract",
+  ] as const) {
+    if (!packet[field].trim()) {
+      throw new Error(`review_task_packet_incomplete:${field}`);
+    }
+  }
+  if (
+    packet.target !== "planning" &&
+    (!packet.targetBaseSha?.trim() || !packet.head?.trim())
+  ) {
+    throw new Error("review_task_packet_incomplete:targetIdentity");
+  }
+}
+
+export function reviewWavesFor(
+  target: ReviewTarget,
+  workerCapacity: number,
+  requiredSpecialists: readonly string[],
+): string[][] {
+  if (!Number.isInteger(workerCapacity) || workerCapacity < 1) {
+    throw new Error("review_worker_capacity_invalid");
+  }
+
+  const required = [
+    ...baselineFor(target),
+    ...requiredSpecialists.map((reviewer) => reviewer.trim()),
+  ];
+  const seen = new Set<string>();
+  for (const reviewer of required) {
+    if (!reviewer || seen.has(reviewer)) {
+      throw new Error(`reviewer_selection_invalid:${reviewer}`);
+    }
+    seen.add(reviewer);
+  }
+
+  const waves: string[][] = [];
+  for (let index = 0; index < required.length; index += workerCapacity) {
+    waves.push(required.slice(index, index + workerCapacity));
+  }
+  return waves;
+}
+
+export type ReviewResult = {
+  reviewer: string;
+  reviewerRunId: string;
+  targetBaseSha: string;
+  head: string;
+  status: "passed" | "finding" | "blocked";
+  findings: readonly ReviewFinding[];
+};
+
+export type ReviewFinding = {
+  severity: "blocking" | "nonblocking";
+  affectedLocation: string;
+  issue: string;
+  evidence: string;
+  remediationOutcome: string;
+  invalidatedSurfaces: readonly string[];
+};
 
 export type PublicationCheckpoint = {
   targetBase: string;
@@ -242,7 +312,9 @@ export type PublicationCheckpoint = {
   head: string;
   diffInspected: boolean;
   hooksPassed: boolean;
-  reviewersPassed: readonly string[];
+  requiredSpecialists: readonly string[];
+  excludedReviewerRunIds: readonly string[];
+  reviewResults: readonly ReviewResult[];
   provider: string;
   blockers: readonly string[];
 };
@@ -269,15 +341,99 @@ export function validatePublicationCheckpoint(
   if (!checkpoint.provider.trim()) {
     throw new Error("provider_route_unresolved");
   }
-  const passedReviewers = new Set(checkpoint.reviewersPassed);
-  const missingReviewers = baselineFor(expected.target).filter(
-    (reviewer) => !passedReviewers.has(reviewer),
+
+  const required = [
+    ...baselineFor(expected.target),
+    ...checkpoint.requiredSpecialists.map((reviewer) => reviewer.trim()),
+  ];
+  const selected = new Set<string>();
+  for (const reviewer of required) {
+    if (!reviewer || selected.has(reviewer)) {
+      throw new Error(
+        `publication_checkpoint_reviewer_selection_invalid:${reviewer}`,
+      );
+    }
+    selected.add(reviewer);
+  }
+
+  const missing = required.filter(
+    (reviewer) =>
+      !checkpoint.reviewResults.some((result) => result.reviewer === reviewer),
   );
-  if (missingReviewers.length > 0) {
+  if (missing.length > 0) {
     throw new Error(
-      `publication_checkpoint_reviewers_missing:${missingReviewers.join(",")}`,
+      `publication_checkpoint_reviewers_missing:${missing.join(",")}`,
     );
   }
+
+  const requiredResults = required.map((reviewer) => {
+    const results = checkpoint.reviewResults.filter(
+      (result) => result.reviewer === reviewer,
+    );
+    if (results.length !== 1) {
+      throw new Error(
+        `publication_checkpoint_reviewer_result_invalid:${reviewer}`,
+      );
+    }
+    return results[0];
+  });
+
+  const reviewerRunIds = new Set<string>();
+  const excluded = new Set(checkpoint.excludedReviewerRunIds);
+  for (const result of requiredResults) {
+    if (
+      result.targetBaseSha !== expected.targetBaseSha ||
+      result.head !== expected.head
+    ) {
+      throw new Error(
+        `publication_checkpoint_reviewer_stale:${result.reviewer}`,
+      );
+    }
+    for (const finding of result.findings) {
+      for (const field of [
+        "affectedLocation",
+        "issue",
+        "evidence",
+        "remediationOutcome",
+      ] as const) {
+        if (!finding[field].trim()) {
+          throw new Error(
+            `publication_checkpoint_finding_incomplete:${result.reviewer}:${field}`,
+          );
+        }
+      }
+      if (
+        !Array.isArray(finding.invalidatedSurfaces) ||
+        finding.invalidatedSurfaces.some((surface) => !surface.trim())
+      ) {
+        throw new Error(
+          `publication_checkpoint_finding_incomplete:${result.reviewer}:invalidatedSurfaces`,
+        );
+      }
+    }
+    if (result.status !== "passed") {
+      throw new Error(
+        `publication_checkpoint_reviewer_not_passed:${result.reviewer}`,
+      );
+    }
+    if (result.findings.some((finding) => finding.severity === "blocking")) {
+      throw new Error(
+        `publication_checkpoint_reviewer_blocking_finding:${result.reviewer}`,
+      );
+    }
+    if (!result.reviewerRunId.trim() || excluded.has(result.reviewerRunId)) {
+      throw new Error(
+        `publication_checkpoint_reviewer_identity_excluded:${result.reviewer}`,
+      );
+    }
+    if (reviewerRunIds.has(result.reviewerRunId)) {
+      throw new Error(
+        `publication_checkpoint_reviewer_identity_reused:${result.reviewerRunId}`,
+      );
+    }
+    reviewerRunIds.add(result.reviewerRunId);
+  }
+
   if (checkpoint.blockers.length > 0) {
     throw new Error("publication_checkpoint_blocked");
   }

@@ -273,7 +273,7 @@ test("Execute blocks POC expansion until the exact architecture checkpoint passe
   );
   assert.match(execute, /feature-specific branch inside shared infrastructure/);
   assert.match(execute, /pause when the first objective proof exists/);
-  assert.match(execute, /architecture-affecting change invalidates it/);
+  assert.match(execute, /architecture-affecting change\s+invalidates/);
 });
 
 test("mode skills coordinate parallel draft stacks through hosted readiness", () => {
@@ -321,19 +321,18 @@ test("Review uses distinct planning, POC, and final implementation baselines", (
     "delivery-shape",
   ]);
   assert.deepEqual(baselineFor("poc"), [
-    "correctness",
-    "regression-risk",
-    "maintainability",
-    "verification-quality",
-    "architecture-fit-and-reuse",
+    "code-simplifier",
     "code-quality-review",
+    "deslop",
+    "diff-review",
+    "scrutinize",
   ]);
   assert.deepEqual(baselineFor("final_implementation"), [
-    "correctness",
-    "regression-risk",
-    "maintainability",
-    "verification-quality",
-    "architecture-fit-and-reuse",
+    "code-simplifier",
+    "code-quality-review",
+    "deslop",
+    "diff-review",
+    "scrutinize",
   ]);
 });
 
@@ -369,6 +368,17 @@ test("modes route to bounded specialists without restoring Codex PR feedback", (
 });
 
 test("Review rejects stale checkpoints and hosted feedback", () => {
+  const reviewResults = baselineFor("final_implementation").map(
+    (reviewer, index) => ({
+      reviewer,
+      reviewerRunId: `reviewer-${index + 1}`,
+      targetBaseSha: "base-a",
+      head: "new",
+      status: "passed" as const,
+      findings: [],
+    }),
+  );
+
   assert.throws(
     () =>
       validatePublicationCheckpoint(
@@ -378,7 +388,9 @@ test("Review rejects stale checkpoints and hosted feedback", () => {
           head: "old",
           diffInspected: true,
           hooksPassed: true,
-          reviewersPassed: [...baselineFor("final_implementation")],
+          requiredSpecialists: [],
+          excludedReviewerRunIds: ["writer", "coordinator"],
+          reviewResults,
           provider: "gitlab",
           blockers: [],
         },
@@ -398,7 +410,9 @@ test("Review rejects stale checkpoints and hosted feedback", () => {
     head: "new",
     diffInspected: true,
     hooksPassed: true,
-    reviewersPassed: ["correctness"],
+    requiredSpecialists: [] as string[],
+    excludedReviewerRunIds: ["writer", "coordinator"],
+    reviewResults: reviewResults.slice(0, 1),
     provider: "gitlab",
     blockers: [] as string[],
   };
@@ -410,12 +424,12 @@ test("Review rejects stale checkpoints and hosted feedback", () => {
         targetBaseSha: "base-a",
         head: "new",
       }),
-    /publication_checkpoint_reviewers_missing:regression-risk,maintainability,verification-quality,architecture-fit-and-reuse/,
+    /publication_checkpoint_reviewers_missing:code-quality-review,deslop,diff-review,scrutinize/,
   );
   validatePublicationCheckpoint(
     {
       ...currentCheckpoint,
-      reviewersPassed: [...baselineFor("final_implementation")],
+      reviewResults,
     },
     {
       target: "final_implementation",
@@ -425,24 +439,42 @@ test("Review rejects stale checkpoints and hosted feedback", () => {
     },
   );
 
-  const pocCheckpoint = {
-    ...currentCheckpoint,
-    reviewersPassed: [...baselineFor("final_implementation")],
+  const pocCheckpoint = { ...currentCheckpoint, reviewResults };
+  validatePublicationCheckpoint(pocCheckpoint, {
+    target: "poc",
+    targetBase: "main",
+    targetBaseSha: "base-a",
+    head: "new",
+  });
+
+  const pocWithSpecialist = {
+    ...pocCheckpoint,
+    requiredSpecialists: ["security-review"],
   };
   assert.throws(
     () =>
-      validatePublicationCheckpoint(pocCheckpoint, {
+      validatePublicationCheckpoint(pocWithSpecialist, {
         target: "poc",
         targetBase: "main",
         targetBaseSha: "base-a",
         head: "new",
       }),
-    /publication_checkpoint_reviewers_missing:code-quality-review/,
+    /publication_checkpoint_reviewers_missing:security-review/,
   );
   validatePublicationCheckpoint(
     {
-      ...pocCheckpoint,
-      reviewersPassed: [...baselineFor("poc")],
+      ...pocWithSpecialist,
+      reviewResults: [
+        ...reviewResults,
+        {
+          reviewer: "security-review",
+          reviewerRunId: "security-agent",
+          targetBaseSha: "base-a",
+          head: "new",
+          status: "passed",
+          findings: [],
+        },
+      ],
     },
     {
       target: "poc",
@@ -457,7 +489,7 @@ test("Review rejects stale checkpoints and hosted feedback", () => {
       validatePublicationCheckpoint(
         {
           ...currentCheckpoint,
-          reviewersPassed: [...baselineFor("final_implementation")],
+          reviewResults,
         },
         {
           target: "final_implementation",

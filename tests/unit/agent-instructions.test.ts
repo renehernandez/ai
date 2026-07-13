@@ -183,8 +183,11 @@ test("implementation rules route semantically and enforce the full OpenSpec POC"
   );
   assert.match(text, /reuse and deviation contract/);
   assert.match(text, /first objective proof/);
-  assert.match(text, /architecture fit\/reuse/);
-  assert.match(text, /strict\s+`code-quality-review` specialist/);
+  assert.match(
+    text,
+    /independent findings-only `code-quality-review` and\s+`scrutinize`/,
+  );
+  assert.match(text, /completed stable POC.*full five-reviewer/is);
 });
 
 test("documentation rules keep OpenSpec adapters explicit and task-shaped", () => {
@@ -198,6 +201,10 @@ test("documentation rules keep OpenSpec adapters explicit and task-shaped", () =
   assert.match(text, /only primary.*Markdown.*\.agents\/plans/is);
   assert.match(text, /Every non-trivial primary plan or OpenSpec/);
   assert.match(text, /No applicable precedent found/);
+  assert.match(
+    text,
+    /planning contracts.*do not run Doc Smith reader personas/is,
+  );
 });
 
 test("Git rules separate Review from Finish and use native hook-enabled commits", () => {
@@ -347,7 +354,7 @@ test("OpenSpec guidance challenges delivery-unit cohesion before writing", () =>
   }
 
   assert.match(testingRules, /delivery-shape reviewers/);
-  assert.match(reviewAdapter, /target-specific baseline/);
+  assert.match(reviewAdapter, /phase-specific baseline/);
   assert.doesNotMatch(reviewAdapter, /four-lane/);
 });
 

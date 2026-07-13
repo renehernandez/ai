@@ -13,11 +13,11 @@ diff, or Git HEAD and never fixes, commits, publishes, polls through provider
 mutation, or merges. For non-trivial entry, announce `Review`, read-only
 authority, and the target once.
 
-## Target-Specific Baselines
+## Phase-Specific Baselines
 
 Use `scripts/review-contract.ts` to select the deterministic baseline.
 
-Planning or OpenSpec targets always run:
+Planning or OpenSpec targets run:
 
 1. `implementation-readiness`
 2. `edge-cases-and-risk`
@@ -25,109 +25,174 @@ Planning or OpenSpec targets always run:
 4. `refactoring-opportunities`
 5. `delivery-shape`
 
-POC or final implementation targets always run:
+Atomic plans and OpenSpec artifacts are planning contracts. Review them here;
+do not also invoke Doc Smith reader personas. During planning convergence,
+rerun only reviewer lanes invalidated by an edit. Before Execute handoff, run
+the complete planning baseline once against the final artifact fingerprint.
 
-1. `correctness`
-2. `regression-risk`
-3. `maintainability`
-4. `verification-quality`
-5. `architecture-fit-and-reuse`
+At a POC's first objective proof, run only:
 
-POC targets additionally run `code-quality-review`. At the first objective
-proof, run the complete POC baseline as the architecture checkpoint before the
-implementation broadens. Run it again for the complete exact POC head before
-publication. A later architecture-affecting change invalidates the first
+1. `code-quality-review`
+2. `scrutinize`, including architecture fit, repository reuse, and the real
+   system path
+3. targeted verification of the real entrypoint and visible success or failure
+
+Do not run the completed-code baseline against intentionally incomplete POC
+code. A later architecture-affecting change invalidates the first-proof
 checkpoint.
 
-Add affected-domain specialists such as security, documentation/agent
-alignment, AX/skill compatibility, data, infrastructure, or UI. Reviewers stay
-read-only and return `passed`, `finding`, or `blocked` with file/line evidence
-where applicable.
+Completed POC and final implementation targets require five separate reviewer
+runs:
+
+1. `code-simplifier`
+2. `code-quality-review`
+3. `deslop`
+4. `diff-review`
+5. `scrutinize`
+
+The writer, coordinator, hosted bots, and automated tests do not count as
+reviewer identities. Each required reviewer uses a distinct task-local
+reviewer-run identity and inspects the same immutable target. The five reviewer
+contracts retain correctness, regression, maintainability, verification, and
+architecture-fit/reuse coverage without treating coverage labels as substitute
+reviewers.
+
+Select affected-domain specialists from the exact diff and risk profile, such
+as security, documentation/agent alignment, AX/skill compatibility, data,
+infrastructure, performance, migration, provider behavior, or UI. Every
+selected specialist uses another distinct reviewer-run identity. Record the
+task-local rationale for selected specialists and risk-relevant omissions.
 
 Every baseline reviewer ID resolves through the catalog in
-`scripts/review-contract.ts`. Do not launch a named lane without its objective,
-target, evidence questions, decision criteria, and normalized output contract.
+`scripts/review-contract.ts`. Do not launch a named reviewer without its
+objective, evidence questions, decision criteria, and normalized output
+contract.
+
+## Immutable Task Packets
+
+Give every delegated reviewer a bounded task packet containing:
+
+- artifact path and fingerprint, or target base, resolved base SHA, HEAD, and
+  diff identity;
+- assigned reviewer contract and normalized output requirement;
+- changed-file list or exact diff scope;
+- applicable repository rules and accepted reuse/deviation decisions;
+- current verification evidence and known gaps; and
+- only accepted decisions required to interpret the target.
+
+In Codex, default bounded reviewer delegation to `fork_turns="none"`. Use a
+small recent-turn window only when the assignment genuinely depends on an
+unresolved conversational decision. Full-thread inheritance is an exceptional
+recovery path and requires a task-local rationale. Use the equivalent clean-
+context mechanism in other harnesses.
+
+## Work-Conserving Review Waves
+
+Build the dependency graph and ready queue before delegation. Reserve
+coordinator capacity, then launch all currently ready reviewers together up to
+the available worker capacity. Backfill each freed worker slot immediately from
+the ready queue.
+
+Join at one phase barrier after all required results arrive. Wait for
+completion, failure, or a genuine stall instead of running short status-polling
+loops. When capacity is below the required reviewer count, preserve every
+reviewer across the minimum number of waves. Never lower coverage to match a
+runtime ceiling.
+
+Launch a wave only when its target is stable enough for that phase. More fanout
+must not create knowingly stale review work.
+
+## Findings Batch And Invalidation
+
+Every reviewer returns `passed`, `finding`, or `blocked` with source evidence.
+Normalize each finding with reviewer, severity, affected location, issue,
+evidence, remediation outcome, and invalidated review or verification surfaces.
+
+Hold mutation until the phase barrier. Deduplicate and reconcile overlapping
+results into one task-local findings batch, then return it to Plan or the single
+Execute owner. Read-only agents may investigate ambiguous findings or propose
+tests concurrently; they never edit the implementation worktree.
+
+After a findings batch is fixed, rerun only affected reviewers and verification
+surfaces during intermediate convergence. A material scope, architecture,
+safety, migration, ownership, or delivery change returns to Plan. Before final
+handoff or publication, run the complete required baseline on the stable exact
+target.
+
+Any implementation HEAD or resolved target-base SHA change invalidates the
+complete publication checkpoint even when intermediate reviewer evidence was
+lane-scoped.
+
+## Planning Delivery Shape
+
 Planning review verifies the artifact's reuse and deviation contract against
-the live repository. `architecture-fit-and-reuse` traces the exact code diff to
-those precedents and canonical owners; working end-to-end behavior alone does
-not pass that lane.
-
-For `delivery-shape`, challenge both under-splitting and over-splitting. Each
-top-level OpenSpec unit must produce one reviewable outcome, remain correct and
-safe when merged before its successors, own objective proof, and have coherent
-reviewer, risk, rollback, and deployment boundaries. Split units that combine
-materially different shared prerequisites, feature behavior, proof
-infrastructure, activation, repository ownership, security, rollback, or
-deployment seams. Combine proposed units that only create unused plumbing,
-unverifiable intermediate states, or checkbox-only PRs/MRs. Existing headings
-and tidy nested task lists are not evidence that the parent unit is mergeable.
-
-An in-scope planning finding returns to Plan. An in-scope implementation
-finding returns to the same Execute owner. A material scope, architecture,
-safety, migration, or delivery change returns to Plan. Target changes invalidate
-all evidence tied to the previous fingerprint, base, or HEAD.
+the live repository. For `delivery-shape`, challenge both under-splitting and
+over-splitting. Each top-level OpenSpec unit must produce one reviewable
+outcome, remain correct and safe before successors, own objective proof, and
+have coherent reviewer, risk, rollback, and deployment boundaries. Combine
+checkbox-only units and split materially different ownership, activation,
+security, rollback, or deployment seams.
 
 ## Hosted Feedback
 
 Review normalizes provider comments, automated review, CI, and approvals after
-Finish performs the required provider interaction. GitHub, generic GitLab, and
-Fullscript GitLab/Nitro retain their configured policies. Feedback for a stale
-source HEAD or target-base SHA never passes a latest-effective-diff gate, and
-hosted gates never replace the local baseline.
+Finish performs the required provider interaction. Hosted gates never replace
+the local baseline, and stale source-HEAD or target-base feedback never passes.
 
-Use `github-adapter-review` for GitHub PR artifact state and
-`gitlab-adapter-review` for GitLab MR artifact state. When active Fullscript
-policy selects Nitro, additionally use `nitro-review-feedback` to identify and
-normalize Nitro-authored feedback. Do not request, poll, normalize, or gate on
-Codex-authored PR review feedback; `codex-review-feedback` remains retired.
+Use `github-adapter-review` for GitHub and `gitlab-adapter-review` for GitLab.
+When active Fullscript policy selects Nitro, additionally use
+`nitro-review-feedback`. Inspect the complete available feedback surface and
+read the entire response and all unresolved Nitro-authored discussions;
+reassuring summary language does not clear actionable feedback later in the
+same response or carried forward to the effective diff. Do not request, poll,
+normalize, or gate on Codex-authored PR review feedback;
+`codex-review-feedback` remains retired.
 
-Inspect the complete available feedback surface for every configured required
-reviewer, not only its summary status or opening sentence. For Nitro, read the
-entire response and all unresolved Nitro-authored discussions. Reassuring text
-such as `no findings` does not clear actionable language later in the same note
-or applicable findings carried forward from older heads.
+Fullscript GitLab/Nitro retain their configured policies; this workflow changes
+local review orchestration without weakening or replacing hosted gates.
 
-Keep provider, artifact URL, target base, head SHA, normalized status, and
-findings in the task handoff. Keep reviewer identities, transcripts,
-fingerprints, retries, and mode state out of commits, tracker records, and
-hosted descriptions.
+Keep provider, artifact URL, target identity, normalized status, findings, and
+reviewer-run identity task-local. Keep identities, transcripts, fingerprints,
+retries, and mode state out of commits, trackers, and hosted descriptions.
 
 ## Publication Checkpoint
 
 Before every push, PR/MR creation, or PR/MR update, emit a task-local
 `publication_checkpoint` only when all are current for the exact target:
 
-- target-base ref, its exact resolved SHA, and implementation HEAD;
-- inspected target-base diff;
-- hook evidence;
-- required local baseline and specialists;
+- target-base ref, resolved SHA, and implementation HEAD;
+- inspected target-base diff and hook evidence;
+- all five distinct findings-only reviewer runs;
+- every selected affected-domain specialist on a distinct identity;
 - resolved provider route; and
 - no blockers.
 
-`scripts/review-contract.ts` validates this checkpoint. Any HEAD or resolved
-target-base SHA change makes it stale. If evidence cannot be recovered after
-resume, rerun it; do not reconstruct persisted gate state.
+`scripts/review-contract.ts` validates reviewer selection, exact target
+identity, passing status, reviewer-run independence, exclusions, and specialist
+completion. Any HEAD or resolved target-base SHA change makes the checkpoint
+stale. If evidence cannot be recovered after resume, rerun it; never reconstruct
+persisted gate state.
 
 ## Common Mistakes
 
 | Mistake | Required response |
 | --- | --- |
-| Using planning reviewers on implementation code | Run the implementation baseline. |
-| Using the final baseline for a POC | Add the POC-only strict `code-quality-review` lane. |
-| Treating Nitro or CI as local Review | Evaluate it as a separate hosted gate. |
-| Fixing a finding from Review | Return it to Plan or the Execute owner. |
-| Reusing evidence after the target changes | Rerun affected lanes and checkpoint inputs. |
+| Running the completed-code baseline at first POC proof | Run Code Quality, Scrutinize, and targeted proof only. |
+| Counting coverage labels as separate reviewers | Require the five distinct reviewer skills and identities. |
+| Passing full conversation history to every reviewer | Use the immutable task packet and clean context. |
+| Launching or polling reviewers one at a time | Fill ready worker slots and join at a phase barrier. |
+| Fixing each finding as it arrives | Close the barrier, deduplicate, then send one findings batch to the owner. |
+| Reusing a partial review as the final gate | Run the complete stable-target baseline before handoff or publication. |
 | Persisting reviewer ledgers or gate state | Keep evidence task-local and recomputable. |
-| Treating provider metadata as review judgment | Use the host adapter for context and the Review lanes for findings. |
-| Requesting Codex PR review | Do not; GitHub review covers host state without a Codex gate. |
+| Treating Nitro or CI as local Review | Evaluate it as a separate hosted gate. |
 
 ## Test Evidence
 
-- RED: POC and final implementation previously shared one generic four-lane
-  baseline, so behavior and verification could pass without repository
-  precedent tracing.
-- GREEN: catalog validation resolves every target-specific reviewer contract,
-  and the POC baseline adds both `architecture-fit-and-reuse` and
-  `code-quality-review`.
-- REFACTOR: publication-checkpoint fixtures reject stale identity and every
-  missing target-specific reviewer while preserving the smaller final baseline.
+- RED: lane strings could satisfy publication without distinct reviewer-run
+  identities, and the complete POC baseline ran at both first proof and final
+  head.
+- GREEN: contract fixtures require five distinct final reviewer runs, two
+  independent first-proof reviewers plus targeted proof, and every selected
+  specialist.
+- REFACTOR: capacity fixtures preserve coverage across minimum waves while
+  task-packet and barrier guidance removes context and polling churn.

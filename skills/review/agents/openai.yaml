@@ -1,4 +1,4 @@
 interface:
   display_name: "Review"
-  short_description: "Inspect exact targets with required review lanes"
-  default_prompt: "Use $review read-only with the target-specific baseline, normalize hosted findings separately, route fixes to Plan or Execute, and emit an exact-head publication checkpoint without persisted gate state."
+  short_description: "Inspect exact targets with independent review waves"
+  default_prompt: "Use $review read-only with the phase-specific baseline. Give delegated reviewers immutable task packets and clean context, fill available worker capacity, join at a phase barrier, batch findings for Plan or Execute, normalize hosted findings separately, and emit the complete exact-head publication checkpoint without persisted gate state."

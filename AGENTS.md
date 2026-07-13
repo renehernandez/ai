@@ -83,9 +83,10 @@ boundary.
 - Troubleshooting remains read-only through diagnosis and report. Enter Execute
   only after the user requests a fix.
 - Use confidence scores as defined in [rules/confidence.md](rules/confidence.md).
-- Use `doc-smith` for non-trivial documentation and `scrutinize` for
-  adversarial validation. No mandatory frontend-design skill is currently
-  selected.
+- Use `doc-smith` for non-trivial user-facing or operational documentation and
+  `scrutinize` for adversarial validation. Atomic plans and OpenSpec artifacts
+  use planning Review instead of Doc Smith reader personas.
+  No mandatory frontend-design skill is currently selected.
 - Prefer authenticated organization-aware CLIs: `gh`, `glab`, and `wrangler`.
 - Do not use vague verification labels. Name the exact unit, integration,
   browser, route, console, deployment, or other verification performed.
@@ -112,8 +113,9 @@ boundary.
   no OpenSpec change for this repository.
 - Do not create a separate planning MR. An atomic plan and its implementation
   are one change set in one final MR, with no POC MR or POC phase.
-- Review evidence stays task-local. A changed artifact, target base, or HEAD
-  invalidates its evidence and publication checkpoint.
+- Review evidence stays task-local. Intermediate changes invalidate affected
+  review surfaces; any changed target base or HEAD invalidates the complete
+  publication checkpoint.
 
 ## Repository Finish policy
 

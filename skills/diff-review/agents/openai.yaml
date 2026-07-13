@@ -1,4 +1,4 @@
 interface:
   display_name: "Diff Review"
   short_description: "Review verified implementation diffs"
-  default_prompt: "Use $diff-review to review this verified implementation diff, including docs and agent-doc alignment."
+  default_prompt: "Use $diff-review to perform a findings-only review of this verified implementation diff, including correctness, regression, verification, security, performance, usability, docs, and agent-doc alignment. Do not edit files; return findings to the Execute owner."

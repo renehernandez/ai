@@ -29,6 +29,17 @@ Before the first write and after resume:
    unrelated work, or divergent from the handoff; and
 4. allow exactly one writer to edit, stage, and commit that artifact.
 
+Before implementation writes, also run a lightweight environment preflight:
+
+1. resolve the repository's documented setup;
+2. report the actual runtime and package-manager versions;
+3. confirm required commands and task-specific credentials are available; and
+4. run one small representative project-native command that can expose an
+   incompatible toolchain or incomplete setup.
+
+Stop on an environment blocker before producing a substantial implementation
+diff. Do not use this preflight as a reason to run the full test suite early.
+
 Read-only reviewers may run in parallel. Another writer needs a different
 branch/worktree with one writer. Prefer disjoint paths, but allow declared
 integration hotspots whose normal restack conflicts belong to the descendant
@@ -87,22 +98,40 @@ refresh every changed effective-diff gate.
 
 ## Commit And Review Loop
 
-Implement the smallest cohesive boundary, verify it, stage only intended files,
-and use native hook-enabled Git commit behavior. Never use `--no-verify`. Fix a
-hook failure before starting the next boundary.
+Use progressive verification. Implement the smallest cohesive boundary and run
+the affected unit, type, lint, schema, or other narrow project-native proof.
+At first objective proof, run the targeted integration, route, browser, or
+equivalent real-entrypoint proof. Run the complete repository-required
+verification only when the head is stable for final Review, scheduling
+independent commands concurrently when safe. If a final failure may predate the
+branch, reproduce it against the target base before attributing it to the diff.
+
+After the narrow proof passes, stage only intended files and use native hook-
+enabled Git commit behavior. Never use `--no-verify`. Fix a hook failure before
+starting the next boundary.
 
 For every OpenSpec POC, pause when the first objective proof exists: slice 1,
 or slice 2 after at most one setup-only slice. Before broadening the POC, run an
-exact-diff architecture checkpoint against the reviewed reuse contract,
-target-base SHA, diff fingerprint, inspected precedents, and triggered semantic
-tripwires. The checkpoint must pass both `architecture-fit-and-reuse` and
-`code-quality-review`. A later architecture-affecting change invalidates it.
-Keep the checkpoint task-local; create no repository ledger or sidecar.
+exact-diff checkpoint against the reviewed reuse contract, target-base SHA,
+diff fingerprint, inspected precedents, and triggered semantic tripwires. It
+must contain separate findings-only `code-quality-review` and `scrutinize`
+reviewer-run identities plus targeted proof of the real entrypoint and visible
+outcome. Do not run the other three completed-code reviewers against
+intentionally incomplete POC code. A later architecture-affecting change
+invalidates the checkpoint. Keep it task-local; create no repository ledger or
+sidecar.
 
 Automatically invoke Review read-only for the exact implementation diff/head.
-Execute fixes in-scope implementation findings, then refreshes Review. A
+Review launches independent work as capacity-aware waves and holds mutation
+until its phase barrier closes. Execute receives one deduplicated findings
+batch, applies accepted fixes as the only writer, and reruns only invalidated
+intermediate review and verification surfaces. Read-only investigation and test
+design may proceed concurrently, but no reviewer edits this worktree.
+
+When the implementation converges, run the complete five-reviewer exact-head
+wave and full stable-head verification once for the publication checkpoint. A
 finding that changes the contract returns to Plan. When local Review passes,
-hand its publication checkpoint to Finish when publication is authorized.
+hand its checkpoint to Finish when publication is authorized.
 
 Finish may reactivate the current lane owner for CI or hosted-review findings
 after publication without another user prompt. If that owner is unavailable,
@@ -121,6 +150,8 @@ authorizes merge.
 | Promoting POC code into final work | Reimplement from reconciled planning state. |
 | Broadening a POC after its first proof without architecture review | Stop and pass the target-specific architecture checkpoint first. |
 | Treating working end-to-end behavior as proof of architecture fit | Trace the exact diff to canonical owners and resolve parallel paths. |
+| Editing as each reviewer responds | Wait for the phase barrier and apply one accepted findings batch. |
+| Running the full suite after every small edit | Use progressive verification and reserve full proof for stable final heads. |
 | Treating logical independence as missing Git order | Preserve one total predecessor chain. |
 | Publishing or merging from Execute | Hand a current checkpoint to Finish. |
 
