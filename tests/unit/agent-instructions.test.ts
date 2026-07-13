@@ -182,6 +182,15 @@ test("implementation rules route semantically and enforce the full OpenSpec POC"
     /similarity wording narrows the scan but never triggers it/,
   );
   assert.match(text, /reuse and deviation contract/);
+  assert.match(text, /Keep the primary artifact at the durable-contract level/);
+  assert.match(
+    text,
+    /Exact files, symbols, commands, exhaustive test or\s+edge-case matrices/,
+  );
+  assert.match(
+    text,
+    /implementation mechanics and non-contract discoveries.*task-locally/is,
+  );
   assert.match(text, /first objective proof/);
   assert.match(
     text,
@@ -201,6 +210,13 @@ test("documentation rules keep OpenSpec adapters explicit and task-shaped", () =
   assert.match(text, /only primary.*Markdown.*\.agents\/plans/is);
   assert.match(text, /Every non-trivial primary plan or OpenSpec/);
   assert.match(text, /No applicable precedent found/);
+  assert.match(text, /Keep the OpenSpec artifacts complementary/);
+  assert.match(text, /Tasks remain a high-level delivery queue/);
+  assert.match(
+    text,
+    /Planning artifacts preserve the objective, high-level approach/,
+  );
+  assert.match(text, /review chronology.*task-local/is);
   assert.match(
     text,
     /planning contracts.*do not run Doc Smith reader personas/is,

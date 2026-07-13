@@ -48,15 +48,23 @@ An OpenSpec `tasks.md` top-level heading is a delivery unit. Each top-level
 delivery unit maps to one final implementation PR/MR. Nested checkboxes are work
 items delivered cohesively inside that PR/MR, usually as focused commits.
 
+Keep the OpenSpec artifacts complementary. The proposal owns motivation,
+outcomes, scope, and delivery shape. Design owns durable technical decisions,
+boundaries, and tradeoffs. Specs own observable requirements and
+boundary-defining scenarios. Tasks remain a high-level delivery queue with
+end-to-end proof, not a duplicate specification or implementation log.
+
 Derive top-level units from behavior, ownership, deployment, security,
 migration, rollback, verification, and repository boundaries before mapping
 tasks onto them. Existing headings are hypotheses, not accepted delivery
 boundaries. When earlier implementation, POC, PR/MR, or incident evidence
 exists, use its actual footprint and findings to challenge the proposed split.
 
-Each unit must provide one reviewable outcome, a safe merged intermediate state,
+Plan must establish one reviewable outcome, a safe merged intermediate state,
 owned objective proof, a coherent reviewer/risk/rollback/deployment boundary,
-and declared predecessor output and integration hotspots. Split materially
+and predecessor output and integration hotspots for each unit. The artifact
+records the outcome, dependency, proof, and only material rollback or deployment
+decisions; detailed mechanics remain task-local. Split materially
 different shared prerequisites, feature behavior, proof infrastructure,
 activation, repositories or owners, security boundaries, rollback paths, and
 deployment mechanisms. Combine candidates that would otherwise leave unused
@@ -65,6 +73,9 @@ PRs/MRs with the same review and rollback boundary. File count and diff size are
 evidence, not delivery-shape thresholds.
 
 - Use headings for reviewable implementation outcomes, never workflow phases.
+- Keep work items at the outcome level. Do not add exact files, symbols,
+  commands, exhaustive edge cases, or test matrices unless they express a
+  material contract decision.
 - Put documentation, linting, testing, review, validation, verification, proof,
   cleanup, and archival inside the work item that owns the behavior. They are
   separate units only when that surface is itself the feature.
@@ -98,6 +109,14 @@ deviation contract: inspected precedents and canonical owners, reused or
 extended elements, genuinely new mechanisms, justified deviations, and the
 proof for the chosen ownership. `No applicable precedent found` requires
 repository evidence. Do not create a separate reuse ledger or sidecar.
+
+Planning artifacts preserve the objective, high-level approach, material
+decisions and constraints, delivery shape, and the earliest real entrypoint
+with visible success or failure evidence. Keep step-by-step instructions, file
+inventories, exact commands, exhaustive test or edge-case matrices, provider
+receipts, review chronology, and intermediate findings task-local unless they
+change externally observable behavior, architecture or ownership, safety or
+rollout policy, migration, delivery boundaries, or end-to-end acceptance.
 
 ## Diagrams
 

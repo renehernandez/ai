@@ -67,6 +67,14 @@ contract before writing and pauses on sibling implementations, repeated
 invariants, feature branches in shared infrastructure, or a second source of
 truth.
 
+Keep the primary artifact at the durable-contract level: objective, selected
+high-level approach, material decisions and constraints, delivery shape, and
+observable end-to-end proof. Exact files, symbols, commands, exhaustive test or
+edge-case matrices, CI wiring mechanics, provider receipts, review chronology,
+and intermediate findings remain task-local unless they change externally
+observable behavior, architecture or canonical ownership, safety or rollout
+policy, migration, a delivery-unit boundary, or end-to-end acceptance.
+
 Before writing an OpenSpec, derive its top-level units from behavior, ownership,
 deployment, security, migration, rollback, verification, and repository
 boundaries. Treat existing headings as hypotheses and inspect prior
@@ -174,7 +182,12 @@ rewriting the accepted delivery contract.
 
 Review inspects every changed planning artifact with implementation-readiness,
 edge-case/risk, simplification/scope, refactoring, and delivery-shape reviewers.
-It inspects every completed POC and final implementation target with five
+Planning Review requests an artifact repair only for a durable contract gap;
+it returns implementation mechanics and non-contract discoveries to Execute
+task-locally. Implementation readiness does not require a prose implementation
+recipe.
+
+Review also inspects every completed POC and final implementation target with five
 independent findings-only reviewers: `code-simplifier`, `code-quality-review`,
 `deslop`, `diff-review`, and `scrutinize`. Those contracts preserve correctness,
 regression, maintainability, verification, and architecture-fit/reuse coverage.

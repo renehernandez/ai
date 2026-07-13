@@ -28,8 +28,10 @@ fit one delivery loop.
 Each `##` heading maps to one delivery unit inside the feature milestone or
 project, and one delivery unit normally maps to one implementation PR/MR. The
 checkbox tasks under that heading are nested work items for the same PR/MR,
-usually one commit each. Sub-bullets can describe files, acceptance notes, or
-verification, but they are not separate delivery units.
+usually one commit each. Keep headings and checkboxes outcome-oriented. Use a
+sub-bullet only for delivery-boundary justification, boundary-defining
+acceptance, or end-to-end proof; exact files, symbols, commands, exhaustive
+edge cases, and test matrices remain task-local implementation considerations.
 
 Task groups represent deliverable implementation areas. Do not use
 lifecycle-only groups anywhere in the file that only run documentation, linting,
@@ -45,6 +47,11 @@ feature being changed. For example, a delivery unit named `Readiness Gates` may
 contain work items for validation scripts and fixtures when the change is about
 runtime validation tooling. A final `Validation` unit that only runs commands
 after unrelated feature work remains invalid.
+
+`tasks.md` is a high-level delivery queue, not an implementation recipe or test
+log. Requirements and scenarios own observable behavior. Design owns durable
+technical decisions and boundaries. Do not repeat either as step-by-step task
+prose merely to make the handoff self-contained.
 
 Target 2-6 nested work items per delivery unit. More than 6 and at most 8 work
 items is a split smell and requires an explicit `Justification:` note attached
@@ -153,6 +160,7 @@ lists, failed audits also emit structured output before exiting non-zero:
 | Treating every checkbox as its own MR | Deliver one checked heading per implementation MR, with nested work-item commits inside that MR |
 | Accepting documentation, testing, or validation phase groups anywhere | Return `needs_spec_redesign` unless that area is the feature being changed |
 | Accepting a delivery-unit-shaped task list where first real confirmation is unit 3 or later | Return `needs_spec_redesign` and ask for redesign direction |
+| Expanding tasks with file lists, commands, and exhaustive cases | Keep the outcome and end-to-end proof in `tasks.md`; hand mechanics to Execute task-locally |
 | Sending manual tasks to Execute | Return `needs_human_action` |
 
 ## Test Evidence
