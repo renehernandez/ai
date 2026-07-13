@@ -1,0 +1,142 @@
+[
+  {
+    "id": "unprompted-precedent-scan-passes-reviewed-first-proof",
+    "checkpoint": {
+      "targetBaseSha": "base-a",
+      "diffFingerprint": "sha256:first-objective-proof",
+      "reuseContractReviewed": true,
+      "precedentEvidence": ["src/existing/canonical-owner.ts"],
+      "semanticTripwires": [],
+      "architectureFitAndReuse": "passed",
+      "codeQualityReview": "passed",
+      "architectureAffectingChangeSinceReview": false
+    },
+    "expected": "pass"
+  },
+  {
+    "id": "justified-novelty-passes-with-inspected-no-precedent-evidence",
+    "checkpoint": {
+      "targetBaseSha": "base-a",
+      "diffFingerprint": "sha256:first-objective-proof",
+      "reuseContractReviewed": true,
+      "precedentEvidence": [
+        "No applicable precedent found: affected source, tests, plans, and docs inspected"
+      ],
+      "semanticTripwires": [],
+      "architectureFitAndReuse": "passed",
+      "codeQualityReview": "passed",
+      "architectureAffectingChangeSinceReview": false
+    },
+    "expected": "pass"
+  },
+  {
+    "id": "parallel-sibling-service-trips-architecture-review",
+    "checkpoint": {
+      "targetBaseSha": "base-a",
+      "diffFingerprint": "sha256:first-objective-proof",
+      "reuseContractReviewed": true,
+      "precedentEvidence": ["src/existing/canonical-owner.ts"],
+      "semanticTripwires": [
+        {
+          "kind": "sibling-service",
+          "resolution": "finding"
+        }
+      ],
+      "architectureFitAndReuse": "finding",
+      "codeQualityReview": "passed",
+      "architectureAffectingChangeSinceReview": false
+    },
+    "expected": "poc_architecture_checkpoint_incomplete:architecture-fit-and-reuse"
+  },
+  {
+    "id": "strict-review-is-required-even-when-behavior-works",
+    "checkpoint": {
+      "targetBaseSha": "base-a",
+      "diffFingerprint": "sha256:first-objective-proof",
+      "reuseContractReviewed": true,
+      "precedentEvidence": ["src/existing/canonical-owner.ts"],
+      "semanticTripwires": [],
+      "architectureFitAndReuse": "passed",
+      "codeQualityReview": "blocked",
+      "architectureAffectingChangeSinceReview": false
+    },
+    "expected": "poc_architecture_checkpoint_incomplete:code-quality-review"
+  },
+  {
+    "id": "later-architecture-change-invalidates-first-proof-review",
+    "checkpoint": {
+      "targetBaseSha": "base-a",
+      "diffFingerprint": "sha256:first-objective-proof",
+      "reuseContractReviewed": true,
+      "precedentEvidence": ["src/existing/canonical-owner.ts"],
+      "semanticTripwires": [],
+      "architectureFitAndReuse": "passed",
+      "codeQualityReview": "passed",
+      "architectureAffectingChangeSinceReview": true
+    },
+    "expected": "poc_architecture_checkpoint_stale"
+  },
+  {
+    "id": "changed-diff-invalidates-first-proof-review",
+    "checkpoint": {
+      "targetBaseSha": "base-a",
+      "diffFingerprint": "sha256:broadened-poc",
+      "reuseContractReviewed": true,
+      "precedentEvidence": ["src/existing/canonical-owner.ts"],
+      "semanticTripwires": [],
+      "architectureFitAndReuse": "passed",
+      "codeQualityReview": "passed",
+      "architectureAffectingChangeSinceReview": false
+    },
+    "expected": "poc_architecture_checkpoint_stale"
+  },
+  {
+    "id": "missing-precedent-evidence-blocks-even-without-trigger-phrase",
+    "checkpoint": {
+      "targetBaseSha": "base-a",
+      "diffFingerprint": "sha256:first-objective-proof",
+      "reuseContractReviewed": true,
+      "precedentEvidence": [],
+      "semanticTripwires": [],
+      "architectureFitAndReuse": "passed",
+      "codeQualityReview": "passed",
+      "architectureAffectingChangeSinceReview": false
+    },
+    "expected": "poc_architecture_checkpoint_incomplete:precedent-evidence"
+  },
+  {
+    "id": "missing-reviewed-reuse-contract-blocks-expansion",
+    "checkpoint": {
+      "targetBaseSha": "base-a",
+      "diffFingerprint": "sha256:first-objective-proof",
+      "reuseContractReviewed": false,
+      "precedentEvidence": ["src/existing/canonical-owner.ts"],
+      "semanticTripwires": [],
+      "architectureFitAndReuse": "passed",
+      "codeQualityReview": "passed",
+      "architectureAffectingChangeSinceReview": false
+    },
+    "expected": "poc_architecture_checkpoint_incomplete:reuse-contract"
+  },
+  {
+    "id": "unresolved-semantic-tripwire-blocks-expansion",
+    "checkpoint": {
+      "targetBaseSha": "base-a",
+      "diffFingerprint": "sha256:first-objective-proof",
+      "reuseContractReviewed": true,
+      "precedentEvidence": [
+        "No applicable precedent found: src and tests searched"
+      ],
+      "semanticTripwires": [
+        {
+          "kind": "second-source-of-truth",
+          "resolution": "plan_required"
+        }
+      ],
+      "architectureFitAndReuse": "passed",
+      "codeQualityReview": "passed",
+      "architectureAffectingChangeSinceReview": false
+    },
+    "expected": "poc_architecture_checkpoint_tripwires_unresolved:second-source-of-truth"
+  }
+]

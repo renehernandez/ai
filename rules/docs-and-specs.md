@@ -87,6 +87,12 @@ Reviewer selections, requests, blueprints, handoffs, ledgers, fingerprints,
 validation inputs, and other private evidence stay task-local. OpenSpec is the
 only planning representation when Plan selects OpenSpec.
 
+Every non-trivial primary plan or OpenSpec includes a concise reuse and
+deviation contract: inspected precedents and canonical owners, reused or
+extended elements, genuinely new mechanisms, justified deviations, and the
+proof for the chosen ownership. `No applicable precedent found` requires
+repository evidence. Do not create a separate reuse ledger or sidecar.
+
 ## Diagrams
 
 Use Mermaid for diagrams in Markdown documentation. Prefer `flowchart` for

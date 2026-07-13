@@ -37,6 +37,24 @@ the complete proposal, design, specification deltas, and top-level delivery
 units. Local review evidence and handoffs remain task-local; no YAML or JSON
 sidecars belong beside the artifact.
 
+## Reuse And Deviation Contract
+
+Every non-trivial atomic plan or OpenSpec records a concise reuse and deviation
+contract in its primary artifact. It must name:
+
+- the inspected precedents and their canonical owners;
+- which existing elements will be reused directly or extended;
+- any shared boundary that must be extracted;
+- every genuinely new mechanism and why direct reuse, owner extension, or
+  shared extraction is insufficient;
+- material deviations from precedent and the evidence that requires them; and
+- the verification that will prove the chosen ownership and reuse path.
+
+`No applicable precedent found` is valid only with the inspected repository
+evidence. User wording such as "similar to" may narrow the scan but is never a
+prerequisite for it. Keep this contract in the main plan or OpenSpec rather than
+creating a ledger, sidecar, or duplicate workflow artifact.
+
 ## Decompose OpenSpec Delivery Before Writing
 
 Treat existing top-level headings as hypotheses, not accepted delivery
@@ -88,6 +106,8 @@ artifact fingerprint with these baseline lanes:
 Add affected-domain specialists. Plan repairs findings that preserve the
 accepted contract. Return material scope, architecture, safety, or delivery
 changes to the user. Publish no planning-only or reconciliation-only PR/MR.
+Planning reviewers verify the reuse and deviation contract against the live
+repository rather than accepting its claims at face value.
 
 ## OpenSpec Requires a Full Disposable POC
 
@@ -143,6 +163,7 @@ artifacts.
 | Mistake | Required response |
 | --- | --- |
 | Writing an artifact as soon as Plan starts | Keep resolving material decisions in chat. |
+| Omitting reuse analysis because the request did not mention precedent | Record the mandatory reuse and deviation contract from repository evidence. |
 | Temporary atomic plan before OpenSpec | Create only the semantically selected OpenSpec. |
 | Adding a POC to an atomic plan | Select OpenSpec when rehearsal is part of the accepted contract. |
 | Treating the POC as optional or partial | Build and review the complete disposable implementation. |

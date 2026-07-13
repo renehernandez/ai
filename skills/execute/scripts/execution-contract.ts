@@ -35,3 +35,62 @@ export function finalDeliveryOrder(unitIds: string[]): string[] {
 
   return [...unitIds];
 }
+
+export type PocArchitectureCheckpoint = {
+  targetBaseSha: string;
+  diffFingerprint: string;
+  reuseContractReviewed: boolean;
+  precedentEvidence: readonly string[];
+  semanticTripwires: readonly {
+    kind: string;
+    resolution: "cleared" | "finding" | "plan_required";
+  }[];
+  architectureFitAndReuse: "passed" | "finding" | "blocked";
+  codeQualityReview: "passed" | "finding" | "blocked";
+  architectureAffectingChangeSinceReview: boolean;
+};
+
+export function assertPocExpansionAllowed(
+  checkpoint: PocArchitectureCheckpoint,
+  expected: {
+    targetBaseSha: string;
+    diffFingerprint: string;
+  },
+): void {
+  if (
+    checkpoint.targetBaseSha !== expected.targetBaseSha ||
+    checkpoint.diffFingerprint !== expected.diffFingerprint ||
+    checkpoint.architectureAffectingChangeSinceReview
+  ) {
+    throw new Error("poc_architecture_checkpoint_stale");
+  }
+
+  const incomplete = [
+    ["reuse-contract", checkpoint.reuseContractReviewed ? "passed" : "missing"],
+    [
+      "precedent-evidence",
+      checkpoint.precedentEvidence.some((evidence) => evidence.trim())
+        ? "passed"
+        : "missing",
+    ],
+    ["architecture-fit-and-reuse", checkpoint.architectureFitAndReuse],
+    ["code-quality-review", checkpoint.codeQualityReview],
+  ]
+    .filter(([, status]) => status !== "passed")
+    .map(([reviewer]) => reviewer);
+
+  if (incomplete.length > 0) {
+    throw new Error(
+      `poc_architecture_checkpoint_incomplete:${incomplete.join(",")}`,
+    );
+  }
+
+  const unresolvedTripwires = checkpoint.semanticTripwires
+    .filter(({ resolution }) => resolution !== "cleared")
+    .map(({ kind }) => kind);
+  if (unresolvedTripwires.length > 0) {
+    throw new Error(
+      `poc_architecture_checkpoint_tripwires_unresolved:${unresolvedTripwires.join(",")}`,
+    );
+  }
+}
