@@ -36,6 +36,29 @@ for (const file of entrypoints) {
     assert.match(text, /merge, deployment, and cleanup.*explicit/i);
   });
 
+  test(`${file} gates new substantive tasks through Explore before readiness`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /Every new substantive task begins in Explore/);
+    assert.match(text, /defaults to `brainstorming`/);
+    assert.match(
+      text,
+      /opening request to fix, implement, change,\s+or build does not itself authorize mutation/,
+    );
+    assert.match(
+      text,
+      /materially different requested\s+outcome resets the task to Explore/,
+    );
+    assert.match(
+      text,
+      /later explicit instruction to proceed\s+authorizes Plan or Execute/,
+    );
+    assert.match(
+      text,
+      /Direct Execute is eligible only when one coherent\s+MR/,
+    );
+  });
+
   test(`${file} keeps shared behavior mechanically reviewed`, () => {
     const text = readFileSync(file, "utf-8");
 
@@ -118,7 +141,22 @@ test("implementation rules route semantically and enforce the full OpenSpec POC"
   );
 
   assert.match(text, /semantic/i);
-  assert.match(text, /no unresolved.*behavior.*architecture.*migration/is);
+  assert.match(text, /Every new substantive task begins in Explore/);
+  assert.match(
+    text,
+    /Opening imperatives such as "fix", "implement", "change", or "build"/,
+  );
+  assert.match(text, /do not independently authorize mutation/);
+  assert.match(text, /later explicit instruction such as\s+"proceed"/);
+  assert.match(
+    text,
+    /materially different requested outcome creates a new task boundary/,
+  );
+  assert.match(
+    text,
+    /review feedback, and CI failures.*do not\s+reset the task/is,
+  );
+  assert.match(text, /no\s+unresolved.*behavior.*architecture.*migration/is);
   assert.match(text, /atomic plan/i);
   assert.match(
     text,

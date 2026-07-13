@@ -6,8 +6,8 @@ allowed-tools: Read, Glob, Grep, AskUserQuestion
 
 # Brainstorming Ideas Into Designs
 
-Help turn ideas into designs through a skimmable first pass, explicit defaults,
-and selective drilldown. The default posture is: map first, drill second.
+Help open up ideas before selectively converging them into designs. The default
+posture is: understand the problem space first, narrow only when invited.
 
 ## Mode Boundary
 
@@ -15,9 +15,10 @@ This is a bounded Explore specialist. It is read-only and does not create or
 edit plans, OpenSpec changes, tracker state, branches, commits, PRs, or MRs.
 Agreement may recommend Plan; it does not authorize a write by itself.
 The read-only boundary applies to the whole turn. If a prompt mixes
-brainstorming with planning or implementation, map and converge the design,
-then queue the requested mutation for a later Plan or Execute turn after the
-brainstorming outcome is accepted.
+brainstorming with planning or implementation, complete the opening exploration,
+converge only when the user explicitly invites it, then queue the requested
+mutation for a later Plan or Execute turn after the brainstorming outcome is
+accepted.
 
 ## Default Flow
 
@@ -27,21 +28,26 @@ brainstorming outcome is accepted.
    implementations and their canonical owners without waiting for the user to
    request reuse. Phrases such as "same approach as" only narrow this required
    scan; they do not trigger it.
-2. **Open with an orientation map.** Show the full decision shape up front:
-   objective, domain terms, approach options, recommended defaults, discussion
-   queue, and likely capture artifact.
+2. **Open the problem space.** Lead with an orientation map covering the
+   intended outcome, motivation, domain terms, existing precedent, current
+   constraints, alternative framings, working hypotheses, and discussion
+   queue. Do not choose v1, implementation slices, proof location, or capture
+   artifact during this opening phase.
 3. **Keep the discussion queue short.** Pick 1-3 high-leverage decisions to
-   discuss. Put the rest under recommended defaults or parking lot.
+   discuss. Put the rest under working hypotheses or parking lot.
 4. **Drill one item at a time.** Ask one question at a time only for items in
-   the discussion queue. Everything else proceeds with the recommended default
-   unless the user objects.
-5. **Converge into an implementation-ready shape.** Summarize the objective,
-   selected feature, shipped context, implementation slices, recommended first
-   slice, deferred work, domain terms, and artifact routing.
+   the discussion queue. When inspected evidence makes the direction
+   unambiguous, omit the question, recommend readiness, and wait for a later
+   explicit transition.
+5. **Converge only when invited later.** After the opening pass, a later request
+   to narrow, choose v1, plan, implement, or prepare delivery activates
+   convergence. Then summarize the objective, selected feature, shipped
+   context, implementation slices, recommended first slice, deferred work,
+   domain terms, and artifact routing.
 
-Treat agreement such as "agreed", "sounds good", or "yes" as accepting the
-current recommendation set. Move to the next unresolved discussion item instead
-of re-litigating accepted defaults.
+Treat agreement such as "agreed", "sounds good", or "yes" as accepting only
+the recommendation currently being discussed. Move to the next unresolved
+discussion item without treating unstated downstream scope as accepted.
 
 ## Orientation Map
 
@@ -50,28 +56,30 @@ Use this structure unless the user asks for a different format:
 
 ```markdown
 **Orientation Map**
-| Area | Recommended default | Why | Discuss? |
+| Area | Working hypothesis | Why | Discuss? |
 |---|---|---|---|
 | Objective | ... | ... | Yes/No |
+| Problem framing | ... | ... | Yes/No |
 | Domain terms | ... | ... | Yes/No |
 | Existing precedent | ... | ... | Yes/No |
 | Approach | ... | ... | Yes/No |
-| First slice | ... | ... | Yes/No |
-| Capture | ... | ... | Yes/No |
 
 **Discussion Queue**
 1. [Decision that needs user judgment]
 2. [Decision that changes scope, safety, architecture, or visible behavior]
 
-**Recommended Defaults**
-- [Decision]: [recommended path I'll use unless you object]
+**Working Hypotheses**
+- [Evidence-backed recommendation that focuses discussion without fixing scope]
 
-**First question**
-[Ask only the highest-leverage unresolved question.]
+**Next step**
+[Ask only the highest-leverage unresolved question, or state that the direction
+appears ready for an explicit transition.]
 ```
 
-Keep the first question tied to the discussion queue. Do not ask about mechanics
-that can be inferred later, such as task-audit workflow details.
+When a question is needed, keep it tied to the discussion queue. Do not ask
+about mechanics that can be inferred later, such as task-audit workflow
+details. Working hypotheses must be supported by inspected context and remain
+revisable until the user accepts the specific recommendation.
 
 For non-trivial designs, the orientation map must name the closest applicable
 implementations and canonical owners, what can be reused or extended, what is
@@ -99,13 +107,14 @@ the outcome.
 
 ## Hard Stops
 
-If the first real outcome is unknown and any recommendation would smuggle
-architecture, ask one scope-setting question and stop. Do not add recommended
-defaults, approaches, first slices, or deferred lists for the blocked decision.
+During the opening phase, if the intended outcome is unknown and any working
+hypothesis would smuggle architecture, ask one problem-framing question and
+stop. Do not add working hypotheses, approaches, or delivery guidance for the
+blocked decision.
 
-Use a hard stop for unresolved answers that decide whether v1 needs a hard gate,
-dedicated infrastructure, signing, generic orchestration, multiple providers, or
-another high-cost foundation.
+After convergence is invited, use a hard stop for unresolved answers that
+decide whether v1 needs a hard gate, dedicated infrastructure, signing, generic
+orchestration, multiple providers, or another high-cost foundation.
 
 Examples of scope-setting questions:
 
@@ -117,6 +126,10 @@ You may still show a neutral map of categories to be decided later, but do not
 recommend an answer for the blocked category.
 
 ## Scope Pressure
+
+Apply this section only after the user invites convergence. During the opening
+phase, future capabilities are evidence about the problem space, not a reason
+to choose v1 or produce implementation slices.
 
 Long-term capabilities are future shape, not v1 scope, until the user explicitly
 promotes them. If the user lists future integrations, dedicated infrastructure,
@@ -131,22 +144,24 @@ requires it.
 
 ## Approaches
 
-When approaches are useful, propose 2-3 options with a recommendation. Keep each
-option brief enough to scan:
+During the opening phase, approaches are distinct ways to frame the problem,
+not implementation plans. Propose 2-3 options with a working recommendation
+when they materially improve the discussion:
 
 ```markdown
 **Approach: [Name]**
-- How it works:
-- First working outcome:
-- What it reuses:
-- What it defers:
+- How it frames the problem:
+- What it prioritizes:
+- What it assumes:
+- Main trade-off:
 - Best when:
 ```
 
-Prefer the approach that proves a real outcome soonest, unless safety, data
-migration, compliance, or operational risk requires foundation first. If the
-first slice is thin, the recommended approach must also be the thin-slice
-approach.
+After convergence is invited, add first working outcome, reuse, and deferred
+scope. Prefer the approach that proves a real outcome soonest unless safety,
+data migration, compliance, or operational risk requires foundation first. If
+the first slice is thin, the recommended delivery approach must also be the
+thin-slice approach.
 
 Choose ownership in this order unless evidence justifies a deviation:
 
@@ -173,6 +188,8 @@ slice consumes it to prove the outcome.
 
 ## Earliest Objective Proof
 
+Apply this section only after the user invites an implementation shape.
+
 Every implementation shape must identify where the named new capability is
 proved. The preferred default is proof in slice 1. If slice 1 must be setup-only,
 slice 2 must consume that setup and prove the capability; no plan may have more
@@ -193,7 +210,8 @@ implementation slice. Decompose the feature into PR-sized slices first.
 
 ## Artifact Routing
 
-When the design is complete, recommend the capture path:
+After convergence is invited and the design is complete, recommend the capture
+path:
 
 | Artifact | Use when |
 |---|---|
@@ -228,16 +246,25 @@ stand so the conversation does not become a questionnaire.
 Ask the repo before asking the user. If code or docs can answer a question,
 inspect them and present the finding.
 
-## Before Finalizing
+## Before Ending The Opening Pass
 
 Check that:
-- the orientation map showed recommended defaults and the discussion queue,
+- the orientation map opened the problem space with working hypotheses and a
+  short discussion queue,
 - the closest implementations and canonical owners were inspected and shown,
 - reused or extended elements, new concepts, and material deviations were
   explicit,
 - domain terms were included,
 - the discussion queue stayed at 1-3 items unless the user asked for more,
-- accepted defaults were not re-litigated,
+- only the recommendation being discussed was treated as accepted,
+- no v1, implementation slice, proof location, or artifact route was selected
+  without a convergence invitation, and
+- an unnecessary question was omitted when the inspected direction was
+  unambiguous.
+
+## Before Finalizing Convergence
+
+After convergence is invited, also check that:
 - the first slice proves a real path with visible result,
 - the proof location is explicit in slice 1 or, after one setup-only slice,
   slice 2,
@@ -255,10 +282,12 @@ Check that:
 | Trap | Better move |
 |---|---|
 | Walking every branch of the decision tree | Show the whole tree, then drill into 1-3 high-leverage decisions |
-| Treating every "agree" as a chance to restate the design | Accept the defaults and move to the next unresolved item |
+| Treating every "agree" as acceptance of the whole map | Accept only the recommendation being discussed and move to the next unresolved item |
 | Skipping vocabulary because the topic feels obvious | Include a lightweight domain-terms pass every time |
 | Waiting for the user to ask for reuse | Scan for precedent for every non-trivial design; prompt wording only narrows the scan |
 | Claiming there is no precedent without evidence | Name the inspected paths or searches before accepting a new mechanism |
+| Treating an opening "fix" or "implement" request as mutation authority | Complete the read-only opening pass and wait for a later explicit transition |
+| Choosing v1 or a first slice during the opening pass | Keep delivery guidance dormant until the user invites convergence |
 | Promoting future requirements into v1 | Keep them as future shape unless they address a concrete first-slice risk |
 | Recommending a platform while implementing a thin slice | Recommend the thin-slice approach and name the platform as future extraction |
 | Making Slice 1 a package, runtime, schema, or config foundation | Reshape Slice 1 around the smallest real end-to-end outcome |
@@ -269,6 +298,17 @@ Check that:
 
 ## Test Evidence
 
+- RED: an opening-fix pressure test without this contract chose immediate
+  Execute because the user explicitly requested implementation, the worktree
+  was clean, the likely change was one line, and urgency made a separate
+  read-only phase appear counterproductive.
+- GREEN: the same opening-fix pressure test chose only the opening Explore pass
+  after the revision, kept v1 and implementation shape dormant, and cited the
+  explicit rule that urgency, an obvious one-line solution, and a clean
+  worktree do not authorize first-turn mutation.
+- REFACTOR controls continued to reopen architectural scope changes and resist
+  premature platform design, so the revision closes the initial authority
+  loophole without adding a broader questionnaire.
 - RED: baseline subagent `019eb4d1-5300-7461-b581-937f05a18316` narrowed to GitLab but still defaulted to a dedicated verification environment, signed markers, hard CI gate, and component architecture before challenging whether existing review infrastructure or a softer first proof was good enough.
 - RED: baseline subagent `019eb4d1-6b0a-7272-abde-d98ff92093b4` recommended a vertical slice but still introduced named orchestration, adapter-shaped wrappers, auth providers, telemetry sinks, and contract tests in the first design.
 - RED/GREEN control: baseline subagent `019eb4d1-8531-7901-90da-9f0d4a954986` performed well only when the user explicitly requested avoiding overengineering, showing the skill needed to make that pressure default.

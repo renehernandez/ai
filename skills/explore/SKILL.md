@@ -20,12 +20,14 @@ not make an artifact or cleanup "obvious."
 
 1. Inspect relevant repository and external context before asking questions the
    available evidence can answer.
-2. Invoke `brainstorming` for divergent design, requirements, feature shaping,
-   or rough ideas that need its map-first contract. Do not substitute a
-   condensed free-form brainstorm.
-3. Invoke `start-project` for new-effort intake, scoping, mapping, or kickoff so
-   it returns the complete Project Brief and preserves its whole-turn no-write
-   boundary.
+2. For every new substantive change request, invoke `brainstorming` by default,
+   including when the opening prompt says to fix, implement, change, or build.
+   Opening implementation language does not bypass this whole-turn read-only
+   Explore pass. Do not substitute a condensed free-form brainstorm.
+3. Invoke `start-project` for matching new-effort intake, scoping, mapping, or
+   kickoff so it returns the complete Project Brief and preserves its whole-turn
+   no-write boundary. An explicitly named mode or bounded read-only specialist
+   overrides inferred specialist routing.
 4. Otherwise return a compact orientation map: objective, known facts, domain
    terms, options, recommended defaults, and at most three material questions.
 5. Test assumptions and separate settled decisions from open ones.
@@ -63,3 +65,4 @@ additional lifecycle modes or grant writes.
 | Creating Linear state from intake | Return the Linear-ready description only. |
 | Reimplementing the brainstorming map inside Explore | Invoke `brainstorming` and follow its complete contract. |
 | Shortening new-effort intake to an ad hoc summary | Invoke `start-project` and return the Project Brief. |
+| Treating a precise opening fix request as Execute authority | Run the read-only brainstorming pass; recommend readiness and wait for a later transition. |
