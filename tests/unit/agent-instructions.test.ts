@@ -208,6 +208,21 @@ test("AI repo Finish policy remains GitLab and Nitro specific", () => {
   );
 });
 
+test("AI repo converges the main worktree and live AX runtime after every merge", () => {
+  const repoAgents = readFileSync("AGENTS.md", "utf-8");
+
+  assert.match(repoAgents, /After every successful merge/);
+  assert.match(repoAgents, /git worktree list --porcelain/);
+  assert.match(repoAgents, /refs\/heads\/main/);
+  assert.match(repoAgents, /clean/);
+  assert.match(repoAgents, /git pull --ff-only origin main/);
+  assert.match(repoAgents, /HEAD.*origin\/main/is);
+  assert.match(repoAgents, /pnpm ax sync/);
+  assert.match(repoAgents, /pnpm ax validate/);
+  assert.match(repoAgents, /feature or disposable worktree/);
+  assert.match(repoAgents, /blocker/);
+});
+
 test("AI repo uses atomic plans without inferring OpenSpec", () => {
   const repoAgents = readFileSync("AGENTS.md", "utf-8");
 

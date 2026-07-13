@@ -160,8 +160,12 @@ Execute-only, Review-only, or local-only stops at that boundary.
   not fetch remote refs, compare file contents, or mutate runtime state.
 - Exercise AX changes before merge only with isolated HOME and runtime roots.
   Do not refresh the live runtime from a feature branch or disposable worktree.
-- After merge, verify the clean merged default branch source, then run live
-  `ax sync`.
+- After every successful merge, locate the worktree that owns
+  `refs/heads/main` with `git worktree list --porcelain`. Require it to be
+  clean, run `git pull --ff-only origin main`, and verify its `HEAD` matches
+  `origin/main` as the merged default branch source. From that main worktree,
+  run live `pnpm ax sync` and `pnpm ax validate`. If any step fails, report the
+  concrete blocker. Never substitute a feature or disposable worktree.
 - Use `ax openspec sync` in the invocation repository for repo-local OpenSpec
   convergence. Headless first setup requires `--context-file <path>`; configured
   review keeps the explicit config-review flags. Top-level runtime sync never
