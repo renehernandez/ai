@@ -118,14 +118,17 @@ The POC:
 6. Receives current local implementation review, configured CI,
    latest-effective-diff hosted automated review, and personal acceptance of
    the exact clean HEAD.
-7. Refreshes every exact-head gate after any POC HEAD change.
+7. Refreshes affected intermediate review surfaces after a POC HEAD change and
+   runs the complete exact-head gate once the POC is stable for publication.
 8. Freezes after acceptance, closes unmerged, and removes its local worktree.
 
 At the POC's first objective proof, in slice 1 or slice 2 after at most one
 setup-only slice, Execute pauses before broadening. Review runs the exact-diff
-POC baseline, including architecture fit/reuse and the strict
-`code-quality-review` specialist. Any later architecture-affecting change
-invalidates that checkpoint. Keep its evidence task-local.
+checkpoint with independent findings-only `code-quality-review` and
+`scrutinize` reviewer runs plus targeted verification of the real entrypoint and
+visible outcome. Any later architecture-affecting change invalidates that
+checkpoint. Keep its evidence task-local. The completed stable POC receives the
+full five-reviewer implementation baseline before publication.
 
 The POC rehearses task completion and archival in a disposable repository copy
 without checking the source `tasks.md` or archiving the live change. POC commits
@@ -171,16 +174,20 @@ rewriting the accepted delivery contract.
 
 Review inspects every changed planning artifact with implementation-readiness,
 edge-case/risk, simplification/scope, refactoring, and delivery-shape reviewers.
-It inspects POC and final implementation targets with correctness, regression,
-maintainability, verification, and architecture-fit/reuse reviewers. POCs also
-require the strict code-quality-review specialist. Add affected-domain
-specialists.
+It inspects every completed POC and final implementation target with five
+independent findings-only reviewers: `code-simplifier`, `code-quality-review`,
+`deslop`, `diff-review`, and `scrutinize`. Those contracts preserve correctness,
+regression, maintainability, verification, and architecture-fit/reuse coverage.
+Add affected-domain specialists from the exact diff and risk profile beyond the
+five-reviewer floor.
 
 Review evidence is task-local and bound to an artifact fingerprint or exact
-target-base/HEAD pair. Before any push or hosted artifact mutation, Review emits
-`publication_checkpoint` with target-base diff, hook evidence, required local
-reviewers, provider route, and blockers. Any HEAD or target-base change makes it
-stale.
+target-base/HEAD pair. Intermediate fixes rerun affected reviewer and
+verification surfaces after a phase-barrier findings batch. Before any push or
+hosted artifact mutation, Review runs the complete required wave and emits
+`publication_checkpoint` with target-base diff, hook evidence, distinct local
+reviewer identities, selected specialists, provider route, and blockers. Any
+HEAD or target-base change makes the publication checkpoint stale.
 
 Finish consumes the current checkpoint, publishes the configured final
 artifact, and follows hosted gates. Implementation and delivery requests permit

@@ -43,6 +43,8 @@ Write or review engineering documentation through a unified linear pipeline. The
 ## When NOT to Use
 
 - User wants to **review code** changes — use a code-review workflow, not this skill
+- User wants to review an atomic plan or OpenSpec artifact — these are planning
+  contracts owned by Plan and the planning Review baseline
 - User wants a **small inline edit** to a single sentence in a doc — do that directly without this workflow
 - User wants a **README** for a brand new project with no existing material — start with the project setup, come back here
 
@@ -55,7 +57,7 @@ Stage 1: Mode and intake      → determine write vs review, gather doc + contex
 Stage 2: Context (write only) → topic, doc type, location, source material, clarifying questions
 Stage 3: Structured analysis  → rubric review across seven dimensions
 Stage 4: Draft or fix plan    → section-by-section drafting (write) or findings report (review)
-Stage 5: Reader testing       → two sub-agent personas in parallel
+Stage 5: Reader testing       → one final parallel persona wave when audience comprehension is in scope
 ```
 
 Review mode enters at Stage 3. Writing mode runs all five stages.
@@ -207,7 +209,17 @@ Fix: Add `- [Rollout playbook](./rollout_playbook.md)` to See Also.
 
 ## Stage 5: Reader testing
 
-Always run two sub-agents in parallel using the `Task` tool. Pass only the document text — no conversation history, no surrounding context. Substitute `<target reader profile>` with the reader description gathered in Stage 2 (writing mode) or inferred from the doc's content and tone (review mode). If the reader profile is unclear in review mode, ask the user before running Stage 5.
+Reserve reader testing for user-facing or operational documentation where
+audience comprehension is part of acceptance. Never use it for atomic plans or
+OpenSpec artifacts. Run one persona wave, in parallel, against the final stable
+document text after structured analysis and drafting are complete; do not rerun
+personas after every intermediate edit.
+
+Use the `Task` tool and pass only the final stable document text—no conversation
+history or surrounding context. Substitute `<target reader profile>` with the
+reader description gathered in Stage 2 (writing mode) or inferred from the
+document's content and tone (review mode). If the reader profile is unclear in
+review mode, ask the user before Stage 5.
 
 **Sub-agent 1: New engineer persona**
 
@@ -243,7 +255,10 @@ Document:
 
 **Writing mode** — reader testing is optional. Proactively offer it; run it unless the user declines. If reader testing surfaces gaps or issues, loop back to Stage 4 Step 2 and revise the affected sections before proceeding to the file-writing step.
 
-**Review mode** — always run both sub-agents. Fold their findings into the findings report using the source labels from `references/quality-rubric.md`.
+**Review mode** — for user-facing or operational documentation, run both
+personas once and fold their findings into the report using the source labels
+from `references/quality-rubric.md`. For other documentation, stop after the
+structured rubric unless audience testing is explicitly required.
 
 ---
 
@@ -267,7 +282,7 @@ After Stage 5 reader testing is complete (or skipped):
 - **Never fabricate technical details** — read source code or ask the user
 - **Scope per invocation** — writing mode: one new doc per invocation. Review mode: multiple files allowed (see Stage 1), reviewed one at a time
 - **Sub-agent reader tests are optional in writing mode** — proactively offer; run unless the user declines. If gaps are found, loop back to Stage 4 to fix them
-- **Sub-agent reader tests are mandatory in review mode** — always run both; reader tests surface gaps that rubric analysis misses
+- **Reader tests are scoped in review mode** — run both once for stable user-facing or operational documentation; never for planning contracts
 - **Review output is inline only** — do NOT write the review report to a file; the user decides what to fix
 - **Do not commit** — writing the file is the final step; committing is the user's responsibility
 - **Never flag accuracy issues without evidence** — confirm via code search or explicitly label as unverified
@@ -289,7 +304,8 @@ After Stage 5 reader testing is complete (or skipped):
 | Fabricating technical details | Read source code or ask the user — never invent API names, config keys, or behavior |
 | Writing the whole doc at once | Draft section by section and get user approval at each step |
 | Ignoring neighboring docs | Read 2-3 neighbors to match the project's tone and sidebar_position numbering |
-| Skipping reader tests in review mode | Always run both sub-agents; reader tests surface gaps that rubric analysis misses |
+| Running reader tests on planning contracts | Route atomic plans and OpenSpec artifacts through planning Review. |
+| Repeating reader tests after intermediate edits | Run one parallel wave against final stable document text. |
 | Writing review report to a file | Report output is inline in the conversation only |
 | Flagging accuracy issues without checking source | Use `Grep` and `Read` to verify before flagging — or label as unverified |
 | Reviewing only part of the doc | Always `Read` the full file before producing any findings |

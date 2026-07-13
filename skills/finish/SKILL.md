@@ -34,8 +34,10 @@ provider mutation without invalidating local work. GitHub, generic GitLab, and
 Fullscript GitLab/Nitro use their configured CI, approval, and reviewer gates.
 
 Before every push, PR/MR creation, or PR/MR update, consume a current Review
-`publication_checkpoint` bound to the exact target base and HEAD. Re-run Review
-if either changes.
+`publication_checkpoint` bound to the exact target base and HEAD. It must carry
+the five distinct findings-only implementation reviewer runs and every selected
+affected-domain specialist. Re-run the complete publication baseline if either
+target identity changes; lane-scoped intermediate evidence is not a substitute.
 
 Reuse an open artifact for the branch instead of creating a duplicate. Preserve
 provider templates and user-owned body sections. Descriptions contain
@@ -53,13 +55,13 @@ bypasses this specialist pass.
 
 For OpenSpec POC publication, create one draft PR/MR titled `POC: ...` against
 the normal target and state that it is review-only and must close unmerged.
-Consume the POC-specific Review baseline, including `architecture-fit-and-reuse`
-and `code-quality-review`; CI, hosted review, and operational proof cannot
-substitute for either local lane. For atomic-plan delivery, publish the plan and
-implementation together as one change set in one final PR/MR, with no
-planning-only or POC artifact. For final OpenSpec delivery, create one mergeable
-PR/MR per top-level delivery unit and no planning or reconciliation-only
-artifact.
+Consume the completed-POC five-reviewer Review baseline; the narrower
+first-objective-proof checkpoint cannot authorize publication. CI, hosted
+review, and operational proof cannot substitute for local Review. For atomic-
+plan delivery, publish the plan and implementation together as one change set
+in one final PR/MR, with no planning-only or POC artifact. For final OpenSpec
+delivery, create one mergeable PR/MR per top-level delivery unit and no planning
+or reconciliation-only artifact.
 
 Create every final MR as draft and verify its live provider state after
 creation or update. Local Review, CI, approvals, hosted review, and technical

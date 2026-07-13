@@ -1,4 +1,4 @@
 interface:
   display_name: "Scrutinize"
   short_description: "Adversarially validate plans, diffs, PRs, and implementation claims"
-  default_prompt: "Use $scrutinize to adversarially validate this plan, implementation diff, PR, hosted review feedback, or proposed approach. Challenge intent, check for a simpler path, verify live state when needed, trace the real system path, report only evidence-backed findings, and end with `Scrutinize verdict: ship|fix-then-ship|rework|reject - <reason>`."
+  default_prompt: "Use $scrutinize to perform a findings-only adversarial validation of this plan, implementation diff, PR, hosted review feedback, or proposed approach. Challenge intent, check for a simpler path, verify live state when needed, trace the real system path, do not edit the artifact, report only evidence-backed findings, and end with `Scrutinize verdict: ship|fix-then-ship|rework|reject - <reason>`."

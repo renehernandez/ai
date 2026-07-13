@@ -45,8 +45,16 @@ export type PocArchitectureCheckpoint = {
     kind: string;
     resolution: "cleared" | "finding" | "plan_required";
   }[];
-  architectureFitAndReuse: "passed" | "finding" | "blocked";
-  codeQualityReview: "passed" | "finding" | "blocked";
+  reviewResults: readonly {
+    reviewer: "code-quality-review" | "scrutinize";
+    reviewerRunId: string;
+    status: "passed" | "finding" | "blocked";
+  }[];
+  targetedProof: {
+    status: "passed" | "failed" | "blocked";
+    entrypoint: string;
+    evidence: string;
+  };
   architectureAffectingChangeSinceReview: boolean;
 };
 
@@ -65,7 +73,7 @@ export function assertPocExpansionAllowed(
     throw new Error("poc_architecture_checkpoint_stale");
   }
 
-  const incomplete = [
+  const incompleteProof = [
     ["reuse-contract", checkpoint.reuseContractReviewed ? "passed" : "missing"],
     [
       "precedent-evidence",
@@ -73,16 +81,51 @@ export function assertPocExpansionAllowed(
         ? "passed"
         : "missing",
     ],
-    ["architecture-fit-and-reuse", checkpoint.architectureFitAndReuse],
-    ["code-quality-review", checkpoint.codeQualityReview],
+    [
+      "targeted-proof",
+      checkpoint.targetedProof.status === "passed" &&
+      checkpoint.targetedProof.entrypoint.trim() &&
+      checkpoint.targetedProof.evidence.trim()
+        ? "passed"
+        : "missing",
+    ],
   ]
     .filter(([, status]) => status !== "passed")
-    .map(([reviewer]) => reviewer);
+    .map(([proof]) => proof);
 
-  if (incomplete.length > 0) {
+  if (incompleteProof.length > 0) {
     throw new Error(
-      `poc_architecture_checkpoint_incomplete:${incomplete.join(",")}`,
+      `poc_architecture_checkpoint_incomplete:${incompleteProof.join(",")}`,
     );
+  }
+
+  const requiredReviewers = ["code-quality-review", "scrutinize"] as const;
+  const requiredResults = requiredReviewers.map((reviewer) => {
+    const results = checkpoint.reviewResults.filter(
+      (result) => result.reviewer === reviewer,
+    );
+    if (results.length !== 1) {
+      throw new Error(
+        `poc_architecture_checkpoint_reviewer_result_invalid:${reviewer}`,
+      );
+    }
+    return results[0];
+  });
+  for (const result of requiredResults) {
+    if (result.status !== "passed") {
+      throw new Error(
+        `poc_architecture_checkpoint_reviewer_not_passed:${result.reviewer}:${result.status}`,
+      );
+    }
+  }
+  const reviewerRunIds = new Set(
+    requiredResults.map((result) => result.reviewerRunId.trim()),
+  );
+  if (
+    requiredResults.some((result) => !result.reviewerRunId.trim()) ||
+    reviewerRunIds.size !== requiredReviewers.length
+  ) {
+    throw new Error("poc_architecture_checkpoint_reviewer_identity_reused");
   }
 
   const unresolvedTripwires = checkpoint.semanticTripwires

@@ -7,8 +7,23 @@
       "reuseContractReviewed": true,
       "precedentEvidence": ["src/existing/canonical-owner.ts"],
       "semanticTripwires": [],
-      "architectureFitAndReuse": "passed",
-      "codeQualityReview": "passed",
+      "reviewResults": [
+        {
+          "reviewer": "code-quality-review",
+          "reviewerRunId": "quality-agent",
+          "status": "passed"
+        },
+        {
+          "reviewer": "scrutinize",
+          "reviewerRunId": "scrutiny-agent",
+          "status": "passed"
+        }
+      ],
+      "targetedProof": {
+        "status": "passed",
+        "entrypoint": "real entrypoint",
+        "evidence": "visible success"
+      },
       "architectureAffectingChangeSinceReview": false
     },
     "expected": "pass"
@@ -23,8 +38,23 @@
         "No applicable precedent found: affected source, tests, plans, and docs inspected"
       ],
       "semanticTripwires": [],
-      "architectureFitAndReuse": "passed",
-      "codeQualityReview": "passed",
+      "reviewResults": [
+        {
+          "reviewer": "code-quality-review",
+          "reviewerRunId": "quality-agent",
+          "status": "passed"
+        },
+        {
+          "reviewer": "scrutinize",
+          "reviewerRunId": "scrutiny-agent",
+          "status": "passed"
+        }
+      ],
+      "targetedProof": {
+        "status": "passed",
+        "entrypoint": "real entrypoint",
+        "evidence": "visible success"
+      },
       "architectureAffectingChangeSinceReview": false
     },
     "expected": "pass"
@@ -37,16 +67,28 @@
       "reuseContractReviewed": true,
       "precedentEvidence": ["src/existing/canonical-owner.ts"],
       "semanticTripwires": [
+        { "kind": "sibling-service", "resolution": "finding" }
+      ],
+      "reviewResults": [
         {
-          "kind": "sibling-service",
-          "resolution": "finding"
+          "reviewer": "code-quality-review",
+          "reviewerRunId": "quality-agent",
+          "status": "passed"
+        },
+        {
+          "reviewer": "scrutinize",
+          "reviewerRunId": "scrutiny-agent",
+          "status": "finding"
         }
       ],
-      "architectureFitAndReuse": "finding",
-      "codeQualityReview": "passed",
+      "targetedProof": {
+        "status": "passed",
+        "entrypoint": "real entrypoint",
+        "evidence": "visible success"
+      },
       "architectureAffectingChangeSinceReview": false
     },
-    "expected": "poc_architecture_checkpoint_incomplete:architecture-fit-and-reuse"
+    "expected": "poc_architecture_checkpoint_reviewer_not_passed:scrutinize:finding"
   },
   {
     "id": "strict-review-is-required-even-when-behavior-works",
@@ -56,11 +98,26 @@
       "reuseContractReviewed": true,
       "precedentEvidence": ["src/existing/canonical-owner.ts"],
       "semanticTripwires": [],
-      "architectureFitAndReuse": "passed",
-      "codeQualityReview": "blocked",
+      "reviewResults": [
+        {
+          "reviewer": "code-quality-review",
+          "reviewerRunId": "quality-agent",
+          "status": "blocked"
+        },
+        {
+          "reviewer": "scrutinize",
+          "reviewerRunId": "scrutiny-agent",
+          "status": "passed"
+        }
+      ],
+      "targetedProof": {
+        "status": "passed",
+        "entrypoint": "real entrypoint",
+        "evidence": "visible success"
+      },
       "architectureAffectingChangeSinceReview": false
     },
-    "expected": "poc_architecture_checkpoint_incomplete:code-quality-review"
+    "expected": "poc_architecture_checkpoint_reviewer_not_passed:code-quality-review:blocked"
   },
   {
     "id": "later-architecture-change-invalidates-first-proof-review",
@@ -70,8 +127,23 @@
       "reuseContractReviewed": true,
       "precedentEvidence": ["src/existing/canonical-owner.ts"],
       "semanticTripwires": [],
-      "architectureFitAndReuse": "passed",
-      "codeQualityReview": "passed",
+      "reviewResults": [
+        {
+          "reviewer": "code-quality-review",
+          "reviewerRunId": "quality-agent",
+          "status": "passed"
+        },
+        {
+          "reviewer": "scrutinize",
+          "reviewerRunId": "scrutiny-agent",
+          "status": "passed"
+        }
+      ],
+      "targetedProof": {
+        "status": "passed",
+        "entrypoint": "real entrypoint",
+        "evidence": "visible success"
+      },
       "architectureAffectingChangeSinceReview": true
     },
     "expected": "poc_architecture_checkpoint_stale"
@@ -84,8 +156,23 @@
       "reuseContractReviewed": true,
       "precedentEvidence": ["src/existing/canonical-owner.ts"],
       "semanticTripwires": [],
-      "architectureFitAndReuse": "passed",
-      "codeQualityReview": "passed",
+      "reviewResults": [
+        {
+          "reviewer": "code-quality-review",
+          "reviewerRunId": "quality-agent",
+          "status": "passed"
+        },
+        {
+          "reviewer": "scrutinize",
+          "reviewerRunId": "scrutiny-agent",
+          "status": "passed"
+        }
+      ],
+      "targetedProof": {
+        "status": "passed",
+        "entrypoint": "real entrypoint",
+        "evidence": "visible success"
+      },
       "architectureAffectingChangeSinceReview": false
     },
     "expected": "poc_architecture_checkpoint_stale"
@@ -98,8 +185,23 @@
       "reuseContractReviewed": true,
       "precedentEvidence": [],
       "semanticTripwires": [],
-      "architectureFitAndReuse": "passed",
-      "codeQualityReview": "passed",
+      "reviewResults": [
+        {
+          "reviewer": "code-quality-review",
+          "reviewerRunId": "quality-agent",
+          "status": "passed"
+        },
+        {
+          "reviewer": "scrutinize",
+          "reviewerRunId": "scrutiny-agent",
+          "status": "passed"
+        }
+      ],
+      "targetedProof": {
+        "status": "passed",
+        "entrypoint": "real entrypoint",
+        "evidence": "visible success"
+      },
       "architectureAffectingChangeSinceReview": false
     },
     "expected": "poc_architecture_checkpoint_incomplete:precedent-evidence"
@@ -112,8 +214,23 @@
       "reuseContractReviewed": false,
       "precedentEvidence": ["src/existing/canonical-owner.ts"],
       "semanticTripwires": [],
-      "architectureFitAndReuse": "passed",
-      "codeQualityReview": "passed",
+      "reviewResults": [
+        {
+          "reviewer": "code-quality-review",
+          "reviewerRunId": "quality-agent",
+          "status": "passed"
+        },
+        {
+          "reviewer": "scrutinize",
+          "reviewerRunId": "scrutiny-agent",
+          "status": "passed"
+        }
+      ],
+      "targetedProof": {
+        "status": "passed",
+        "entrypoint": "real entrypoint",
+        "evidence": "visible success"
+      },
       "architectureAffectingChangeSinceReview": false
     },
     "expected": "poc_architecture_checkpoint_incomplete:reuse-contract"
@@ -128,13 +245,25 @@
         "No applicable precedent found: src and tests searched"
       ],
       "semanticTripwires": [
+        { "kind": "second-source-of-truth", "resolution": "plan_required" }
+      ],
+      "reviewResults": [
         {
-          "kind": "second-source-of-truth",
-          "resolution": "plan_required"
+          "reviewer": "code-quality-review",
+          "reviewerRunId": "quality-agent",
+          "status": "passed"
+        },
+        {
+          "reviewer": "scrutinize",
+          "reviewerRunId": "scrutiny-agent",
+          "status": "passed"
         }
       ],
-      "architectureFitAndReuse": "passed",
-      "codeQualityReview": "passed",
+      "targetedProof": {
+        "status": "passed",
+        "entrypoint": "real entrypoint",
+        "evidence": "visible success"
+      },
       "architectureAffectingChangeSinceReview": false
     },
     "expected": "poc_architecture_checkpoint_tripwires_unresolved:second-source-of-truth"

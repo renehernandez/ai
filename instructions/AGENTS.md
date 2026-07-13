@@ -74,9 +74,10 @@ modes.
 - Troubleshooting stays read-only through diagnosis and report. Enter Execute
   only when the user requests a fix.
 - Use confidence scores from [rules/confidence.md](../rules/confidence.md).
-- Use `doc-smith` for non-trivial documentation and `scrutinize` for
-  adversarial validation. No mandatory frontend-design skill is currently
-  selected.
+- Use `doc-smith` for non-trivial user-facing or operational documentation and
+  `scrutinize` for adversarial validation. Atomic plans and OpenSpec artifacts
+  use planning Review instead of Doc Smith reader personas.
+  No mandatory frontend-design skill is currently selected.
 - Prefer authenticated organization-aware CLIs: `gh`, `glab`, and `wrangler`.
 - Name the exact verification layer performed; do not use vague shorthand.
 - Avoid generic AI filler and formulaic contrast phrasing.
@@ -110,8 +111,9 @@ modes.
   implementation are one change set in one final PR/MR, with no POC PR/MR or
   POC phase. OpenSpec produces one final PR/MR per top-level delivery unit, with
   nested work items implemented cohesively inside that unit.
-- Review evidence and the publication checkpoint remain task-local and become
-  stale when the artifact, target base, or HEAD changes.
+- Review evidence and the publication checkpoint remain task-local.
+  Intermediate changes invalidate affected review surfaces; any changed target
+  base or HEAD invalidates the complete publication checkpoint.
 - For multiple final units, Plan records semantic eligibility and one total Git
   order. Execute may develop eligible units concurrently when each has a singly
   owned branch/worktree; publication and restack propagation preserve the Git

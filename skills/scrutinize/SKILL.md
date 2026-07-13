@@ -9,7 +9,9 @@ description: Use when the user asks to scrutinize, sanity-check, challenge, get 
 
 Stand outside the artifact and ask whether it should exist, whether a smaller path works, and whether the real system path proves its claims.
 
-This is not a generic review. Use the normal review skills for their scopes; use this skill to challenge intent and verify claims end to end.
+This is a findings-only adversarial review, not a generic review. Never edit the
+artifact. Use the normal review skills for their scopes; use this skill to
+challenge intent and verify claims end to end.
 
 ## When to Use
 
@@ -47,10 +49,11 @@ If live state cannot be verified, state the verified scope before findings.
 | --- | --- |
 | `BLOCKER` | Stop; fix before proceeding. |
 | `MAJOR` | Stop; fix before proceeding unless the user explicitly accepts the trade-off. |
-| `MINOR` in plan scrutiny | Fix automatically before implementation when scoped and mechanical. |
-| `MINOR` in implementation or PR scrutiny | Fix automatically when local and low-risk; otherwise report as non-blocking residual risk. |
+| `MINOR` in plan scrutiny | Return a scoped finding to Plan before implementation. |
+| `MINOR` in implementation or PR scrutiny | Return a finding to Execute, or report it as non-blocking residual risk when no change is required. |
 
-When required fixes change the reviewed artifact, rerun scrutiny before proceeding.
+When the owning mode changes the reviewed artifact, rerun scrutiny before
+proceeding. Scrutinize never applies the change itself.
 
 ## Evidence Rule
 

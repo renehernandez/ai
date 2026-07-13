@@ -1,24 +1,19 @@
 ---
 name: code-simplifier
-description: Use when simplifying code, cleaning up recently modified code, refactoring for clarity, improving readability, reducing nesting, removing redundant abstractions, or making behavior-preserving maintainability edits.
-allowed-tools: Read, Glob, Grep, Bash(git:*), Bash(pnpm:*), Bash(npm:*), Bash(yarn:*), Bash(cargo:*), Bash(go:*), Bash(pytest:*), Bash(mise:*), Edit
+description: Use when reviewing recently changed code for behavior-preserving simplification, clearer control flow, reduced nesting, redundant abstractions, or unnecessary concepts.
+allowed-tools: Read, Glob, Grep, Bash(git:*)
 ---
 
 # Code Simplifier
 
-Simplify recently changed code while preserving behavior. Prefer clear, boring, project-native code over clever compression or broad refactors.
-
-## When to Use
-
-- The user asks to simplify code, clean up code, refactor for clarity, improve readability, or make code more maintainable.
-- A follow-up implementation pass is needed after `code-quality-review` findings.
-- Recently touched code has redundant branches, avoidable nesting, duplicate logic, or thin abstractions.
-
-Use `deslop` when the main issue is AI-shaped clutter. Use `code-quality-review` when the user wants findings only.
+Run a findings-only simplification review. Do not edit files. Find concrete ways
+to remove complexity while preserving every accepted success and failure
+behavior.
 
 ## Scope
 
-Default to changed or recently touched code:
+Start with the exact branch diff, then read enough neighboring code to verify
+project conventions and canonical owners:
 
 ```bash
 git merge-base HEAD main
@@ -26,52 +21,47 @@ git diff --stat <base>..HEAD
 git diff <base>..HEAD
 ```
 
-If `main` is unavailable, use the project's active base branch. Broaden scope only when the user asks or when a local simplification needs nearby context.
+Use the active target branch when `main` is not the review base. Do not broaden
+into unrelated cleanup.
 
-## Principles
+## Review Lens
 
-- Preserve behavior exactly unless the user explicitly asks for a behavior change.
-- Follow project rules, local tooling, package scripts, and neighboring code.
-- Make code easier to read, test, and extend.
-- Prefer explicit names and straightforward control flow over dense one-liners.
-- Remove complexity; do not just move it to a different file.
-- Keep useful abstractions that clarify ownership or isolate real variation.
+Look for:
 
-## Simplification Targets
+- nested branches or ternaries that a linear flow can replace;
+- duplicate branches, setup, or policy decisions;
+- thin wrappers and abstractions that name no durable concept;
+- casts, optionality, or fallback paths hiding a simpler invariant;
+- mixed-purpose functions that obscure ownership;
+- scattered special cases that an existing policy or model already owns;
+- comments or intermediate layers made unnecessary by clearer names; and
+- complexity moved between files without reducing concepts.
 
-| Pattern | Prefer |
+A valid finding must identify a behavior-preserving alternative grounded in the
+diff and surrounding code. Fewer lines alone are not evidence of simplification.
+Keep useful boundaries that isolate real variation, security assumptions,
+migrations, or non-obvious business rules.
+
+## Output
+
+Return `passed`, `finding`, or `blocked` with source evidence. For each finding:
+
+```markdown
+**[SEVERITY] Simplification title** [confidence: 0.86 - high]
+Location: `path:line`
+Issue:
+Evidence:
+Behavior-preserving recommendation:
+```
+
+If clean, name the inspected diff and remaining behavioral risk. Send findings
+to the Execute owner; never stage, commit, or apply the recommendation.
+
+## Common Mistakes
+
+| Mistake | Required response |
 | --- | --- |
-| Nested conditionals or ternaries | Early returns, named predicates, or a simple lookup |
-| Duplicate branches | Shared helper, common setup, or a single clearer flow |
-| Thin wrappers and pass-through helpers | Direct calls unless the wrapper names a real concept |
-| Cast-heavy or optional-heavy code | Explicit type boundaries and narrowing |
-| Large mixed-purpose functions | Focused helpers split by responsibility |
-| Obvious comments | Self-explanatory names or deleted comments |
-| Over-chained expressions | Named intermediate values when they improve scanning |
-| Scattered special cases | A single owner, policy helper, or model that explains the variation |
-
-## Guardrails
-
-- Do not optimize for fewer lines at the expense of clarity.
-- Do not introduce new libraries or dependencies for simplification.
-- Do not rewrite stable unrelated code to match a personal style preference.
-- Do not remove comments that explain business rules, security assumptions, migrations, or non-obvious trade-offs.
-- If preserving behavior is uncertain, stop and explain the risk before editing further.
-
-## Verification
-
-Run the narrowest relevant verification after edits:
-
-- existing focused tests for touched code
-- typecheck or lint when types or style changed
-- project-native commands only, such as package scripts, language test runners, or documented task runners
-
-Describe the exact verification performed. If verification is not available or not run, say why.
-
-## Final Response
-
-Keep the close-out concise:
-
-- What was simplified.
-- What behavior was preserved.
-- What verification was performed.
+| Optimizing for line count | Require lower cognitive or structural complexity. |
+| Suggesting a behavior change | Route it as a contract question, not simplification. |
+| Rewriting stable neighboring code | Keep findings scoped to introduced or materially worsened complexity. |
+| Editing after finding an easy cleanup | Return the finding to the single Execute owner. |
