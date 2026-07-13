@@ -18,6 +18,13 @@ import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Command } from "commander";
 import {
+  applyPreparedManagedConfigs,
+  inspectManagedConfigs,
+  prepareManagedConfigs,
+  syncManagedConfigs,
+  validateManagedConfigs,
+} from "./ax/config-sync.ts";
+import {
   type CoordinatorTargets,
   writeCoordinatorRegistration,
 } from "./ax/coordinator-project-runtime.ts";
@@ -35,7 +42,7 @@ import {
   validateRuntime,
 } from "./ax/runtime-sync.ts";
 
-type Scope = RuntimeSurface | "openspec";
+type Scope = RuntimeSurface | "configs" | "openspec";
 type RuntimeCommand = "sync" | "status" | "validate";
 type ShimCommand = "install" | "status" | "uninstall";
 
@@ -106,6 +113,7 @@ export function createProgram(
   addRuntimeScope(program, "instructions", execute);
   addRuntimeScope(program, "hooks", execute);
   addRuntimeScope(program, "agents", execute);
+  addRuntimeScope(program, "configs", execute);
   addCoordinatorCommands(program, execute);
   addOpenSpecCommands(program, execute);
   addShimCommands(program, execute);
@@ -122,6 +130,11 @@ export function executeParsedCommand(input: ParsedArgs): void {
   const runtimeRoot = input.runtimeRoot
     ? expandPath(input.runtimeRoot, context.sourceRoot)
     : undefined;
+  const managedConfigOptions = {
+    sourceRoot: context.sourceRoot,
+    config,
+    runtimeRoot,
+  };
 
   if (input.scope === "openspec") {
     const openSpecConfig = config.runtime.openspec as
@@ -161,14 +174,48 @@ export function executeParsedCommand(input: ParsedArgs): void {
     return;
   }
 
+  if (input.scope === "configs") {
+    const result =
+      input.command === "sync"
+        ? syncManagedConfigs(managedConfigOptions)
+        : input.command === "validate"
+          ? validateManagedConfigs(managedConfigOptions)
+          : inspectManagedConfigs(managedConfigOptions);
+    printResult(result, input.json);
+    if ("ok" in result && !result.ok) {
+      process.exitCode = 1;
+    }
+    return;
+  }
+
   if (input.command === "sync") {
+    const preparedConfigs = input.scope
+      ? undefined
+      : prepareManagedConfigs(managedConfigOptions);
     const result = syncRuntime({
       sourceRoot: context.sourceRoot,
       config,
       runtimeRoot,
       surface: input.scope,
     });
-    printResult(result, input.json);
+    const managedConfigs = preparedConfigs
+      ? applyPreparedManagedConfigs(preparedConfigs)
+      : undefined;
+    printResult(
+      managedConfigs
+        ? {
+            ...result,
+            changedPaths: [
+              ...new Set([
+                ...result.changedPaths,
+                ...managedConfigs.changedPaths,
+              ]),
+            ].sort(),
+            managedConfigs,
+          }
+        : result,
+      input.json,
+    );
     return;
   }
   const report =
@@ -191,11 +238,22 @@ export function executeParsedCommand(input: ParsedArgs): void {
         targetRoot: context.targetRoot,
         config: (config.runtime.openspec as OpenSpecConfig | undefined) ?? {},
       });
+  const managedConfigs = input.scope
+    ? undefined
+    : input.command === "validate"
+      ? validateManagedConfigs(managedConfigOptions)
+      : inspectManagedConfigs(managedConfigOptions);
+  const ok = report.ok && (managedConfigs?.ok ?? true);
   printResult(
-    targetOpenSpec ? { ...report, targetOpenSpec } : report,
+    {
+      ...report,
+      ok,
+      ...(targetOpenSpec ? { targetOpenSpec } : {}),
+      ...(managedConfigs ? { managedConfigs } : {}),
+    },
     input.json,
   );
-  if (input.command === "status" && !report.ok) {
+  if (!ok) {
     process.exitCode = 1;
   }
 }
@@ -229,7 +287,7 @@ function addRuntimeCommand(
 
 function addRuntimeScope(
   program: Command,
-  scope: RuntimeSurface,
+  scope: RuntimeSurface | "configs",
   execute: CommandExecutor,
 ): void {
   const parent = program

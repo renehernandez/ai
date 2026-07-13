@@ -216,6 +216,226 @@ test("CLI synchronizes an isolated runtime and reports offline local state", () 
   });
 });
 
+test("configs status identifies exact drift before sync and validate converge it", () => {
+  withTempDir((root) => {
+    const fixture = createRuntimeSource(root);
+    const tracked = JSON.parse(readFileSync(fixture.configPath, "utf-8"));
+    tracked.runtime.configs = {
+      codex: {
+        target: "~/.codex/config.toml",
+        managed: {
+          features: {
+            memories: true,
+            multi_agent_v2: {
+              enabled: true,
+              max_concurrent_threads_per_session: 10,
+            },
+          },
+          agents: { max_depth: 1 },
+          memories: { generate_memories: true, use_memories: true },
+        },
+      },
+    };
+    writeFileSync(
+      fixture.configPath,
+      `${JSON.stringify(tracked, null, 2)}\n`,
+      "utf-8",
+    );
+
+    const home = join(root, "home");
+    const codexHome = join(home, ".codex");
+    mkdirSync(codexHome, { recursive: true });
+    const configPath = join(codexHome, "config.toml");
+    writeFileSync(
+      configPath,
+      `[features]\nmemories = true\n\n[features.multi_agent_v2]\nenabled = true\nmax_concurrent_threads_per_session = 4\n\n[agents]\nmax_depth = 1\n\n[memories]\ngenerate_memories = true\nuse_memories = true\n`,
+      "utf-8",
+    );
+
+    const fakeBin = join(root, "bin");
+    mkdirSync(fakeBin);
+    const fakeCodex = join(fakeBin, "codex");
+    writeFileSync(
+      fakeCodex,
+      `#!/bin/sh
+echo "config loader rejected candidate" >&2
+exit 23
+`,
+      "utf-8",
+    );
+    chmodSync(fakeCodex, 0o755);
+    const env = { HOME: home, PATH: `${fakeBin}:/usr/bin:/bin` };
+
+    const rejectedTopLevelSync = runAx(
+      [
+        "--config",
+        fixture.configPath,
+        "--runtime-root",
+        fixture.runtimeRoot,
+        "sync",
+        "--json",
+      ],
+      { cwd: root, sourceRoot: fixture.sourceRoot, env },
+    );
+    assert.notEqual(rejectedTopLevelSync.status, 0);
+    assert.match(
+      rejectedTopLevelSync.stderr,
+      /managed_config_validator_failed: config loader rejected candidate/,
+    );
+    assert.equal(
+      existsSync(join(fixture.installRoot, "agents", "skills", "explore")),
+      false,
+    );
+
+    writeFileSync(
+      fakeCodex,
+      `#!/bin/sh
+test "$1" = "features" || exit 20
+test "$2" = "list" || exit 21
+grep -q "max_concurrent_threads_per_session = 10" "$CODEX_HOME/config.toml" || exit 22
+exit 0
+`,
+      "utf-8",
+    );
+    chmodSync(fakeCodex, 0o755);
+
+    const status = runAx(
+      ["--config", fixture.configPath, "configs", "status", "--json"],
+      { cwd: root, sourceRoot: fixture.sourceRoot, env },
+    );
+    assert.equal(status.status, 1, status.stderr || status.stdout);
+    const statusReport = JSON.parse(status.stdout) as {
+      tools: { codex: { drift: Array<{ path: string; expected: number }> } };
+    };
+    assert.deepEqual(statusReport.tools.codex.drift, [
+      {
+        path: "features.multi_agent_v2.max_concurrent_threads_per_session",
+        expected: 10,
+        actual: 4,
+        reason: "different",
+      },
+    ]);
+
+    const sync = runAx(
+      [
+        "--config",
+        fixture.configPath,
+        "--runtime-root",
+        fixture.runtimeRoot,
+        "configs",
+        "sync",
+        "--json",
+      ],
+      { cwd: root, sourceRoot: fixture.sourceRoot, env },
+    );
+    assert.equal(sync.status, 0, sync.stderr || sync.stdout);
+    assert.match(
+      readFileSync(configPath, "utf-8"),
+      /max_concurrent_threads_per_session = 10/,
+    );
+
+    const validate = runAx(
+      ["--config", fixture.configPath, "configs", "validate", "--json"],
+      { cwd: root, sourceRoot: fixture.sourceRoot, env },
+    );
+    assert.equal(validate.status, 0, validate.stderr || validate.stdout);
+    assert.equal(
+      (
+        JSON.parse(validate.stdout) as {
+          tools: { codex: { validator: string } };
+        }
+      ).tools.codex.validator,
+      "passed",
+    );
+
+    const topLevelSync = runAx(
+      [
+        "--config",
+        fixture.configPath,
+        "--runtime-root",
+        fixture.runtimeRoot,
+        "sync",
+        "--json",
+      ],
+      { cwd: root, sourceRoot: fixture.sourceRoot, env },
+    );
+    assert.equal(
+      topLevelSync.status,
+      0,
+      topLevelSync.stderr || topLevelSync.stdout,
+    );
+    assert.deepEqual(
+      (
+        JSON.parse(topLevelSync.stdout) as {
+          managedConfigs: { changedPaths: string[] };
+        }
+      ).managedConfigs.changedPaths,
+      [],
+    );
+
+    const target = join(root, "target");
+    gitInit(target);
+    const topLevelStatus = runAx(
+      [
+        "--config",
+        fixture.configPath,
+        "--runtime-root",
+        fixture.runtimeRoot,
+        "status",
+        "--json",
+      ],
+      { cwd: target, sourceRoot: fixture.sourceRoot, env },
+    );
+    assert.equal(
+      topLevelStatus.status,
+      0,
+      topLevelStatus.stderr || topLevelStatus.stdout,
+    );
+    assert.equal(
+      (
+        JSON.parse(topLevelStatus.stdout) as {
+          managedConfigs: { ok: boolean };
+        }
+      ).managedConfigs.ok,
+      true,
+    );
+
+    writeFileSync(
+      configPath,
+      readFileSync(configPath, "utf-8").replace(
+        "max_concurrent_threads_per_session = 10",
+        "max_concurrent_threads_per_session = 4",
+      ),
+    );
+    const topLevelValidate = runAx(
+      [
+        "--config",
+        fixture.configPath,
+        "--runtime-root",
+        fixture.runtimeRoot,
+        "validate",
+        "--json",
+      ],
+      { cwd: target, sourceRoot: fixture.sourceRoot, env },
+    );
+    assert.equal(topLevelValidate.status, 1, topLevelValidate.stderr);
+    const validationReport = JSON.parse(topLevelValidate.stdout) as {
+      ok: boolean;
+      managedConfigs: {
+        ok: boolean;
+        tools: { codex: { validator: string; drift: unknown[] } };
+      };
+    };
+    assert.equal(validationReport.ok, false);
+    assert.equal(validationReport.managedConfigs.ok, false);
+    assert.equal(
+      validationReport.managedConfigs.tools.codex.validator,
+      "not_run",
+    );
+    assert.equal(validationReport.managedConfigs.tools.codex.drift.length, 1);
+  });
+});
+
 test("legacy mutation commands fail without creating runtime state", () => {
   withTempDir((root) => {
     const fixture = createRuntimeSource(root);

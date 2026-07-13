@@ -71,3 +71,18 @@ test("ax-cli skill retrieves source, isolation, shim, and activation rules", () 
   assert.match(metadata, /ax sync/i);
   assert.doesNotMatch(metadata, /install and update|install\|update/i);
 });
+
+test("ax-cli skill retrieves managed tool config ownership and isolation", () => {
+  assert.match(skill, /`pnpm ax configs sync`/);
+  assert.match(skill, /`pnpm ax configs status`/);
+  assert.match(skill, /`pnpm ax configs validate`/);
+  assert.match(skill, /exact.*TOML.*leaf|TOML.*leaf.*exact/is);
+  assert.match(skill, /unowned.*preserv/is);
+  assert.match(skill, /Codex.*config-loader|config-loader.*Codex/is);
+  assert.match(skill, /isolated HOME.*runtime root/is);
+  assert.match(
+    skill,
+    /runtime root.*does not.*config|does not.*redirect.*config/is,
+  );
+  assert.match(skill, /Do not.*hand-edit.*managed.*config/is);
+});

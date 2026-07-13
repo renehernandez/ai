@@ -49,7 +49,8 @@ These rules apply to command execution, network access, and tool installation ac
 
 Tracked `ax.config.json` is authoritative runtime state. It declares installed
 profiles, exactly one workflow-policy profile, exact runtime targets, and
-explicitly retired skills.
+explicitly retired skills. `runtime.configs` additionally owns exact leaf
+values inside mixed machine-local tool configs.
 
 - Use `pnpm ax sync` to build one validated candidate, replace every declared
   skill, instruction, and hook target, and remove `runtime.retiredSkills`.
@@ -57,6 +58,9 @@ explicitly retired skills.
   config when the machine selection changes. Sync has no selection flags.
 - Scoped `pnpm ax skills sync`, `pnpm ax instructions sync`, and
   `pnpm ax hooks sync` use that tracked selection and mutate only that surface.
+- Use `pnpm ax configs sync` to converge only the exact managed TOML leaves in
+  tracked config. Preserve every unowned value and do not hand-edit a managed
+  leaf in `~/.codex/config.toml`.
 - Leave unrelated paths outside AX's exact configured targets untouched.
 - Do not hand-copy runtime assets, create managed symlinks manually, or edit
   managed hook registration directly.
@@ -78,6 +82,9 @@ interrupted, rerun it.
   restore authoritative content.
 - Scoped `skills`, `instructions`, and `hooks` status/validate commands apply
   the same offline boundary to one surface.
+- `configs status` compares exact managed leaves. `configs validate` also runs
+  the installed Codex config loader against a temporary candidate and
+  remains read-only.
 - Codex hook trust is app-owned state. Report an untrusted status; do not edit
   trust hashes manually.
 
@@ -98,7 +105,8 @@ interrupted, rerun it.
 ## Isolated proof and live activation
 
 - Run pre-merge AX proof with isolated HOME, cache, skills, instructions, hooks,
-  and profile targets.
+  configs, and profile targets. `--runtime-root` does not redirect tool config,
+  so config mutation requires both an isolated HOME and runtime root.
 - A feature branch, dirty source, or disposable worktree must never mutate live
   runtime roots.
 - After merge, verify the clean merged default branch source matches the hosted

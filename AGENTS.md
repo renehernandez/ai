@@ -159,13 +159,17 @@ boundary.
   `runtime.installedProfiles`, `runtime.policyProfile`, exact managed targets,
   and `runtime.retiredSkills`.
 - Use `pnpm ax sync` to replace declared runtime targets from source and remove
-  explicitly retired skills. Scoped `skills sync`, `instructions sync`, and
-  `hooks sync` use the same config without initialization state.
-- AX leaves unrelated paths outside its exact declared targets untouched.
+  explicitly retired skills and converge exact managed tool-config leaves.
+  Scoped `skills sync`, `instructions sync`, `hooks sync`, and `configs sync`
+  use the same config without initialization state.
+- AX leaves unrelated paths and unowned tool-config values outside its exact
+  declared ownership untouched.
 - Use `ax status` and `ax validate` for offline, read-only inspection. They do
   not fetch remote refs, compare file contents, or mutate runtime state.
 - Exercise AX changes before merge only with isolated HOME and runtime roots.
   Do not refresh the live runtime from a feature branch or disposable worktree.
+  `--runtime-root` does not redirect tool config, so config sync requires an
+  isolated HOME too.
 - After every successful merge, locate the worktree that owns
   `refs/heads/main` with `git worktree list --porcelain`. Require it to be
   clean, run `git pull --ff-only origin main`, and verify its `HEAD` matches

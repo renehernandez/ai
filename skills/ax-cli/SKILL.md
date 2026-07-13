@@ -1,6 +1,6 @@
 ---
 name: ax-cli
-description: Use when managing local Agents Experience assets with the ax CLI, including authoritative runtime sync, shared skills, instructions, hooks, organizational agents, coordinator control projects, profiles, repo-local OpenSpec scaffolding, or runtime validation.
+description: Use when managing local Agents Experience assets with the ax CLI, including authoritative runtime sync, managed tool configs, shared skills, instructions, hooks, organizational agents, coordinator control projects, profiles, repo-local OpenSpec scaffolding, or runtime validation.
 allowed-tools: Read, Grep, Bash(ax:*), Bash(git:*), Bash(pnpm:*)
 ---
 
@@ -27,6 +27,7 @@ never synchronize runtime content.
 | Hooks only | `pnpm ax hooks sync` | `ax hooks sync` |
 | Organizational agents only | `pnpm ax agents sync` | `ax agents sync` |
 | Coordinator projects only | `pnpm ax coordinators sync` | `ax coordinators sync` |
+| Managed tool configs only | `pnpm ax configs sync` | `ax configs sync` |
 | Record saved-project IDs | `pnpm ax coordinators register --delivery-project-id <id> --operations-project-id <id>` | `ax coordinators register --delivery-project-id <id> --operations-project-id <id>` |
 | Repo-local OpenSpec | `pnpm ax openspec sync` | `ax openspec sync` |
 | Inspect runtime structure | `pnpm ax status` / `pnpm ax validate` | `ax status` / `ax validate` |
@@ -48,6 +49,7 @@ AX builds and validates every candidate before touching live targets. It then:
   declared by the selected profiles;
 - removes exact skill names listed in `runtime.retiredSkills`;
 - recreates configured Codex and Claude symlinks; and
+- converges exact managed Codex TOML leaves while preserving unowned values;
 - leaves unrelated files and skills outside those declared targets untouched.
 
 General runtime sync does not retain backups or require recovery decisions. The
@@ -86,6 +88,21 @@ a standalone policy hook. AX preserves siblings of those child roots. After
 post-merge sync and manual saved-project creation, resolve both IDs with Codex
 `list_projects`, then run `ax coordinators register` before activation.
 
+## Managed tool configs
+
+`runtime.configs` currently manages six exact leaves inside
+`~/.codex/config.toml`: `features.memories`, both
+`features.multi_agent_v2` values, `agents.max_depth`, and both `memories`
+values. Parent tables are grouping only. All other TOML values and unowned
+source text remain machine-local and are preserved.
+
+Use `pnpm ax configs status` to report path-specific drift,
+`pnpm ax configs sync` to converge the tracked leaves, and
+`pnpm ax configs validate` for read-only drift plus Codex config-loader
+validation. Sync validates a complete temporary candidate, detects concurrent
+Codex Desktop writes, and atomically replaces only a safe regular-file target.
+Do not hand-edit a managed config leaf; update `ax.config.json` instead.
+
 ## Repo-local OpenSpec
 
 OpenSpec remains repository-scoped and transactionally managed. Run
@@ -117,6 +134,10 @@ rejects live-root mutation from a feature branch, dirty source, or disposable
 worktree. Post-merge, run `ax sync` from a verified clean default-branch source
 to activate the merged runtime.
 
+`--runtime-root` does not redirect tool configs. Feature-branch config proof
+must use both an isolated HOME and an isolated runtime root; AX rejects an
+unverified source that still resolves the Codex target under the live home.
+
 ## Portable skill boundary
 
 Keep AX command and runtime-path steering in this skill. Other portable skills
@@ -131,6 +152,11 @@ dependency.
   coordinators register` and requires coordinator validation before activation.
 - REFACTOR keeps feature-branch proof under isolated HOME/runtime roots and
   forbids editing generated children or registration state directly.
+- RED retrieval checks showed no command or ownership guidance for managed
+  Codex config leaves.
+- GREEN retrieves the three `configs` commands, exact-leaf ownership,
+  installed config-loader validation, unowned-value preservation, and dual-root
+  isolation from this skill.
 
 ## Common mistakes
 
@@ -141,8 +167,10 @@ dependency.
 | Expecting status to fetch a remote | Run sync when remote freshness matters. |
 | Expecting general validate to compare source content | Run sync to restore general surfaces; coordinator validate separately checks its owned inventory. |
 | Editing generated Codex agent TOML | Edit `agents/` in the AI repo and run agent sync. |
+| Hand-editing a managed Codex config leaf | Edit `runtime.configs.codex.managed` in `ax.config.json`, then run `ax configs sync`. |
 | Editing a generated coordinator child | Edit `coordinator-projects/` or the renderer, then run coordinator sync. |
 | Hand-editing `control-projects.json` | Resolve unique ID/path matches with `list_projects`, then use `ax coordinators register`. |
 | Activating before saved-project registration | Register both current project IDs and validate the coordinator surface first. |
 | Running raw upstream OpenSpec setup | Use repo-local `ax openspec sync`. |
+| Passing only `--runtime-root` for config proof | Also set an isolated HOME; runtime-root selection does not redirect `config.toml`. |
 | Activating live roots from feature work | Use isolated roots and activate after merge. |

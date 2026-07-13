@@ -137,3 +137,25 @@ test("AX reference documents the organizational agent surface", () => {
   assert.match(workspace, /Max and Ultra are manual-only/);
   assert.match(workspace, /Rene must merge|merge authority/i);
 });
+
+test("AX reference documents exact managed config leaves", () => {
+  const content = readFileSync("docs/ax.md", "utf-8");
+  const config = JSON.parse(readFileSync("ax.config.json", "utf-8"));
+
+  assert.match(content, /pnpm ax configs sync/);
+  assert.match(content, /exact.*TOML.*leaf|TOML.*leaf.*exact/is);
+  assert.match(content, /unowned.*preserv/is);
+  assert.match(content, /isolated HOME.*runtime root/is);
+  assert.match(content, /Codex.*config loader|codex features list/is);
+  assert.deepEqual(config.runtime.configs.codex.managed, {
+    features: {
+      memories: true,
+      multi_agent_v2: {
+        enabled: true,
+        max_concurrent_threads_per_session: 10,
+      },
+    },
+    agents: { max_depth: 1 },
+    memories: { generate_memories: true, use_memories: true },
+  });
+});

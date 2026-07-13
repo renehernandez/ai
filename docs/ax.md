@@ -15,7 +15,8 @@ OpenSpec target the current working directory.
 
 Tracked `ax.config.json` is authoritative runtime state. It declares source
 refs, `runtime.installedProfiles`, `runtime.policyProfile`, exact targets,
-instructions, hooks, agents, coordinator projects, and `runtime.retiredSkills`.
+instructions, hooks, agents, coordinator projects, managed tool-config leaves,
+and `runtime.retiredSkills`.
 
 AX replaces declared targets on every sync and leaves unrelated filesystem
 paths untouched. It stores only a disposable remote-source cache under
@@ -40,6 +41,7 @@ pnpm ax instructions sync
 pnpm ax hooks sync
 pnpm ax agents sync
 pnpm ax coordinators sync
+pnpm ax configs sync
 ```
 
 Each distinct configured source/ref pair resolves once per invocation. Every
@@ -68,11 +70,54 @@ When offline inspection includes OpenSpec, AX locates the configured
 checks. Status and validate never execute that CLI or probe its version. Only
 `ax openspec sync` runs `openspec --version`.
 
-Scoped `skills`, `instructions`, `hooks`, `agents`, and `coordinators`
-status/validate commands apply the same offline boundary to one surface. Agent
-validation additionally compiles every JSON schema, checks the exact generated
-output inventory, validates role/profile references, enforces the xhigh
-automatic ceiling, and verifies the generated standalone validators.
+Scoped `skills`, `instructions`, `hooks`, `agents`, `coordinators`, and
+`configs` status/validate commands apply the same offline boundary to one
+surface. Agent validation additionally compiles every JSON schema, checks the
+exact generated output inventory, validates role/profile references, enforces
+the xhigh automatic ceiling, and verifies the generated standalone validators.
+
+The `configs` scope compares tracked leaf values with the local tool config.
+`configs validate` additionally runs the installed Codex config loader
+against a temporary candidate home. It does not mutate the target.
+
+## Synchronize managed tool configs
+
+`runtime.configs` owns selected values inside mixed machine-local config files.
+The first handler manages these exact TOML leaves in
+`~/.codex/config.toml`:
+
+| Managed leaf | Value |
+| --- | --- |
+| `features.memories` | `true` |
+| `features.multi_agent_v2.enabled` | `true` |
+| `features.multi_agent_v2.max_concurrent_threads_per_session` | `10` |
+| `agents.max_depth` | `1` |
+| `memories.generate_memories` | `true` |
+| `memories.use_memories` | `true` |
+
+Parent tables are grouping only. AX preserves every unowned value and unowned
+source text, including project trust entries, plugins, MCP servers, providers,
+and machine-specific paths. Do not hand-edit a managed config leaf; change its
+tracked value in `ax.config.json` and run:
+
+```bash
+pnpm ax configs status
+pnpm ax configs sync
+pnpm ax configs validate
+```
+
+Status reports each missing or differing leaf. Sync starts from the existing
+file, constructs a source-preserving candidate, parses the complete TOML, and
+runs `codex features list` against a temporary `CODEX_HOME`. This loads the
+complete config schema and types without requiring auth or connectivity. AX then
+verifies that Codex Desktop has not changed the original bytes and uses a
+same-directory atomic rename. A matching file is not rewritten. Validate is
+read-only and requires both convergence and a successful Codex load.
+
+A missing config is ordinary drift; sync creates the minimum managed document.
+AX rejects alternate targets, symlinked config paths, unsafe parent paths,
+ambiguous TOML representations, validator failures, and concurrent target
+changes without replacing the original file.
 
 ## Synchronize organizational agents
 
@@ -227,9 +272,12 @@ managed assets.
 ## Prove changes without touching live runtime
 
 Before merge, run AX behavior only with isolated HOME, cache, skill,
-instruction, hook, profile, and coordinator roots. Feature
-branches, dirty source, and disposable worktrees cannot target canonical live
-runtime roots.
+instruction, hook, profile, config, and coordinator roots. Feature branches,
+dirty source, and disposable worktrees cannot target canonical live runtime
+roots. `--runtime-root` does not redirect `~/.codex/config.toml`; config proof
+therefore requires an isolated HOME and an isolated runtime root. AX rejects an
+unverified source that points either surface at the operating system user's
+live home.
 
 After merge, verify the clean merged default branch source matches the hosted
 default branch. Then run live `ax sync`. Candidate construction and structural
