@@ -79,8 +79,15 @@ function passingClosure(
     executionId: "main-agent-closure",
     targetBaseSha: "base-a",
     head: "head-b",
-    findingIds: ["finding-1"],
-    affectedVerificationPassed: true,
+    resolutions: [
+      {
+        findingId: "finding-1",
+        resolutionEvidence:
+          "The repaired head uses one bounded closure path for the finding.",
+        recheckedSurfaces: ["review-guidance"],
+        affectedVerificationPassed: true,
+      },
+    ],
     status: "passed",
     findings: [],
     ...overrides,
@@ -323,8 +330,48 @@ test("technical readiness rejects incomplete or blocking normalized findings", (
               : result,
           ),
           closureResult: passingClosure({
-            findingIds: ["finding-1", "finding-1"],
+            resolutions: [
+              {
+                findingId: "finding-1",
+                resolutionEvidence: "First duplicate resolution.",
+                recheckedSurfaces: ["review-guidance"],
+                affectedVerificationPassed: true,
+              },
+              {
+                findingId: "finding-1",
+                resolutionEvidence: "Second duplicate resolution.",
+                recheckedSurfaces: ["review-guidance"],
+                affectedVerificationPassed: true,
+              },
+            ],
           }),
+        },
+        {
+          target: "final_implementation",
+          targetBase: "main",
+          targetBaseSha: "base-a",
+          head: "head-b",
+        },
+      ),
+    /technical_readiness_closure_resolution_reused:finding-1/,
+  );
+
+  assert.throws(
+    () =>
+      validateTechnicalReadinessCheckpoint(
+        {
+          ...checkpoint,
+          head: "head-b",
+          reviewResults: checkpoint.reviewResults.map((result) =>
+            result.reviewType === "diff-review"
+              ? {
+                  ...result,
+                  status: "finding" as const,
+                  findings: [repairFinding(), secondFinding],
+                }
+              : result,
+          ),
+          closureResult: passingClosure(),
         },
         {
           target: "final_implementation",
@@ -353,6 +400,30 @@ test("one closure check resolves only the repair batch and affected proof", () =
     ),
     closureResult: passingClosure(),
   };
+  const validResolution = passingClosure().resolutions[0];
+  const assertClosureRejects = (
+    resolutions: NonNullable<
+      TechnicalReadinessCheckpoint["closureResult"]
+    >["resolutions"],
+    expectedError: RegExp,
+  ) => {
+    assert.throws(
+      () =>
+        validateTechnicalReadinessCheckpoint(
+          {
+            ...checkpoint,
+            closureResult: passingClosure({ resolutions }),
+          },
+          {
+            target: "final_implementation",
+            targetBase: "main",
+            targetBaseSha: "base-a",
+            head: "head-b",
+          },
+        ),
+      expectedError,
+    );
+  };
 
   assert.doesNotThrow(() =>
     validateTechnicalReadinessCheckpoint(checkpoint, {
@@ -363,22 +434,36 @@ test("one closure check resolves only the repair batch and affected proof", () =
     }),
   );
 
-  assert.throws(
-    () =>
-      validateTechnicalReadinessCheckpoint(
+  for (const [resolutions, expectedError] of [
+    [[], /technical_readiness_closure_missing:finding-1/],
+    [
+      [{ ...validResolution, resolutionEvidence: "" }],
+      /technical_readiness_closure_resolution_incomplete:finding-1:resolutionEvidence/,
+    ],
+    [
+      [{ ...validResolution, recheckedSurfaces: [] }],
+      /technical_readiness_closure_surfaces_missing:finding-1:review-guidance/,
+    ],
+    [
+      [
         {
-          ...checkpoint,
-          closureResult: passingClosure({ findingIds: [] }),
+          ...validResolution,
+          recheckedSurfaces: ["review-guidance", "review-guidance"],
         },
-        {
-          target: "final_implementation",
-          targetBase: "main",
-          targetBaseSha: "base-a",
-          head: "head-b",
-        },
-      ),
-    /technical_readiness_closure_missing:finding-1/,
-  );
+      ],
+      /technical_readiness_closure_surfaces_invalid:finding-1/,
+    ],
+    [
+      [{ ...validResolution, affectedVerificationPassed: false }],
+      /technical_readiness_closure_verification_failed:finding-1/,
+    ],
+    [
+      [{ ...validResolution, findingId: "unknown-finding" }],
+      /technical_readiness_closure_scope_expanded:unknown-finding/,
+    ],
+  ] as const) {
+    assertClosureRejects(resolutions, expectedError);
+  }
 
   assert.throws(
     () =>
@@ -430,6 +515,68 @@ test("one closure check resolves only the repair batch and affected proof", () =
         },
       ),
     /technical_readiness_closure_finding_incomplete:invalidatedSurfaces/,
+  );
+
+  assert.doesNotThrow(() =>
+    validateTechnicalReadinessCheckpoint(
+      {
+        ...checkpoint,
+        closureResult: passingClosure({
+          findings: [
+            {
+              ...repairFinding(),
+              id: "deferred-cleanup",
+              severity: "nonblocking",
+              disposition: "defer",
+              issue: "The repair exposed an unrelated optional cleanup.",
+              remediationOutcome: "Defer it without blocking readiness.",
+              invalidatedSurfaces: [],
+            },
+          ],
+        }),
+      },
+      {
+        target: "final_implementation",
+        targetBase: "main",
+        targetBaseSha: "base-a",
+        head: "head-b",
+      },
+    ),
+  );
+});
+
+test("material-risk rediscovery supersedes the earlier closure checkpoint", () => {
+  const discovery = passingCheckpoint();
+  const rediscovered: TechnicalReadinessCheckpoint = {
+    ...discovery,
+    head: "head-b",
+    reviewResults: discovery.reviewResults.map((result) => ({
+      ...result,
+      head: "head-b",
+    })),
+  };
+
+  assert.doesNotThrow(() =>
+    validateTechnicalReadinessCheckpoint(rediscovered, {
+      target: "final_implementation",
+      targetBase: "main",
+      targetBaseSha: "base-a",
+      head: "head-b",
+    }),
+  );
+
+  assert.throws(
+    () =>
+      validateTechnicalReadinessCheckpoint(
+        { ...rediscovered, closureResult: passingClosure() },
+        {
+          target: "final_implementation",
+          targetBase: "main",
+          targetBaseSha: "base-a",
+          head: "head-b",
+        },
+      ),
+    /technical_readiness_closure_scope_expanded:finding-1/,
   );
 });
 
@@ -736,6 +883,14 @@ test("orchestration guidance keeps review coverage explicit and bounded", () => 
   assert.match(review, /backfill/i);
   assert.match(review, /one discovery pass/i);
   assert.match(review, /one closure check/i);
+  assert.match(review, /one resolution record.*repair.*finding/is);
+  assert.match(review, /resolutionEvidence/);
+  assert.match(review, /recheckedSurfaces/);
+  assert.match(review, /surviving canonical owner/i);
+  assert.match(review, /producer-to-consumer path/i);
+  assert.match(review, /replacement discovery\s+supersedes/i);
+  assert.match(review, /do not launch or re-prompt a reviewer/i);
+  assert.match(review, /without asking\s+the user/i);
   assert.match(review, /patch-equivalent rebase/i);
   assert.match(review, /findings batch/i);
   assert.match(review, /every phase-specific review type/i);

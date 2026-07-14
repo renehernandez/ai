@@ -323,14 +323,20 @@ export type ReviewFinding = {
   invalidatedSurfaces: readonly string[];
 };
 
+export type ClosureResolution = {
+  findingId: string;
+  resolutionEvidence: string;
+  recheckedSurfaces: readonly string[];
+  affectedVerificationPassed: boolean;
+};
+
 export type ClosureResult = {
   reviewTypes: readonly string[];
   execution: "inline" | "subagent";
   executionId: string;
   targetBaseSha: string;
   head: string;
-  findingIds: readonly string[];
-  affectedVerificationPassed: boolean;
+  resolutions: readonly ClosureResolution[];
   status: "passed" | "blocked";
   findings: readonly ReviewFinding[];
 };
@@ -505,12 +511,9 @@ export function validateTechnicalReadinessCheckpoint(
 
   const closure = checkpoint.closureResult;
   if (repairFindings.length > 0) {
-    const missingClosure = repairFindings.find(
-      ({ finding }) => !closure?.findingIds.includes(finding.id),
-    );
-    if (missingClosure) {
+    if (!closure) {
       throw new Error(
-        `technical_readiness_closure_missing:${missingClosure.finding.id}`,
+        `technical_readiness_closure_missing:${repairFindings[0].finding.id}`,
       );
     }
   }
@@ -519,8 +522,7 @@ export function validateTechnicalReadinessCheckpoint(
     if (
       closure.targetBaseSha !== expected.targetBaseSha ||
       closure.head !== expected.head ||
-      closure.status !== "passed" ||
-      !closure.affectedVerificationPassed
+      closure.status !== "passed"
     ) {
       throw new Error("technical_readiness_closure_incomplete");
     }
@@ -530,18 +532,70 @@ export function validateTechnicalReadinessCheckpoint(
     ) {
       throw new Error("technical_readiness_closure_execution_invalid");
     }
-    const repairIds = new Set(repairFindings.map(({ finding }) => finding.id));
-    const closureIds = new Set(closure.findingIds);
-    if (
-      closureIds.size !== closure.findingIds.length ||
-      closureIds.size !== repairIds.size ||
-      [...repairIds].some((id) => !closureIds.has(id))
-    ) {
-      const missing = repairFindings.find(
-        ({ finding }) => !closureIds.has(finding.id),
-      );
+
+    const repairsById = new Map(
+      repairFindings.map(({ finding }) => [finding.id, finding] as const),
+    );
+    const resolutionsById = new Map<string, ClosureResolution>();
+    for (const resolution of closure.resolutions) {
+      if (!resolution.findingId.trim()) {
+        throw new Error(
+          "technical_readiness_closure_resolution_incomplete:unknown:findingId",
+        );
+      }
+      if (resolutionsById.has(resolution.findingId)) {
+        throw new Error(
+          `technical_readiness_closure_resolution_reused:${resolution.findingId}`,
+        );
+      }
+      const repair = repairsById.get(resolution.findingId);
+      if (!repair) {
+        throw new Error(
+          `technical_readiness_closure_scope_expanded:${resolution.findingId}`,
+        );
+      }
+      if (!resolution.resolutionEvidence.trim()) {
+        throw new Error(
+          `technical_readiness_closure_resolution_incomplete:${resolution.findingId}:resolutionEvidence`,
+        );
+      }
+      if (!Array.isArray(resolution.recheckedSurfaces)) {
+        throw new Error(
+          `technical_readiness_closure_surfaces_invalid:${resolution.findingId}`,
+        );
+      }
+      const recheckedSurfaces = new Set<string>();
+      for (const surface of resolution.recheckedSurfaces) {
+        const normalizedSurface = surface.trim();
+        if (!normalizedSurface || recheckedSurfaces.has(normalizedSurface)) {
+          throw new Error(
+            `technical_readiness_closure_surfaces_invalid:${resolution.findingId}`,
+          );
+        }
+        recheckedSurfaces.add(normalizedSurface);
+      }
+      for (const surface of repair.invalidatedSurfaces) {
+        const normalizedSurface = surface.trim();
+        if (!recheckedSurfaces.has(normalizedSurface)) {
+          throw new Error(
+            `technical_readiness_closure_surfaces_missing:${resolution.findingId}:${normalizedSurface}`,
+          );
+        }
+      }
+      if (!resolution.affectedVerificationPassed) {
+        throw new Error(
+          `technical_readiness_closure_verification_failed:${resolution.findingId}`,
+        );
+      }
+      resolutionsById.set(resolution.findingId, resolution);
+    }
+
+    const missing = repairFindings.find(
+      ({ finding }) => !resolutionsById.has(finding.id),
+    );
+    if (missing) {
       throw new Error(
-        `technical_readiness_closure_${missing ? `missing:${missing.finding.id}` : "scope_expanded"}`,
+        `technical_readiness_closure_missing:${missing.finding.id}`,
       );
     }
     const repairReviewTypes = new Set(
