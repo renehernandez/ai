@@ -8,12 +8,12 @@ import {
   type PocArchitectureCheckpoint,
 } from "../../skills/execute/scripts/execution-contract.ts";
 import {
-  baselineFor,
   firstObjectiveProofBaseline,
-  type PublicationCheckpoint,
+  requiredReviewTypesFor,
   reviewWavesFor,
-  validatePublicationCheckpoint,
+  type TechnicalReadinessCheckpoint,
   validateReviewTaskPacket,
+  validateTechnicalReadinessCheckpoint,
 } from "../../skills/review/scripts/review-contract.ts";
 
 const root = process.cwd();
@@ -22,7 +22,7 @@ function read(path: string): string {
   return readFileSync(join(root, path), "utf8");
 }
 
-const implementationReviewers = [
+const implementationReviewerCatalog = [
   "code-simplifier",
   "code-quality-review",
   "deslop",
@@ -30,33 +30,71 @@ const implementationReviewers = [
   "scrutinize",
 ] as const;
 
-function passingCheckpoint(): PublicationCheckpoint {
+function passingCheckpoint(): TechnicalReadinessCheckpoint {
   return {
+    artifact: "MR !199",
     targetBase: "main",
     targetBaseSha: "base-a",
     head: "head-a",
     diffInspected: true,
     hooksPassed: true,
     requiredSpecialists: [],
-    excludedReviewerRunIds: ["writer", "coordinator", "hosted-bot"],
-    reviewResults: implementationReviewers.map((reviewer, index) => ({
-      reviewer,
-      reviewerRunId: `reviewer-${index + 1}`,
+    reviewResults: implementationReviewerCatalog.map((reviewType) => ({
+      reviewType,
+      execution: "inline" as const,
+      executionId: "main-agent-review",
       targetBaseSha: "base-a",
       head: "head-a",
       status: "passed" as const,
       findings: [],
     })),
+    closureResult: undefined,
+    rebaseEvidence: undefined,
     provider: "gitlab",
     blockers: [],
   };
 }
 
-test("completed code requires the five accepted reviewer skills", () => {
-  assert.deepEqual(baselineFor("poc"), implementationReviewers);
+function repairFinding() {
+  return {
+    id: "finding-1",
+    severity: "blocking" as const,
+    disposition: "repair" as const,
+    affectedLocation: "skills/review/SKILL.md",
+    issue: "The closure boundary is missing.",
+    evidence: "The current instructions restart full discovery after repair.",
+    remediationOutcome: "Bound closure to this finding and affected proof.",
+    invalidatedSurfaces: ["review-guidance"],
+  };
+}
+
+function passingClosure(
+  overrides: Partial<
+    NonNullable<TechnicalReadinessCheckpoint["closureResult"]>
+  > = {},
+): NonNullable<TechnicalReadinessCheckpoint["closureResult"]> {
+  return {
+    reviewTypes: ["diff-review"],
+    execution: "inline",
+    executionId: "main-agent-closure",
+    targetBaseSha: "base-a",
+    head: "head-b",
+    findingIds: ["finding-1"],
+    affectedVerificationPassed: true,
+    status: "passed",
+    findings: [],
+    ...overrides,
+  };
+}
+
+test("completed code exposes every required phase review type", () => {
   assert.deepEqual(
-    baselineFor("final_implementation"),
-    implementationReviewers,
+    requiredReviewTypesFor("poc"),
+    implementationReviewerCatalog,
+  );
+  assert.deepEqual(
+    requiredReviewTypesFor("final_implementation"),
+    implementationReviewerCatalog,
   );
   assert.deepEqual(firstObjectiveProofBaseline, [
     "code-quality-review",
@@ -64,10 +102,10 @@ test("completed code requires the five accepted reviewer skills", () => {
   ]);
 });
 
-test("publication requires distinct reviewer-run identities on the exact target", () => {
+test("technical readiness requires every phase review type", () => {
   const checkpoint = passingCheckpoint();
   assert.doesNotThrow(() =>
-    validatePublicationCheckpoint(checkpoint, {
+    validateTechnicalReadinessCheckpoint(checkpoint, {
       target: "final_implementation",
       targetBase: "main",
       targetBaseSha: "base-a",
@@ -75,43 +113,66 @@ test("publication requires distinct reviewer-run identities on the exact target"
     }),
   );
 
-  const duplicateIdentity = {
+  assert.throws(
+    () =>
+      validateTechnicalReadinessCheckpoint(
+        { ...checkpoint, reviewResults: checkpoint.reviewResults.slice(0, 1) },
+        {
+          target: "final_implementation",
+          targetBase: "main",
+          targetBaseSha: "base-a",
+          head: "head-a",
+        },
+      ),
+    /technical_readiness_review_types_missing:code-quality-review,deslop,diff-review,scrutinize/,
+  );
+
+  assert.throws(
+    () =>
+      validateTechnicalReadinessCheckpoint(
+        { ...checkpoint, artifact: "" },
+        {
+          target: "final_implementation",
+          targetBase: "main",
+          targetBaseSha: "base-a",
+          head: "head-a",
+        },
+      ),
+    /technical_readiness_artifact_unresolved/,
+  );
+});
+
+test("one inline execution may cover every review type on the exact target", () => {
+  const checkpoint = passingCheckpoint();
+  assert.doesNotThrow(() =>
+    validateTechnicalReadinessCheckpoint(checkpoint, {
+      target: "final_implementation",
+      targetBase: "main",
+      targetBaseSha: "base-a",
+      head: "head-a",
+    }),
+  );
+
+  const mixedTargets: TechnicalReadinessCheckpoint = {
     ...checkpoint,
     reviewResults: checkpoint.reviewResults.map((result, index) =>
       index === 1
         ? {
             ...result,
-            reviewerRunId: checkpoint.reviewResults[0].reviewerRunId,
+            head: "different-discovery-head",
           }
         : result,
     ),
   };
   assert.throws(
     () =>
-      validatePublicationCheckpoint(duplicateIdentity, {
+      validateTechnicalReadinessCheckpoint(mixedTargets, {
         target: "final_implementation",
         targetBase: "main",
         targetBaseSha: "base-a",
         head: "head-a",
       }),
-    /publication_checkpoint_reviewer_identity_reused/,
-  );
-
-  const excludedIdentity = {
-    ...checkpoint,
-    reviewResults: checkpoint.reviewResults.map((result, index) =>
-      index === 0 ? { ...result, reviewerRunId: "writer" } : result,
-    ),
-  };
-  assert.throws(
-    () =>
-      validatePublicationCheckpoint(excludedIdentity, {
-        target: "final_implementation",
-        targetBase: "main",
-        targetBaseSha: "base-a",
-        head: "head-a",
-      }),
-    /publication_checkpoint_reviewer_identity_excluded/,
+    /technical_readiness_discovery_target_mismatch:code-quality-review/,
   );
 });
 
@@ -123,13 +184,13 @@ test("selected specialists require separate current passing results", () => {
   };
   assert.throws(
     () =>
-      validatePublicationCheckpoint(missingSpecialist, {
+      validateTechnicalReadinessCheckpoint(missingSpecialist, {
         target: "poc",
         targetBase: "main",
         targetBaseSha: "base-a",
         head: "head-a",
       }),
-    /publication_checkpoint_reviewers_missing:security-review/,
+    /technical_readiness_review_types_missing:security-review/,
   );
 
   const passingSpecialist = {
@@ -137,8 +198,9 @@ test("selected specialists require separate current passing results", () => {
     reviewResults: [
       ...checkpoint.reviewResults,
       {
-        reviewer: "security-review",
-        reviewerRunId: "security-specialist",
+        reviewType: "security-review",
+        execution: "subagent" as const,
+        executionId: "security-specialist",
         targetBaseSha: "base-a",
         head: "head-a",
         status: "passed" as const,
@@ -147,7 +209,7 @@ test("selected specialists require separate current passing results", () => {
     ],
   };
   assert.doesNotThrow(() =>
-    validatePublicationCheckpoint(passingSpecialist, {
+    validateTechnicalReadinessCheckpoint(passingSpecialist, {
       target: "poc",
       targetBase: "main",
       targetBaseSha: "base-a",
@@ -156,22 +218,25 @@ test("selected specialists require separate current passing results", () => {
   );
 });
 
-test("publication rejects incomplete or blocking normalized findings", () => {
+test("technical readiness rejects incomplete or blocking normalized findings", () => {
   const checkpoint = passingCheckpoint();
   const withFinding = (
-    finding: PublicationCheckpoint["reviewResults"][number]["findings"][number],
-  ): PublicationCheckpoint => ({
+    finding: TechnicalReadinessCheckpoint["reviewResults"][number]["findings"][number],
+    status: "passed" | "finding" = "finding",
+  ): TechnicalReadinessCheckpoint => ({
     ...checkpoint,
     reviewResults: checkpoint.reviewResults.map((result, index) =>
-      index === 0 ? { ...result, findings: [finding] } : result,
+      index === 0 ? { ...result, status, findings: [finding] } : result,
     ),
   });
 
   assert.throws(
     () =>
-      validatePublicationCheckpoint(
+      validateTechnicalReadinessCheckpoint(
         withFinding({
+          id: "finding-1",
           severity: "nonblocking",
+          disposition: "defer",
           affectedLocation: "skills/review/SKILL.md",
           issue: "Reviewer result needs structured evidence.",
           evidence: "",
@@ -185,14 +250,16 @@ test("publication rejects incomplete or blocking normalized findings", () => {
           head: "head-a",
         },
       ),
-    /publication_checkpoint_finding_incomplete:code-simplifier:evidence/,
+    /technical_readiness_finding_incomplete:code-simplifier:evidence/,
   );
 
   assert.throws(
     () =>
-      validatePublicationCheckpoint(
+      validateTechnicalReadinessCheckpoint(
         withFinding({
+          id: "finding-1",
           severity: "blocking",
+          disposition: "repair",
           affectedLocation: "skills/review/scripts/review-contract.ts",
           issue: "A blocking finding cannot pass publication.",
           evidence: "The reviewer marked the finding blocking.",
@@ -206,31 +273,297 @@ test("publication rejects incomplete or blocking normalized findings", () => {
           head: "head-a",
         },
       ),
-    /publication_checkpoint_reviewer_blocking_finding:code-simplifier/,
+    /technical_readiness_closure_missing:finding-1/,
+  );
+
+  assert.throws(
+    () =>
+      validateTechnicalReadinessCheckpoint(
+        withFinding(
+          {
+            id: "finding-1",
+            severity: "nonblocking",
+            disposition: "defer",
+            affectedLocation: "skills/review/SKILL.md",
+            issue: "A passed outcome cannot hide a finding.",
+            evidence: "The result includes a normalized finding.",
+            remediationOutcome: "Report the review type as finding.",
+            invalidatedSurfaces: [],
+          },
+          "passed",
+        ),
+        {
+          target: "final_implementation",
+          targetBase: "main",
+          targetBaseSha: "base-a",
+          head: "head-a",
+        },
+      ),
+    /technical_readiness_passed_review_has_findings:code-simplifier/,
+  );
+
+  const secondFinding = {
+    ...repairFinding(),
+    id: "finding-2",
+    issue: "A second repair is required.",
+  };
+  assert.throws(
+    () =>
+      validateTechnicalReadinessCheckpoint(
+        {
+          ...checkpoint,
+          head: "head-b",
+          reviewResults: checkpoint.reviewResults.map((result) =>
+            result.reviewType === "diff-review"
+              ? {
+                  ...result,
+                  status: "finding" as const,
+                  findings: [repairFinding(), secondFinding],
+                }
+              : result,
+          ),
+          closureResult: passingClosure({
+            findingIds: ["finding-1", "finding-1"],
+          }),
+        },
+        {
+          target: "final_implementation",
+          targetBase: "main",
+          targetBaseSha: "base-a",
+          head: "head-b",
+        },
+      ),
+    /technical_readiness_closure_missing:finding-2/,
+  );
+});
+
+test("one closure check resolves only the repair batch and affected proof", () => {
+  const discovery = passingCheckpoint();
+  const checkpoint: TechnicalReadinessCheckpoint = {
+    ...discovery,
+    head: "head-b",
+    reviewResults: discovery.reviewResults.map((result) =>
+      result.reviewType === "diff-review"
+        ? {
+            ...result,
+            status: "finding" as const,
+            findings: [repairFinding()],
+          }
+        : result,
+    ),
+    closureResult: passingClosure(),
+  };
+
+  assert.doesNotThrow(() =>
+    validateTechnicalReadinessCheckpoint(checkpoint, {
+      target: "final_implementation",
+      targetBase: "main",
+      targetBaseSha: "base-a",
+      head: "head-b",
+    }),
+  );
+
+  assert.throws(
+    () =>
+      validateTechnicalReadinessCheckpoint(
+        {
+          ...checkpoint,
+          closureResult: passingClosure({ findingIds: [] }),
+        },
+        {
+          target: "final_implementation",
+          targetBase: "main",
+          targetBaseSha: "base-a",
+          head: "head-b",
+        },
+      ),
+    /technical_readiness_closure_missing:finding-1/,
+  );
+
+  assert.throws(
+    () =>
+      validateTechnicalReadinessCheckpoint(
+        {
+          ...checkpoint,
+          closureResult: passingClosure({
+            findings: [
+              {
+                ...repairFinding(),
+                id: "new-blocker",
+                issue: "Repair introduced an affected-behavior defect.",
+              },
+            ],
+          }),
+        },
+        {
+          target: "final_implementation",
+          targetBase: "main",
+          targetBaseSha: "base-a",
+          head: "head-b",
+        },
+      ),
+    /technical_readiness_closure_blocking_finding:new-blocker/,
+  );
+
+  assert.throws(
+    () =>
+      validateTechnicalReadinessCheckpoint(
+        {
+          ...checkpoint,
+          closureResult: passingClosure({
+            findings: [
+              {
+                ...repairFinding(),
+                id: "deferred-cleanup",
+                severity: "nonblocking",
+                disposition: "defer",
+                invalidatedSurfaces: [""],
+              },
+            ],
+          }),
+        },
+        {
+          target: "final_implementation",
+          targetBase: "main",
+          targetBaseSha: "base-a",
+          head: "head-b",
+        },
+      ),
+    /technical_readiness_closure_finding_incomplete:invalidatedSurfaces/,
+  );
+});
+
+test("patch-equivalent rebase refreshes the checkpoint without rediscovery", () => {
+  const discovery = passingCheckpoint();
+  const rebaseEvidence = {
+    reviewedTargetBaseSha: "base-a",
+    reviewedHead: "head-a",
+    effectivePatchUnchanged: true,
+    baseSensitiveContextUnchanged: true,
+    requiredCoverageUnchanged: true,
+    affectedVerificationPassed: true,
+  };
+  const checkpoint: TechnicalReadinessCheckpoint = {
+    ...discovery,
+    targetBaseSha: "base-b",
+    rebaseEvidence,
+  };
+
+  assert.doesNotThrow(() =>
+    validateTechnicalReadinessCheckpoint(checkpoint, {
+      target: "final_implementation",
+      targetBase: "main",
+      targetBaseSha: "base-b",
+      head: "head-a",
+    }),
+  );
+
+  assert.throws(
+    () =>
+      validateTechnicalReadinessCheckpoint(
+        {
+          ...checkpoint,
+          rebaseEvidence: {
+            ...rebaseEvidence,
+            requiredCoverageUnchanged: false,
+          },
+        },
+        {
+          target: "final_implementation",
+          targetBase: "main",
+          targetBaseSha: "base-b",
+          head: "head-a",
+        },
+      ),
+    /technical_readiness_discovery_stale:code-simplifier/,
+  );
+
+  const repairedAfterRebase: TechnicalReadinessCheckpoint = {
+    ...checkpoint,
+    head: "head-b",
+    reviewResults: discovery.reviewResults.map((result) =>
+      result.reviewType === "diff-review"
+        ? {
+            ...result,
+            status: "finding" as const,
+            findings: [repairFinding()],
+          }
+        : result,
+    ),
+    closureResult: passingClosure({
+      targetBaseSha: "base-b",
+      head: "head-b",
+    }),
+    rebaseEvidence: undefined,
+  };
+  assert.throws(
+    () =>
+      validateTechnicalReadinessCheckpoint(repairedAfterRebase, {
+        target: "final_implementation",
+        targetBase: "main",
+        targetBaseSha: "base-b",
+        head: "head-b",
+      }),
+    /technical_readiness_discovery_stale:code-simplifier/,
+  );
+  assert.doesNotThrow(() =>
+    validateTechnicalReadinessCheckpoint(
+      { ...repairedAfterRebase, rebaseEvidence },
+      {
+        target: "final_implementation",
+        targetBase: "main",
+        targetBaseSha: "base-b",
+        head: "head-b",
+      },
+    ),
   );
 });
 
 test("review waves preserve coverage at available worker capacity", () => {
-  assert.deepEqual(reviewWavesFor("final_implementation", 9, []), [
-    [...implementationReviewers],
-  ]);
-  assert.deepEqual(reviewWavesFor("final_implementation", 3, []), [
-    implementationReviewers.slice(0, 3),
-    implementationReviewers.slice(3),
-  ]);
   assert.deepEqual(
-    reviewWavesFor("final_implementation", 6, [
-      "security-review",
-      "docs-alignment-review",
-    ]),
-    [
-      [...implementationReviewers, "security-review"],
-      ["docs-alignment-review"],
-    ],
+    reviewWavesFor(
+      "final_implementation",
+      9,
+      ["diff-review", "scrutinize"],
+      [],
+    ),
+    [["diff-review", "scrutinize"]],
+  );
+  assert.deepEqual(
+    reviewWavesFor(
+      "final_implementation",
+      1,
+      ["diff-review", "scrutinize"],
+      [],
+    ),
+    [["diff-review"], ["scrutinize"]],
+  );
+  assert.deepEqual(
+    reviewWavesFor(
+      "final_implementation",
+      3,
+      ["diff-review"],
+      ["security-review", "docs-alignment-review"],
+    ),
+    [["diff-review", "security-review", "docs-alignment-review"]],
   );
   assert.throws(
-    () => reviewWavesFor("final_implementation", 0, []),
+    () => reviewWavesFor("final_implementation", 0, ["diff-review"], []),
     /review_worker_capacity_invalid/,
+  );
+  assert.throws(
+    () => reviewWavesFor("final_implementation", 1, [], [""]),
+    /review_type_routing_invalid/,
+  );
+  assert.throws(
+    () =>
+      reviewWavesFor(
+        "final_implementation",
+        1,
+        ["implementation-readiness"],
+        [],
+      ),
+    /review_type_target_invalid:implementation-readiness/,
   );
 });
 
@@ -393,7 +726,7 @@ test("required reviewer skills are findings-only", () => {
   }
 });
 
-test("orchestration guidance uses clean context, barriers, and progressive proof", () => {
+test("orchestration guidance keeps review coverage explicit and bounded", () => {
   const review = read("skills/review/SKILL.md");
   const execute = read("skills/execute/SKILL.md");
   const docs = read("skills/doc-smith/SKILL.md");
@@ -401,9 +734,21 @@ test("orchestration guidance uses clean context, barriers, and progressive proof
   assert.match(review, /fork_turns="none"/);
   assert.match(review, /phase barrier/i);
   assert.match(review, /backfill/i);
+  assert.match(review, /one discovery pass/i);
+  assert.match(review, /one closure check/i);
+  assert.match(review, /patch-equivalent rebase/i);
   assert.match(review, /findings batch/i);
+  assert.match(review, /every phase-specific review type/i);
+  assert.match(review, /integrated inline pass/i);
+  assert.match(review, /Review: discovery \| MR !123 @ <head> \| inline/);
+  assert.match(review, /Findings: 0 repair, 0 defer, 0 plan_required/);
+  assert.match(review, /Local: passed \| Nitro: pending \| Readiness: pending/);
+  assert.match(review, /pre-commit hook owns the full local suite/i);
+  assert.doesNotMatch(review, /distinct reviewer-run identity/i);
   assert.match(execute, /environment preflight/i);
   assert.match(execute, /progressive verification/i);
+  assert.match(execute, /do not restart discovery/i);
+  assert.match(execute, /hook-clean commit is published.*hosted review/is);
   assert.match(docs, /planning contracts/i);
   assert.match(docs, /final stable document text/i);
 });

@@ -126,8 +126,8 @@ The POC:
 6. Receives current local implementation review, configured CI,
    latest-effective-diff hosted automated review, and personal acceptance of
    the exact clean HEAD.
-7. Refreshes affected intermediate review surfaces after a POC HEAD change and
-   runs the complete exact-head gate once the POC is stable for publication.
+7. Runs bounded closure after repairs and emits a fresh exact-head technical-
+   readiness checkpoint.
 8. Freezes after acceptance, closes unmerged, and removes its local worktree.
 
 At the POC's first objective proof, in slice 1 or slice 2 after at most one
@@ -135,8 +135,9 @@ setup-only slice, Execute pauses before broadening. Review runs the exact-diff
 checkpoint with independent findings-only `code-quality-review` and
 `scrutinize` reviewer runs plus targeted verification of the real entrypoint and
 visible outcome. Any later architecture-affecting change invalidates that
-checkpoint. Keep its evidence task-local. The completed stable POC receives the
-full five-reviewer implementation baseline before publication.
+checkpoint. Keep its evidence task-local. The completed stable POC publishes a
+hook-clean draft, requests hosted review, then receives every completed-code
+review type against that exact hosted head.
 
 The POC rehearses task completion and archival in a disposable repository copy
 without checking the source `tasks.md` or archiving the live change. POC commits
@@ -180,32 +181,32 @@ rewriting the accepted delivery contract.
 
 ## Review and publication boundary
 
-Review inspects every changed planning artifact with implementation-readiness,
-edge-case/risk, simplification/scope, refactoring, and delivery-shape reviewers.
-Planning Review requests an artifact repair only for a durable contract gap;
-it returns implementation mechanics and non-contract discoveries to Execute
-task-locally. Implementation readiness does not require a prose implementation
-recipe.
-
-Review also inspects every completed POC and final implementation target with five
-independent findings-only reviewers: `code-simplifier`, `code-quality-review`,
-`deslop`, `diff-review`, and `scrutinize`. Those contracts preserve correctness,
-regression, maintainability, verification, and architecture-fit/reuse coverage.
-Add affected-domain specialists from the exact diff and risk profile beyond the
-five-reviewer floor.
+Review gives every planning artifact, completed POC, and final implementation
+one discovery pass covering every phase-specific review type. Planning types
+are implementation readiness, edge cases and risk, simplification and scope,
+refactoring, and delivery shape. Completed-code types are `code-simplifier`,
+`code-quality-review`, `deslop`, `diff-review`, and `scrutinize`. One integrated
+inline pass may cover a small coherent change; use subagents only when
+delegation is faster. Add affected-domain specialists when the exact target
+exposes their domain. Planning Review requests an artifact repair only for a
+durable contract gap and returns implementation mechanics and non-contract
+discoveries to Execute task-locally.
 
 Review evidence is task-local and bound to an artifact fingerprint or exact
-target-base/HEAD pair. Intermediate fixes rerun affected reviewer and
-verification surfaces after a phase-barrier findings batch. Before any push or
-hosted artifact mutation, Review runs the complete required wave and emits
-`publication_checkpoint` with target-base diff, hook evidence, distinct local
-reviewer identities, selected specialists, provider route, and blockers. Any
-HEAD or target-base change makes the publication checkpoint stale.
+target-base/HEAD pair. It returns one phase-barrier findings batch, then runs one
+closure check limited to affected review types and verification. The native
+pre-commit hook owns the full local suite. Finish publishes the hook-clean draft
+and requests hosted review before local implementation Review starts on that
+same head. Review then emits `technical_readiness_checkpoint` with artifact,
+target-base diff, hook evidence, every required type, closure evidence when
+needed, selected specialists, provider route, and blockers. A materially
+changed contract or review risk requires new discovery. A patch-equivalent
+rebase may preserve discovery only after base-sensitive validation and a fresh
+exact-target checkpoint.
 
-Finish consumes the current checkpoint, publishes the configured final
-artifact, and follows hosted gates. Implementation and delivery requests permit
-publication but do not permit merge. Merge, deployment, and cleanup require
-explicit language or activated project policy.
+Finish follows hosted gates after draft publication. Implementation and
+delivery requests permit publication but do not permit merge. Merge,
+deployment, and cleanup require explicit language or activated project policy.
 
 ## Repository artifacts
 

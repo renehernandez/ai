@@ -11,9 +11,9 @@ Create GitLab merge requests with `glab` after verifying branch, remote, and dup
 ## Mode Boundary
 
 This is a bounded Finish provider adapter. It performs mechanics only after
-Finish supplies mutation authority, a current publication checkpoint, and a
-body approved by `change-request-create`. Explicitly naming this adapter does
-not bypass `change-request-create` or grant publication or merge authority.
+Finish supplies mutation authority, a native hook-clean commit, and a body
+approved by `change-request-create`. Explicitly naming this adapter does not
+bypass `change-request-create` or grant publication or merge authority.
 
 This is the default MR creation workflow for repos hosted in the Fullscript Lab GitLab instance. Apply repo-local templates, labels, review-request routing, and merge policies when present.
 

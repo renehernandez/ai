@@ -14,9 +14,9 @@ Run a strict, findings-only review focused on maintainability, structure, and lo
 - A branch works functionally but may worsen architecture, readability, ownership, or type boundaries.
 - The user wants review findings before a follow-up implementation pass.
 - An OpenSpec POC reaches its first objective proof or its complete exact head;
-  use this strict pass before expansion and again before publication.
+  use this strict pass before expansion and again before technical readiness.
 - A final implementation reaches its stable exact head and needs the required
-  structural review before publication.
+  structural review after draft publication and before technical readiness.
 
 For ordinary correctness/security/performance review, use the repo's normal review path first. This skill is a stricter maintainability lens.
 

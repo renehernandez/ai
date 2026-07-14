@@ -31,7 +31,7 @@ Explicit mode language overrides inference.
 | Plan | Confirm artifact-write authority, the target planning artifact, and one dedicated branch/worktree before the first write. |
 | Execute | Confirm accepted implementation scope and exactly one writer for the owned branch/worktree. |
 | Review | Bind inspection to one artifact fingerprint, target-base diff, or exact HEAD and remain read-only. |
-| Finish | Confirm provider route, current publication checkpoint, hosted artifact identity, and explicit authority for merge, deployment, or cleanup. |
+| Finish | Confirm provider route, hook-clean commit evidence for publication, hosted artifact identity when present, and explicit authority for merge, deployment, or cleanup. |
 
 If the worktree is dirty, shared, divergent from its handoff, changed by an
 uncoordinated process, or has unknown ownership, Plan and Execute block or move

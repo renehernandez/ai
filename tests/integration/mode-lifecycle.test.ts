@@ -19,11 +19,11 @@ import {
   selectPlanningArtifact,
 } from "../../skills/plan/scripts/plan-contract.ts";
 import {
-  baselineFor,
   normalizeHostedFinding,
+  requiredReviewTypesFor,
   reviewerContractFor,
-  validatePublicationCheckpoint,
   validateReviewerCatalog,
+  validateTechnicalReadinessCheckpoint,
 } from "../../skills/review/scripts/review-contract.ts";
 
 const root = process.cwd();
@@ -229,7 +229,7 @@ test("Plan keeps atomic delivery in one change set and rehearses OpenSpec", () =
   assert.match(skill, /exhaustive test or edge-case\s+matrices/);
   assert.match(
     skill,
-    /Pass implementation considerations\s+to Execute task-locally/,
+    /Pass\s+implementation considerations\s+to Execute task-locally/,
   );
 });
 
@@ -344,22 +344,22 @@ test("mode skills coordinate parallel draft stacks through hosted readiness", ()
   );
 });
 
-test("Review uses distinct planning, POC, and final implementation baselines", () => {
-  assert.deepEqual(baselineFor("planning"), [
+test("Review exposes distinct planning, POC, and final reviewer catalogs", () => {
+  assert.deepEqual(requiredReviewTypesFor("planning"), [
     "implementation-readiness",
     "edge-cases-and-risk",
     "simplification-and-scope",
     "refactoring-opportunities",
     "delivery-shape",
   ]);
-  assert.deepEqual(baselineFor("poc"), [
+  assert.deepEqual(requiredReviewTypesFor("poc"), [
     "code-simplifier",
     "code-quality-review",
     "deslop",
     "diff-review",
     "scrutinize",
   ]);
-  assert.deepEqual(baselineFor("final_implementation"), [
+  assert.deepEqual(requiredReviewTypesFor("final_implementation"), [
     "code-simplifier",
     "code-quality-review",
     "deslop",
@@ -385,11 +385,11 @@ test("Review uses distinct planning, POC, and final implementation baselines", (
   assert.match(reviewSkill, /does not require a prose recipe/);
 });
 
-test("every baseline Review lane resolves to a complete reviewer contract", () => {
+test("every Review catalog entry resolves to a complete reviewer contract", () => {
   assert.doesNotThrow(() => validateReviewerCatalog());
 
   for (const target of ["planning", "poc", "final_implementation"] as const) {
-    for (const id of baselineFor(target)) {
+    for (const id of requiredReviewTypesFor(target)) {
       const contract = reviewerContractFor(id);
       assert.ok(contract.objective.length > 0, id);
       assert.ok(contract.targets.includes(target), `${id}:${target}`);
@@ -416,11 +416,12 @@ test("modes route to bounded specialists without restoring Codex PR feedback", (
   assert.match(finish, /`github-pr-create` or `glab-mr-create`/);
 });
 
-test("Review rejects stale checkpoints and hosted feedback", () => {
-  const reviewResults = baselineFor("final_implementation").map(
-    (reviewer, index) => ({
-      reviewer,
-      reviewerRunId: `reviewer-${index + 1}`,
+test("Review rejects stale readiness checkpoints and hosted feedback", () => {
+  const reviewResults = requiredReviewTypesFor("final_implementation").map(
+    (reviewType) => ({
+      reviewType,
+      execution: "inline" as const,
+      executionId: "main-agent-review",
       targetBaseSha: "base-a",
       head: "new",
       status: "passed" as const,
@@ -430,15 +431,15 @@ test("Review rejects stale checkpoints and hosted feedback", () => {
 
   assert.throws(
     () =>
-      validatePublicationCheckpoint(
+      validateTechnicalReadinessCheckpoint(
         {
+          artifact: "MR !199",
           targetBase: "main",
           targetBaseSha: "base-a",
           head: "old",
           diffInspected: true,
           hooksPassed: true,
           requiredSpecialists: [],
-          excludedReviewerRunIds: ["writer", "coordinator"],
           reviewResults,
           provider: "gitlab",
           blockers: [],
@@ -450,32 +451,32 @@ test("Review rejects stale checkpoints and hosted feedback", () => {
           head: "new",
         },
       ),
-    /publication_checkpoint_stale/,
+    /technical_readiness_stale/,
   );
 
   const currentCheckpoint = {
+    artifact: "MR !199",
     targetBase: "main",
     targetBaseSha: "base-a",
     head: "new",
     diffInspected: true,
     hooksPassed: true,
     requiredSpecialists: [] as string[],
-    excludedReviewerRunIds: ["writer", "coordinator"],
     reviewResults: reviewResults.slice(0, 1),
     provider: "gitlab",
     blockers: [] as string[],
   };
   assert.throws(
     () =>
-      validatePublicationCheckpoint(currentCheckpoint, {
+      validateTechnicalReadinessCheckpoint(currentCheckpoint, {
         target: "final_implementation",
         targetBase: "main",
         targetBaseSha: "base-a",
         head: "new",
       }),
-    /publication_checkpoint_reviewers_missing:code-quality-review,deslop,diff-review,scrutinize/,
+    /technical_readiness_review_types_missing:code-quality-review,deslop,diff-review,scrutinize/,
   );
-  validatePublicationCheckpoint(
+  validateTechnicalReadinessCheckpoint(
     {
       ...currentCheckpoint,
       reviewResults,
@@ -489,7 +490,7 @@ test("Review rejects stale checkpoints and hosted feedback", () => {
   );
 
   const pocCheckpoint = { ...currentCheckpoint, reviewResults };
-  validatePublicationCheckpoint(pocCheckpoint, {
+  validateTechnicalReadinessCheckpoint(pocCheckpoint, {
     target: "poc",
     targetBase: "main",
     targetBaseSha: "base-a",
@@ -502,22 +503,23 @@ test("Review rejects stale checkpoints and hosted feedback", () => {
   };
   assert.throws(
     () =>
-      validatePublicationCheckpoint(pocWithSpecialist, {
+      validateTechnicalReadinessCheckpoint(pocWithSpecialist, {
         target: "poc",
         targetBase: "main",
         targetBaseSha: "base-a",
         head: "new",
       }),
-    /publication_checkpoint_reviewers_missing:security-review/,
+    /technical_readiness_review_types_missing:security-review/,
   );
-  validatePublicationCheckpoint(
+  validateTechnicalReadinessCheckpoint(
     {
       ...pocWithSpecialist,
       reviewResults: [
         ...reviewResults,
         {
-          reviewer: "security-review",
-          reviewerRunId: "security-agent",
+          reviewType: "security-review",
+          execution: "subagent" as const,
+          executionId: "security-agent",
           targetBaseSha: "base-a",
           head: "new",
           status: "passed",
@@ -535,7 +537,7 @@ test("Review rejects stale checkpoints and hosted feedback", () => {
 
   assert.throws(
     () =>
-      validatePublicationCheckpoint(
+      validateTechnicalReadinessCheckpoint(
         {
           ...currentCheckpoint,
           reviewResults,
@@ -547,7 +549,7 @@ test("Review rejects stale checkpoints and hosted feedback", () => {
           head: "new",
         },
       ),
-    /publication_checkpoint_stale/,
+    /technical_readiness_stale/,
   );
 
   assert.deepEqual(

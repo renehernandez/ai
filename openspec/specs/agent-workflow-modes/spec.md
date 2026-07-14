@@ -144,12 +144,12 @@ The system SHALL automatically review every written or changed planning artifact
 
 #### Scenario: Plan or OpenSpec is reviewed
 - **WHEN** a planning artifact is written or materially changed
-- **THEN** Review launches implementation-readiness, edge-case/risk, simplification/scope, and refactoring reviewers
+- **THEN** Review covers every configured planning review type inline or through delegated reviewers
 - **AND** adds affected-domain specialists
 
 #### Scenario: POC or final implementation is reviewed
 - **WHEN** a POC or final implementation diff/head is ready
-- **THEN** Review launches correctness, regression, maintainability, and verification reviewers
+- **THEN** Review covers every configured completed-code review type inline or through delegated reviewers
 - **AND** adds affected-domain specialists
 
 #### Scenario: Hosted gates are evaluated
@@ -169,20 +169,24 @@ The system SHALL automatically review every written or changed planning artifact
 - **WHEN** reviewed artifact content or implementation HEAD changes
 - **THEN** evidence tied to the previous target becomes stale
 
-### Requirement: Review produces an exact-head publication checkpoint
-The system SHALL replace persisted AX review-gate state with a task-local publication checkpoint consumed by Finish.
+### Requirement: Draft publication precedes the technical-readiness checkpoint
+The system SHALL publish a hook-clean draft before local implementation Review, then run local and hosted review against the same exact head before reporting technical readiness.
 
-#### Scenario: Publication checkpoint is ready
-- **WHEN** the exact implementation HEAD has current target-base diff inspection, hook evidence, required local reviewers, provider route, and no blockers
-- **THEN** Review emits `publication_checkpoint` bound to that HEAD and base
+#### Scenario: Draft is published
+- **WHEN** the exact implementation HEAD commits successfully through the native pre-commit hook
+- **THEN** Finish publishes or updates the draft and requests configured hosted review without waiting for local implementation Review
 
-#### Scenario: Publication target changes
+#### Scenario: Technical-readiness checkpoint is ready
+- **WHEN** the hosted implementation HEAD has current target-base diff inspection, hook evidence, every required local review type, provider route, and no blockers
+- **THEN** Review emits `technical_readiness_checkpoint` bound to the hosted artifact, HEAD, and base
+
+#### Scenario: Readiness target changes
 - **WHEN** HEAD or target base changes after the checkpoint
-- **THEN** the checkpoint becomes stale and Review recomputes it before provider mutation
+- **THEN** the checkpoint becomes stale, hosted review refreshes, and Review recomputes affected local evidence
 
 #### Scenario: Checkpoint evidence is unavailable
 - **WHEN** a resumed task cannot recover the checkpoint
-- **THEN** Review reruns its inputs rather than reconstructing persisted AX gate state
+- **THEN** Review reruns only the missing bounded inputs rather than reconstructing persisted AX gate state
 
 ### Requirement: Local orchestration evidence remains private
 The system SHALL keep reviewer identities, transcripts, fingerprints, retries, handoffs, and mode state out of committed artifacts, tracker records, and hosted descriptions.
@@ -236,4 +240,3 @@ The system SHALL use Finish for implementation publication, hosted feedback foll
 #### Scenario: OpenSpec stack reaches readiness
 - **WHEN** every declared delivery-unit MR has current local/provider gates and valid predecessor identity
 - **THEN** Finish reports stack readiness without merging
-

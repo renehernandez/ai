@@ -11,9 +11,9 @@ Create GitHub pull requests with `gh` after verifying branch, remote, and duplic
 ## Mode Boundary
 
 This is a bounded Finish provider adapter. It performs mechanics only after
-Finish supplies mutation authority, a current publication checkpoint, and a
-body approved by `change-request-create`. Explicitly naming this adapter does
-not bypass `change-request-create` or grant publication or merge authority.
+Finish supplies mutation authority, a native hook-clean commit, and a body
+approved by `change-request-create`. Explicitly naming this adapter does not
+bypass `change-request-create` or grant publication or merge authority.
 
 ## When to Use
 

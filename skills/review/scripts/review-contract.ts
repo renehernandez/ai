@@ -1,6 +1,6 @@
 export type ReviewTarget = "planning" | "poc" | "final_implementation";
 
-export const planningBaseline = [
+export const planningReviewerCatalog = [
   "implementation-readiness",
   "edge-cases-and-risk",
   "simplification-and-scope",
@@ -8,7 +8,7 @@ export const planningBaseline = [
   "delivery-shape",
 ] as const;
 
-export const finalImplementationBaseline = [
+export const finalImplementationReviewerCatalog = [
   "code-simplifier",
   "code-quality-review",
   "deslop",
@@ -16,7 +16,9 @@ export const finalImplementationBaseline = [
   "scrutinize",
 ] as const;
 
-export const pocBaseline = [...finalImplementationBaseline] as const;
+export const pocReviewerCatalog = [
+  ...finalImplementationReviewerCatalog,
+] as const;
 
 export const firstObjectiveProofBaseline = [
   "code-quality-review",
@@ -24,8 +26,8 @@ export const firstObjectiveProofBaseline = [
 ] as const;
 
 export type ReviewerId =
-  | (typeof planningBaseline)[number]
-  | (typeof finalImplementationBaseline)[number];
+  | (typeof planningReviewerCatalog)[number]
+  | (typeof finalImplementationReviewerCatalog)[number];
 
 export type ReviewerContract = {
   objective: string;
@@ -186,7 +188,7 @@ export const reviewerCatalog: Readonly<Record<ReviewerId, ReviewerContract>> = {
     passedWhen:
       "The goal remains valid, no evidenced smaller path supersedes the change, and the real system trace supports its claims.",
     findingWhen:
-      "Concrete evidence requires a scoped correction before publication.",
+      "Concrete evidence requires a scoped correction before technical readiness.",
     blockedWhen:
       "Required live state, repository context, or system-path evidence is unavailable.",
     output: "passed | finding | blocked with source evidence",
@@ -200,9 +202,9 @@ export function reviewerContractFor(id: ReviewerId): ReviewerContract {
 export function validateReviewerCatalog(): void {
   const required = [
     ...new Set([
-      ...planningBaseline,
-      ...finalImplementationBaseline,
-      ...pocBaseline,
+      ...planningReviewerCatalog,
+      ...finalImplementationReviewerCatalog,
+      ...pocReviewerCatalog,
       ...firstObjectiveProofBaseline,
     ]),
   ];
@@ -221,11 +223,15 @@ export function validateReviewerCatalog(): void {
   }
 }
 
-export function baselineFor(target: ReviewTarget): readonly ReviewerId[] {
+export function requiredReviewTypesFor(
+  target: ReviewTarget,
+): readonly ReviewerId[] {
   if (target === "planning") {
-    return planningBaseline;
+    return planningReviewerCatalog;
   }
-  return target === "poc" ? pocBaseline : finalImplementationBaseline;
+  return target === "poc"
+    ? pocReviewerCatalog
+    : finalImplementationReviewerCatalog;
 }
 
 export type ReviewTaskPacket = {
@@ -264,22 +270,29 @@ export function validateReviewTaskPacket(packet: ReviewTaskPacket): void {
 export function reviewWavesFor(
   target: ReviewTarget,
   workerCapacity: number,
+  delegatedReviewTypes: readonly ReviewerId[],
   requiredSpecialists: readonly string[],
 ): string[][] {
   if (!Number.isInteger(workerCapacity) || workerCapacity < 1) {
     throw new Error("review_worker_capacity_invalid");
   }
 
+  for (const reviewType of delegatedReviewTypes) {
+    if (!reviewerCatalog[reviewType]?.targets.includes(target)) {
+      throw new Error(`review_type_target_invalid:${reviewType}`);
+    }
+  }
+
   const required = [
-    ...baselineFor(target),
-    ...requiredSpecialists.map((reviewer) => reviewer.trim()),
+    ...delegatedReviewTypes,
+    ...requiredSpecialists.map((reviewType) => reviewType.trim()),
   ];
   const seen = new Set<string>();
-  for (const reviewer of required) {
-    if (!reviewer || seen.has(reviewer)) {
-      throw new Error(`reviewer_selection_invalid:${reviewer}`);
+  for (const reviewType of required) {
+    if (!reviewType || seen.has(reviewType)) {
+      throw new Error(`review_type_routing_invalid:${reviewType}`);
     }
-    seen.add(reviewer);
+    seen.add(reviewType);
   }
 
   const waves: string[][] = [];
@@ -290,8 +303,9 @@ export function reviewWavesFor(
 }
 
 export type ReviewResult = {
-  reviewer: string;
-  reviewerRunId: string;
+  reviewType: string;
+  execution: "inline" | "subagent";
+  executionId: string;
   targetBaseSha: string;
   head: string;
   status: "passed" | "finding" | "blocked";
@@ -299,7 +313,9 @@ export type ReviewResult = {
 };
 
 export type ReviewFinding = {
+  id: string;
   severity: "blocking" | "nonblocking";
+  disposition: "repair" | "defer" | "plan_required";
   affectedLocation: string;
   issue: string;
   evidence: string;
@@ -307,21 +323,67 @@ export type ReviewFinding = {
   invalidatedSurfaces: readonly string[];
 };
 
-export type PublicationCheckpoint = {
+export type ClosureResult = {
+  reviewTypes: readonly string[];
+  execution: "inline" | "subagent";
+  executionId: string;
+  targetBaseSha: string;
+  head: string;
+  findingIds: readonly string[];
+  affectedVerificationPassed: boolean;
+  status: "passed" | "blocked";
+  findings: readonly ReviewFinding[];
+};
+
+export type RebaseEvidence = {
+  reviewedTargetBaseSha: string;
+  reviewedHead: string;
+  effectivePatchUnchanged: boolean;
+  baseSensitiveContextUnchanged: boolean;
+  requiredCoverageUnchanged: boolean;
+  affectedVerificationPassed: boolean;
+};
+
+export type TechnicalReadinessCheckpoint = {
+  artifact: string;
   targetBase: string;
   targetBaseSha: string;
   head: string;
   diffInspected: boolean;
   hooksPassed: boolean;
   requiredSpecialists: readonly string[];
-  excludedReviewerRunIds: readonly string[];
   reviewResults: readonly ReviewResult[];
+  closureResult?: ClosureResult;
+  rebaseEvidence?: RebaseEvidence;
   provider: string;
   blockers: readonly string[];
 };
 
-export function validatePublicationCheckpoint(
-  checkpoint: PublicationCheckpoint,
+function validateFinding(
+  finding: ReviewFinding,
+  incompleteErrorPrefix: string,
+): void {
+  for (const field of [
+    "id",
+    "affectedLocation",
+    "issue",
+    "evidence",
+    "remediationOutcome",
+  ] as const) {
+    if (!finding[field].trim()) {
+      throw new Error(`${incompleteErrorPrefix}:${field}`);
+    }
+  }
+  if (
+    !Array.isArray(finding.invalidatedSurfaces) ||
+    finding.invalidatedSurfaces.some((surface) => !surface.trim())
+  ) {
+    throw new Error(`${incompleteErrorPrefix}:invalidatedSurfaces`);
+  }
+}
+
+export function validateTechnicalReadinessCheckpoint(
+  checkpoint: TechnicalReadinessCheckpoint,
   expected: {
     target: ReviewTarget;
     targetBase: string;
@@ -334,109 +396,211 @@ export function validatePublicationCheckpoint(
     checkpoint.targetBaseSha !== expected.targetBaseSha ||
     checkpoint.head !== expected.head
   ) {
-    throw new Error("publication_checkpoint_stale");
+    throw new Error("technical_readiness_stale");
   }
   if (!checkpoint.diffInspected || !checkpoint.hooksPassed) {
-    throw new Error("publication_checkpoint_incomplete");
+    throw new Error("technical_readiness_incomplete");
+  }
+  if (!checkpoint.artifact.trim()) {
+    throw new Error("technical_readiness_artifact_unresolved");
   }
   if (!checkpoint.provider.trim()) {
     throw new Error("provider_route_unresolved");
   }
 
   const required = [
-    ...baselineFor(expected.target),
-    ...checkpoint.requiredSpecialists.map((reviewer) => reviewer.trim()),
+    ...requiredReviewTypesFor(expected.target),
+    ...checkpoint.requiredSpecialists.map((reviewType) => reviewType.trim()),
   ];
   const selected = new Set<string>();
-  for (const reviewer of required) {
-    if (!reviewer || selected.has(reviewer)) {
-      throw new Error(
-        `publication_checkpoint_reviewer_selection_invalid:${reviewer}`,
-      );
+  for (const reviewType of required) {
+    if (!reviewType || selected.has(reviewType)) {
+      throw new Error(`technical_readiness_review_type_invalid:${reviewType}`);
     }
-    selected.add(reviewer);
+    selected.add(reviewType);
   }
 
   const missing = required.filter(
-    (reviewer) =>
-      !checkpoint.reviewResults.some((result) => result.reviewer === reviewer),
+    (reviewType) =>
+      !checkpoint.reviewResults.some(
+        (result) => result.reviewType === reviewType,
+      ),
   );
   if (missing.length > 0) {
     throw new Error(
-      `publication_checkpoint_reviewers_missing:${missing.join(",")}`,
+      `technical_readiness_review_types_missing:${missing.join(",")}`,
     );
   }
 
-  const requiredResults = required.map((reviewer) => {
+  const requiredResults = required.map((reviewType) => {
     const results = checkpoint.reviewResults.filter(
-      (result) => result.reviewer === reviewer,
+      (result) => result.reviewType === reviewType,
     );
     if (results.length !== 1) {
       throw new Error(
-        `publication_checkpoint_reviewer_result_invalid:${reviewer}`,
+        `technical_readiness_review_result_invalid:${reviewType}`,
       );
     }
     return results[0];
   });
 
-  const reviewerRunIds = new Set<string>();
-  const excluded = new Set(checkpoint.excludedReviewerRunIds);
-  for (const result of requiredResults) {
+  const discoveryTarget = requiredResults[0];
+  for (const result of requiredResults.slice(1)) {
     if (
-      result.targetBaseSha !== expected.targetBaseSha ||
-      result.head !== expected.head
+      result.targetBaseSha !== discoveryTarget.targetBaseSha ||
+      result.head !== discoveryTarget.head
     ) {
       throw new Error(
-        `publication_checkpoint_reviewer_stale:${result.reviewer}`,
+        `technical_readiness_discovery_target_mismatch:${result.reviewType}`,
+      );
+    }
+  }
+
+  const repairFindings: Array<{
+    finding: ReviewFinding;
+    reviewType: string;
+  }> = [];
+  const findingIds = new Set<string>();
+  for (const result of requiredResults) {
+    if (!result.executionId.trim()) {
+      throw new Error(
+        `technical_readiness_execution_unresolved:${result.reviewType}`,
       );
     }
     for (const finding of result.findings) {
-      for (const field of [
-        "affectedLocation",
-        "issue",
-        "evidence",
-        "remediationOutcome",
-      ] as const) {
-        if (!finding[field].trim()) {
-          throw new Error(
-            `publication_checkpoint_finding_incomplete:${result.reviewer}:${field}`,
-          );
-        }
+      validateFinding(
+        finding,
+        `technical_readiness_finding_incomplete:${result.reviewType}`,
+      );
+      if (findingIds.has(finding.id)) {
+        throw new Error(`technical_readiness_finding_id_reused:${finding.id}`);
       }
-      if (
-        !Array.isArray(finding.invalidatedSurfaces) ||
-        finding.invalidatedSurfaces.some((surface) => !surface.trim())
-      ) {
+      findingIds.add(finding.id);
+      if (finding.disposition === "plan_required") {
+        throw new Error(`technical_readiness_plan_required:${finding.id}`);
+      }
+      if (finding.disposition === "defer" && finding.severity === "blocking") {
+        throw new Error(`technical_readiness_blocking_finding:${finding.id}`);
+      }
+      if (finding.disposition === "repair") {
+        repairFindings.push({ finding, reviewType: result.reviewType });
+      }
+    }
+    if (result.status === "blocked") {
+      throw new Error(
+        `technical_readiness_review_not_passed:${result.reviewType}`,
+      );
+    }
+    if (result.status === "finding" && result.findings.length === 0) {
+      throw new Error(
+        `technical_readiness_review_finding_missing:${result.reviewType}`,
+      );
+    }
+    if (result.status === "passed" && result.findings.length > 0) {
+      throw new Error(
+        `technical_readiness_passed_review_has_findings:${result.reviewType}`,
+      );
+    }
+  }
+
+  const closure = checkpoint.closureResult;
+  if (repairFindings.length > 0) {
+    const missingClosure = repairFindings.find(
+      ({ finding }) => !closure?.findingIds.includes(finding.id),
+    );
+    if (missingClosure) {
+      throw new Error(
+        `technical_readiness_closure_missing:${missingClosure.finding.id}`,
+      );
+    }
+  }
+
+  if (closure) {
+    if (
+      closure.targetBaseSha !== expected.targetBaseSha ||
+      closure.head !== expected.head ||
+      closure.status !== "passed" ||
+      !closure.affectedVerificationPassed
+    ) {
+      throw new Error("technical_readiness_closure_incomplete");
+    }
+    if (
+      !closure.executionId.trim() ||
+      closure.reviewTypes.some((reviewType) => !reviewType.trim())
+    ) {
+      throw new Error("technical_readiness_closure_execution_invalid");
+    }
+    const repairIds = new Set(repairFindings.map(({ finding }) => finding.id));
+    const closureIds = new Set(closure.findingIds);
+    if (
+      closureIds.size !== closure.findingIds.length ||
+      closureIds.size !== repairIds.size ||
+      [...repairIds].some((id) => !closureIds.has(id))
+    ) {
+      const missing = repairFindings.find(
+        ({ finding }) => !closureIds.has(finding.id),
+      );
+      throw new Error(
+        `technical_readiness_closure_${missing ? `missing:${missing.finding.id}` : "scope_expanded"}`,
+      );
+    }
+    const repairReviewTypes = new Set(
+      repairFindings.map(({ reviewType }) => reviewType),
+    );
+    const closureReviewTypes = new Set(closure.reviewTypes);
+    if (
+      closureReviewTypes.size !== closure.reviewTypes.length ||
+      closureReviewTypes.size !== repairReviewTypes.size ||
+      [...repairReviewTypes].some(
+        (reviewType) => !closureReviewTypes.has(reviewType),
+      )
+    ) {
+      throw new Error("technical_readiness_closure_review_types_mismatch");
+    }
+    for (const finding of closure.findings) {
+      validateFinding(
+        finding,
+        "technical_readiness_closure_finding_incomplete",
+      );
+      if (finding.severity === "blocking") {
         throw new Error(
-          `publication_checkpoint_finding_incomplete:${result.reviewer}:invalidatedSurfaces`,
+          `technical_readiness_closure_blocking_finding:${finding.id}`,
+        );
+      }
+      if (finding.disposition !== "defer") {
+        throw new Error(
+          `technical_readiness_closure_scope_expanded:${finding.id}`,
         );
       }
     }
-    if (result.status !== "passed") {
+  }
+
+  for (const result of requiredResults) {
+    const current =
+      result.targetBaseSha === expected.targetBaseSha &&
+      result.head === expected.head;
+    const repaired =
+      repairFindings.length > 0 &&
+      result.targetBaseSha === expected.targetBaseSha &&
+      closure?.targetBaseSha === expected.targetBaseSha &&
+      closure.head === expected.head;
+    const rebase = checkpoint.rebaseEvidence;
+    const rebased =
+      rebase?.reviewedTargetBaseSha === result.targetBaseSha &&
+      rebase.reviewedHead === result.head &&
+      rebase.effectivePatchUnchanged &&
+      rebase.baseSensitiveContextUnchanged &&
+      rebase.requiredCoverageUnchanged &&
+      rebase.affectedVerificationPassed;
+    if (!current && !repaired && !rebased) {
       throw new Error(
-        `publication_checkpoint_reviewer_not_passed:${result.reviewer}`,
+        `technical_readiness_discovery_stale:${result.reviewType}`,
       );
     }
-    if (result.findings.some((finding) => finding.severity === "blocking")) {
-      throw new Error(
-        `publication_checkpoint_reviewer_blocking_finding:${result.reviewer}`,
-      );
-    }
-    if (!result.reviewerRunId.trim() || excluded.has(result.reviewerRunId)) {
-      throw new Error(
-        `publication_checkpoint_reviewer_identity_excluded:${result.reviewer}`,
-      );
-    }
-    if (reviewerRunIds.has(result.reviewerRunId)) {
-      throw new Error(
-        `publication_checkpoint_reviewer_identity_reused:${result.reviewerRunId}`,
-      );
-    }
-    reviewerRunIds.add(result.reviewerRunId);
   }
 
   if (checkpoint.blockers.length > 0) {
-    throw new Error("publication_checkpoint_blocked");
+    throw new Error("technical_readiness_blocked");
   }
 }
 

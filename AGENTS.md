@@ -29,7 +29,7 @@ authority expansion, state the mode, mutation authority, and goal once.
 - **Execute** implements accepted work in one owned branch/worktree. Exactly one write owner controls each worktree and may edit, stage, and commit there.
 - **Review** is read-only inspection of one artifact fingerprint, target-base
   diff, or exact HEAD. It returns findings to Plan or Execute and emits the
-  task-local publication checkpoint.
+  task-local technical-readiness checkpoint after draft publication.
 - **Finish** owns provider writes, hosted feedback follow-through, and readiness.
   Merge, deployment, and cleanup require explicit user authority or activated
   project policy.
@@ -113,9 +113,15 @@ boundary.
   no OpenSpec change for this repository.
 - Do not create a separate planning MR. An atomic plan and its implementation
   are one change set in one final MR, with no POC MR or POC phase.
-- Review evidence stays task-local. Intermediate changes invalidate affected
-  review surfaces; any changed target base or HEAD invalidates the complete
-  publication checkpoint.
+- Review evidence stays task-local. After a hook-clean commit, publish the
+  draft and request Nitro before local Review runs on that same head. Cover
+  every phase-specific review type inline or through subagents, use one
+  findings batch, and run bounded closure only for affected types after
+  repairs. Local Review consumes the pre-commit hook's full-suite evidence and
+  does not rerun it. A changed target base or HEAD requires a fresh exact-target
+  checkpoint; patch-equivalent rebases may preserve discovery only after base-
+  sensitive validation, while material contract or review-risk changes require
+  new discovery.
 
 ## Repository Finish policy
 
