@@ -123,21 +123,61 @@ Execute owner. Read-only agents may investigate ambiguous findings or propose
 tests concurrently; they never edit the implementation worktree.
 
 After the findings batch is repaired, run one closure check limited to the
-enumerated `repair` findings and affected verification. Closure passes when the
-repairs and affected behavior pass. It defers unrelated nonblocking suggestions
-instead of opening another discovery cycle, and fails when a repair remains
-unresolved or the affected behavior exposes a blocking defect.
+enumerated `repair` findings and affected verification. In that same closure
+execution, return exactly one resolution record for every repair finding:
+
+- `findingId` identifies the original finding;
+- `resolutionEvidence` shows that its stated remediation outcome holds on the
+  repaired head;
+- `recheckedSurfaces` includes every review or verification surface invalidated
+  by that finding; and
+- `affectedVerificationPassed` records affected proof for that resolution.
+
+Do not emit a resolution for a deferred or unknown finding. Closure fails when
+a resolution is missing, duplicated, unevidenced, omits an invalidated surface,
+has failed affected verification, or the repair remains semantically unresolved.
+It defers unrelated nonblocking suggestions instead of opening another
+discovery cycle.
+
+For duplication, routing, lifecycle, reuse, or ownership findings, evidence
+must name the surviving canonical owner, the alternate representation,
+fallback, branch, or override removed, and the producer-to-consumer path
+inspected. Passing tests or wrapping duplicate inputs in a composite value does
+not prove that one owner remains.
 
 A material scope, behavior, architecture, safety, migration, ownership,
 delivery, or review-risk change returns to Plan or starts one new bounded
 discovery pass against the new stable target. Ordinary repair commits do not
-restart discovery.
+restart discovery. Start fresh completed-code discovery when a repair introduces
+or materially changes a sibling helper, parser, handler, service, renderer, or
+policy; a repeated schema, constant, identity, routing, or lifecycle invariant;
+a feature branch in shared infrastructure; a second durable source of truth; a
+canonical ownership or reuse decision; semantic validation; or accepted
+success, failure, compatibility, or rollout behavior. Removing a branch,
+reusing an existing constant, or moving derivation to the already accepted
+owner stays in closure.
+
+When a material repair starts fresh discovery, that replacement discovery
+supersedes the earlier discovery and closure for technical readiness. Keep the
+earlier evidence task-local; do not combine its resolution records with the
+replacement discovery results. Build the checkpoint from the replacement
+results and require closure only for repair findings produced by that discovery.
+
+Normalize receipt-shape errors from evidence already returned by the current
+closure execution; do not launch or re-prompt a reviewer merely to format the
+receipt. Never invent missing substantive evidence. Keep that finding
+unresolved and return it automatically to the same Execute owner without asking
+the user. Start materially required rediscovery automatically. Ask the user
+only for a genuinely new contract decision or reserved authority, never for a
+routine repair, schema correction, deferred improvement, or arbitrary retry
+limit.
 
 A target-base change makes the checkpoint stale, but does not automatically
-discard discovery. Review may reuse it only after confirming that the effective
-patch, base-sensitive context, required coverage, and affected verification
-remain materially unchanged. Emit a fresh exact-target checkpoint with that
-rebase evidence. Otherwise run one new discovery pass.
+discard discovery. A patch-equivalent rebase may reuse it only after Review
+confirms that the effective patch, base-sensitive context, required coverage,
+and affected verification remain materially unchanged. Emit a fresh exact-
+target checkpoint with that rebase evidence. Otherwise run one new discovery
+pass.
 
 ## Planning Delivery Shape
 
@@ -203,18 +243,19 @@ current for the exact hosted target:
 - target-base ref, resolved SHA, and implementation HEAD;
 - inspected target-base diff and hook evidence;
 - every phase-specific review type and selected affected-domain specialist;
-- one successful closure result for the enumerated repair findings and affected
-  verification, when repairs occurred;
+- one evidence-bearing resolution for every enumerated repair finding, covering
+  its remediation outcome, invalidated surfaces, and affected verification;
 - patch-equivalence and base-sensitive verification evidence when discovery is
   reused after a rebase;
 - resolved provider route; and
 - no blockers.
 
 `scripts/review-contract.ts` validates complete type coverage, exact hosted
-target identity, passing status, routing, and specialist completion. It rejects
-unclosed repairs, closure scope expansion, material rebase changes, and stale
-discovery. If evidence cannot be recovered after resume, rerun the bounded
-work; never reconstruct persisted gate state.
+target identity, passing status, routing, specialist completion, one-to-one
+repair resolutions, and complete affected-surface coverage. It rejects
+unevidenced or unclosed repairs, closure scope expansion, material rebase
+changes, and stale discovery. If evidence cannot be recovered after resume,
+rerun the bounded work; never reconstruct persisted gate state.
 
 Review never reruns the repository full suite inline or through subagents. The
 native pre-commit hook owns the full local suite for each committed head;
@@ -231,6 +272,8 @@ proof.
 | Launching or polling reviewers one at a time | Fill ready worker slots and join at a phase barrier. |
 | Fixing each finding as it arrives | Close the barrier, deduplicate, then send one findings batch to the owner. |
 | Restarting discovery after an ordinary repair | Run one closure check against the repair batch and affected proof. |
+| Closing findings by ID without semantic proof | Record one evidenced resolution per repair finding and recheck every invalidated surface. |
+| Asking the user to resolve routine convergence | Return in-scope work to Execute or start materially required rediscovery automatically. |
 | Treating every rebase as materially new | Verify patch equivalence, base-sensitive context, required coverage, and affected proof first. |
 | Rerunning the full suite during Review | Consume the commit-hook result and inspect the exact MR head. |
 | Producing elaborate review proof | Emit the compact receipt from already collected state. |
@@ -239,13 +282,15 @@ proof.
 
 ## Test Evidence
 
-- RED: small changes launched one subagent per catalog type before publication,
-  waited on slow reviewers after focused proof passed, and repeated full
-  discovery after narrow repairs.
-- GREEN: contract fixtures require every phase type while allowing one inline
-  execution identity, require the hosted artifact, close only affected types,
-  and preserve discovery only with patch-equivalent rebase evidence.
-- REFACTOR: fixtures reject missing type coverage, unclosed repairs, closure
-  scope expansion, blocking affected-behavior defects, and materially changed
-  rebase context without adding persistent workflow state or review-time suite
-  runs.
+- RED: closure could record only finding IDs plus one global verification bit,
+  so the checkpoint could not require semantic resolution evidence or prove
+  that every invalidated surface was rechecked; later review could rediscover
+  the surviving simplification or duplicate-ownership problem.
+- GREEN: contract fixtures and pressure scenarios require one evidenced
+  resolution per repair, reject a composite wrapper that preserves duplicate
+  authority, escalate a handwritten parser, and keep correct single-owner and
+  local-cleanup repairs bounded.
+- REFACTOR: fixtures close missing, duplicate, unknown, unevidenced, incomplete-
+  surface, and failed-verification loopholes, and replacement discovery
+  supersedes old closure evidence without another review execution, persistent
+  workflow state, or review-time suite run.
