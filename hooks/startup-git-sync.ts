@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 import { spawnSync } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 type GitResult = {
@@ -56,7 +56,8 @@ function checkedGit(cwd: string, args: string[]): string {
 }
 
 function gitPath(cwd: string, name: string): string {
-  return checkedGit(cwd, ["rev-parse", "--git-path", name]);
+  const path = checkedGit(cwd, ["rev-parse", "--git-path", name]);
+  return isAbsolute(path) ? path : join(cwd, path);
 }
 
 function currentWorktreePath(cwd: string): string {
@@ -221,14 +222,40 @@ function fastForwardPrimary(
     );
     return;
   }
-  const reason = dirtyReason(primary.path);
-  if (reason) {
-    messages.push(
-      `Skipped primary fast-forward for ${primary.path}: ${reason}.`,
+
+  const inProgress = hasInProgressGitState(primary.path);
+  if (inProgress) {
+    throw new Error(
+      `Cannot synchronize primary worktree ${primary.path}: in-progress git state (${inProgress}).`,
     );
-    return;
   }
-  checkedGit(primary.path, ["merge", "--ff-only", remoteRef]);
+
+  const head = currentHead(primary.path);
+  if (!isAncestor(primary.path, head, remoteRef)) {
+    throw new Error(
+      `Cannot fast-forward primary worktree ${primary.path} to ${remoteRef}; local commits would be lost.`,
+    );
+  }
+
+  const hadChanges =
+    checkedGit(primary.path, [
+      "status",
+      "--porcelain=v1",
+      "--untracked-files=all",
+    ]).length > 0;
+  checkedGit(primary.path, ["reset", "--hard", "HEAD"]);
+  checkedGit(primary.path, ["clean", "-fd"]);
+  const merge = git(primary.path, ["merge", "--ff-only", remoteRef]);
+  if (merge.status !== 0) {
+    throw new Error(
+      `Primary worktree ${primary.path} was cleaned but could not fast-forward to ${remoteRef}: ${(merge.stderr || merge.stdout).trim()}`,
+    );
+  }
+  if (hadChanges) {
+    messages.push(
+      `Discarded uncommitted changes in primary worktree ${primary.path}.`,
+    );
+  }
   messages.push(
     `Fast-forwarded primary worktree ${primary.path} to ${remoteRef}.`,
   );
@@ -249,8 +276,8 @@ function syncCurrentWorktree(
 
   const reason = dirtyReason(cwd);
   if (reason) {
-    messages.push(`Skipped current worktree sync: ${reason}.`);
-    return "skipped";
+    messages.push(`Failed current worktree sync: ${reason}.`);
+    return "failed";
   }
 
   const current = currentBranch(cwd);
@@ -258,14 +285,13 @@ function syncCurrentWorktree(
     const head = currentHead(cwd);
     if (!isAncestor(cwd, head, remoteRef)) {
       messages.push(
-        "Skipped detached HEAD with local commits not reachable from the remote default branch.",
+        "Failed detached HEAD sync: local commits are not reachable from the remote default branch.",
       );
-      return "skipped";
+      return "failed";
     }
-    messages.push(
-      "Skipped detached HEAD already reachable from the remote default branch.",
-    );
-    return "skipped";
+    checkedGit(cwd, ["reset", "--hard", remoteRef]);
+    messages.push(`Advanced detached worktree ${currentPath} to ${remoteRef}.`);
+    return "synced";
   }
 
   if (current === branch) {
@@ -340,7 +366,7 @@ function printDiscovery(): void {
       name: HOOK_NAME,
       type: "startup",
       description:
-        "Conservatively fetches the remote default branch, fast-forwards the primary worktree, and rebases only clean safe current worktrees.",
+        "Fetches the remote default branch, discards uncommitted primary-worktree changes, fast-forwards the primary worktree, and synchronizes only safe current worktrees.",
       command: argv.map((arg) => JSON.stringify(arg)).join(" "),
       argv,
     })}\n`,
@@ -354,7 +380,9 @@ Usage:
   startup-git-sync.ts [--remote origin] [--branch main] [--cwd <path>]
   startup-git-sync.ts --agent-discovery
 
-The hook never stashes, resets, force pushes, or creates merge commits.
+The hook discards uncommitted changes in a fast-forwardable primary default-
+branch worktree. It never resets local commits, force pushes, or creates merge
+commits.
 `);
 }
 

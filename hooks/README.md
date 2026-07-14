@@ -46,13 +46,18 @@ the clean merged default branch source, then run live `ax sync`.
 
 ## `startup-git-sync.ts`
 
-The startup hook performs conservative repository synchronization before a
-local agent session:
+The startup hook synchronizes a repository before a local agent session:
 
+- verify that the primary worktree can fast-forward, then discard its staged,
+  unstaged, and untracked changes while preserving ignored files and local
+  commits;
 - fast-forward the primary worktree that owns the configured default branch;
+- advance a clean detached task worktree when its HEAD is already reachable
+  from the fetched remote default branch;
 - rebase a clean current feature worktree when safe;
-- skip dirty, detached-with-local-commits, non-Git, and in-progress-operation
-  states;
+- fail startup for dirty task worktrees, detached task worktrees with local
+  commits, diverged primary branches, and in-progress Git operations;
+- skip non-Git startup directories;
 - abort a conflicted rebase and leave the checkout unchanged;
 - emit structured agent-discovery metadata.
 

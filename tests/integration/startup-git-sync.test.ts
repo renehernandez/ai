@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -9,7 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
 
@@ -67,6 +68,11 @@ function runGit(args: string[], cwd: string): string {
 function configureUser(cwd: string): void {
   runGit(["config", "user.email", "ax@example.test"], cwd);
   runGit(["config", "user.name", "AX Test"], cwd);
+}
+
+function resolvedGitPath(cwd: string, name: string): string {
+  const path = runGit(["rev-parse", "--git-path", name], cwd);
+  return isAbsolute(path) ? path : join(cwd, path);
 }
 
 function commitFile(
@@ -173,6 +179,161 @@ test("startup Git sync fast-forwards the primary default-branch worktree selecte
   });
 });
 
+test("startup Git sync discards primary uncommitted changes before fast-forwarding", () => {
+  withGitFixture((fixture) => {
+    const feature = join(fixture.directory, "feature");
+    runGit(
+      ["worktree", "add", "-b", "feature", feature, "HEAD"],
+      fixture.primary,
+    );
+    const remoteCommit = pushRemoteUpdate(fixture, "remote\n");
+    writeFileSync(join(fixture.primary, "README.md"), "staged\n", "utf-8");
+    runGit(["add", "README.md"], fixture.primary);
+    writeFileSync(join(fixture.primary, "README.md"), "unstaged\n", "utf-8");
+    mkdirSync(join(fixture.primary, "scratch"));
+    writeFileSync(
+      join(fixture.primary, "scratch", "untracked.txt"),
+      "untracked\n",
+      "utf-8",
+    );
+    const excludePath = resolvedGitPath(fixture.primary, "info/exclude");
+    writeFileSync(excludePath, "ignored.txt\n", "utf-8");
+    writeFileSync(join(fixture.primary, "ignored.txt"), "ignored\n", "utf-8");
+
+    const result = runHook(feature);
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(runGit(["rev-parse", "HEAD"], fixture.primary), remoteCommit);
+    assert.equal(
+      readFileSync(join(fixture.primary, "README.md"), "utf-8"),
+      "remote\n",
+    );
+    assert.equal(existsSync(join(fixture.primary, "scratch")), false);
+    assert.equal(existsSync(join(fixture.primary, "ignored.txt")), true);
+    assert.match(result.stderr, /Discarded uncommitted changes/);
+  });
+});
+
+test("startup Git sync runs directly from the primary default-branch worktree", () => {
+  withGitFixture((fixture) => {
+    const remoteCommit = pushRemoteUpdate(fixture, "remote\n");
+    writeFileSync(join(fixture.primary, "README.md"), "dirty\n", "utf-8");
+    writeFileSync(join(fixture.primary, "pending.txt"), "pending\n", "utf-8");
+
+    const result = runHook(fixture.primary);
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(runGit(["rev-parse", "HEAD"], fixture.primary), remoteCommit);
+    assert.equal(
+      readFileSync(join(fixture.primary, "README.md"), "utf-8"),
+      "remote\n",
+    );
+    assert.equal(existsSync(join(fixture.primary, "pending.txt")), false);
+    assert.match(
+      result.stderr,
+      /Current worktree is the primary default-branch worktree/,
+    );
+  });
+});
+
+test("startup Git sync preserves a diverged primary worktree and its uncommitted changes", () => {
+  withGitFixture((fixture) => {
+    const feature = join(fixture.directory, "feature");
+    runGit(
+      ["worktree", "add", "-b", "feature", feature, "HEAD"],
+      fixture.primary,
+    );
+    const localCommit = commitFile(
+      fixture.primary,
+      "local-commit.txt",
+      "local\n",
+      "local commit",
+    );
+    writeFileSync(join(fixture.primary, "pending.txt"), "pending\n", "utf-8");
+    pushRemoteUpdate(fixture, "remote\n");
+
+    const result = runHook(feature);
+
+    assert.notEqual(result.status, 0);
+    assert.equal(runGit(["rev-parse", "HEAD"], fixture.primary), localCommit);
+    assert.equal(existsSync(join(fixture.primary, "pending.txt")), true);
+    assert.match(result.stderr, /local commits would be lost/);
+  });
+});
+
+test("startup Git sync preserves a primary worktree with an in-progress Git operation", () => {
+  withGitFixture((fixture) => {
+    const feature = join(fixture.directory, "feature");
+    runGit(
+      ["worktree", "add", "-b", "feature", feature, "HEAD"],
+      fixture.primary,
+    );
+    const rebaseState = resolvedGitPath(fixture.primary, "rebase-merge");
+    mkdirSync(rebaseState, { recursive: true });
+    writeFileSync(join(fixture.primary, "pending.txt"), "pending\n", "utf-8");
+    pushRemoteUpdate(fixture, "remote\n");
+
+    const result = runHook(feature);
+
+    assert.notEqual(result.status, 0);
+    assert.equal(existsSync(join(fixture.primary, "pending.txt")), true);
+    assert.match(result.stderr, /in-progress git state/);
+  });
+});
+
+test("startup Git sync reports when primary cleanup precedes a fast-forward failure", () => {
+  withGitFixture((fixture) => {
+    const feature = join(fixture.directory, "feature");
+    runGit(
+      ["worktree", "add", "-b", "feature", feature, "HEAD"],
+      fixture.primary,
+    );
+    const originalHead = runGit(["rev-parse", "HEAD"], fixture.primary);
+    pushRemoteUpdate(fixture, "remote\n");
+    writeFileSync(join(fixture.primary, "pending.txt"), "pending\n", "utf-8");
+    const wrapperDirectory = join(fixture.directory, "git-wrapper");
+    const wrapperPath = join(wrapperDirectory, "git");
+    mkdirSync(wrapperDirectory);
+    writeFileSync(
+      wrapperPath,
+      `#!/bin/sh
+if [ "$1" = "merge" ]; then
+  echo "simulated merge failure" >&2
+  exit 1
+fi
+exec "${gitBinary}" "$@"
+`,
+      "utf-8",
+    );
+    chmodSync(wrapperPath, 0o755);
+
+    const result = runHook(feature, [], {
+      PATH: `${wrapperDirectory}:${process.env.PATH ?? ""}`,
+    });
+
+    assert.notEqual(result.status, 0);
+    assert.equal(runGit(["rev-parse", "HEAD"], fixture.primary), originalHead);
+    assert.equal(existsSync(join(fixture.primary, "pending.txt")), false);
+    assert.match(result.stderr, /was cleaned but could not fast-forward/);
+    assert.match(result.stderr, /simulated merge failure/);
+  });
+});
+
+test("startup Git sync advances a clean detached task worktree", () => {
+  withGitFixture((fixture) => {
+    const detached = join(fixture.directory, "detached");
+    runGit(["worktree", "add", "--detach", detached, "HEAD"], fixture.primary);
+    const remoteCommit = pushRemoteUpdate(fixture, "remote\n");
+
+    const result = runHook(detached);
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(runGit(["rev-parse", "HEAD"], fixture.primary), remoteCommit);
+    assert.equal(runGit(["rev-parse", "HEAD"], detached), remoteCommit);
+    assert.match(result.stderr, /Advanced detached worktree/);
+  });
+});
+
 test("startup Git sync rebases clean current worktrees", () => {
   withGitFixture((fixture) => {
     const feature = join(fixture.directory, "feature");
@@ -199,7 +360,7 @@ test("startup Git sync rebases clean current worktrees", () => {
   });
 });
 
-test("startup Git sync skips dirty current worktrees", () => {
+test("startup Git sync fails for dirty current worktrees", () => {
   withGitFixture((fixture) => {
     const feature = join(fixture.directory, "feature");
     runGit(
@@ -212,16 +373,13 @@ test("startup Git sync skips dirty current worktrees", () => {
 
     const result = runHook(feature);
 
-    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.notEqual(result.status, 0);
     assert.equal(runGit(["rev-parse", "HEAD"], feature), originalHead);
-    assert.match(
-      result.stderr,
-      /Skipped current worktree sync: dirty worktree/,
-    );
+    assert.match(result.stderr, /Failed current worktree sync: dirty worktree/);
   });
 });
 
-test("startup Git sync skips in-progress Git operation state", () => {
+test("startup Git sync fails for in-progress current Git operation state", () => {
   withGitFixture((fixture) => {
     const feature = join(fixture.directory, "feature");
     runGit(
@@ -238,7 +396,7 @@ test("startup Git sync skips in-progress Git operation state", () => {
 
     const result = runHook(feature);
 
-    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.notEqual(result.status, 0);
     assert.equal(runGit(["rev-parse", "HEAD"], feature), originalHead);
     assert.match(result.stderr, /in-progress git state/);
   });
@@ -282,7 +440,7 @@ test("startup Git sync aborts conflicted rebases and leaves no rebase state", ()
   });
 });
 
-test("startup Git sync skips detached local commits", () => {
+test("startup Git sync fails for detached local commits", () => {
   withGitFixture((fixture) => {
     runGit(["checkout", "--detach"], fixture.primary);
     configureUser(fixture.primary);
@@ -296,9 +454,9 @@ test("startup Git sync skips detached local commits", () => {
 
     const result = runHook(fixture.primary);
 
-    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.notEqual(result.status, 0);
     assert.equal(runGit(["rev-parse", "HEAD"], fixture.primary), localHead);
-    assert.match(result.stderr, /Skipped detached HEAD with local commits/);
+    assert.match(result.stderr, /Failed detached HEAD sync: local commits/);
   });
 });
 
