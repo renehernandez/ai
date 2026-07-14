@@ -34,24 +34,35 @@ publication, provider policy, and explicit terminal authority.
 ## Review and Finish boundary
 
 Review is read-only. It inspects one planning artifact fingerprint or one exact
-target-base diff and HEAD, runs the required local reviewer baseline, and
-normalizes hosted findings retrieved by Finish.
+target-base diff and HEAD, covers every phase-specific review type, and
+normalizes hosted findings retrieved by Finish. A small coherent change may use
+one integrated inline pass; use subagents only when delegation is faster.
 
-Before any push, PR/MR creation, or PR/MR update, Review emits a task-local
-`publication_checkpoint` containing:
+After a native hook-clean commit, Finish pushes and creates or updates the
+draft PR/MR, requests configured hosted review, and starts local Review against
+the same hosted head. Review and its subagents consume the pre-commit hook's
+full-suite evidence instead of rerunning that suite.
 
-- target base and exact HEAD;
-- current target-base diff scope;
-- repository-hook evidence;
-- five distinct findings-only local reviewer outcomes and every selected
-  affected-domain specialist;
+Review then emits a task-local `technical_readiness_checkpoint` containing:
+
+- hosted artifact, target base, and exact HEAD;
+- current target-base diff scope and repository-hook evidence;
+- every phase-specific findings-only review outcome and affected-domain
+  specialist;
+- bounded closure for the enumerated repair findings and affected verification,
+  when repairs occurred;
+- confirmed patch equivalence, base-sensitive context, required coverage, and
+  affected proof when discovery is reused after a rebase;
 - resolved provider route;
 - blocking findings.
 
-If HEAD or the resolved target-base SHA changes, the effective diff and
-checkpoint become stale even when the target ref and source HEAD are unchanged.
-Missing task-local evidence is recomputed; do not reconstruct or persist local
-gate state through a repository or runtime tool.
+If HEAD or the resolved target-base SHA changes, request refreshed hosted review
+and emit a fresh exact-target checkpoint. Ordinary repairs receive one bounded
+closure check for affected types; material contract or review-risk changes
+receive one new discovery pass. A patch-
+equivalent rebase may reuse discovery only with the evidence above. Missing
+task-local evidence is recomputed; do not reconstruct or persist local gate
+state through a repository or runtime tool.
 
 Finish performs provider mutations and polling. Implementation or delivery
 language authorizes publication and hosted feedback follow-through without

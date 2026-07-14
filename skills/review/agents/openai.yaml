@@ -1,4 +1,4 @@
 interface:
   display_name: "Review"
-  short_description: "Inspect exact targets with independent review waves"
-  default_prompt: "Use $review read-only with the phase-specific baseline. Keep planning artifacts limited to durable contract findings and return implementation mechanics task-locally. Give delegated reviewers immutable task packets and clean context, join at a phase barrier, batch findings for Plan or Execute, normalize hosted findings separately, and emit the complete exact-head publication checkpoint without persisted gate state."
+  short_description: "Run bounded required review coverage and closure"
+  default_prompt: "Use $review read-only for every phase-specific review type against the exact hosted target. Cover a small coherent change inline or delegate only when faster, join at one phase barrier, return one findings batch, and run closure only for affected types and proof. Consume commit-hook suite evidence, emit the compact receipt from already collected state, and produce a fresh technical-readiness checkpoint after draft publication and hosted-review request."

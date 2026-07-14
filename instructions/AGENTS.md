@@ -117,9 +117,15 @@ modes.
   implementation are one change set in one final PR/MR, with no POC PR/MR or
   POC phase. OpenSpec produces one final PR/MR per top-level delivery unit, with
   nested work items implemented cohesively inside that unit.
-- Review evidence and the publication checkpoint remain task-local.
-  Intermediate changes invalidate affected review surfaces; any changed target
-  base or HEAD invalidates the complete publication checkpoint.
+- Review evidence and the technical-readiness checkpoint remain task-local.
+  After a hook-clean commit, publish the draft and request hosted review before
+  running local Review on that same head. Cover every phase-specific review
+  type inline or through subagents, use one findings batch, and run bounded
+  closure only for affected types after repairs. Local Review consumes the
+  pre-commit hook's full-suite evidence and does not rerun that suite. A changed
+  target base or HEAD requires a fresh exact-target checkpoint; patch-equivalent
+  rebases may preserve discovery only after base-sensitive validation, while
+  material contract or review-risk changes require new discovery.
 - For multiple final units, Plan records semantic eligibility and one total Git
   order. Execute may develop eligible units concurrently when each has a singly
   owned branch/worktree; publication and restack propagation preserve the Git

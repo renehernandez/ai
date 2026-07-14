@@ -1,6 +1,6 @@
 ---
 name: review
-description: Use when inspecting a planning artifact, code diff, POC head, final implementation head, or hosted review finding without mutation.
+description: Use when running mandatory phase review coverage, bounded repair closure, exact-MR-head readiness, or hosted finding review without mutation.
 allowed-tools: Read, Glob, Grep, Task, AskUserQuestion, Bash
 ---
 
@@ -13,22 +13,24 @@ diff, or Git HEAD and never fixes, commits, publishes, polls through provider
 mutation, or merges. For non-trivial entry, announce `Review`, read-only
 authority, and the target once.
 
-## Phase-Specific Baselines
+## Required Review Coverage
 
-Use `scripts/review-contract.ts` to select the deterministic baseline.
+Every planning and completed-code target receives one discovery pass against a
+stable exact artifact or diff. Cover every phase-specific review type. One
+integrated inline pass may cover all types for a small coherent change. Use
+subagents only when separating concerns is expected to finish faster; coverage
+outcomes, not distinct reviewer identities, decide readiness.
 
-Planning or OpenSpec targets run:
-
-1. `implementation-readiness`
-2. `edge-cases-and-risk`
-3. `simplification-and-scope`
-4. `refactoring-opportunities`
-5. `delivery-shape`
+Use `scripts/review-contract.ts` as the reviewer catalog. Planning types are
+`implementation-readiness`, `edge-cases-and-risk`,
+`simplification-and-scope`, `refactoring-opportunities`, and `delivery-shape`.
+Completed-code types are `code-simplifier`, `code-quality-review`, `deslop`,
+`diff-review`, and `scrutinize`. Record one current `passed`, `finding`, or
+`blocked` outcome for every type. Add affected-domain specialists only when the
+exact target exposes their domain.
 
 Atomic plans and OpenSpec artifacts are planning contracts. Review them here;
-do not also invoke Doc Smith reader personas. During planning convergence,
-rerun only reviewer lanes invalidated by an edit. Before Execute handoff, run
-the complete planning baseline once against the final artifact fingerprint.
+do not also invoke Doc Smith reader personas.
 
 ## Planning Artifact Boundary
 
@@ -51,33 +53,16 @@ At a POC's first objective proof, run only:
    system path
 3. targeted verification of the real entrypoint and visible success or failure
 
-Do not run the completed-code baseline against intentionally incomplete POC
+Do not run completed-code discovery against intentionally incomplete POC
 code. A later architecture-affecting change invalidates the first-proof
 checkpoint.
 
-Completed POC and final implementation targets require five separate reviewer
-runs:
-
-1. `code-simplifier`
-2. `code-quality-review`
-3. `deslop`
-4. `diff-review`
-5. `scrutinize`
-
-The writer, coordinator, hosted bots, and automated tests do not count as
-reviewer identities. Each required reviewer uses a distinct task-local
-reviewer-run identity and inspects the same immutable target. The five reviewer
-contracts retain correctness, regression, maintainability, verification, and
-architecture-fit/reuse coverage without treating coverage labels as substitute
-reviewers.
-
-Select affected-domain specialists from the exact diff and risk profile, such
-as security, documentation/agent alignment, AX/skill compatibility, data,
+Select affected-domain specialists from the exact diff, such as security,
+documentation/agent alignment, AX/skill compatibility, data,
 infrastructure, performance, migration, provider behavior, or UI. Every
-selected specialist uses another distinct reviewer-run identity. Record the
-task-local rationale for selected specialists and risk-relevant omissions.
+selected specialist receives one outcome against the same immutable target.
 
-Every baseline reviewer ID resolves through the catalog in
+Every required review type resolves through the catalog in
 `scripts/review-contract.ts`. Do not launch a named reviewer without its
 objective, evidence questions, decision criteria, and normalized output
 contract.
@@ -100,27 +85,35 @@ unresolved conversational decision. Full-thread inheritance is an exceptional
 recovery path and requires a task-local rationale. Use the equivalent clean-
 context mechanism in other harnesses.
 
-## Work-Conserving Review Waves
+## Inline Or Delegated Execution
 
-Build the dependency graph and ready queue before delegation. Reserve
-coordinator capacity, then launch all currently ready reviewers together up to
-the available worker capacity. Backfill each freed worker slot immediately from
-the ready queue.
+Prefer one inline pass when the main thread already has the exact diff and the
+change is small enough to inspect coherently. If delegation will be faster,
+build the ready queue before launching, reserve coordinator capacity, and start
+all independent review types together up to available capacity. Backfill freed
+slots from that queue.
 
-Join at one phase barrier after all required results arrive. Wait for
+Join at one phase barrier after every required outcome arrives. Wait for
 completion, failure, or a genuine stall instead of running short status-polling
-loops. When capacity is below the required reviewer count, preserve every
-reviewer across the minimum number of waves. Never lower coverage to match a
-runtime ceiling.
+loops. When capacity is lower than delegated work, use the minimum number of
+waves. Never lower required type coverage to match a runtime ceiling.
 
 Launch a wave only when its target is stable enough for that phase. More fanout
 must not create knowingly stale review work.
 
 ## Findings Batch And Invalidation
 
-Every reviewer returns `passed`, `finding`, or `blocked` with source evidence.
-Normalize each finding with reviewer, severity, affected location, issue,
-evidence, remediation outcome, and invalidated review or verification surfaces.
+Every review type returns `passed`, `finding`, or `blocked`. Include evidence
+detail only for findings or blockers. Normalize each finding with an ID, review
+type, severity, affected location, issue, evidence, remediation outcome,
+invalidated review or verification
+surfaces, and exactly one disposition:
+
+- `repair` for a required in-scope correction owned by Plan or Execute;
+- `defer` for a nonblocking improvement that must not expand the current work;
+- `plan_required` when the finding changes the accepted behavior,
+  architecture, safety, ownership, migration, or delivery contract.
+
 For planning targets, also classify the result as a durable artifact finding or
 a task-local implementation consideration using the boundary above.
 
@@ -129,15 +122,22 @@ results into one task-local findings batch, then return it to Plan or the single
 Execute owner. Read-only agents may investigate ambiguous findings or propose
 tests concurrently; they never edit the implementation worktree.
 
-After a findings batch is fixed, rerun only affected reviewers and verification
-surfaces during intermediate convergence. A material scope, architecture,
-safety, migration, ownership, or delivery change returns to Plan. Before final
-handoff or publication, run the complete required baseline on the stable exact
-target.
+After the findings batch is repaired, run one closure check limited to the
+enumerated `repair` findings and affected verification. Closure passes when the
+repairs and affected behavior pass. It defers unrelated nonblocking suggestions
+instead of opening another discovery cycle, and fails when a repair remains
+unresolved or the affected behavior exposes a blocking defect.
 
-Any implementation HEAD or resolved target-base SHA change invalidates the
-complete publication checkpoint even when intermediate reviewer evidence was
-lane-scoped.
+A material scope, behavior, architecture, safety, migration, ownership,
+delivery, or review-risk change returns to Plan or starts one new bounded
+discovery pass against the new stable target. Ordinary repair commits do not
+restart discovery.
+
+A target-base change makes the checkpoint stale, but does not automatically
+discard discovery. Review may reuse it only after confirming that the effective
+patch, base-sensitive context, required coverage, and affected verification
+remain materially unchanged. Emit a fresh exact-target checkpoint with that
+rebase evidence. Otherwise run one new discovery pass.
 
 ## Planning Delivery Shape
 
@@ -153,7 +153,9 @@ security, rollback, or deployment seams.
 
 Review normalizes provider comments, automated review, CI, and approvals after
 Finish performs the required provider interaction. Hosted gates never replace
-the local baseline, and stale source-HEAD or target-base feedback never passes.
+local required coverage, and stale source-HEAD or target-base feedback never
+passes. Apply the same one-batch and bounded-closure rule to hosted repair
+feedback; only a material contract or risk change starts new discovery.
 
 Use `github-adapter-review` for GitHub and `gitlab-adapter-review` for GitLab.
 When active Fullscript policy selects Nitro, additionally use
@@ -168,47 +170,82 @@ Fullscript GitLab/Nitro retain their configured policies; this workflow changes
 local review orchestration without weakening or replacing hosted gates.
 
 Keep provider, artifact URL, target identity, normalized status, findings, and
-reviewer-run identity task-local. Keep identities, transcripts, fingerprints,
+execution routing task-local. Keep identities, transcripts, fingerprints,
 retries, and mode state out of commits, trackers, and hosted descriptions.
 
-## Publication Checkpoint
+## Compact Review Receipt
 
-Before every push, PR/MR creation, or PR/MR update, emit a task-local
-`publication_checkpoint` only when all are current for the exact target:
+After discovery or closure, emit one compact task-local receipt derived only
+from state already collected during Review:
 
+```text
+Review: discovery | MR !123 @ <head> | inline
+- code-simplifier: passed
+- code-quality-review: passed
+- deslop: passed
+- diff-review: passed
+- scrutinize: passed
+Findings: 0 repair, 0 defer, 0 plan_required
+Local: passed | Nitro: pending | Readiness: pending
+```
+
+Use the phase, current MR head, routing, one outcome per required type, finding
+counts, and local/hosted readiness. Do not run commands, verification, timers,
+hashes, polling, extra reviews, or persistent ledgers to produce the receipt.
+
+## Technical Readiness Checkpoint
+
+After a hook-clean commit is pushed to a draft PR/MR and hosted review is
+requested, emit a task-local `technical_readiness_checkpoint` only when all are
+current for the exact hosted target:
+
+- artifact identity;
 - target-base ref, resolved SHA, and implementation HEAD;
 - inspected target-base diff and hook evidence;
-- all five distinct findings-only reviewer runs;
-- every selected affected-domain specialist on a distinct identity;
+- every phase-specific review type and selected affected-domain specialist;
+- one successful closure result for the enumerated repair findings and affected
+  verification, when repairs occurred;
+- patch-equivalence and base-sensitive verification evidence when discovery is
+  reused after a rebase;
 - resolved provider route; and
 - no blockers.
 
-`scripts/review-contract.ts` validates reviewer selection, exact target
-identity, passing status, reviewer-run independence, exclusions, and specialist
-completion. Any HEAD or resolved target-base SHA change makes the checkpoint
-stale. If evidence cannot be recovered after resume, rerun it; never reconstruct
-persisted gate state.
+`scripts/review-contract.ts` validates complete type coverage, exact hosted
+target identity, passing status, routing, and specialist completion. It rejects
+unclosed repairs, closure scope expansion, material rebase changes, and stale
+discovery. If evidence cannot be recovered after resume, rerun the bounded
+work; never reconstruct persisted gate state.
+
+Review never reruns the repository full suite inline or through subagents. The
+native pre-commit hook owns the full local suite for each committed head;
+Review consumes that hook evidence and runs only inspection or affected closure
+proof.
 
 ## Common Mistakes
 
 | Mistake | Required response |
 | --- | --- |
-| Running the completed-code baseline at first POC proof | Run Code Quality, Scrutinize, and targeted proof only. |
-| Counting coverage labels as separate reviewers | Require the five distinct reviewer skills and identities. |
+| Running completed-code discovery at first POC proof | Run Code Quality, Scrutinize, and targeted proof only. |
+| Starting one subagent per required type for a small change | Cover all types in one integrated inline pass. |
 | Passing full conversation history to every reviewer | Use the immutable task packet and clean context. |
 | Launching or polling reviewers one at a time | Fill ready worker slots and join at a phase barrier. |
 | Fixing each finding as it arrives | Close the barrier, deduplicate, then send one findings batch to the owner. |
-| Reusing a partial review as the final gate | Run the complete stable-target baseline before handoff or publication. |
+| Restarting discovery after an ordinary repair | Run one closure check against the repair batch and affected proof. |
+| Treating every rebase as materially new | Verify patch equivalence, base-sensitive context, required coverage, and affected proof first. |
+| Rerunning the full suite during Review | Consume the commit-hook result and inspect the exact MR head. |
+| Producing elaborate review proof | Emit the compact receipt from already collected state. |
 | Persisting reviewer ledgers or gate state | Keep evidence task-local and recomputable. |
 | Treating Nitro or CI as local Review | Evaluate it as a separate hosted gate. |
 
 ## Test Evidence
 
-- RED: lane strings could satisfy publication without distinct reviewer-run
-  identities, and the complete POC baseline ran at both first proof and final
-  head.
-- GREEN: contract fixtures require five distinct final reviewer runs, two
-  independent first-proof reviewers plus targeted proof, and every selected
-  specialist.
-- REFACTOR: capacity fixtures preserve coverage across minimum waves while
-  task-packet and barrier guidance removes context and polling churn.
+- RED: small changes launched one subagent per catalog type before publication,
+  waited on slow reviewers after focused proof passed, and repeated full
+  discovery after narrow repairs.
+- GREEN: contract fixtures require every phase type while allowing one inline
+  execution identity, require the hosted artifact, close only affected types,
+  and preserve discovery only with patch-equivalent rebase evidence.
+- REFACTOR: fixtures reject missing type coverage, unclosed repairs, closure
+  scope expansion, blocking affected-behavior defects, and materially changed
+  rebase context without adding persistent workflow state or review-time suite
+  runs.

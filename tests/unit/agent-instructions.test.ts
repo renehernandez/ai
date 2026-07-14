@@ -187,16 +187,16 @@ test("implementation rules route semantically and enforce the full OpenSpec POC"
     text,
     /Exact files, symbols, commands, exhaustive test or\s+edge-case matrices/,
   );
-  assert.match(
-    text,
-    /implementation mechanics and non-contract discoveries.*task-locally/is,
-  );
+  assert.match(text, /Exact files.*remain task-local/is);
   assert.match(text, /first objective proof/);
   assert.match(
     text,
     /independent findings-only `code-quality-review` and\s+`scrutinize`/,
   );
-  assert.match(text, /completed stable POC.*full five-reviewer/is);
+  assert.match(
+    text,
+    /completed stable POC.*publishes a.*hook-clean draft.*every completed-code.*review type/is,
+  );
 });
 
 test("documentation rules keep OpenSpec adapters explicit and task-shaped", () => {
@@ -230,9 +230,15 @@ test("Git rules separate Review from Finish and use native hook-enabled commits"
   assert.match(text, /never.*--no-verify/i);
   assert.match(text, /Review.*read-only/is);
   assert.match(text, /Finish.*provider mutation/is);
-  assert.match(text, /publication_checkpoint/);
+  assert.match(text, /technical_readiness_checkpoint/);
+  assert.match(
+    text,
+    /hook-clean commit.*creates or updates the.*draft.*hosted review.*local Review/is,
+  );
+  assert.match(text, /pre-commit hook's.*full-suite evidence/is);
   assert.match(text, /task-local/i);
-  assert.match(text, /HEAD or (?:the resolved )?target-base SHA.*stale/is);
+  assert.match(text, /HEAD or the resolved target-base SHA.*fresh exact-/is);
+  assert.match(text, /patch-\s*equivalent rebase.*reuse discovery/is);
   assert.match(text, /merge.*explicit/i);
   assert.match(
     text,
@@ -240,6 +246,22 @@ test("Git rules separate Review from Finish and use native hook-enabled commits"
   );
   assert.match(text, /with no POC\s+phase/is);
   assert.doesNotMatch(text, /ax commit|review-gate|plans artifact/i);
+});
+
+test("workflow spec publishes the hook-clean draft before local readiness", () => {
+  const text = readFileSync(
+    "openspec/specs/agent-workflow-modes/spec.md",
+    "utf-8",
+  );
+
+  assert.match(
+    text,
+    /publish a hook-clean draft before local implementation Review/i,
+  );
+  assert.match(text, /local and hosted review against the same exact head/i);
+  assert.match(text, /every required local review type/i);
+  assert.match(text, /technical_readiness_checkpoint/);
+  assert.doesNotMatch(text, /Review emits `publication_checkpoint`/);
 });
 
 test("AI repo Finish policy remains GitLab and Nitro specific", () => {
@@ -378,8 +400,8 @@ test("OpenSpec guidance challenges delivery-unit cohesion before writing", () =>
     assert.match(text, /POC.*actual/is);
   }
 
-  assert.match(testingRules, /delivery-shape reviewers/);
-  assert.match(reviewAdapter, /phase-specific baseline/);
+  assert.match(testingRules, /delivery\s+shape/);
+  assert.match(reviewAdapter, /every phase-specific review type/);
   assert.doesNotMatch(reviewAdapter, /four-lane/);
 });
 

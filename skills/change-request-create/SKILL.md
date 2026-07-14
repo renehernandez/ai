@@ -12,9 +12,9 @@ policy; provider adapters own provider-specific mutation mechanics.
 ## Mode Boundary
 
 This is a bounded Finish specialist. It does not independently grant provider
-mutation, merge, deployment, or cleanup authority. Finish supplies the current
-publication checkpoint and authority; this skill produces the policy-compliant
-body and delegates authorized mechanics to one provider adapter.
+mutation, merge, deployment, or cleanup authority. Finish supplies hook-clean
+commit evidence and authority; this skill produces the policy-compliant body
+and delegates authorized mechanics to one provider adapter.
 
 ## When To Use
 
@@ -42,16 +42,15 @@ Do not guess from the first remote by position when multiple hosts remain
 plausible. Delegate provider mechanics to `github-pr-create` or
 `glab-mr-create` after Finish has resolved the route and authority.
 
-## Publication Checkpoint
+## Draft Publication Gate
 
 When creating or updating a hosted change request would publish local
-agent-authored work, first require a current final personal publication
-checkpoint for the branch diff and exact HEAD SHA. The checkpoint must name the
-target base, diff scope, HEAD SHA, reviewer outcome, and blocking findings.
-Pause before pushing or mutating the hosted artifact when the checkpoint is
-missing, stale, tied to another HEAD, or has unresolved blockers. Keep this
-evidence private unless the selected project workflow already requires
-reviewer-facing evidence.
+agent-authored work, first require a native hook-clean commit for the branch
+diff and exact HEAD SHA. Pause when hook evidence is missing, stale, tied to
+another HEAD, or the provider route is unresolved. Local Review and the
+technical-readiness checkpoint follow draft publication and the hosted review
+request; they do not gate creation of the draft. Keep workflow evidence private
+unless the selected project policy already requires reviewer-facing evidence.
 
 ## Description Policy
 
@@ -120,7 +119,7 @@ review-environment setup details belong in workflow evidence unless reviewers
 need one of those facts to assess the diff.
 
 Keep workflow completion evidence, including green CI, Nitro feedback,
-publication checkpoints, operational-verification runs, and private review-gate
+technical-readiness checkpoints, operational-verification runs, and private review-gate
 state, in the delivery ledger or final thread report unless it meets the
 reviewer-facing criteria above.
 

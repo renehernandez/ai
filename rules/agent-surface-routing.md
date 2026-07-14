@@ -68,7 +68,8 @@ change-request description policy and provider creation mechanics.
 - Explore and Review may run on any surface that can read the required target.
 - Plan and Execute require a repository-visible artifact plus a dedicated
   branch/worktree with one known write owner before writing.
-- Finish requires authenticated provider access and a current task-local
-  publication checkpoint for the exact target.
+- Finish requires authenticated provider access and hook-clean commit evidence
+  for draft publication. Technical readiness additionally requires the current
+  task-local checkpoint for the exact hosted target.
 - A hosted or cloud agent without local worktree, hook, or runtime evidence must
   report that gap and may not infer the missing evidence from machine memory.

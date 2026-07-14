@@ -101,10 +101,10 @@ refresh every changed effective-diff gate.
 Use progressive verification. Implement the smallest cohesive boundary and run
 the affected unit, type, lint, schema, or other narrow project-native proof.
 At first objective proof, run the targeted integration, route, browser, or
-equivalent real-entrypoint proof. Run the complete repository-required
-verification only when the head is stable for final Review, scheduling
-independent commands concurrently when safe. If a final failure may predate the
-branch, reproduce it against the target base before attributing it to the diff.
+equivalent real-entrypoint proof. Do not manually rerun the complete repository
+suite before Review; the native pre-commit hook owns that full proof for each
+committed head. If a hook failure may predate the branch, reproduce it against
+the target base before attributing it to the diff.
 
 After the narrow proof passes, stage only intended files and use native hook-
 enabled Git commit behavior. Never use `--no-verify`. Fix a hook failure before
@@ -121,25 +121,27 @@ intentionally incomplete POC code. A later architecture-affecting change
 invalidates the checkpoint. Keep it task-local; create no repository ledger or
 sidecar.
 
-Automatically invoke Review read-only for the exact implementation diff/head.
-Review launches independent work as capacity-aware waves and holds mutation
-until its phase barrier closes. Execute receives one deduplicated findings
-batch, applies accepted fixes as the only writer, and reruns only invalidated
-intermediate review and verification surfaces. Read-only investigation and test
-design may proceed concurrently, but no reviewer edits this worktree.
+After the hook-clean commit is published to a draft PR/MR and hosted review is
+requested, invoke Review read-only for the exact hosted diff/head. Review covers
+every phase-specific type inline or through capacity-aware delegation and holds
+mutation until its phase barrier closes. Inline Review and review subagents
+consume hook evidence instead of rerunning the full suite. Execute receives one
+deduplicated findings batch, applies required in-scope repairs as the only
+writer, and defers optional improvements.
 
-When the implementation converges, run the complete five-reviewer exact-head
-wave and full stable-head verification once for the publication checkpoint. A
-finding that changes the contract returns to Plan. When local Review passes,
-hand its checkpoint to Finish when publication is authorized.
+After repairs, run one closure check limited to the enumerated findings and
+affected verification. Do not restart discovery for ordinary repair commits. A
+finding or repair that materially changes the accepted contract or review risk
+returns to Plan or one new bounded discovery pass. Review emits the exact-target
+technical-readiness checkpoint after publication and hosted-review request.
 
 Finish may reactivate the current lane owner for CI or hosted-review findings
 after publication without another user prompt. If that owner is unavailable,
 perform the standard exclusive ownership handoff before a replacement edits.
 
 Execute-only or local-only wording stops before Finish. `implement`, `deliver`,
-or `proceed` authorizes the normal publication sequence after Review, but never
-authorizes merge.
+or `proceed` authorizes the normal hook-clean draft-publication sequence before
+local Review, but never authorizes merge.
 
 ## Common Mistakes
 
@@ -151,9 +153,10 @@ authorizes merge.
 | Broadening a POC after its first proof without architecture review | Stop and pass the target-specific architecture checkpoint first. |
 | Treating working end-to-end behavior as proof of architecture fit | Trace the exact diff to canonical owners and resolve parallel paths. |
 | Editing as each reviewer responds | Wait for the phase barrier and apply one accepted findings batch. |
-| Running the full suite after every small edit | Use progressive verification and reserve full proof for stable final heads. |
+| Restarting discovery after every repair | Run one bounded closure check unless the contract or review risk materially changed. |
+| Manually running the full suite before Review | Run focused proof; let the native commit hook own the full suite once. |
 | Treating logical independence as missing Git order | Preserve one total predecessor chain. |
-| Publishing or merging from Execute | Hand a current checkpoint to Finish. |
+| Treating draft publication as technical readiness | Publish hook-clean, then complete local and hosted review. |
 
 ## Test Evidence
 

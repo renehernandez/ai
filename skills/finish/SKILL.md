@@ -33,11 +33,20 @@ project policy, workflow-policy profile, remote inference. Ambiguity blocks
 provider mutation without invalidating local work. GitHub, generic GitLab, and
 Fullscript GitLab/Nitro use their configured CI, approval, and reviewer gates.
 
-Before every push, PR/MR creation, or PR/MR update, consume a current Review
-`publication_checkpoint` bound to the exact target base and HEAD. It must carry
-the five distinct findings-only implementation reviewer runs and every selected
-affected-domain specialist. Re-run the complete publication baseline if either
-target identity changes; lane-scoped intermediate evidence is not a substitute.
+After a native hook-clean commit, push and create or update the draft PR/MR
+without waiting for local Review. Request configured hosted review, then start
+local Review against that same exact hosted head so both can proceed
+concurrently. The hook evidence is the full local-suite proof for the commit;
+local Review and review subagents do not rerun that suite.
+
+Technical readiness consumes a current Review
+`technical_readiness_checkpoint` bound to the hosted artifact, target base, and
+HEAD. It carries every required phase review type, selected affected-domain
+specialists, and successful bounded closure for any repair batch. A changed
+target identity requires a fresh checkpoint, but patch-equivalent rebase
+evidence may preserve discovery when Review confirms unchanged base-sensitive
+context, required coverage, and affected verification. Material changes require
+one new bounded discovery pass.
 
 Reuse an open artifact for the branch instead of creating a duplicate. Preserve
 provider templates and user-owned body sections. Descriptions contain
@@ -55,7 +64,7 @@ bypasses this specialist pass.
 
 For OpenSpec POC publication, create one draft PR/MR titled `POC: ...` against
 the normal target and state that it is review-only and must close unmerged.
-Consume the completed-POC five-reviewer Review baseline; the narrower
+Consume the completed-POC Review checkpoint; the narrower
 first-objective-proof checkpoint cannot authorize publication. CI, hosted
 review, and operational proof cannot substitute for local Review. For atomic-
 plan delivery, publish the plan and implementation together as one change set
@@ -72,8 +81,12 @@ readiness never authorize changing it from draft to ready.
 Perform configured provider review requests and polling, then hand provider,
 artifact URL, target base, exact target-base SHA, source head, status, and the
 complete available feedback to Review for normalization. Route actionable
-implementation findings to the current Execute lane owner. Every changed source
-head or resolved target-base SHA reruns local Review, CI, and hosted gates.
+implementation findings to the current Execute lane owner as one batch. After
+repairs, request refreshed hosted review for the new head, then Review runs
+bounded closure only for affected types and verification. It starts new
+discovery only for a material contract or review-risk change. Every changed
+source head or resolved target-base SHA refreshes local readiness, CI, and
+hosted gates.
 
 Do not stop at publication, a pending pipeline, a green parent pipeline, a
 review request, or reassuring summary language. Continue monitoring the newest
@@ -121,9 +134,10 @@ before cleanup; never force-delete as ordinary follow-through.
 | Marking a technically ready MR ready | Leave it draft until explicit merge authority starts its turn. |
 | Stopping at MR creation or green parent CI | Monitor the full current pipeline/review cycle and route failures. |
 | Trusting `No findings` without reading the note | Read the full response and applicable unresolved discussions. |
-| Reusing a stale checkpoint after push or rebase | Return to Review for the new exact head/base. |
+| Waiting for local Review before creating the draft | Publish the hook-clean commit, request hosted review, then run local Review on the same head. |
+| Reusing a stale checkpoint after repair or rebase | Refresh hosted review and run bounded closure or patch-equivalence validation on the new head. |
 | Letting provider choice follow the first remote | Apply policy precedence and block ambiguity. |
 | Writing a PR/MR body directly in Finish | Invoke `change-request-create`, then delegate provider mechanics. |
 | Splitting an atomic plan from its implementation | Publish both as one change set in one final PR/MR. |
-| Treating green POC CI as architecture approval | Require the current POC-specific local Review checkpoint. |
+| Treating green POC CI as architecture approval | Require the current POC-specific local Review checkpoint for readiness. |
 | Merging because all gates are green | Require explicit merge authority or activated policy. |

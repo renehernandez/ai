@@ -38,18 +38,20 @@ external blockers, and CI-only coverage as verification gaps.
 
 ## Planning, POC, and final targets
 
-- Planning artifacts use implementation-readiness, edge-case/risk,
-  simplification/scope, refactoring, and delivery-shape reviewers against one
-  artifact fingerprint. Reviewers verify the artifact's reuse and deviation
-  contract against live repository evidence. Intermediate edits rerun affected
-  lanes; Execute handoff requires the complete final-artifact baseline.
+- Planning artifacts receive one discovery pass against one artifact
+  fingerprint. Cover every planning review type: implementation readiness,
+  edge cases and risk, simplification and scope, refactoring, and delivery
+  shape. One inline pass may integrate them for a small coherent artifact.
+  Review verifies the reuse and deviation contract against live repository
+  evidence.
 - At first objective proof, a POC uses separate `code-quality-review` and
   `scrutinize` reviewers plus targeted verification of the real entrypoint and
   visible outcome.
-- Completed POC and final implementation targets use five distinct findings-only
-  reviewers—`code-simplifier`, `code-quality-review`, `deslop`, `diff-review`,
-  and `scrutinize`—against one target-base diff and exact HEAD. Add affected-
-  domain specialists beyond that floor.
+- Completed POC and final implementation targets receive one findings-only
+  discovery pass against the exact hosted target-base diff and HEAD, covering
+  every completed-code review type. One integrated inline pass may cover a
+  small coherent change; use subagents only when delegation is expected to
+  finish faster. Add affected-domain specialists when the diff exposes them.
 - Every OpenSpec POC proves the complete accepted contract, including applicable
   operational, migration, rollback, compatibility, security, performance, and
   accessibility concerns. Explicit requirements cannot be waived by a receipt.
@@ -57,10 +59,12 @@ external blockers, and CI-only coverage as verification gaps.
   environment. A mock that bypasses the decision is not verification.
 - Run pre-merge AX proof only with isolated HOME and runtime roots. Live runtime
   activation waits for verified merged default branch source and `ax sync`.
-- Intermediate artifact or HEAD changes invalidate affected verification and
-  Review surfaces. Any target-base or HEAD change invalidates the complete
-  publication checkpoint, which reruns every required reviewer and selected
-  specialist on the final exact target.
+- Repair changes receive one closure check limited to the enumerated findings
+  plus affected review types and verification. New discovery is required only
+  for a material contract or review-risk change. A patch-equivalent rebase may preserve
+  discovery after Review confirms unchanged effective patch, base-sensitive
+  context, required coverage, and affected proof, then emits a fresh exact-target
+  checkpoint.
 
 ## Progressive Verification
 
@@ -75,7 +79,8 @@ Escalate proof with target maturity:
    narrow verification.
 2. At first objective proof, run the targeted real-entrypoint integration,
    route, browser, or equivalent proof.
-3. At a stable final head, run all repository-required verification and execute
-   independent commands concurrently when safe.
+3. Commit the stable head through the native pre-commit hook, which owns the
+   full repository-required suite. Local Review and review subagents consume
+   that hook evidence instead of rerunning the suite.
 4. When a final failure may predate the branch, reproduce it against the target
    base before attributing it to the change.

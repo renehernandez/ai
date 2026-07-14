@@ -108,22 +108,20 @@ artifact repair; the specialist never rewrites `tasks.md` automatically.
 
 ## Planning Review
 
-During planning convergence, invoke Review read-only against the exact artifact
-fingerprint and rerun only the lanes invalidated by each material edit:
+When the planning artifact is stable, invoke one read-only Review discovery pass
+against its exact fingerprint. Cover every planning review type. A small
+coherent plan may use one integrated inline pass; use subagents only when
+separating concerns is expected to finish faster. Add affected-domain
+specialists when the exact artifact exposes their domain. Hold edits until the
+review phase barrier and deduplicate one task-local findings batch.
 
-1. `implementation-readiness`
-2. `edge-cases-and-risk`
-3. `simplification-and-scope`
-4. `refactoring-opportunities`
-5. `delivery-shape`
-
-Add affected-domain specialists. Hold edits until the review phase barrier,
-deduplicate the task-local findings batch, and let Plan repair only findings
-that change the durable planning contract. Pass implementation considerations
-to Execute task-locally instead of expanding the artifact. Before Execute
-handoff, run the complete planning baseline once against the final artifact
-fingerprint. Return material scope, architecture, safety, or delivery changes
-to the user. Publish no
+Plan repairs only findings that change the durable planning contract. Pass
+implementation considerations to Execute task-locally instead of expanding the
+artifact, and defer optional improvements. After repairs, run one closure check
+limited to the enumerated findings and affected proof. Start a new bounded
+discovery pass only when the repair materially changes scope, behavior,
+architecture, safety, ownership, migration, delivery, or the review-risk
+coverage. Return those material changes to the user. Publish no
 planning-only or reconciliation-only PR/MR. Planning reviewers verify the reuse
 and deviation contract against the live repository rather than accepting its
 claims at face value. Atomic plans and OpenSpec artifacts do not also run Doc
