@@ -95,8 +95,6 @@ function createRuntimeSource(root: string): {
       {
         version: 1,
         runtime: {
-          installedProfiles: ["personal"],
-          policyProfile: "personal",
           retiredSkills: [],
           canonicalSkillsDir: join(installRoot, "agents", "skills"),
           skillSymlinkTargets: [
@@ -134,6 +132,13 @@ function createRuntimeSource(root: string): {
               "rules/base.md",
             ],
           },
+          work: {
+            include: ["modes", "fullscript"],
+            paths: [
+              { sourcePath: "instructions/AGENTS.md", targetPath: "AGENTS.md" },
+              "rules/base.md",
+            ],
+          },
         },
         blocks: {
           modes: {
@@ -141,6 +146,16 @@ function createRuntimeSource(root: string): {
               {
                 localPath: "skills",
                 names: ["explore", "plan", "execute", "review", "finish"],
+              },
+            ],
+          },
+          fullscript: {
+            skills: [
+              {
+                url: "https://git.fullscript.invalid/ai/skills.git",
+                ref: "main",
+                basePath: ".",
+                names: ["private-skill"],
               },
             ],
           },
@@ -176,6 +191,8 @@ test("CLI synchronizes an isolated runtime and reports offline local state", () 
         "--runtime-root",
         fixture.runtimeRoot,
         "sync",
+        "--profile",
+        "personal",
         "--json",
       ],
       { cwd: target, sourceRoot: fixture.sourceRoot },
@@ -184,8 +201,13 @@ test("CLI synchronizes an isolated runtime and reports offline local state", () 
     const result = JSON.parse(first.stdout) as { status: string };
     assert.equal(result.status, "synchronized");
     assert.equal(
-      existsSync(join(fixture.runtimeRoot, "managed-runtime.json")),
-      false,
+      JSON.parse(
+        readFileSync(
+          join(fixture.runtimeRoot, "selected-profile.json"),
+          "utf-8",
+        ),
+      ).selectedProfile,
+      "personal",
     );
     assert.equal(existsSync(join(fixture.sourceRoot, "ax.lock.json")), false);
     assert.equal(existsSync(join(fixture.sourceRoot, ".ax", "cache")), false);
@@ -213,6 +235,26 @@ test("CLI synchronizes an isolated runtime and reports offline local state", () 
     );
     assert.equal(status.status, 0, status.stderr || status.stdout);
     assert.equal((JSON.parse(status.stdout) as { ok: boolean }).ok, true);
+
+    const repeated = runAx(
+      [
+        "--config",
+        fixture.configPath,
+        "--runtime-root",
+        fixture.runtimeRoot,
+        "sync",
+        "--profile",
+        "personal",
+        "--json",
+      ],
+      { cwd: target, sourceRoot: fixture.sourceRoot },
+    );
+    assert.equal(repeated.status, 0, repeated.stderr || repeated.stdout);
+    assert.equal(
+      (JSON.parse(repeated.stdout) as { selectedProfile: string })
+        .selectedProfile,
+      "personal",
+    );
   });
 });
 
@@ -273,6 +315,8 @@ exit 23
         "--runtime-root",
         fixture.runtimeRoot,
         "sync",
+        "--profile",
+        "personal",
         "--json",
       ],
       { cwd: root, sourceRoot: fixture.sourceRoot, env },
@@ -355,6 +399,8 @@ exit 0
         "--runtime-root",
         fixture.runtimeRoot,
         "sync",
+        "--profile",
+        "personal",
         "--json",
       ],
       { cwd: root, sourceRoot: fixture.sourceRoot, env },

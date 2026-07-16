@@ -47,17 +47,19 @@ These rules apply to command execution, network access, and tool installation ac
 
 ## AX runtime convergence
 
-Tracked `ax.config.json` is authoritative runtime state. It declares installed
-profiles, exactly one workflow-policy profile, exact runtime targets, and
-explicitly retired skills. `runtime.configs` additionally owns exact leaf
-values inside mixed machine-local tool configs.
+Tracked `ax.config.json` is authoritative for available profiles, exact runtime targets,
+and explicitly retired skills. Each machine persists one selected profile under
+its AX runtime root; that profile controls both installed assets and workflow
+policy. `runtime.configs` additionally owns exact leaf values inside mixed
+machine-local tool configs.
 
 - Use `pnpm ax sync` to build one validated candidate, replace every declared
   skill, instruction, and hook target, and remove `runtime.retiredSkills`.
-- Change `runtime.installedProfiles` and `runtime.policyProfile` in tracked
-  config when the machine selection changes. Sync has no selection flags.
+- Initialize or switch the machine with `pnpm ax sync --profile <name>`.
+  Subsequent plain syncs reuse the local selection. Never infer a profile for
+  an uninitialized machine.
 - Scoped `pnpm ax skills sync`, `pnpm ax instructions sync`, and
-  `pnpm ax hooks sync` use that tracked selection and mutate only that surface.
+  `pnpm ax hooks sync` use that local selection and mutate only that surface.
 - Use `pnpm ax configs sync` to converge only the exact managed TOML leaves in
   tracked config. Preserve every unowned value and do not hand-edit a managed
   leaf in `~/.codex/config.toml`.
@@ -76,7 +78,7 @@ interrupted, rerun it.
 
 - Use `pnpm ax status` and `pnpm ax validate` for offline, read-only inspection
   with no network access or filesystem mutation.
-- Status reports configured profiles, path presence, link targets, retired
+- Status reports the selected profile, path presence, link targets, retired
   paths, and cache state. It cannot establish remote-ref freshness.
 - Validate checks runtime structure, not byte-for-byte content. Run sync to
   restore authoritative content.

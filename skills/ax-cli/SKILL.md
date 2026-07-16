@@ -21,6 +21,7 @@ never synchronize runtime content.
 
 | Need | In this repo | Through the shim |
 | --- | --- | --- |
+| Initialize or switch profile | `pnpm ax sync --profile <name>` | `ax sync --profile <name>` |
 | All runtime surfaces | `pnpm ax sync` | `ax sync` |
 | Skills only | `pnpm ax skills sync` | `ax skills sync` |
 | Instructions and rules only | `pnpm ax instructions sync` | `ax instructions sync` |
@@ -38,24 +39,31 @@ validates every installed runtime surface before returning success.
 
 ## Authoritative runtime sync
 
-Runtime selection comes from `runtime.installedProfiles` and
-`runtime.policyProfile` in `ax.config.json`. Change the tracked config when the
-machine should install a different profile set or policy profile. Runtime sync
-has no selection, adoption, or ownership flags.
+Tracked `ax.config.json` defines available profiles. Each machine stores one
+selected profile in `<runtime-root>/selected-profile.json`; that profile owns
+both installed assets and workflow policy. Initialize or switch with `ax sync
+--profile <name>`. Plain `ax sync` reuses the persisted selection. Scoped sync
+commands require that selection and never change it.
+
+An uninitialized top-level sync fails before source resolution and lists the
+available profile names. AX never silently selects a profile and does not
+provide multiple-profile, policy-profile, adoption, or ownership flags.
 
 AX builds and validates every candidate before touching live targets. It then:
 
 - replaces every exact skill, instruction, hook, agent, and coordinator target
-  declared by the selected profiles;
+  declared by the selected profile;
+- removes paths owned only by the previous profile during a switch;
 - removes exact skill names listed in `runtime.retiredSkills`;
 - recreates configured Codex and Claude symlinks; and
 - converges exact managed Codex TOML leaves while preserving unowned values;
 - leaves unrelated files and skills outside those declared targets untouched.
 
-General runtime sync does not retain backups or require recovery decisions. The
-two coordinator child targets are the exception: each carries a hashed
-ownership inventory so AX can refuse unmanaged or locally modified content.
-Their saved Codex project identities live in
+Runtime replacement and profile selection use the existing AX transaction
+engine. The selected profile is committed last; a failed switch restores the
+previous profile-owned runtime and selection. The two coordinator child targets
+also carry a hashed ownership inventory so AX can refuse unmanaged or locally
+modified content. Their saved Codex project identities live in
 `~/.agents/runtime/control-projects.json`. If a sync is interrupted, rerun `ax
 sync`. The source cache remains disposable.
 
@@ -163,7 +171,8 @@ dependency.
 | Mistake | Correct action |
 | --- | --- |
 | Editing an installed runtime copy | Edit the AI repo source, then run `ax sync`. |
-| Passing profile flags to sync | Update `runtime.installedProfiles` and `runtime.policyProfile`. |
+| Editing tracked config to select this machine's profile | Run `ax sync --profile <name>` once, then use plain `ax sync`. |
+| Passing a profile flag to scoped sync | Initialize or switch with top-level `ax sync --profile <name>`. |
 | Expecting status to fetch a remote | Run sync when remote freshness matters. |
 | Expecting general validate to compare source content | Run sync to restore general surfaces; coordinator validate separately checks its owned inventory. |
 | Editing generated Codex agent TOML | Edit `agents/` in the AI repo and run agent sync. |

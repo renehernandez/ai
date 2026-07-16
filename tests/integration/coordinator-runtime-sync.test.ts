@@ -13,6 +13,10 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import {
+  selectedProfilePath,
+  selectedProfilePayload,
+} from "../../scripts/ax/profile-state.ts";
+import {
   type AxRuntimeConfig,
   inspectRuntime,
   syncRuntime,
@@ -88,6 +92,12 @@ test("coordinator sync owns only exact children and refuses unmanaged content", 
         runtimeRoot,
         surface: "coordinators" as const,
       };
+      mkdirSync(runtimeRoot, { recursive: true });
+      writeFileSync(
+        selectedProfilePath(runtimeRoot),
+        selectedProfilePayload("personal"),
+        "utf-8",
+      );
       const first = syncRuntime(options);
       assert.deepEqual(first.changedPaths, [delivery, operations]);
       assert.equal(readFileSync(sibling, "utf-8"), "preserve me\n");

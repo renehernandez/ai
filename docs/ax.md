@@ -13,25 +13,39 @@ OpenSpec target the current working directory.
 
 ## State model
 
-Tracked `ax.config.json` is authoritative runtime state. It declares source
-refs, `runtime.installedProfiles`, `runtime.policyProfile`, exact targets,
-instructions, hooks, agents, coordinator projects, managed tool-config leaves,
-and `runtime.retiredSkills`.
+Tracked `ax.config.json` is authoritative for available profile definitions,
+source refs, exact targets, instructions, hooks, agents, coordinator projects,
+managed tool-config leaves, and `runtime.retiredSkills`. Each machine stores
+one selected profile in `<runtime-root>/selected-profile.json`; that profile
+controls both installed assets and workflow policy.
 
 AX replaces declared targets on every sync and leaves unrelated filesystem
-paths untouched. It stores only a disposable remote-source cache under
-`~/.agents/runtime/cache`. The two coordinator targets carry local ownership
-markers, and their saved-project IDs live in
+paths untouched. It stores a disposable remote-source cache under
+`~/.agents/runtime/cache` and temporary recovery journals plus verified backups
+under `~/.agents/runtime/transactions` and `~/.agents/runtime/backups`. The two
+coordinator targets carry local ownership markers, and their saved-project IDs live in
 `~/.agents/runtime/control-projects.json`; neither file is an orchestration
 database or canonical work state.
 
 ## Synchronize runtime profiles
 
-Run top-level sync to converge the profiles selected in tracked config:
+Initialize a machine by selecting one available profile:
+
+```bash
+pnpm ax sync --profile personal
+```
+
+The selection is persisted locally. Later syncs reuse it:
 
 ```bash
 pnpm ax sync
 ```
+
+Switch profiles explicitly with `pnpm ax sync --profile work`. AX builds the
+new candidate before mutation, removes paths owned only by the previous
+profile, and commits the new selection last. A failed switch restores the
+previous profile-owned runtime and selection. An uninitialized sync never
+chooses a profile or contacts a profile source.
 
 Scoped synchronization uses the same config without initialization state:
 
@@ -59,7 +73,7 @@ pnpm ax status
 pnpm ax validate
 ```
 
-Status reports source/config roots, cache state, installed/policy profiles,
+Status reports source/config roots, cache state, the selected profile,
 missing targets, invalid links, and retired paths that remain present. Validate
 checks the same structural contract and exits non-zero on findings. Neither
 command compares file contents or proves remote-ref freshness. Run sync to

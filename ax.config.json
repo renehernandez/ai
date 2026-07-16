@@ -1,8 +1,6 @@
 {
   "version": 1,
   "runtime": {
-    "installedProfiles": ["personal", "work"],
-    "policyProfile": "work",
     "retiredSkills": [
       "codex-review-feedback",
       "merge-followthrough",

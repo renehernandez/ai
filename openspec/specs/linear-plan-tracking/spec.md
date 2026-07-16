@@ -12,25 +12,24 @@ The system SHALL include an initial Linear project description in conversational
 - **AND** the content is ready for optional use during Plan
 
 ### Requirement: Linear policy is required or disabled
-The system SHALL resolve Linear behavior to exactly `required` or `disabled` from direct user instruction, project policy, and one workflow-policy profile default.
+The system SHALL resolve Linear behavior to exactly `required` or `disabled` from direct user instruction, project policy, and the machine's selected-profile default.
 
 #### Scenario: Policy precedence is evaluated
 - **WHEN** more than one policy source is available
 - **THEN** direct user instruction overrides project policy
-- **AND** project policy overrides the workflow-policy profile default
+- **AND** project policy overrides the selected-profile default
 
 #### Scenario: Personal profile supplies the default
-- **WHEN** no direct or project policy exists and `managed-runtime.json.policyProfile` is `personal`
+- **WHEN** no direct or project policy exists and `selected-profile.json.selectedProfile` is `personal`
 - **THEN** Linear policy is `disabled`
 
 #### Scenario: Work profile supplies the default
-- **WHEN** no direct or project policy exists and `managed-runtime.json.policyProfile` is `work`
+- **WHEN** no direct or project policy exists and `selected-profile.json.selectedProfile` is `work`
 - **THEN** Linear policy is `required`
 
-#### Scenario: Several profiles are installed
-- **WHEN** no direct or project policy exists and the local manifest has no valid single `policyProfile` from its installed set
-- **THEN** policy resolution blocks with `policy_profile_ambiguous`
-- **AND** installed profile sets are not combined to choose a default
+#### Scenario: Selected profile is unavailable
+- **WHEN** no direct or project policy exists and the local runtime has no valid selected profile
+- **THEN** policy resolution blocks with `runtime_profile_uninitialized`
 
 #### Scenario: Direct instruction changes policy
 - **WHEN** the user explicitly enables or disables Linear for the current work
@@ -149,4 +148,3 @@ The system SHALL verify and synchronize each required issue against current plan
 #### Scenario: Required mapping drifts
 - **WHEN** the issue is missing, duplicated, unreachable, attached to the wrong project, or materially differs from the OpenSpec outcome
 - **THEN** the workflow returns to Plan for an approved reconciliation
-

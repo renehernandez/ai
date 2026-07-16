@@ -139,8 +139,8 @@ modes.
 
 ## Provider policy
 
-- Resolve provider behavior from direct user instruction, project policy, one
-  workflow-policy profile, then remote inference.
+- Resolve provider behavior from direct user instruction, project policy, the
+  machine's selected profile, then remote inference.
 - Project instructions select the review host, target branch, automated
   reviewer, approvals, and direct-publication policy.
 - Nitro applies only to Fullscript GitLab projects whose active policy selects
@@ -169,9 +169,11 @@ modes.
 
 ## AX runtime
 
-- Tracked `ax.config.json` is authoritative runtime state. It declares installed
-  profiles, one policy profile, exact managed targets, and retired skills.
-- Use `ax sync` for runtime convergence. It replaces declared targets and
+- Tracked `ax.config.json` is authoritative for available profiles, exact managed targets,
+  and retired skills. Each machine persists one selected profile under its AX
+  runtime root; that profile controls installed assets and policy.
+- Initialize or switch with `ax sync --profile <name>`. Later plain `ax sync`
+  runs reuse that selection for runtime convergence. Sync replaces declared targets and
   removes explicitly retired skills without adoption or ownership prompts. It
   also converges exact managed tool-config leaves while preserving unowned
   values.

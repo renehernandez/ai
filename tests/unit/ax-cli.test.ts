@@ -8,6 +8,7 @@ type Parsed = {
   command: string;
   configPath: string;
   runtimeRoot?: string;
+  profile?: string;
   recoveryFile?: string;
   contextFile?: string;
 };
@@ -56,19 +57,21 @@ test("AX exposes sync/status/validate surfaces and keeps workflow commands absen
   assert.doesNotMatch(help, /plans artifact/);
 });
 
-test("top-level sync reads runtime selection from config", () => {
+test("top-level sync accepts one machine profile selection", () => {
   const [parsed] = parse([
     "--config",
     "/tmp/config.json",
     "--runtime-root",
     "/tmp/runtime",
     "sync",
+    "--profile",
+    "personal",
   ]);
   assert.equal(parsed.command, "sync");
   assert.equal(parsed.scope, undefined);
   assert.equal(parsed.runtimeRoot, "/tmp/runtime");
+  assert.equal(parsed.profile, "personal");
   for (const option of [
-    "--profile",
     "--all-profiles",
     "--policy-profile",
     "--profile-selection-file",
