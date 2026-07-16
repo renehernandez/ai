@@ -1,0 +1,4 @@
+interface:
+  display_name: "Linear Project Overview"
+  short_description: "Draft and maintain stable Linear overviews"
+  default_prompt: "Use $linear-project-overview to draft or review a stable Linear project summary and description."

@@ -61,9 +61,11 @@ surface. Surface capability changes what each mode can prove or mutate; it does
 not create another lifecycle entrypoint.
 
 Bounded specialists do not add lifecycle authority. Explore owns
-`brainstorming` and `start-project`; Plan owns `openspec-tasks`; Review owns the
-GitHub/GitLab host adapters and Nitro feedback normalization; Finish owns
-change-request description policy and provider creation mechanics.
+`brainstorming`, `start-project`, and read-only `linear-project-overview`
+drafting and review; Plan owns `openspec-tasks`; Review owns the GitHub/GitLab
+host adapters and Nitro feedback normalization; Finish owns later explicitly
+approved `linear-project-overview` updates, change-request description policy,
+and provider creation mechanics.
 
 - Explore and Review may run on any surface that can read the required target.
 - Plan and Execute require a repository-visible artifact plus a dedicated

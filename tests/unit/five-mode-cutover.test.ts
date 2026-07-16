@@ -36,6 +36,7 @@ const retainedSpecialists = [
   "glab-mr-create",
   "handoff-brief",
   "linear-breakdown",
+  "linear-project-overview",
   "nitro-review-feedback",
   "openspec-tasks",
   "project-health-brief",
