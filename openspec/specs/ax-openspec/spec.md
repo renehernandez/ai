@@ -139,7 +139,7 @@ The system SHALL expose `ax openspec sync` as the sole mutating OpenSpec command
 #### Scenario: Candidate is ready
 - **WHEN** generation, canonicalization, harness-link normalization, explicit-only adapter normalization, and validation pass
 - **THEN** AX applies the candidate through a repository-scoped transaction
-- **AND** does not add repository paths to `managed-runtime.json`
+- **AND** does not read or change runtime `selected-profile.json`
 
 #### Scenario: Repository transaction begins
 - **WHEN** OpenSpec sync is ready to mutate files

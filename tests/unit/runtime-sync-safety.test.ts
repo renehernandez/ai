@@ -49,8 +49,6 @@ function fixture(root: string): Fixture {
     config: {
       version: 1,
       runtime: {
-        installedProfiles: ["personal"],
-        policyProfile: "personal",
         retiredSkills: [],
         canonicalSkillsDir: join(installRoot, "agents", "skills"),
         skillSymlinkTargets: [join(installRoot, "codex", "skills")],
@@ -98,7 +96,10 @@ test("candidate validation completes before existing targets are replaced", () =
     writeFileSync(target, "# Existing\n", "utf-8");
     rmSync(join(input.sourceRoot, "skills", "finish", "SKILL.md"));
 
-    assert.throws(() => syncRuntime(input), /skill_missing/);
+    assert.throws(
+      () => syncRuntime({ ...input, profile: "personal" }),
+      /skill_missing/,
+    );
     assert.equal(readFileSync(target, "utf-8"), "# Existing\n");
   });
 });
@@ -140,19 +141,28 @@ test("runtime configuration rejects escapes and overlapping target roots", () =>
     withTempDir((root) => {
       const input = fixture(root);
       scenario.mutate(input, root);
-      assert.throws(() => syncRuntime(input), scenario.expected);
+      assert.throws(
+        () => syncRuntime({ ...input, profile: "personal" }),
+        scenario.expected,
+      );
     });
   }
 });
 
-test("runtime profile and policy selection is fully config-driven", () => {
+test("runtime profile selection is explicit and locally persisted", () => {
   withTempDir((root) => {
     const input = fixture(root);
-    input.config.runtime.installedProfiles = ["missing"];
-    assert.throws(() => syncRuntime(input), /unknown_profile/);
+    assert.throws(
+      () => syncRuntime({ ...input, profile: "missing" }),
+      /selected_profile_unknown.*missing.*personal/,
+    );
 
-    input.config.runtime.installedProfiles = ["personal"];
-    input.config.runtime.policyProfile = "work";
-    assert.throws(() => syncRuntime(input), /policyProfile.*must be installed/);
+    const first = syncRuntime({ ...input, profile: "personal" });
+    assert.equal(first.selectedProfile, "personal");
+    assert.equal(syncRuntime(input).selectedProfile, "personal");
+    assert.throws(
+      () => syncRuntime({ ...input, surface: "skills", profile: "personal" }),
+      /profile_selection_scoped/,
+    );
   });
 });

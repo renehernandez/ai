@@ -10,7 +10,7 @@ const activeRuntimeDocs = [
   "rules/command-and-tools.md",
 ] as const;
 
-test("active AX docs use config-driven authoritative sync", () => {
+test("active AX docs use selected-profile authoritative sync", () => {
   for (const relativePath of activeRuntimeDocs) {
     const content = readFileSync(relativePath, "utf-8");
 
@@ -51,13 +51,13 @@ test("AX reference describes authoritative targets and structural validation", (
   const content = readFileSync("docs/ax.md", "utf-8");
 
   assert.match(content, /tracked `ax\.config\.json`.*authoritative/is);
-  assert.match(content, /runtime\.installedProfiles/);
-  assert.match(content, /runtime\.policyProfile/);
+  assert.match(content, /selected-profile\.json/);
+  assert.match(content, /sync --profile/);
   assert.match(content, /runtime\.retiredSkills/);
   assert.match(content, /unrelated filesystem\s+paths untouched/is);
   assert.match(content, /~\/\.agents\/runtime\/cache/);
-  assert.doesNotMatch(content, /~\/\.agents\/runtime\/transactions/);
-  assert.doesNotMatch(content, /~\/\.agents\/runtime\/backups/);
+  assert.match(content, /~\/\.agents\/runtime\/transactions/);
+  assert.match(content, /~\/\.agents\/runtime\/backups/);
   assert.doesNotMatch(content, /sha256-tree-v1/);
 });
 
