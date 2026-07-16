@@ -142,22 +142,9 @@ export function runtimePaths(runtimeRoot?: string): RuntimePaths {
 }
 
 export function syncRuntime(options: RuntimeSyncOptions): RuntimeSyncResult {
-  const sourceRoot = resolve(options.sourceRoot);
-  const paths = runtimePaths(options.runtimeRoot);
-  if (options.surface && options.profile) {
-    throw new Error(
-      "profile_selection_scoped: use top-level ax sync --profile <name>",
-    );
-  }
-  validateConfig(options.config, sourceRoot);
-  assertVerifiedLiveSource(sourceRoot, paths.runtimeRoot);
+  const { paths, previousSelection, selection, sourceRoot } =
+    runtimeSyncPreflight(options);
   mkdirSync(paths.runtimeRoot, { recursive: true });
-  const previousSelection = persistedRuntimeSelection(options.config, paths);
-  const selection = resolveRuntimeSelection({
-    config: options.config,
-    persisted: previousSelection,
-    requestedProfile: options.profile,
-  });
   const stagingRoot = mkdtempSync(join(paths.runtimeRoot, ".candidate-"));
   const snapshots = new SourceSnapshotManager({
     cacheRoot: paths.cacheRoot,
@@ -239,6 +226,34 @@ export function syncRuntime(options: RuntimeSyncOptions): RuntimeSyncResult {
     snapshots.dispose();
     rmSync(stagingRoot, { force: true, recursive: true });
   }
+}
+
+export function preflightRuntimeSync(options: RuntimeSyncOptions): void {
+  runtimeSyncPreflight(options);
+}
+
+function runtimeSyncPreflight(options: RuntimeSyncOptions): {
+  sourceRoot: string;
+  paths: RuntimePaths;
+  previousSelection?: RuntimeSelection;
+  selection: RuntimeSelection;
+} {
+  const sourceRoot = resolve(options.sourceRoot);
+  const paths = runtimePaths(options.runtimeRoot);
+  if (options.surface && options.profile) {
+    throw new Error(
+      "profile_selection_scoped: use top-level ax sync --profile <name>",
+    );
+  }
+  validateConfig(options.config, sourceRoot);
+  assertVerifiedLiveSource(sourceRoot, paths.runtimeRoot);
+  const previousSelection = persistedRuntimeSelection(options.config, paths);
+  const selection = resolveRuntimeSelection({
+    config: options.config,
+    persisted: previousSelection,
+    requestedProfile: options.profile,
+  });
+  return { paths, previousSelection, selection, sourceRoot };
 }
 
 export function inspectRuntime(input: {

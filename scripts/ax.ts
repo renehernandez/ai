@@ -33,6 +33,7 @@ import {
 import {
   type AxRuntimeConfig,
   inspectRuntime,
+  preflightRuntimeSync,
   type RuntimeSurface,
   syncRuntime,
   validateRuntime,
@@ -183,19 +184,21 @@ export function executeParsedCommand(input: ParsedArgs): void {
   }
 
   if (input.command === "sync") {
+    const runtimeOptions = {
+      sourceRoot: context.sourceRoot,
+      config,
+      runtimeRoot,
+      surface: input.scope,
+      profile: input.profile,
+    };
+    preflightRuntimeSync(runtimeOptions);
     const preparedConfigs = input.scope
       ? undefined
       : prepareManagedConfigs(managedConfigOptions);
     const managedConfigs = preparedConfigs
       ? applyPreparedManagedConfigs(preparedConfigs)
       : undefined;
-    const result = syncRuntime({
-      sourceRoot: context.sourceRoot,
-      config,
-      runtimeRoot,
-      surface: input.scope,
-      profile: input.profile,
-    });
+    const result = syncRuntime(runtimeOptions);
     printResult(
       managedConfigs
         ? {

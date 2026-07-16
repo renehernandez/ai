@@ -308,6 +308,28 @@ exit 23
     chmodSync(fakeCodex, 0o755);
     const env = { HOME: home, PATH: `${fakeBin}:/usr/bin:/bin` };
 
+    const uninitializedTopLevelSync = runAx(
+      [
+        "--config",
+        fixture.configPath,
+        "--runtime-root",
+        fixture.runtimeRoot,
+        "sync",
+        "--json",
+      ],
+      { cwd: root, sourceRoot: fixture.sourceRoot, env },
+    );
+    assert.notEqual(uninitializedTopLevelSync.status, 0);
+    assert.match(
+      uninitializedTopLevelSync.stderr,
+      /runtime_profile_uninitialized.*ax sync --profile <name>/,
+    );
+    assert.match(
+      readFileSync(configPath, "utf-8"),
+      /max_concurrent_threads_per_session = 4/,
+    );
+    assert.equal(existsSync(fixture.runtimeRoot), false);
+
     const rejectedTopLevelSync = runAx(
       [
         "--config",
