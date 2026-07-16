@@ -243,8 +243,6 @@ test("CLI synchronizes an isolated runtime and reports offline local state", () 
         "--runtime-root",
         fixture.runtimeRoot,
         "sync",
-        "--profile",
-        "personal",
         "--json",
       ],
       { cwd: target, sourceRoot: fixture.sourceRoot },
