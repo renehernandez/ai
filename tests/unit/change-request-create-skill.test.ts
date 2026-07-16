@@ -184,3 +184,41 @@ test("change-request-create encodes thread 019edf9e verification-drift regressio
     /pass only if internal\/routine references, clean Nitro state, passing pipeline\s+state, and operational-verification state are omitted while targeted proof and\s+the pending check gap are retained/,
   );
 });
+
+test("change-request-create classifies Linear relationships before GitLab mutation", () => {
+  const skill = read("skills/change-request-create/SKILL.md");
+  const gitlab = read("skills/glab-mr-create/SKILL.md");
+  const fixture = read(
+    "tests/fixtures/change-request/linear-relationship-handoff.md",
+  );
+
+  assert.match(skill, /## Tracking/);
+  assert.match(skill, /`Closes PAD-123`/);
+  assert.match(skill, /`Related to PAD-123`/);
+  assert.match(skill, /one issue completed by one MR/);
+  assert.match(skill, /partial delivery, POCs,\s+or stack units/);
+  assert.match(skill, /pause publication and ask for clarification/);
+  assert.match(skill, /explicit no-issue\s+result/);
+  assert.match(skill, /Preserve an existing template-owned or manual Tracking/);
+  assert.match(skill, /task-local\s+relationship expectation/);
+  assert.match(skill, /does not establish completion intent/);
+
+  assert.match(gitlab, /task-local Linear relationship expectations/);
+  assert.match(gitlab, /closing: `Closes PAD-123`/);
+  assert.match(gitlab, /contributing: `Related to PAD-123`/);
+  assert.match(gitlab, /Reject Markdown-linked issue keys/);
+  assert.match(gitlab, /Read the hosted title and body back/);
+  assert.match(gitlab, /does not pass/);
+  assert.match(gitlab, /explicit no-issue result/);
+  assert.match(gitlab, /preserves an existing template-owned or manual/);
+
+  assert.match(fixture, /Expectation: PAD-1909 is closing/);
+  assert.match(fixture, /Closes PAD-1909/);
+  assert.match(fixture, /Expectation: PAD-1909 is contributing/);
+  assert.match(fixture, /Related to PAD-1909/);
+  assert.match(fixture, /reject before provider mutation/);
+  assert.match(fixture, /Closes \[PAD-1909\]/);
+  assert.match(fixture, /explicit no-issue result/);
+  assert.match(fixture, /Release coordination: owned by the MR author/);
+  assert.match(fixture, /preserve the section unchanged/);
+});
