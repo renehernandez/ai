@@ -123,6 +123,43 @@ technical-readiness checkpoints, operational-verification runs, and private revi
 state, in the delivery ledger or final thread report unless it meets the
 reviewer-facing criteria above.
 
+### Linear Relationships In GitLab MRs
+
+When the selected provider is GitLab and the accepted delivery context
+identifies one or more Linear issues, classify each issue before approving the
+body:
+
+| Delivery relationship | Required Tracking statement |
+| --- | --- |
+| This MR independently satisfies the issue's accepted scope | `Closes PAD-123` |
+| This MR advances the issue but does not independently satisfy it | `Related to PAD-123` |
+
+Use a `## Tracking` section with one exact plain statement per issue. Do not
+wrap the issue key in a Markdown link inside the statement. Multiple or mixed
+issues are classified separately; one completed issue does not make every
+referenced issue closing.
+
+The common case is one issue completed by one MR, so use `Closes` when the MR
+independently delivers that issue. Use `Related to` for partial delivery, POCs,
+or stack units that require another MR to complete the issue. If a clearly
+relevant issue exists but the accepted context does not establish which
+relationship applies, pause publication and ask for clarification. If no
+relevant Linear issue exists, add no Linear relationship statement or new
+Tracking section. Preserve an existing template-owned or manual Tracking
+section under the normal update-safety rules.
+
+A Linear URL, bare issue key, branch name, MR title, or commit message may
+identify a candidate issue but does not establish completion intent. A plain
+link also does not replace the required relationship statement. Linear team
+and target-branch automation decides the resulting status; do not promise that
+the status is literally named `Done`.
+
+Hand the provider adapter the approved title and body plus the task-local
+relationship expectation for each relevant issue, or an explicit no-issue
+result. This handoff is private workflow evidence, not a persisted schema. The
+adapter validates that the body matches the expectation; it never selects or
+changes the relationship itself.
+
 ## Template And Update Safety
 
 Prefer project templates and preserve their structure. Fill placeholders with
@@ -210,6 +247,9 @@ flags.
 | Ignoring project templates | Preserve template shape and fill placeholders |
 | Filling a human-owned Testing section | Preserve its instruction and leave it for the owner |
 | Treating provider command success as proof of a safe update | Read the body back and restore or block on damage |
+| Linking a Linear issue without completion semantics | Classify it and use exact plain `Closes PAD-123` or `Related to PAD-123` in `## Tracking` |
+| Closing every Linear issue mentioned by the work | Close only issues independently satisfied by the MR; relate partial, POC, and stacked delivery |
+| Guessing whether an ambiguous MR completes a Linear issue | Pause publication and ask for clarification |
 
 ## Validation Scenarios
 
@@ -246,3 +286,37 @@ flags.
   local paths and raw private artifacts are omitted while reviewer-useful
   summaries, hashes, thread references, note IDs, discussion IDs, or stable
   correlation IDs are retained.
+- GitLab MR context identifies one Linear issue that the MR independently
+  satisfies: pass only if the approved body contains `## Tracking` with the
+  exact plain statement `Closes PAD-123` and the handoff records a closing
+  relationship.
+- GitLab MR context identifies a Linear issue that needs a later stack unit:
+  pass only if the approved body contains `## Tracking` with the exact plain
+  statement `Related to PAD-123` and the handoff records a contributing
+  relationship.
+- GitLab MR context contains a Linear URL but does not establish whether the MR
+  completes the issue: pass only if publication pauses for clarification
+  instead of publishing a bare link, guessing `Closes`, or silently choosing
+  `Related to`.
+- GitLab MR context has no relevant Linear issue: pass only if the handoff
+  records the explicit no-issue result, adds no Linear relationship statement
+  or new Tracking section, and preserves existing template-owned or manual
+  Tracking content.
+
+## Test Evidence
+
+- RED: the full-scope baseline used Markdown-linked
+  `Closes [PAD-1909](...)` outside a Tracking section, while the partial-stack
+  baseline used explanatory prose without Linear's supported `Related to`
+  statement.
+- RED: under deadline and publication pressure, the ambiguous-scope baseline
+  published a neutral Linear link because the prior skill did not require a
+  completion decision.
+- GREEN: the same scenarios produced exact plain `Closes PAD-1909` and
+  `Related to PAD-1909` Tracking statements, while ambiguous scope blocked
+  publication and returned for clarification.
+- RED: an explicit no-issue result plus a human-owned template Tracking section
+  had no compliant path because the earlier adapter wording required the
+  section to be absent while update safety required it to be preserved.
+- GREEN: explicit no-issue handling now forbids invented Linear statements and
+  sections while preserving existing template-owned or manual Tracking content.
