@@ -34,6 +34,15 @@ verification decision remains. Otherwise use Plan. Narrow language such as
 read-only, Plan-only, Execute-only, Review-only, or local-only limits later
 modes.
 
+After a mode gains authority, continue automatically within that scope. Ask
+again only for a material contract decision, a required human-only action, or
+an authority expansion. Routine wording, formatting, validation, test, CI,
+review, and schema repairs do not require renewed permission. Clear agreement
+with an explicit recommendation bundle accepts that bundle, but never unstated
+scope or unrelated mutation or terminal authority. Existing authenticated
+commands do not require renewed approval; credential entry or a new credential
+grant remains a human action.
+
 ## Operating rules
 
 - Keep commands simple: one command per tool call, no compound shell chains,

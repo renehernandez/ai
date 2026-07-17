@@ -1,4 +1,4 @@
 interface:
   display_name: "Plan"
   short_description: "Settle decisions and review one artifact"
-  default_prompt: "Use $plan to settle material decisions conversationally, select exactly one atomic Markdown plan or OpenSpec semantically, keep it focused on the high-level approach and end-to-end outcome, run local planning Review, require a full disposable POC for every OpenSpec, and create no planning MR."
+  default_prompt: "Use $plan to settle material decisions conversationally, select exactly one atomic Markdown plan or OpenSpec semantically, keep it focused on the high-level approach and end-to-end outcome, repair contract-preserving validator failures without renewed permission, run local planning Review, require a full disposable POC for every OpenSpec, and create no planning MR."

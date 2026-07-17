@@ -10,6 +10,8 @@ description: Use when OpenSpec tasks.md needs audit before delivery, especially 
 This is a bounded Plan specialist. It reads and audits an existing OpenSpec but
 does not rewrite `tasks.md`, implement code, publish, or expand Plan's current
 artifact-write authority.
+The no-rewrite boundary applies to this read-only specialist, not to Plan's
+authorized ownership of contract-preserving artifact repairs.
 
 ## Overview
 
@@ -61,9 +63,10 @@ deployment, reviewability, or ownership boundaries justify a separate PR/MR.
 
 When an existing `tasks.md` has lifecycle-only groups, proof-only task
 checkboxes, or manual-looking tasks that only capture validation evidence,
-return `needs_spec_redesign`. Ask the user whether to redo the spec, brainstorm
-a better breakdown, narrow the change, or choose another planning route. Do not
-rewrite `tasks.md` automatically.
+return `needs_spec_redesign` to Plan. Do not rewrite `tasks.md` automatically or
+ask the user directly. Plan applies an unambiguous contract-preserving repair
+under its existing authority, or asks one focused question when the correction
+would change a material contract boundary.
 
 Existing `tasks.md` files must also identify earliest objective proof. The first
 delivery unit should prove the named capability by default. If the first
@@ -95,9 +98,10 @@ No tags, schema extensions, or hidden state are added.
 4. Block when a delivery-unit heading is too broad, a checkbox lacks a heading,
    a work-item ID is duplicated, sizing is invalid, or the unit hides multiple
    reviewable outcomes that should split.
-5. If the audit returns `status: needs_spec_redesign`, stop and ask the user
-   whether to redo the spec, brainstorm a better breakdown, narrow the change,
-   or choose another planning route. Do not rewrite `tasks.md` automatically.
+5. If the audit returns `status: needs_spec_redesign`, stop and return the
+   structured blocker to Plan. Do not rewrite `tasks.md` automatically. Plan
+   decides whether the accepted contract supplies a mechanical repair or a
+   material redesign decision is required.
 6. Classify manual, deployment, monitoring, and external-prerequisite tasks so
    Plan returns `needs_human_action` instead of handing them to Execute.
 
@@ -146,7 +150,7 @@ lists, failed audits also emit structured output before exiting non-zero:
       "reason": "lifecycle_phase_group"
     }
   ],
-  "next_action": "ask_user_for_redesign_direction"
+  "next_action": "return_to_plan"
 }
 ```
 
@@ -159,7 +163,8 @@ lists, failed audits also emit structured output before exiting non-zero:
 | Treating a whole phase as one checkbox | Use the phase as the delivery-unit heading and list nested work items under it |
 | Treating every checkbox as its own MR | Deliver one checked heading per implementation MR, with nested work-item commits inside that MR |
 | Accepting documentation, testing, or validation phase groups anywhere | Return `needs_spec_redesign` unless that area is the feature being changed |
-| Accepting a delivery-unit-shaped task list where first real confirmation is unit 3 or later | Return `needs_spec_redesign` and ask for redesign direction |
+| Accepting a delivery-unit-shaped task list where first real confirmation is unit 3 or later | Return `needs_spec_redesign` to Plan for a material redesign decision |
+| Asking the user about validator-compatible wording | Return the structured failure to Plan for automatic contract-preserving repair |
 | Expanding tasks with file lists, commands, and exhaustive cases | Keep the outcome and end-to-end proof in `tasks.md`; hand mechanics to Execute task-locally |
 | Sending manual tasks to Execute | Return `needs_human_action` |
 

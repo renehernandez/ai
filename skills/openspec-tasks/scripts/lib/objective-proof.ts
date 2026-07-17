@@ -32,7 +32,7 @@ const SETUP_ONLY_PATTERN =
 const IMPLEMENTATION_PATTERN =
   /\b(execute|run|dispatch|verify|exercise|route|process|handle|render|send|receive)\b/i;
 const REAL_ENTRYPOINT_PATTERN =
-  /\b(entry ?point|command|cli|api|endpoint|route|workflow|job|runner|dispatch|request|hook|ci|matrix|hosted|probe|scenario|browser|runtime|execution)\b/i;
+  /\b(entry ?point|command|cli|api|endpoint|route|workflow|job|runner|dispatch|request|hook|ci|matrix|hosted|probe|scenario|browser|runtime|execution)\b|\b(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+\/[a-z0-9._~!$&'()*+,;=:@%/-]+/i;
 const VISIBLE_OUTCOME_PATTERN =
   /\b(success|failure|pass(?:es|ed)?|fail(?:s|ed)?|evidence|artifact|summary|result|output|visible|creates?|produces?|returns?|reports?|observes?|verif(?:y|ies|ication works))\b/i;
 
