@@ -35,19 +35,23 @@ accepted.
    artifact during this opening phase.
 3. **Keep the discussion queue short.** Pick 1-3 high-leverage decisions to
    discuss. Put the rest under working hypotheses or parking lot.
-4. **Drill one item at a time.** Ask one question at a time only for items in
-   the discussion queue. When inspected evidence makes the direction
-   unambiguous, omit the question, recommend readiness, and wait for a later
-   explicit transition.
+4. **Drill one material item at a time.** Ask one question at a time only when
+   an unresolved item changes scope, behavior, architecture, safety, ownership,
+   operations, cost, or another user-visible contract. State low-risk defaults
+   and evidence-backed recommendations without asking the user to approve each
+   one. When inspected evidence makes the direction unambiguous, omit the
+   question, recommend readiness, and wait for a later explicit transition.
 5. **Converge only when invited later.** After the opening pass, a later request
    to narrow, choose v1, plan, implement, or prepare delivery activates
    convergence. Then summarize the objective, selected feature, shipped
    context, implementation slices, recommended first slice, deferred work,
    domain terms, and artifact routing.
 
-Treat agreement such as "agreed", "sounds good", or "yes" as accepting only
-the recommendation currently being discussed. Move to the next unresolved
-discussion item without treating unstated downstream scope as accepted.
+Treat agreement such as "agreed", "sounds good", or "yes" as accepting the
+explicit recommendation or recommendation bundle that the response clearly
+refers to. Do not ask again about accepted items or low-risk defaults. Move to
+the next unresolved material discussion item without treating unstated scope,
+artifact writes, implementation, or terminal actions as accepted.
 
 ## Orientation Map
 
@@ -72,8 +76,8 @@ Use this structure unless the user asks for a different format:
 - [Evidence-backed recommendation that focuses discussion without fixing scope]
 
 **Next step**
-[Ask only the highest-leverage unresolved question, or state that the direction
-appears ready for an explicit transition.]
+[Ask only the highest-leverage unresolved material question, or state that the
+direction appears ready for an explicit transition.]
 ```
 
 When a question is needed, keep it tied to the discussion queue. Do not ask
@@ -256,7 +260,8 @@ Check that:
   explicit,
 - domain terms were included,
 - the discussion queue stayed at 1-3 items unless the user asked for more,
-- only the recommendation being discussed was treated as accepted,
+- clear agreement accepted the explicit recommendation or bundle it referred
+  to without expanding into unstated scope or authority,
 - no v1, implementation slice, proof location, or artifact route was selected
   without a convergence invitation, and
 - an unnecessary question was omitted when the inspected direction was
@@ -282,7 +287,8 @@ After convergence is invited, also check that:
 | Trap | Better move |
 |---|---|
 | Walking every branch of the decision tree | Show the whole tree, then drill into 1-3 high-leverage decisions |
-| Treating every "agree" as acceptance of the whole map | Accept only the recommendation being discussed and move to the next unresolved item |
+| Treating every "agree" as acceptance of the whole map | Accept the explicit recommendation or bundle the response refers to, never unstated scope |
+| Asking `agree?` after every recommended default | State low-risk defaults together and ask only about unresolved material choices |
 | Skipping vocabulary because the topic feels obvious | Include a lightweight domain-terms pass every time |
 | Waiting for the user to ask for reuse | Scan for precedent for every non-trivial design; prompt wording only narrows the scan |
 | Claiming there is no precedent without evidence | Name the inspected paths or searches before accepting a new mechanism |
@@ -327,6 +333,8 @@ After convergence is invited, also check that:
 - RED: thread `019ec851-0d15-74e0-ab86-1f105de1c358` planned the PR-review migration with an early runtime/package slice and cautious enablement flag before the first real hosted review proof, causing later correction around direct end-to-end evidence and unnecessary variables.
 - RED: thread `019ed2b5-6e2e-7581-8fc5-e776bde1c1ec` treated the selected feature direction as the first slice until user correction forced a true objective / feature / implementation-slice breakdown.
 - RED: this session found that the prior skill forced section-by-section validation, which made defaultable decisions feel like required discussion.
+- RED: Stat thread `019f601f-ea2e-7892-a9d8-cd422023ded0` walked through individually recommended decisions and later requested two wording-only approvals after Plan authority already existed.
+- GREEN: explicit recommendation bundles are accepted together, low-risk defaults do not become questions, and only unresolved material choices remain in the discussion queue.
 - RED: the automatic risk-scoring rehearsal proved its behavior while missing
   repository equivalents and proposing parallel owners until repeated user
   steering exposed the duplication.

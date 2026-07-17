@@ -32,6 +32,19 @@ ownership, and the mandatory OpenSpec rehearsal boundary.
   inspect the relevant local state before assuming the repository is at fault.
 - Agreement on a design confirms the decision; it does not authorize artifact
   or implementation writes.
+- Once Plan, Execute, Review, or Finish has the required authority, continue
+  within that granted scope without asking for renewed permission. Interrupt
+  only when the next action expands authority, requires a human-only action, or
+  changes a material behavior, architecture, migration, safety, ownership,
+  ordering, cross-component, verification, delivery, or rollout decision.
+  Contract-preserving wording, formatting, validation, test, CI, review, and
+  schema repairs return automatically to the current mode owner. Existing
+  authenticated commands do not require renewed approval; credential entry or
+  a new credential grant remains a human action.
+- When a user response clearly accepts an explicit recommendation bundle, treat
+  every recommendation in that bundle as accepted. Do not infer unstated scope,
+  repository mutation, provider mutation, or terminal authority from that
+  agreement.
 - Every non-trivial design starts with a repository precedent scan. Reuse is
   the default even when the request does not mention an existing approach;
   similarity wording narrows the scan but never triggers it.

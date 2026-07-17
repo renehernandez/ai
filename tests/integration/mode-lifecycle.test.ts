@@ -133,6 +133,22 @@ test("new tasks explore before later mutation authority", () => {
     rules,
     /review feedback, and CI failures.*do not reset the task/,
   );
+  assert.match(
+    rules,
+    /continue\s+within that granted scope without asking for renewed permission/,
+  );
+  assert.match(
+    rules,
+    /Contract-preserving wording, formatting, validation, test, CI, review, and\s+schema repairs return automatically/,
+  );
+  assert.match(
+    rules,
+    /explicit recommendation bundle.*every recommendation in that bundle as accepted/,
+  );
+  assert.match(
+    rules,
+    /Existing\s+authenticated commands do not require renewed approval; credential entry or\s+a new credential grant remains a human action/,
+  );
   assert.match(explore, /invoke `brainstorming` by default/);
 });
 
@@ -235,6 +251,7 @@ test("Plan keeps atomic delivery in one change set and rehearses OpenSpec", () =
 
 test("OpenSpec Tasks stays a high-level delivery queue", () => {
   const skill = read("skills/openspec-tasks/SKILL.md");
+  const plan = read("skills/plan/SKILL.md");
 
   assert.match(skill, /high-level delivery queue/);
   assert.match(skill, /not an implementation recipe or test\s+log/);
@@ -247,6 +264,24 @@ test("OpenSpec Tasks stays a high-level delivery queue", () => {
   assert.match(
     skill,
     /real\s+entrypoint and visible success or failure evidence/,
+  );
+  assert.match(skill, /return the\s+structured blocker to Plan/);
+  assert.match(skill, /Do not rewrite `tasks\.md` automatically/);
+  assert.match(
+    plan,
+    /contract-preserving wording,\s+formatting, schema, and validator-conformance repairs automatically/,
+  );
+  assert.match(
+    plan,
+    /repairs and reruns\s+the audit without renewed permission/,
+  );
+  assert.match(
+    plan,
+    /leaves the requested behavior, work, outputs, acceptance, ownership,\s+and delivery boundaries unchanged/,
+  );
+  assert.match(
+    plan,
+    /changing what an action or deliverable\s+means is a material repair/,
   );
 });
 

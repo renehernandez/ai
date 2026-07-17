@@ -369,9 +369,7 @@ function auditTasks(units: OpenSpecDeliveryUnit[]): void {
           delivery_units: units,
           invalid_tasks: invalidTasks,
           next_action:
-            status === "needs_spec_redesign"
-              ? "ask_user_for_redesign_direction"
-              : "fix_tasks",
+            status === "needs_spec_redesign" ? "return_to_plan" : "fix_tasks",
         },
         null,
         2,

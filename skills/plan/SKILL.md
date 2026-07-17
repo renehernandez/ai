@@ -16,6 +16,13 @@ Remain conversational until scope, design, delivery shape, risks, acceptance,
 verification, and policy choices are coherent. If any material behavior,
 architecture, migration, safety, ownership, ordering, cross-component, or
 verification decision remains, ask for that decision and write no placeholder.
+After Plan gains artifact-write authority, apply contract-preserving wording,
+formatting, schema, and validator-conformance repairs automatically. Ask again
+only when a repair would change a durable contract boundary, require a
+human-only action, or expand authority. A repair is contract-preserving only
+when it leaves the requested behavior, work, outputs, acceptance, ownership,
+and delivery boundaries unchanged; changing what an action or deliverable
+means is a material repair even when expressed as a wording edit.
 
 ## Choose One Artifact Semantically
 
@@ -103,8 +110,15 @@ After an OpenSpec exists, invoke `openspec-tasks` before implementation handoff.
 Its self-contained audit validates native checkbox structure, delivery-unit and
 work-item identity, lifecycle-only groups, manual or external work, sizing
 shape, and earliest objective proof. A `needs_spec_redesign` or
-`needs_human_action` result blocks Execute handoff. Plan owns any accepted
-artifact repair; the specialist never rewrites `tasks.md` automatically.
+`needs_human_action` result blocks Execute handoff. Plan owns artifact repairs
+that preserve the accepted contract; the specialist never rewrites `tasks.md`
+automatically. A structured audit failure returns to Plan rather than directly
+to the user. When
+the accepted contract makes one correction unambiguous and the correction does
+not change behavior, architecture, safety, ownership, migration, delivery
+shape, objective proof, or another durable boundary, Plan repairs and reruns
+the audit without renewed permission. Ask for one focused decision only when
+those boundaries would change or the required intent is genuinely unknown.
 
 ## Planning Review
 
@@ -187,5 +201,6 @@ artifacts.
 | Treating the POC as optional or partial | Build and review the complete disposable implementation. |
 | Accepting tidy nested tasks as proof of one mergeable unit | Derive units from implementation and ownership boundaries, then map tasks onto them. |
 | Handing an unaudited OpenSpec task list to Execute | Run `openspec-tasks` and resolve structured blockers first. |
+| Asking before a wording-only validator repair | Apply the contract-preserving repair under existing Plan authority and rerun the audit. |
 | Publishing a planning MR | Keep planning local and include it in the owning final unit. |
 | Automatically rerunning POC after reconciliation | Present materially unproved deltas for explicit direction. |

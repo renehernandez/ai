@@ -551,7 +551,7 @@ test("audit returns needs_spec_redesign for lifecycle-only task shapes", () => {
   const parsed = JSON.parse(result.stdout);
 
   assert.equal(parsed.status, "needs_spec_redesign");
-  assert.equal(parsed.next_action, "ask_user_for_redesign_direction");
+  assert.equal(parsed.next_action, "return_to_plan");
   assert.equal(parsed.invalid_tasks[0].id, "2.1");
   assert.equal(parsed.invalid_tasks[0].reason, "lifecycle_phase_group");
   assert.match(result.stderr, /needs_spec_redesign/);
@@ -735,6 +735,51 @@ test("audit accepts objective proof in the first deliverable", () => {
   const parsed = JSON.parse(result.stdout);
 
   assert.equal(parsed.status, "pass");
+});
+
+test("audit recognizes explicit HTTP paths as real objective-proof entrypoints", () => {
+  for (const entrypoint of [
+    "GET /llms.txt",
+    "POST /api/v1/users",
+    "GET /~user",
+  ]) {
+    const result = runOpenSpecTasks(
+      "audit",
+      `# Tasks
+
+## 1. Delivery
+
+- [ ] 1.1 Deliver protected publishing
+  - Proof location: ${entrypoint} returns visible success or reports the failure boundary.
+- [ ] 1.2 Add cleanup handling
+`,
+    );
+
+    assert.equal(result.status, 0, entrypoint);
+    const parsed = JSON.parse(result.stdout);
+
+    assert.equal(parsed.status, "pass", entrypoint);
+  }
+});
+
+test("audit rejects a bare HTTP root as an objective-proof entrypoint", () => {
+  const result = runOpenSpecTasks(
+    "audit",
+    `# Tasks
+
+## 1. Delivery
+
+- [ ] 1.1 Deliver protected publishing
+  - Proof location: GET / returns visible success or reports the failure boundary.
+- [ ] 1.2 Add cleanup handling
+`,
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /real entrypoint and visible success or failure evidence/,
+  );
 });
 
 test("audit accepts one setup-only deliverable before objective proof", () => {

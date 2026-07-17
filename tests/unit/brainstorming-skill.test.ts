@@ -51,12 +51,17 @@ test("brainstorming separates opening exploration from convergence", () => {
   );
 });
 
-test("brainstorming keeps agreement narrow and opening prompts read-only", () => {
+test("brainstorming accepts explicit bundles without expanding authority", () => {
   assert.match(
     skill,
-    /accepting only the recommendation currently being discussed/,
+    /accepting the explicit recommendation or recommendation bundle/,
   );
-  assert.match(skill, /without treating unstated downstream scope as accepted/);
+  assert.match(skill, /without treating unstated scope/);
+  assert.match(
+    skill,
+    /Do not ask again about accepted items or low-risk defaults/,
+  );
+  assert.match(skill, /State low-risk defaults together/);
   assert.match(
     skill,
     /Treating an opening "fix" or "implement" request as mutation authority/,
