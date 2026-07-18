@@ -83,19 +83,19 @@ const VOID_TAGS = new Set(["br"]);
 const CSS = `
 :root {
   color-scheme: light;
-  --paper: #f6f2e9;
-  --surface: #fffdf8;
-  --ink: #22201d;
-  --muted: #6f685f;
-  --accent: #a54524;
-  --accent-soft: #f3dfd2;
-  --line: #d9d0c2;
-  --code-bg: #20242b;
-  --code-ink: #f4f1ea;
-  --good: #216a45;
-  --good-bg: #e7f4ec;
-  --bad: #9b2f2f;
-  --bad-bg: #faeaea;
+  --paper: #f4f7fb;
+  --surface: #ffffff;
+  --ink: #18212f;
+  --muted: #5b6878;
+  --accent: #2457d6;
+  --accent-soft: #e8efff;
+  --line: #ccd6e4;
+  --code-bg: #172033;
+  --code-ink: #f4f7fb;
+  --good: #17653f;
+  --good-bg: #e9f6ef;
+  --bad: #a12e3d;
+  --bad-bg: #fbecef;
 }
 
 * { box-sizing: border-box; }
@@ -104,64 +104,82 @@ body {
   margin: 0;
   background: var(--paper);
   color: var(--ink);
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 18px;
-  line-height: 1.68;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
 }
-.page { width: min(860px, calc(100% - 2rem)); margin: 0 auto; padding: 4rem 0 7rem; }
+.page { width: min(100% - 1.25rem, 860px); margin: 0 auto; padding: 1.5rem 0 4rem; }
 .eyebrow, .label {
   color: var(--accent);
-  font-family: ui-sans-serif, system-ui, sans-serif;
   font-size: .76rem;
   font-weight: 750;
   letter-spacing: .1em;
   text-transform: uppercase;
 }
-h1 { max-width: 18ch; margin: .25rem 0 .8rem; font-size: clamp(2.2rem, 7vw, 4.5rem); line-height: 1.02; letter-spacing: -.035em; }
-h2 { margin: 4.5rem 0 1rem; font-size: clamp(1.7rem, 4vw, 2.45rem); line-height: 1.15; }
-h3 { margin-top: 2.2rem; font-size: 1.25rem; }
+h1, h2 { font-family: Georgia, "Times New Roman", serif; }
+h1 { max-width: 18ch; margin: .25rem 0 .8rem; font-size: clamp(2.25rem, 12vw, 4.5rem); line-height: 1.02; letter-spacing: -.035em; overflow-wrap: anywhere; }
+h2 { margin: 3.5rem 0 1rem; font-size: clamp(1.75rem, 8vw, 2.45rem); line-height: 1.15; }
+h3 { margin-top: 2rem; font-size: 1.2rem; }
 h4 { margin-top: 1.6rem; font-size: 1.05rem; }
-.subtitle { margin: 0 0 1.4rem; color: var(--muted); font-family: ui-sans-serif, system-ui, sans-serif; }
-.summary { max-width: 68ch; font-size: 1.12rem; }
-.toc { margin: 2.5rem 0; padding: 1.2rem 1.4rem; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
-.toc ul { display: flex; flex-wrap: wrap; gap: .6rem 1.4rem; margin: .65rem 0 0; padding: 0; list-style: none; }
+.subtitle { margin: 0 0 1.25rem; color: var(--muted); }
+.summary { max-width: 68ch; font-size: 1.05rem; }
+.toc { margin: 2rem 0; padding: 1rem; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.toc ul { display: flex; flex-wrap: wrap; gap: .5rem 1.1rem; margin: .55rem 0 0; padding: 0; list-style: none; }
 a { color: var(--accent); text-underline-offset: .18em; }
 code, pre, kbd, samp { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
-code { padding: .12rem .28rem; background: #ebe5db; border-radius: 4px; font-size: .88em; }
-pre { overflow-x: auto; margin: 1.4rem 0; padding: 1.2rem 1.35rem; background: var(--code-bg); color: var(--code-ink); border-radius: 12px; white-space: pre-wrap; font-size: .82rem; line-height: 1.55; }
+code { padding: .12rem .28rem; background: #e6ebf2; border-radius: 4px; font-size: .88em; }
+pre { max-width: 100%; overflow-x: auto; margin: 1.25rem 0; padding: 1rem; background: var(--code-bg); color: var(--code-ink); border-radius: 10px; white-space: pre; font-size: .78rem; line-height: 1.55; overflow-wrap: normal; -webkit-overflow-scrolling: touch; }
 pre code { padding: 0; background: transparent; color: inherit; }
-.callout { margin: 1.4rem 0; padding: 1rem 1.25rem; background: var(--accent-soft); border-left: 4px solid var(--accent); border-radius: 0 10px 10px 0; }
-.diagram { margin: 1.5rem 0; padding: 1.25rem; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
-.flow { display: flex; align-items: stretch; justify-content: center; gap: .65rem; flex-wrap: wrap; }
-.node { display: grid; place-items: center; min-width: 130px; min-height: 72px; padding: .7rem 1rem; background: #fbf4ea; border: 2px solid var(--accent); border-radius: 10px; text-align: center; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .88rem; }
-.arrow { display: grid; place-items: center; color: var(--muted); font-family: ui-sans-serif, system-ui, sans-serif; }
-.comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin: 1.5rem 0; }
-.before, .after { padding: 1rem 1.15rem; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.callout { margin: 1.25rem 0; padding: .9rem 1rem; background: var(--accent-soft); border-left: 4px solid var(--accent); border-radius: 0 10px 10px 0; }
+.diagram { max-width: 100%; margin: 1.25rem 0; padding: 1rem; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.flow { display: flex; align-items: stretch; justify-content: flex-start; gap: .6rem; flex-wrap: nowrap; overflow-x: auto; padding: .15rem .1rem .65rem; overscroll-behavior-inline: contain; -webkit-overflow-scrolling: touch; }
+.node { display: grid; flex: 0 0 min(12rem, 75vw); place-items: center; min-height: 64px; padding: .65rem .85rem; background: #f7f9fd; border: 2px solid var(--accent); border-radius: 9px; text-align: center; font-size: .86rem; }
+.arrow { display: grid; flex: 0 0 auto; place-items: center; color: var(--muted); }
+.comparison { display: grid; grid-template-columns: 1fr; gap: .85rem; margin: 1.25rem 0; }
+.before, .after { min-width: 0; padding: .9rem 1rem; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
 .before { border-top: 4px solid var(--bad); }
 .after { border-top: 4px solid var(--good); }
 .muted, figcaption { color: var(--muted); }
 figcaption { margin-top: .8rem; font-size: .88rem; }
-table { width: 100%; margin: 1.4rem 0; border-collapse: collapse; font-size: .92rem; }
+.table-scroll { max-width: 100%; margin: 1.25rem 0; overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; -webkit-overflow-scrolling: touch; }
+.table-scroll:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+table { width: 100%; min-width: 34rem; border-collapse: collapse; font-size: .88rem; }
 th, td { padding: .65rem .75rem; border: 1px solid var(--line); text-align: left; vertical-align: top; }
-th { background: #ece4d8; font-family: ui-sans-serif, system-ui, sans-serif; }
-.quiz-card { margin: 1.25rem 0; padding: 1.25rem; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
-.quiz-card legend { padding: 0 .35rem; font-weight: 700; }
-.quiz-option { display: block; width: 100%; margin: .55rem 0; padding: .75rem .9rem; background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 9px; text-align: left; font: inherit; cursor: pointer; }
-.quiz-option:hover { border-color: var(--accent); background: #fbf3e9; }
-.quiz-option:focus-visible, a:focus-visible { outline: 3px solid #2f65a7; outline-offset: 3px; }
-.quiz-option[aria-pressed="true"] { border-width: 2px; }
-.quiz-option.is-correct { border-color: var(--good); }
-.quiz-option.is-incorrect { border-color: var(--bad); }
-.feedback { display: none; margin-top: .75rem; padding: .8rem 1rem; border-radius: 9px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .9rem; }
+th { background: #edf2f8; }
+.quiz-card { margin: 1rem 0; padding: 1rem; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.quiz-question { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: .7rem; margin-bottom: .9rem; }
+.quiz-question h3 { margin: .12rem 0 0; font-size: 1rem; line-height: 1.4; }
+.question-number { display: grid; width: 2rem; height: 2rem; place-items: center; background: var(--ink); color: #fff; border-radius: 7px; font-size: .72rem; font-weight: 800; letter-spacing: .03em; }
+.quiz-options { display: grid; gap: .55rem; }
+.quiz-choice { min-width: 0; }
+.quiz-option { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: .7rem; width: 100%; min-height: 48px; padding: .6rem .7rem; background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 9px; text-align: left; font: 500 .94rem/1.45 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; cursor: pointer; }
+.option-marker { display: grid; width: 1.75rem; height: 1.75rem; place-items: center; border: 1px solid #aebbd0; border-radius: 6px; color: var(--muted); font-size: .74rem; font-weight: 800; }
+.quiz-option:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.quiz-option[aria-pressed="true"] { border-width: 2px; padding: calc(.6rem - 1px) calc(.7rem - 1px); }
+.quiz-option.is-correct { border-color: var(--good); background: var(--good-bg); }
+.quiz-option.is-incorrect { border-color: var(--bad); background: var(--bad-bg); }
+.quiz-option.is-correct .option-marker { border-color: var(--good); color: var(--good); }
+.quiz-option.is-incorrect .option-marker { border-color: var(--bad); color: var(--bad); }
+.feedback { display: none; margin-top: .45rem; padding: .7rem .8rem; border-radius: 8px; font-size: .86rem; }
 .feedback.visible { display: block; }
 .feedback.correct { color: var(--good); background: var(--good-bg); border-left: 4px solid var(--good); }
 .feedback.incorrect { color: var(--bad); background: var(--bad-bg); border-left: 4px solid var(--bad); }
-@media (max-width: 640px) {
-  body { font-size: 16px; }
-  .page { width: min(100% - 1.2rem, 860px); padding-top: 2rem; }
-  .comparison { grid-template-columns: 1fr; }
-  .flow { flex-direction: column; }
-  .arrow { min-height: 32px; transform: rotate(90deg); }
+@media (hover: hover) {
+  .quiz-option:hover { border-color: var(--accent); background: var(--accent-soft); }
+}
+@media (min-width: 48rem) {
+  body { font-size: 18px; }
+  .page { padding: 4rem 0 7rem; }
+  h2 { margin-top: 4.5rem; }
+  .toc { padding: 1.2rem 1.4rem; }
+  .comparison { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+  .diagram { padding: 1.25rem; }
+  .quiz-card { margin: 1.25rem 0; padding: 1.25rem; }
+  .quiz-question h3 { font-size: 1.08rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
 }
 `;
 
@@ -172,16 +190,19 @@ const QUIZ_JS = `
     const correctReason = card.querySelector('.correct-reason');
     for (const option of card.querySelectorAll('.quiz-option')) {
       option.addEventListener('click', () => {
+        const choice = option.closest('.quiz-choice');
         const correct = option.dataset.correct === 'true';
         for (const peer of card.querySelectorAll('.quiz-option')) {
           peer.setAttribute('aria-pressed', String(peer === option));
           peer.classList.remove('is-correct', 'is-incorrect');
         }
         option.classList.add(correct ? 'is-correct' : 'is-incorrect');
-        const chosen = option.nextElementSibling?.textContent ?? '';
+        const chosen = choice?.querySelector('.choice-reason')?.textContent ?? '';
         const reasoning = correct ? chosen : chosen + ' Correct reasoning: ' + (correctReason?.textContent ?? '');
-        feedback.textContent = (correct ? 'Correct. ' : 'Not quite. ') + reasoning;
+        feedback.textContent = '';
+        choice?.after(feedback);
         feedback.className = 'feedback visible ' + (correct ? 'correct' : 'incorrect');
+        feedback.textContent = (correct ? 'Correct. ' : 'Not quite. ') + reasoning;
       });
     }
   }
@@ -334,6 +355,9 @@ export function validatePassiveHtml(markup: string): string[] {
 
     const attributeErrors = validateAttributes(rawAttributes, name);
     errors.push(...attributeErrors);
+    if (name === "table" && stack.includes("table")) {
+      errors.push("contains nested <table> elements");
+    }
     if (!VOID_TAGS.has(name) && !tagSource.endsWith("/>")) stack.push(name);
   }
 
@@ -398,7 +422,7 @@ export function renderExplanation(spec: ExplanationSpec): string {
   const sections = spec.sections
     .map(
       (section) =>
-        `<section aria-labelledby="${section.id}">\n<h2 id="${section.id}">${escapeHtml(section.heading)}</h2>\n${section.html}\n</section>`,
+        `<section aria-labelledby="${section.id}">\n<h2 id="${section.id}">${escapeHtml(section.heading)}</h2>\n${wrapTables(section.html)}\n</section>`,
     )
     .join("\n");
   const quizHtml = quiz.map(renderQuestion).join("\n");
@@ -441,16 +465,25 @@ function renderQuestion(question: ExplanationQuestion, index: number): string {
   const correct = question.options.find((option) => option.correct);
   const options = question.options
     .map(
-      (option) =>
-        `<button type="button" class="quiz-option" aria-pressed="false" data-correct="${String(option.correct)}">${escapeHtml(option.text)}</button><span hidden>${escapeHtml(option.feedback)}</span>`,
+      (option, optionIndex) =>
+        `<div class="quiz-choice"><button type="button" class="quiz-option" aria-pressed="false" data-correct="${String(option.correct)}"><span class="option-marker" aria-hidden="true">${String.fromCharCode(65 + optionIndex)}</span><span class="option-text">${escapeHtml(option.text)}</span></button><span class="choice-reason" hidden>${escapeHtml(option.feedback)}</span></div>`,
     )
     .join("\n");
-  return `<fieldset class="quiz-card">
-<legend>${index + 1}. ${escapeHtml(question.question)}</legend>
-${options}
+  return `<article class="quiz-card" aria-labelledby="quiz-question-${index + 1}">
+<div class="quiz-question"><span class="question-number" aria-hidden="true">Q${index + 1}</span><h3 id="quiz-question-${index + 1}">${escapeHtml(question.question)}</h3></div>
+<div class="quiz-options" role="group" aria-labelledby="quiz-question-${index + 1}">${options}</div>
 <span class="correct-reason" hidden>${escapeHtml(correct?.feedback ?? "")}</span>
 <div class="feedback" aria-live="polite"></div>
-</fieldset>`;
+</article>`;
+}
+
+function wrapTables(html: string): string {
+  return html
+    .replaceAll(
+      /<table(?=[\s>])/gi,
+      '<div class="table-scroll" role="region" aria-label="Scrollable table" tabindex="0">$&',
+    )
+    .replaceAll(/<\/table\s*>/gi, "$&</div>");
 }
 
 function validateAttributes(rawAttributes: string, tagName: string): string[] {
