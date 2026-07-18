@@ -30,6 +30,7 @@ const retainedSpecialists = [
   "diff-review",
   "doc-smith",
   "docs-alignment-review",
+  "explain-diff-html",
   "github-adapter-review",
   "github-pr-create",
   "gitlab-adapter-review",
