@@ -1,4 +1,4 @@
 interface:
   display_name: "Explain Diff HTML"
   short_description: "Teach code changes through interactive HTML"
-  default_prompt: "Use $explain-diff-html to explain this code change as a self-contained interactive HTML page."
+  default_prompt: "Use $explain-diff-html to explain this code change as an offline interactive HTML bundle."

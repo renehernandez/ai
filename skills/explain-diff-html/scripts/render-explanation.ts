@@ -1,8 +1,14 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export type ExplanationOption = {
@@ -183,7 +189,7 @@ th { background: #edf2f8; }
 }
 `;
 
-const QUIZ_JS = `
+export const QUIZ_JS = `
 (() => {
   for (const card of document.querySelectorAll('.quiz-card')) {
     const feedback = card.querySelector('.feedback');
@@ -432,7 +438,7 @@ export function renderExplanation(spec: ExplanationSpec): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; connect-src 'none'; font-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'self' file:; img-src data:; connect-src 'none'; font-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>${escapeHtml(spec.title)}</title>
 <style>${CSS}</style>
 </head>
@@ -455,7 +461,7 @@ ${sections}
 ${quizHtml}
 </section>
 </main>
-<script>${QUIZ_JS}</script>
+<script src="./quiz.js"></script>
 </body>
 </html>
 `;
@@ -647,7 +653,7 @@ export function main(args = process.argv.slice(2)): number {
   }
   if ((command !== "validate" && command !== "render") || !specPath) {
     process.stderr.write(
-      "Usage: render-explanation.ts <validate|render> <spec.json> [--output path]\n       render-explanation.ts example-spec\n",
+      "Usage: render-explanation.ts <validate|render> <spec.json> [--output-dir path]\n       render-explanation.ts example-spec\n",
     );
     return 1;
   }
@@ -676,20 +682,50 @@ export function main(args = process.argv.slice(2)): number {
   }
 
   const spec = input as ExplanationSpec;
-  const outputFlag = rest.indexOf("--output");
-  if (outputFlag >= 0 && !rest[outputFlag + 1]) {
-    process.stderr.write("--output requires a path\n");
+  if (rest.includes("--output")) {
+    process.stderr.write(
+      "--output no longer writes a standalone HTML file; use --output-dir <directory>\n",
+    );
+    return 1;
+  }
+  const outputDirectoryFlag = rest.indexOf("--output-dir");
+  if (outputDirectoryFlag >= 0 && !rest[outputDirectoryFlag + 1]) {
+    process.stderr.write("--output-dir requires a path\n");
     return 1;
   }
   const date = localDateStamp();
-  const outputPath = resolve(
-    outputFlag >= 0
-      ? rest[outputFlag + 1]
-      : `/tmp/${date}-explanation-${slugify(spec.slug ?? spec.title)}.html`,
+  const outputDirectory = resolve(
+    outputDirectoryFlag >= 0
+      ? rest[outputDirectoryFlag + 1]
+      : `/tmp/${date}-explanation-${slugify(spec.slug ?? spec.title)}`,
   );
-  mkdirSync(dirname(outputPath), { recursive: true });
-  writeFileSync(outputPath, renderExplanation(spec), "utf8");
-  process.stdout.write(`${outputPath}\n`);
+  const allowedBundleFiles = new Set(["index.html", "quiz.js"]);
+  try {
+    if (existsSync(outputDirectory)) {
+      const unexpectedFiles = readdirSync(outputDirectory).filter(
+        (entry) => !allowedBundleFiles.has(entry),
+      );
+      if (unexpectedFiles.length > 0) {
+        process.stderr.write(
+          `Output directory contains unrelated files: ${unexpectedFiles.join(", ")}\n`,
+        );
+        return 1;
+      }
+    }
+    mkdirSync(outputDirectory, { recursive: true });
+    writeFileSync(
+      join(outputDirectory, "index.html"),
+      renderExplanation(spec),
+      "utf8",
+    );
+    writeFileSync(join(outputDirectory, "quiz.js"), QUIZ_JS, "utf8");
+  } catch (error) {
+    process.stderr.write(
+      `Unable to write explanation bundle: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+    return 1;
+  }
+  process.stdout.write(`${join(outputDirectory, "index.html")}\n`);
   return 0;
 }
 

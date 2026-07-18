@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -9,6 +15,7 @@ import {
   type ExplanationSpec,
   localDateStamp,
   main,
+  QUIZ_JS,
   renderExplanation,
   validatePassiveHtml,
   validateSpec,
@@ -62,7 +69,10 @@ test("renders a deterministic offline explanation", () => {
   assert.match(first, /white-space: pre;/);
   assert.match(first, /href="#background"/);
   assert.match(first, /id="background"/);
-  assert.doesNotMatch(first, /<link\b|<img\b|src=/);
+  assert.match(first, /script-src 'self' file:/);
+  assert.match(first, /<script src="\.\/quiz\.js"><\/script>/);
+  assert.doesNotMatch(first, /<script>\s*\(\(\) =>/);
+  assert.doesNotMatch(first, /<link\b|<img\b|(?:src|href)="https?:/);
 });
 
 test("renders quiz cards as compact labelled interactions", () => {
@@ -88,11 +98,11 @@ test("renders quiz cards as compact labelled interactions", () => {
     html,
     /class="quiz-options" role="group" aria-labelledby="quiz-question-1"/,
   );
-  assert.match(html, /const choice = option\.closest\('\.quiz-choice'\)/);
-  assert.match(html, /choice\?\.after\(feedback\)/);
+  assert.match(QUIZ_JS, /const choice = option\.closest\('\.quiz-choice'\)/);
+  assert.match(QUIZ_JS, /choice\?\.after\(feedback\)/);
   assert.ok(
-    html.indexOf("choice?.after(feedback);") <
-      html.indexOf(
+    QUIZ_JS.indexOf("choice?.after(feedback);") <
+      QUIZ_JS.indexOf(
         "feedback.textContent = (correct ? 'Correct. ' : 'Not quite. ')",
       ),
   );
@@ -183,17 +193,65 @@ test("rejects invalid quiz contracts before rendering", () => {
   assert.throws(() => renderExplanation(invalid), /Invalid explanation spec/);
 });
 
-test("CLI renders a validated HTML file", () => {
+test("CLI renders a validated offline bundle", () => {
   const directory = mkdtempSync(join(tmpdir(), "explain-diff-html-"));
   const specPath = join(directory, "spec.json");
-  const outputPath = join(directory, "rendered.html");
+  const outputDirectory = join(directory, "rendered");
 
   try {
     writeFileSync(specPath, JSON.stringify(spec()));
-    assert.equal(main(["render", specPath, "--output", outputPath]), 0);
+    assert.equal(
+      main(["render", specPath, "--output-dir", outputDirectory]),
+      0,
+    );
+    assert.deepEqual(readdirSync(outputDirectory).sort(), [
+      "index.html",
+      "quiz.js",
+    ]);
     assert.match(
-      readFileSync(outputPath, "utf8"),
+      readFileSync(join(outputDirectory, "index.html"), "utf8"),
       /Cache invalidation on writes/,
+    );
+    assert.match(
+      readFileSync(join(outputDirectory, "quiz.js"), "utf8"),
+      /option\.addEventListener\('click'/,
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("CLI rejects the legacy file-oriented output option", () => {
+  const directory = mkdtempSync(join(tmpdir(), "explain-diff-html-"));
+  const specPath = join(directory, "spec.json");
+
+  try {
+    writeFileSync(specPath, JSON.stringify(spec()));
+    assert.equal(
+      main(["render", specPath, "--output", join(directory, "rendered.html")]),
+      1,
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("CLI refuses to mix a bundle with unrelated output files", () => {
+  const directory = mkdtempSync(join(tmpdir(), "explain-diff-html-"));
+  const specPath = join(directory, "spec.json");
+  const outputDirectory = join(directory, "rendered");
+
+  try {
+    writeFileSync(specPath, JSON.stringify(spec()));
+    writeFileSync(join(directory, "unrelated.txt"), "outside bundle");
+    assert.equal(main(["render", specPath, "--output-dir", directory]), 1);
+    assert.equal(
+      readFileSync(join(directory, "unrelated.txt"), "utf8"),
+      "outside bundle",
+    );
+    assert.equal(
+      main(["render", specPath, "--output-dir", outputDirectory]),
+      0,
     );
   } finally {
     rmSync(directory, { recursive: true, force: true });

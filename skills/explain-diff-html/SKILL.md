@@ -7,9 +7,11 @@ description: Use when the user wants a rich, self-contained HTML explanation of 
 
 ## Overview
 
-Teach how a verified code change works through one offline HTML page. Keep the
+Teach how a verified code change works through one offline HTML bundle. Keep the
 investigation and narrative specific to the change; delegate the stable layout,
 style, safety validation, and quiz ordering to `scripts/render-explanation.ts`.
+The renderer emits one `index.html` page plus its fixed `quiz.js` runtime so the
+same local folder stays interactive when published to Stat.
 
 ## Workflow
 
@@ -30,16 +32,20 @@ style, safety validation, and quiz ordering to `scripts/render-explanation.ts`.
 4. Write a JSON content specification. From the skill folder, run
    `node scripts/render-explanation.ts validate <spec.json>`, repair every
    error, then run `node scripts/render-explanation.ts render <spec.json>`.
-5. Inspect the emitted file mobile-first. Start at a 320-430px viewport, then
-   widen it. Confirm it is a complete offline page, code whitespace is
-   preserved, wide content stays contained, diagrams remain legible, and quiz
-   feedback appears directly below the selected answer.
-6. Return the absolute output path and summarize inspected evidence,
+5. Treat the emitted directory as one artifact. Open its `index.html` directly
+   without a server and inspect it mobile-first. Start at a 320-430px viewport,
+   then widen it. Confirm code whitespace is preserved, wide content stays
+   contained, diagrams remain legible, and quiz feedback appears directly
+   below the selected answer.
+6. Return both the absolute `index.html` path for local viewing and its exact
+   containing directory for Stat publishing. Summarize inspected evidence,
    assumptions, and validation limitations.
 
 Run `node scripts/render-explanation.ts example-spec` from the skill folder for
-the exact JSON shape and supported passive HTML classes. Do not hand-write the
-page scaffold or copy the renderer into the target repository.
+the exact JSON shape and supported passive HTML classes. Use `--output-dir`
+when an explicit bundle directory is needed. Do not hand-write the page
+scaffold, copy the renderer into the target repository, or publish only the
+`index.html` file.
 
 ## Narrative And Visual Rules
 
@@ -55,7 +61,8 @@ page scaffold or copy the renderer into the target repository.
 - Keep headings and question text concise enough to scan at 320px. The renderer
   owns touch targets and generated quiz markers; do not encode layout in prose.
 - Never use ASCII diagrams, top-level tabs, external fonts, CDNs, remote images,
-  or network-dependent assets.
+  or network-dependent assets. `quiz.js` is the only renderer-owned sibling
+  asset in the bundle.
 
 ## Quiz Quality Gate
 
@@ -87,6 +94,8 @@ at the content boundary before rendering.
 | Mistake | Fix |
 | --- | --- |
 | Rebuilding CSS and JavaScript in every response | Generate only the content spec and run the bundled renderer |
+| Publishing only `index.html` to Stat | Publish the exact containing bundle directory so `quiz.js` remains same-origin |
+| Requesting a standalone path with `--output` | Use `--output-dir`; the portable artifact is the two-file bundle |
 | Explaining files in diff order | Group changes by runtime or dependency flow |
 | Calling an unseeded shuffle “fair” | Let the renderer allocate balanced deterministic positions |
 | Making the correct option longest | Rewrite all four options with parallel detail and grammar |
