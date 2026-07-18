@@ -30,8 +30,10 @@ style, safety validation, and quiz ordering to `scripts/render-explanation.ts`.
 4. Write a JSON content specification. From the skill folder, run
    `node scripts/render-explanation.ts validate <spec.json>`, repair every
    error, then run `node scripts/render-explanation.ts render <spec.json>`.
-5. Inspect the emitted file. Confirm it is a complete offline page, code
-   whitespace is preserved, diagrams remain legible, and quiz feedback works.
+5. Inspect the emitted file mobile-first. Start at a 320-430px viewport, then
+   widen it. Confirm it is a complete offline page, code whitespace is
+   preserved, wide content stays contained, diagrams remain legible, and quiz
+   feedback appears directly below the selected answer.
 6. Return the absolute output path and summarize inspected evidence,
    assumptions, and validation limitations.
 
@@ -47,6 +49,11 @@ page scaffold or copy the renderer into the target repository.
   `.node`, `.arrow`, `.comparison`, `.before`, `.after`, and plain tables.
 - Include example values in data-flow diagrams and captions for visual meaning.
 - Use `<pre><code>...</code></pre>` for code and escape code-derived markup.
+- Treat the narrow layout as the primary composition. Comparisons stack by
+  default; flows remain one coherent horizontally scrollable sequence; tables
+  and code scroll inside their own regions instead of widening the page.
+- Keep headings and question text concise enough to scan at 320px. The renderer
+  owns touch targets and generated quiz markers; do not encode layout in prose.
 - Never use ASCII diagrams, top-level tabs, external fonts, CDNs, remote images,
   or network-dependent assets.
 
@@ -85,3 +92,4 @@ at the content boundary before rendering.
 | Making the correct option longest | Rewrite all four options with parallel detail and grammar |
 | Copying source markup into the page | Escape it and keep repository content passive |
 | Showing a diagram without example data or a caption | Add representative values and accessible prose |
+| Reviewing only at desktop width | Start at 320-430px, then confirm wider layouts enhance without changing reading order |

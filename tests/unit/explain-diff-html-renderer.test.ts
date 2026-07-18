@@ -59,10 +59,64 @@ test("renders a deterministic offline explanation", () => {
   assert.equal(first, second);
   assert.match(first, /^<!doctype html>/);
   assert.match(first, /Content-Security-Policy/);
-  assert.match(first, /white-space: pre-wrap/);
+  assert.match(first, /white-space: pre;/);
   assert.match(first, /href="#background"/);
   assert.match(first, /id="background"/);
   assert.doesNotMatch(first, /<link\b|<img\b|src=/);
+});
+
+test("renders quiz cards as compact labelled interactions", () => {
+  const html = renderExplanation(spec());
+
+  assert.doesNotMatch(html, /<fieldset|<legend/);
+  assert.match(
+    html,
+    /<article class="quiz-card" aria-labelledby="quiz-question-1">/,
+  );
+  assert.match(
+    html,
+    /<span class="question-number" aria-hidden="true">Q1<\/span>/,
+  );
+  assert.match(html, /<h3 id="quiz-question-1">Question 0\?<\/h3>/);
+  assert.match(
+    html,
+    /<span class="option-marker" aria-hidden="true">A<\/span>/,
+  );
+  assert.match(html, /<span class="option-text">Question 0 option \d<\/span>/);
+  assert.match(html, /class="quiz-option" aria-pressed="false"/);
+  assert.match(
+    html,
+    /class="quiz-options" role="group" aria-labelledby="quiz-question-1"/,
+  );
+  assert.match(html, /const choice = option\.closest\('\.quiz-choice'\)/);
+  assert.match(html, /choice\?\.after\(feedback\)/);
+  assert.ok(
+    html.indexOf("choice?.after(feedback);") <
+      html.indexOf(
+        "feedback.textContent = (correct ? 'Correct. ' : 'Not quite. ')",
+      ),
+  );
+});
+
+test("uses mobile-first layout and contained wide content", () => {
+  const input = spec();
+  input.sections[0].html =
+    "<TABLE><THEAD><TR><TH>Contract</TH><TH>Behavior</TH></TR></THEAD><TBODY><TR><TD>write</TD><TD>invalidate</TD></TR></TBODY></TABLE>";
+  const html = renderExplanation(input);
+
+  assert.match(html, /\.page \{ width: min\(100% - 1\.25rem, 860px\)/);
+  assert.match(html, /h1 \{[^}]*overflow-wrap: anywhere;/s);
+  assert.match(html, /\.comparison \{[^}]*grid-template-columns: 1fr;/s);
+  assert.match(html, /\.flow \{[^}]*flex-wrap: nowrap;[^}]*overflow-x: auto;/s);
+  assert.match(html, /\.quiz-option \{[^}]*min-height: 48px;/s);
+  assert.match(html, /\.table-scroll \{[^}]*overflow-x: auto;/s);
+  assert.match(
+    html,
+    /<div class="table-scroll" role="region" aria-label="Scrollable table" tabindex="0"><TABLE>/,
+  );
+  assert.match(html, /<\/TABLE><\/div>/);
+  assert.match(html, /@media \(min-width: 48rem\)/);
+  assert.match(html, /@media \(prefers-reduced-motion: reduce\)/);
 });
 
 test("balances correct-answer positions across five questions", () => {
@@ -106,6 +160,15 @@ test("accepts the supported visual vocabulary", () => {
       '<figure class="diagram"><div class="flow"><div class="node">API</div><span class="arrow">→</span><div class="node">DB</div></div><figcaption>Example request flow.</figcaption></figure>',
     ),
     [],
+  );
+});
+
+test("rejects nested tables before responsive wrappers are added", () => {
+  assert.match(
+    validatePassiveHtml(
+      "<table><tbody><tr><td><table><tbody><tr><td>nested</td></tr></tbody></table></td></tr></tbody></table>",
+    ).join("\n"),
+    /nested <table>/,
   );
 });
 
