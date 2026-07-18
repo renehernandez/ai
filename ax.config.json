@@ -140,6 +140,7 @@
             "doc-smith",
             "docs-alignment-review",
             "execute",
+            "explain-diff-html",
             "explore",
             "finish",
             "github-adapter-review",
