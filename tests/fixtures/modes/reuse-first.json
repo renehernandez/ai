@@ -9,14 +9,22 @@
       "semanticTripwires": [],
       "reviewResults": [
         {
+          "reviewer": "code-simplifier",
+          "reviewerRunId": "simplifier-agent",
+          "status": "passed",
+          "evidence": "reviewed exact first-proof diff"
+        },
+        {
           "reviewer": "code-quality-review",
           "reviewerRunId": "quality-agent",
-          "status": "passed"
+          "status": "passed",
+          "evidence": "reviewed exact first-proof diff"
         },
         {
           "reviewer": "scrutinize",
           "reviewerRunId": "scrutiny-agent",
-          "status": "passed"
+          "status": "passed",
+          "evidence": "reviewed exact first-proof diff"
         }
       ],
       "targetedProof": {
@@ -40,14 +48,22 @@
       "semanticTripwires": [],
       "reviewResults": [
         {
+          "reviewer": "code-simplifier",
+          "reviewerRunId": "simplifier-agent",
+          "status": "passed",
+          "evidence": "reviewed exact first-proof diff"
+        },
+        {
           "reviewer": "code-quality-review",
           "reviewerRunId": "quality-agent",
-          "status": "passed"
+          "status": "passed",
+          "evidence": "reviewed exact first-proof diff"
         },
         {
           "reviewer": "scrutinize",
           "reviewerRunId": "scrutiny-agent",
-          "status": "passed"
+          "status": "passed",
+          "evidence": "reviewed exact first-proof diff"
         }
       ],
       "targetedProof": {
@@ -71,14 +87,22 @@
       ],
       "reviewResults": [
         {
+          "reviewer": "code-simplifier",
+          "reviewerRunId": "simplifier-agent",
+          "status": "passed",
+          "evidence": "reviewed exact first-proof diff"
+        },
+        {
           "reviewer": "code-quality-review",
           "reviewerRunId": "quality-agent",
-          "status": "passed"
+          "status": "passed",
+          "evidence": "reviewed exact first-proof diff"
         },
         {
           "reviewer": "scrutinize",
           "reviewerRunId": "scrutiny-agent",
-          "status": "finding"
+          "status": "finding",
+          "evidence": "reviewed exact first-proof diff"
         }
       ],
       "targetedProof": {
@@ -100,14 +124,22 @@
       "semanticTripwires": [],
       "reviewResults": [
         {
+          "reviewer": "code-simplifier",
+          "reviewerRunId": "simplifier-agent",
+          "status": "passed",
+          "evidence": "reviewed exact first-proof diff"
+        },
+        {
           "reviewer": "code-quality-review",
           "reviewerRunId": "quality-agent",
-          "status": "blocked"
+          "status": "blocked",
+          "evidence": "reviewed exact first-proof diff"
         },
         {
           "reviewer": "scrutinize",
           "reviewerRunId": "scrutiny-agent",
-          "status": "passed"
+          "status": "passed",
+          "evidence": "reviewed exact first-proof diff"
         }
       ],
       "targetedProof": {
@@ -129,14 +161,22 @@
       "semanticTripwires": [],
       "reviewResults": [
         {
+          "reviewer": "code-simplifier",
+          "reviewerRunId": "simplifier-agent",
+          "status": "passed",
+          "evidence": "reviewed exact first-proof diff"
+        },
+        {
           "reviewer": "code-quality-review",
           "reviewerRunId": "quality-agent",
-          "status": "passed"
+          "status": "passed",
+          "evidence": "reviewed exact first-proof diff"
         },
         {
           "reviewer": "scrutinize",
           "reviewerRunId": "scrutiny-agent",
-          "status": "passed"
+          "status": "passed",
+          "evidence": "reviewed exact first-proof diff"
         }
       ],
       "targetedProof": {
@@ -158,14 +198,22 @@
       "semanticTripwires": [],
       "reviewResults": [
         {
+          "reviewer": "code-simplifier",
+          "reviewerRunId": "simplifier-agent",
+          "status": "passed",
+          "evidence": "reviewed exact first-proof diff"
+        },
+        {
           "reviewer": "code-quality-review",
           "reviewerRunId": "quality-agent",
-          "status": "passed"
+          "status": "passed",
+          "evidence": "reviewed exact first-proof diff"
         },
         {
           "reviewer": "scrutinize",
           "reviewerRunId": "scrutiny-agent",
-          "status": "passed"
+          "status": "passed",
+          "evidence": "reviewed exact first-proof diff"
         }
       ],
       "targetedProof": {
@@ -187,14 +235,22 @@
       "semanticTripwires": [],
       "reviewResults": [
         {
+          "reviewer": "code-simplifier",
+          "reviewerRunId": "simplifier-agent",
+          "status": "passed",
+          "evidence": "reviewed exact first-proof diff"
+        },
+        {
           "reviewer": "code-quality-review",
           "reviewerRunId": "quality-agent",
-          "status": "passed"
+          "status": "passed",
+          "evidence": "reviewed exact first-proof diff"
         },
         {
           "reviewer": "scrutinize",
           "reviewerRunId": "scrutiny-agent",
-          "status": "passed"
+          "status": "passed",
+          "evidence": "reviewed exact first-proof diff"
         }
       ],
       "targetedProof": {
@@ -216,14 +272,22 @@
       "semanticTripwires": [],
       "reviewResults": [
         {
+          "reviewer": "code-simplifier",
+          "reviewerRunId": "simplifier-agent",
+          "status": "passed",
+          "evidence": "reviewed exact first-proof diff"
+        },
+        {
           "reviewer": "code-quality-review",
           "reviewerRunId": "quality-agent",
-          "status": "passed"
+          "status": "passed",
+          "evidence": "reviewed exact first-proof diff"
         },
         {
           "reviewer": "scrutinize",
           "reviewerRunId": "scrutiny-agent",
-          "status": "passed"
+          "status": "passed",
+          "evidence": "reviewed exact first-proof diff"
         }
       ],
       "targetedProof": {
@@ -249,14 +313,22 @@
       ],
       "reviewResults": [
         {
+          "reviewer": "code-simplifier",
+          "reviewerRunId": "simplifier-agent",
+          "status": "passed",
+          "evidence": "reviewed exact first-proof diff"
+        },
+        {
           "reviewer": "code-quality-review",
           "reviewerRunId": "quality-agent",
-          "status": "passed"
+          "status": "passed",
+          "evidence": "reviewed exact first-proof diff"
         },
         {
           "reviewer": "scrutinize",
           "reviewerRunId": "scrutiny-agent",
-          "status": "passed"
+          "status": "passed",
+          "evidence": "reviewed exact first-proof diff"
         }
       ],
       "targetedProof": {

@@ -145,12 +145,13 @@ The POC:
 
 At the POC's first objective proof, in slice 1 or slice 2 after at most one
 setup-only slice, Execute pauses before broadening. Review runs the exact-diff
-checkpoint with independent findings-only `code-quality-review` and
-`scrutinize` reviewer runs plus targeted verification of the real entrypoint and
-visible outcome. Any later architecture-affecting change invalidates that
-checkpoint. Keep its evidence task-local. The completed stable POC publishes a
-hook-clean draft, requests hosted review, then receives every completed-code
-review type against that exact hosted head.
+checkpoint with a separate findings-only `code-simplifier` reviewer-run
+identity and independent findings-only `code-quality-review` and `scrutinize`
+reviewer runs plus targeted verification of the real entrypoint and visible
+outcome. Any later architecture-affecting change invalidates that checkpoint.
+Keep its evidence task-local. The completed stable POC publishes a hook-clean
+draft, requests hosted review, then receives every completed-code review type
+against that exact hosted head.
 
 The POC rehearses task completion and archival in a disposable repository copy
 without checking the source `tasks.md` or archiving the live change. POC commits
@@ -196,14 +197,17 @@ rewriting the accepted delivery contract.
 
 Review gives every planning artifact, completed POC, and final implementation
 one discovery pass covering every phase-specific review type. Planning types
-are implementation readiness, edge cases and risk, simplification and scope,
+are implementation readiness, edge cases and risk, `code-simplifier`,
 refactoring, and delivery shape. Completed-code types are `code-simplifier`,
 `code-quality-review`, `deslop`, `diff-review`, and `scrutinize`. One integrated
 inline pass may cover a small coherent change; use subagents only when
 delegation is faster. Add affected-domain specialists when the exact target
-exposes their domain. Planning Review requests an artifact repair only for a
-durable contract gap and returns implementation mechanics and non-contract
-discoveries to Execute task-locally.
+exposes their domain. `code-simplifier` is a core reviewer with its own recorded
+outcome for planning, first-objective-proof, completed POC, and final
+implementation targets; another review type cannot substitute for it.
+Planning Review requests an artifact repair only for a durable contract gap and
+returns implementation mechanics and non-contract discoveries to Execute
+task-locally.
 
 Review evidence is task-local and bound to an artifact fingerprint or exact
 target-base/HEAD pair. It returns one phase-barrier findings batch, then runs one

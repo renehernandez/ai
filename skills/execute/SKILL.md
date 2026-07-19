@@ -115,11 +115,13 @@ or slice 2 after at most one setup-only slice. Before broadening the POC, run an
 exact-diff checkpoint against the reviewed reuse contract, target-base SHA,
 diff fingerprint, inspected precedents, and triggered semantic tripwires. It
 must contain separate findings-only `code-quality-review` and `scrutinize`
-reviewer-run identities plus targeted proof of the real entrypoint and visible
-outcome. Do not run the other three completed-code reviewers against
-intentionally incomplete POC code. A later architecture-affecting change
-invalidates the checkpoint. Keep it task-local; create no repository ledger or
-sidecar.
+reviewer-run identities, a separate findings-only `code-simplifier` reviewer-run
+identity, and targeted proof of the real entrypoint and visible outcome. Every
+first-proof reviewer result records the exact evidence inspected, including a
+passing result. Do not
+run `deslop` or `diff-review` against intentionally incomplete POC code. A later
+architecture-affecting change invalidates the checkpoint. Keep it task-local;
+create no repository ledger or sidecar.
 
 After the hook-clean commit is published to a draft PR/MR and hosted review is
 requested, invoke Review read-only for the exact hosted diff/head. Review covers

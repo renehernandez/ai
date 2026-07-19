@@ -13,8 +13,12 @@ for both atomic handoffs and OpenSpec blueprints.
 #### Scenario: Baseline reviewers are always required
 - **WHEN** `plan-ready` validates a ready atomic handoff or OpenSpec blueprint
 - **THEN** `required_reviewers` includes `implementation-readiness`,
-  `edge-cases-and-risks`, `simplification-and-scope-control`, and
-  `refactoring-opportunities`
+  `edge-cases-and-risks`, `code-simplifier`, `refactoring-opportunities`, and
+  `delivery-shape`
+- **AND** `code-simplifier` has its own recorded result even when the baseline
+  runs through one integrated pass
+- **AND** an unavailable preferred reviewer model routes to an available-model
+  or inline fallback instead of removing `code-simplifier`
 
 #### Scenario: Optional reviewers are catalog-only
 - **WHEN** `plan-ready` validates `optional_reviewers`

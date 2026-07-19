@@ -23,11 +23,16 @@ outcomes, not distinct reviewer identities, decide readiness.
 
 Use `scripts/review-contract.ts` as the reviewer catalog. Planning types are
 `implementation-readiness`, `edge-cases-and-risk`,
-`simplification-and-scope`, `refactoring-opportunities`, and `delivery-shape`.
+`code-simplifier`, `refactoring-opportunities`, and `delivery-shape`.
 Completed-code types are `code-simplifier`, `code-quality-review`, `deslop`,
 `diff-review`, and `scrutinize`. Record one current `passed`, `finding`, or
 `blocked` outcome for every type. Add affected-domain specialists only when the
 exact target exposes their domain.
+
+`code-simplifier` is a core reviewer for planning and completed-code targets.
+It always keeps its own recorded outcome, even when one inline execution covers
+several review types or delegated execution falls back to an available model.
+Another review type never substitutes for its simplification evidence.
 
 Atomic plans and OpenSpec artifacts are planning contracts. Review them here;
 do not also invoke Doc Smith reader personas.
@@ -46,12 +51,20 @@ Execute without requiring them in the artifact. Implementation readiness means
 that no material decision is unresolved; it does not require a prose recipe or
 protection from rediscovering repository mechanics after context compaction.
 
+Before Plan hands the artifact to Execute, validate one completed planning
+checkpoint against the exact artifact path and fingerprint. Require exactly one
+current result for every planning type and selected specialist. A result may
+carry only evidenced, nonblocking `defer` findings classified as task-local
+implementation considerations; missing, duplicate, stale, blocked, `repair`,
+`plan_required`, or blocking findings prevent handoff.
+
 At a POC's first objective proof, run only:
 
-1. `code-quality-review`
-2. `scrutinize`, including architecture fit, repository reuse, and the real
+1. `code-simplifier`
+2. `code-quality-review`
+3. `scrutinize`, including architecture fit, repository reuse, and the real
    system path
-3. targeted verification of the real entrypoint and visible success or failure
+4. targeted verification of the real entrypoint and visible success or failure
 
 Do not run completed-code discovery against intentionally incomplete POC
 code. A later architecture-affecting change invalidates the first-proof
@@ -104,7 +117,9 @@ must not create knowingly stale review work.
 ## Findings Batch And Invalidation
 
 Every review type returns `passed`, `finding`, or `blocked`. Include evidence
-detail only for findings or blockers. Normalize each finding with an ID, review
+detail only for findings or blockers, except that every first-objective-proof
+reviewer result records the exact evidence inspected even when it passes.
+Normalize each finding with an ID, review
 type, severity, affected location, issue, evidence, remediation outcome,
 invalidated review or verification
 surfaces, and exactly one disposition:
@@ -257,6 +272,9 @@ unevidenced or unclosed repairs, closure scope expansion, material rebase
 changes, and stale discovery. If evidence cannot be recovered after resume,
 rerun the bounded work; never reconstruct persisted gate state.
 
+For planning targets, the same script's planning-checkpoint validator binds
+every required result to the exact artifact fingerprint before Execute handoff.
+
 Review never reruns the repository full suite inline or through subagents. The
 native pre-commit hook owns the full local suite for each committed head;
 Review consumes that hook evidence and runs only inspection or affected closure
@@ -266,7 +284,7 @@ proof.
 
 | Mistake | Required response |
 | --- | --- |
-| Running completed-code discovery at first POC proof | Run Code Quality, Scrutinize, and targeted proof only. |
+| Running full completed-code discovery at first POC proof | Run Code Simplifier, Code Quality, Scrutinize, and targeted proof only; defer Deslop and Diff Review. |
 | Starting one subagent per required type for a small change | Cover all types in one integrated inline pass. |
 | Passing full conversation history to every reviewer | Use the immutable task packet and clean context. |
 | Launching or polling reviewers one at a time | Fill ready worker slots and join at a phase barrier. |
