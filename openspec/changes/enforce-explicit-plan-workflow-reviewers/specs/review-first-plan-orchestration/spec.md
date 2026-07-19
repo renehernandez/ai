@@ -8,7 +8,11 @@ atomic handoffs and OpenSpec blueprints.
 - **WHEN** `plan-ready` emits a ready atomic handoff or OpenSpec blueprint
 - **THEN** the output records the static `plan-ready` baseline reviewers:
   `implementation-readiness`, `edge-cases-and-risks`,
-  `simplification-and-scope-control`, and `refactoring-opportunities`
+  `code-simplifier`, `refactoring-opportunities`, and `delivery-shape`
+- **AND** records a separate `code-simplifier` result even when reviewers run
+  through one integrated pass
+- **AND** uses an available-model or inline fallback when the preferred
+  reviewer model is unavailable instead of omitting simplification review
 - **AND** records selected dynamic reviewers
 - **AND** records each reviewer status, summary, artifact fingerprint, skipped
   rationale when applicable, blocking findings, completion timestamp, and final

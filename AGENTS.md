@@ -123,8 +123,12 @@ grant remains a human action.
 - Do not create a separate planning MR. An atomic plan and its implementation
   are one change set in one final MR, with no POC MR or POC phase.
 - Review evidence stays task-local. After a hook-clean commit, publish the
-  draft and request Nitro before local Review runs on that same head. Cover
-  every phase-specific review type inline or through subagents, use one
+  draft and request Nitro before local Review runs on that same head.
+  `code-simplifier` is a core reviewer for planning artifacts, POC first
+  objective proof, completed POCs, and final implementations; it always keeps
+  its own recorded outcome even when review execution is integrated or falls
+  back to another available model.
+  Cover every phase-specific review type inline or through subagents, use one
   findings batch, and run bounded closure only for affected types after
   repairs. Local Review consumes the pre-commit hook's full-suite evidence and
   does not rerun it. A changed target base or HEAD requires a fresh exact-target

@@ -5,13 +5,16 @@ import test from "node:test";
 
 import {
   assertPocExpansionAllowed,
+  firstObjectiveProofReviewers,
   type PocArchitectureCheckpoint,
 } from "../../skills/execute/scripts/execution-contract.ts";
 import {
   firstObjectiveProofBaseline,
+  type PlanningReviewCheckpoint,
   requiredReviewTypesFor,
   reviewWavesFor,
   type TechnicalReadinessCheckpoint,
+  validatePlanningReviewCheckpoint,
   validateReviewTaskPacket,
   validateTechnicalReadinessCheckpoint,
 } from "../../skills/review/scripts/review-contract.ts";
@@ -51,6 +54,23 @@ function passingCheckpoint(): TechnicalReadinessCheckpoint {
     closureResult: undefined,
     rebaseEvidence: undefined,
     provider: "gitlab",
+    blockers: [],
+  };
+}
+
+function passingPlanningCheckpoint(): PlanningReviewCheckpoint {
+  return {
+    artifact: ".agents/plans/example.md",
+    artifactFingerprint: "sha256:plan-a",
+    requiredSpecialists: [],
+    reviewResults: requiredReviewTypesFor("planning").map((reviewType) => ({
+      reviewType,
+      execution: "inline" as const,
+      executionId: "main-agent-planning-review",
+      artifactFingerprint: "sha256:plan-a",
+      status: "passed" as const,
+      findings: [],
+    })),
     blockers: [],
   };
 }
@@ -104,9 +124,125 @@ test("completed code exposes every required phase review type", () => {
     implementationReviewerCatalog,
   );
   assert.deepEqual(firstObjectiveProofBaseline, [
+    "code-simplifier",
     "code-quality-review",
     "scrutinize",
   ]);
+  assert.deepEqual(firstObjectiveProofReviewers, firstObjectiveProofBaseline);
+});
+
+test("planning completion requires a current explicit simplifier result", () => {
+  const checkpoint = passingPlanningCheckpoint();
+  const expected = {
+    artifact: ".agents/plans/example.md",
+    artifactFingerprint: "sha256:plan-a",
+  };
+
+  assert.doesNotThrow(() =>
+    validatePlanningReviewCheckpoint(checkpoint, expected),
+  );
+  assert.throws(
+    () =>
+      validatePlanningReviewCheckpoint(
+        {
+          ...checkpoint,
+          reviewResults: checkpoint.reviewResults.filter(
+            (result) => result.reviewType !== "code-simplifier",
+          ),
+        },
+        expected,
+      ),
+    /planning_review_types_missing:code-simplifier/,
+  );
+  assert.throws(
+    () =>
+      validatePlanningReviewCheckpoint(
+        {
+          ...checkpoint,
+          reviewResults: checkpoint.reviewResults.map((result) =>
+            result.reviewType === "code-simplifier"
+              ? { ...result, artifactFingerprint: "sha256:stale" }
+              : result,
+          ),
+        },
+        expected,
+      ),
+    /planning_review_result_stale:code-simplifier/,
+  );
+});
+
+test("planning completion carries only nonblocking deferred considerations", () => {
+  const checkpoint = passingPlanningCheckpoint();
+  const deferredFinding = {
+    id: "planning-consideration-1",
+    severity: "nonblocking" as const,
+    disposition: "defer" as const,
+    affectedLocation: "skills/execute/SKILL.md",
+    issue: "The implementer can use the existing helper directly.",
+    evidence: "The helper already owns the task-local operation.",
+    remediationOutcome: "Carry the consideration into Execute.",
+    invalidatedSurfaces: ["implementation-mechanics"],
+  };
+  const withFinding = {
+    ...checkpoint,
+    reviewResults: checkpoint.reviewResults.map((result) =>
+      result.reviewType === "code-simplifier"
+        ? {
+            ...result,
+            status: "finding" as const,
+            findings: [deferredFinding],
+          }
+        : result,
+    ),
+  };
+  const expected = {
+    artifact: checkpoint.artifact,
+    artifactFingerprint: checkpoint.artifactFingerprint,
+  };
+
+  assert.doesNotThrow(() =>
+    validatePlanningReviewCheckpoint(withFinding, expected),
+  );
+  assert.throws(
+    () =>
+      validatePlanningReviewCheckpoint(
+        {
+          ...withFinding,
+          reviewResults: withFinding.reviewResults.map((result) =>
+            result.reviewType === "code-simplifier"
+              ? {
+                  ...result,
+                  findings: [
+                    { ...deferredFinding, disposition: "repair" as const },
+                  ],
+                }
+              : result,
+          ),
+        },
+        expected,
+      ),
+    /planning_review_finding_blocks_handoff:planning-consideration-1/,
+  );
+  assert.throws(
+    () =>
+      validatePlanningReviewCheckpoint(
+        {
+          ...withFinding,
+          reviewResults: withFinding.reviewResults.map((result) =>
+            result.reviewType === "code-simplifier"
+              ? {
+                  ...result,
+                  findings: [
+                    { ...deferredFinding, severity: "blocking" as const },
+                  ],
+                }
+              : result,
+          ),
+        },
+        expected,
+      ),
+    /planning_review_finding_blocks_handoff:planning-consideration-1/,
+  );
 });
 
 test("technical readiness requires every phase review type", () => {
@@ -750,7 +886,7 @@ test("review task packets contain exact immutable assignment context", () => {
   );
 });
 
-test("first objective proof requires two independent reviewers and targeted proof", () => {
+test("first objective proof requires three independent reviewers and targeted proof", () => {
   const checkpoint: PocArchitectureCheckpoint = {
     targetBaseSha: "base-a",
     diffFingerprint: "sha256:proof",
@@ -759,14 +895,22 @@ test("first objective proof requires two independent reviewers and targeted proo
     semanticTripwires: [],
     reviewResults: [
       {
+        reviewer: "code-simplifier",
+        reviewerRunId: "simplifier-agent",
+        status: "passed",
+        evidence: "exact first-proof diff simplified",
+      },
+      {
         reviewer: "code-quality-review",
         reviewerRunId: "quality-agent",
         status: "passed",
+        evidence: "exact first-proof structure reviewed",
       },
       {
         reviewer: "scrutinize",
         reviewerRunId: "scrutiny-agent",
         status: "passed",
+        evidence: "real system path scrutinized",
       },
     ],
     targetedProof: {
@@ -782,6 +926,42 @@ test("first objective proof requires two independent reviewers and targeted proo
       targetBaseSha: "base-a",
       diffFingerprint: "sha256:proof",
     }),
+  );
+
+  assert.throws(
+    () =>
+      assertPocExpansionAllowed(
+        {
+          ...checkpoint,
+          reviewResults: checkpoint.reviewResults.filter(
+            (result) => result.reviewer !== "code-simplifier",
+          ),
+        },
+        {
+          targetBaseSha: "base-a",
+          diffFingerprint: "sha256:proof",
+        },
+      ),
+    /poc_architecture_checkpoint_reviewer_result_invalid:code-simplifier/,
+  );
+
+  assert.throws(
+    () =>
+      assertPocExpansionAllowed(
+        {
+          ...checkpoint,
+          reviewResults: checkpoint.reviewResults.map((result) =>
+            result.reviewer === "code-simplifier"
+              ? { ...result, evidence: "" }
+              : result,
+          ),
+        },
+        {
+          targetBaseSha: "base-a",
+          diffFingerprint: "sha256:proof",
+        },
+      ),
+    /poc_architecture_checkpoint_reviewer_evidence_missing:code-simplifier/,
   );
 
   assert.throws(
@@ -809,7 +989,7 @@ test("first objective proof requires two independent reviewers and targeted proo
           ...checkpoint,
           reviewResults: [
             ...checkpoint.reviewResults,
-            checkpoint.reviewResults[0],
+            checkpoint.reviewResults[1],
           ],
         },
         {

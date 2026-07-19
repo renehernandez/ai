@@ -127,6 +127,10 @@ grant remains a human action.
   POC phase. OpenSpec produces one final PR/MR per top-level delivery unit, with
   nested work items implemented cohesively inside that unit.
 - Review evidence and the technical-readiness checkpoint remain task-local.
+  `code-simplifier` is a core reviewer for planning artifacts, POC first
+  objective proof, completed POCs, and final implementations; it always keeps
+  its own recorded outcome even when review execution is integrated or falls
+  back to another available model.
   After a hook-clean commit, publish the draft and request hosted review before
   running local Review on that same head. Cover every phase-specific review
   type inline or through subagents, use one findings batch, and run bounded

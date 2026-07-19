@@ -40,13 +40,13 @@ external blockers, and CI-only coverage as verification gaps.
 
 - Planning artifacts receive one discovery pass against one artifact
   fingerprint. Cover every planning review type: implementation readiness,
-  edge cases and risk, simplification and scope, refactoring, and delivery
-  shape. One inline pass may integrate them for a small coherent artifact.
-  Review verifies the reuse and deviation contract against live repository
-  evidence.
-- At first objective proof, a POC uses separate `code-quality-review` and
-  `scrutinize` reviewers plus targeted verification of the real entrypoint and
-  visible outcome.
+  edge cases and risk, `code-simplifier`, refactoring, and delivery shape. One
+  inline execution may cover them for a small coherent artifact, but
+  `code-simplifier` keeps its own recorded outcome. Review verifies the reuse
+  and deviation contract against live repository evidence.
+- At first objective proof, a POC uses separate `code-simplifier`,
+  `code-quality-review`, and `scrutinize` reviewers plus targeted verification
+  of the real entrypoint and visible outcome.
 - Completed POC and final implementation targets receive one findings-only
   discovery pass against the exact hosted target-base diff and HEAD, covering
   every completed-code review type. One integrated inline pass may cover a

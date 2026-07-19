@@ -3,7 +3,7 @@ export type ReviewTarget = "planning" | "poc" | "final_implementation";
 export const planningReviewerCatalog = [
   "implementation-readiness",
   "edge-cases-and-risk",
-  "simplification-and-scope",
+  "code-simplifier",
   "refactoring-opportunities",
   "delivery-shape",
 ] as const;
@@ -21,6 +21,7 @@ export const pocReviewerCatalog = [
 ] as const;
 
 export const firstObjectiveProofBaseline = [
+  "code-simplifier",
   "code-quality-review",
   "scrutinize",
 ] as const;
@@ -70,20 +71,6 @@ export const reviewerCatalog: Readonly<Record<ReviewerId, ReviewerContract>> = {
       "Safe behavior depends on an unresolved policy or unavailable evidence.",
     output: "passed | finding | blocked with source evidence",
   },
-  "simplification-and-scope": {
-    objective:
-      "Challenge unnecessary machinery, duplicated contracts, and accidental scope growth.",
-    targets: ["planning"],
-    evidenceQuestions: [
-      "Can existing systems or a smaller coherent change achieve the same outcome?",
-    ],
-    passedWhen:
-      "The artifact uses the smallest coherent surface that preserves the outcome.",
-    findingWhen: "Unnecessary scope or an existing simpler path is evidenced.",
-    blockedWhen:
-      "The proposed shape is incoherent or substantially broader than the accepted goal.",
-    output: "passed | finding | blocked with source evidence",
-  },
   "refactoring-opportunities": {
     objective:
       "Identify existing ownership boundaries that should absorb the change.",
@@ -115,18 +102,19 @@ export const reviewerCatalog: Readonly<Record<ReviewerId, ReviewerContract>> = {
   },
   "code-simplifier": {
     objective:
-      "Find behavior-preserving simplifications that remove avoidable branches, wrappers, nesting, duplication, or concepts.",
-    targets: ["poc", "final_implementation"],
+      "Find contract- or behavior-preserving simplifications that remove unnecessary scope, machinery, branches, wrappers, nesting, duplication, or concepts.",
+    targets: ["planning", "poc", "final_implementation"],
     evidenceQuestions: [
+      "For planning artifacts, can existing owners or a smaller coherent delivery shape achieve the same accepted outcome without duplicated contracts or setup-only machinery?",
       "Can the exact diff express the same behavior with fewer concepts or a clearer project-native flow?",
-      "Does a proposed simplification preserve every reachable success and failure state?",
+      "Does a proposed simplification preserve every accepted contract boundary and reachable success and failure state?",
     ],
     passedWhen:
-      "No concrete behavior-preserving simplification would materially reduce change cost or cognitive load.",
+      "No concrete contract- or behavior-preserving simplification would materially reduce scope, change cost, or cognitive load.",
     findingWhen:
-      "A scoped simplification can remove meaningful complexity without changing behavior.",
+      "A scoped simplification can remove meaningful complexity without changing the accepted contract or implementation behavior.",
     blockedWhen:
-      "The exact diff, surrounding ownership, or behavior contract cannot be inspected.",
+      "The exact planning artifact or diff, surrounding ownership, or accepted contract cannot be inspected.",
     output: "passed | finding | blocked with source evidence",
   },
   "code-quality-review": {
@@ -323,6 +311,23 @@ export type ReviewFinding = {
   invalidatedSurfaces: readonly string[];
 };
 
+export type PlanningReviewResult = {
+  reviewType: string;
+  execution: "inline" | "subagent";
+  executionId: string;
+  artifactFingerprint: string;
+  status: "passed" | "finding" | "blocked";
+  findings: readonly ReviewFinding[];
+};
+
+export type PlanningReviewCheckpoint = {
+  artifact: string;
+  artifactFingerprint: string;
+  requiredSpecialists: readonly string[];
+  reviewResults: readonly PlanningReviewResult[];
+  blockers: readonly string[];
+};
+
 export type ClosureResolution = {
   findingId: string;
   resolutionEvidence: string;
@@ -385,6 +390,93 @@ function validateFinding(
     finding.invalidatedSurfaces.some((surface) => !surface.trim())
   ) {
     throw new Error(`${incompleteErrorPrefix}:invalidatedSurfaces`);
+  }
+}
+
+export function validatePlanningReviewCheckpoint(
+  checkpoint: PlanningReviewCheckpoint,
+  expected: {
+    artifact: string;
+    artifactFingerprint: string;
+  },
+): void {
+  if (
+    checkpoint.artifact !== expected.artifact ||
+    checkpoint.artifactFingerprint !== expected.artifactFingerprint
+  ) {
+    throw new Error("planning_review_stale");
+  }
+  if (!checkpoint.artifact.trim() || !checkpoint.artifactFingerprint.trim()) {
+    throw new Error("planning_review_artifact_unresolved");
+  }
+
+  const required = [
+    ...requiredReviewTypesFor("planning"),
+    ...checkpoint.requiredSpecialists.map((reviewType) => reviewType.trim()),
+  ];
+  const selected = new Set<string>();
+  for (const reviewType of required) {
+    if (!reviewType || selected.has(reviewType)) {
+      throw new Error(`planning_review_type_invalid:${reviewType}`);
+    }
+    selected.add(reviewType);
+  }
+
+  const missing = required.filter(
+    (reviewType) =>
+      !checkpoint.reviewResults.some(
+        (result) => result.reviewType === reviewType,
+      ),
+  );
+  if (missing.length > 0) {
+    throw new Error(`planning_review_types_missing:${missing.join(",")}`);
+  }
+
+  const findingIds = new Set<string>();
+  for (const reviewType of required) {
+    const results = checkpoint.reviewResults.filter(
+      (result) => result.reviewType === reviewType,
+    );
+    if (results.length !== 1) {
+      throw new Error(`planning_review_result_invalid:${reviewType}`);
+    }
+    const [result] = results;
+    if (result.artifactFingerprint !== expected.artifactFingerprint) {
+      throw new Error(`planning_review_result_stale:${reviewType}`);
+    }
+    if (!result.executionId.trim()) {
+      throw new Error(`planning_review_execution_incomplete:${reviewType}`);
+    }
+    if (result.status === "blocked") {
+      throw new Error(
+        `planning_review_result_not_passed:${reviewType}:${result.status}`,
+      );
+    }
+    if (result.status === "finding" && result.findings.length === 0) {
+      throw new Error(`planning_review_finding_missing:${reviewType}`);
+    }
+    if (result.status === "passed" && result.findings.length > 0) {
+      throw new Error(
+        `planning_review_passed_result_has_findings:${reviewType}`,
+      );
+    }
+    for (const finding of result.findings) {
+      validateFinding(
+        finding,
+        `planning_review_finding_incomplete:${reviewType}`,
+      );
+      if (findingIds.has(finding.id)) {
+        throw new Error(`planning_review_finding_id_reused:${finding.id}`);
+      }
+      findingIds.add(finding.id);
+      if (finding.disposition !== "defer" || finding.severity === "blocking") {
+        throw new Error(`planning_review_finding_blocks_handoff:${finding.id}`);
+      }
+    }
+  }
+
+  if (checkpoint.blockers.some((blocker) => blocker.trim())) {
+    throw new Error("planning_review_blocked");
   }
 }
 

@@ -123,11 +123,19 @@ those boundaries would change or the required intent is genuinely unknown.
 ## Planning Review
 
 When the planning artifact is stable, invoke one read-only Review discovery pass
-against its exact fingerprint. Cover every planning review type. A small
-coherent plan may use one integrated inline pass; use subagents only when
+against its exact fingerprint. Cover every planning review type, including one
+explicit `code-simplifier` outcome that cannot be replaced by another review
+type. A small coherent plan may use one integrated inline execution, but the
+simplification result remains separately recorded. Use subagents only when
 separating concerns is expected to finish faster. Add affected-domain
 specialists when the exact artifact exposes their domain. Hold edits until the
 review phase barrier and deduplicate one task-local findings batch.
+
+Before implementation handoff, validate the completed planning results with
+Review's artifact-fingerprint-bound planning checkpoint. A missing result,
+stale fingerprint, blocker, durable artifact finding, or unresolved repair
+prevents handoff. Evidenced nonblocking `defer` findings classified as
+task-local implementation considerations accompany the handoff to Execute.
 
 Plan repairs only findings that change the durable planning contract. Pass
 implementation considerations to Execute task-locally instead of expanding the

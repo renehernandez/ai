@@ -36,6 +36,15 @@ export function finalDeliveryOrder(unitIds: string[]): string[] {
   return [...unitIds];
 }
 
+export const firstObjectiveProofReviewers = [
+  "code-simplifier",
+  "code-quality-review",
+  "scrutinize",
+] as const;
+
+type FirstObjectiveProofReviewer =
+  (typeof firstObjectiveProofReviewers)[number];
+
 export type PocArchitectureCheckpoint = {
   targetBaseSha: string;
   diffFingerprint: string;
@@ -46,9 +55,10 @@ export type PocArchitectureCheckpoint = {
     resolution: "cleared" | "finding" | "plan_required";
   }[];
   reviewResults: readonly {
-    reviewer: "code-quality-review" | "scrutinize";
+    reviewer: FirstObjectiveProofReviewer;
     reviewerRunId: string;
     status: "passed" | "finding" | "blocked";
+    evidence: string;
   }[];
   targetedProof: {
     status: "passed" | "failed" | "blocked";
@@ -99,8 +109,7 @@ export function assertPocExpansionAllowed(
     );
   }
 
-  const requiredReviewers = ["code-quality-review", "scrutinize"] as const;
-  const requiredResults = requiredReviewers.map((reviewer) => {
+  const requiredResults = firstObjectiveProofReviewers.map((reviewer) => {
     const results = checkpoint.reviewResults.filter(
       (result) => result.reviewer === reviewer,
     );
@@ -112,6 +121,11 @@ export function assertPocExpansionAllowed(
     return results[0];
   });
   for (const result of requiredResults) {
+    if (!result.evidence.trim()) {
+      throw new Error(
+        `poc_architecture_checkpoint_reviewer_evidence_missing:${result.reviewer}`,
+      );
+    }
     if (result.status !== "passed") {
       throw new Error(
         `poc_architecture_checkpoint_reviewer_not_passed:${result.reviewer}:${result.status}`,
@@ -123,7 +137,7 @@ export function assertPocExpansionAllowed(
   );
   if (
     requiredResults.some((result) => !result.reviewerRunId.trim()) ||
-    reviewerRunIds.size !== requiredReviewers.length
+    reviewerRunIds.size !== firstObjectiveProofReviewers.length
   ) {
     throw new Error("poc_architecture_checkpoint_reviewer_identity_reused");
   }

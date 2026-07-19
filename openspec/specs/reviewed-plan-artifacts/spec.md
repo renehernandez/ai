@@ -50,7 +50,8 @@ The system SHALL validate and review a written or materially changed planning ar
 
 #### Scenario: Planning baseline runs
 - **WHEN** a Plan artifact is written or changed
-- **THEN** Review launches implementation-readiness, edge-case/risk, simplification/scope, and refactoring reviewers against one artifact fingerprint
+- **THEN** Review requires implementation-readiness, edge-case/risk, `code-simplifier`, refactoring, and delivery-shape results against one artifact fingerprint
+- **AND** `code-simplifier` keeps its own recorded result when execution is integrated or falls back to another available model
 - **AND** adds affected-domain specialists
 
 #### Scenario: In-scope finding is repaired

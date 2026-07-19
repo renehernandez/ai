@@ -383,7 +383,7 @@ test("Review exposes distinct planning, POC, and final reviewer catalogs", () =>
   assert.deepEqual(requiredReviewTypesFor("planning"), [
     "implementation-readiness",
     "edge-cases-and-risk",
-    "simplification-and-scope",
+    "code-simplifier",
     "refactoring-opportunities",
     "delivery-shape",
   ]);
@@ -413,6 +413,32 @@ test("Review exposes distinct planning, POC, and final reviewer catalogs", () =>
     edgeCases.findingWhen,
     /task-local implementation consideration/,
   );
+
+  const simplifier = reviewerContractFor("code-simplifier");
+  assert.deepEqual(simplifier.targets, [
+    "planning",
+    "poc",
+    "final_implementation",
+  ]);
+  assert.match(simplifier.evidenceQuestions.join(" "), /planning artifacts/);
+
+  const reviewedPlanSpec = read(
+    "openspec/specs/reviewed-plan-artifacts/spec.md",
+  );
+  assert.match(reviewedPlanSpec, /`code-simplifier`/);
+  assert.match(reviewedPlanSpec, /one artifact fingerprint/);
+  assert.doesNotMatch(reviewedPlanSpec, /simplification\/scope/);
+
+  for (const activeSpec of [
+    "openspec/changes/enforce-explicit-plan-workflow-reviewers/specs/review-first-plan-orchestration/spec.md",
+    "openspec/changes/integrate-review-gate-plan-workflows/specs/review-first-plan-orchestration/spec.md",
+  ]) {
+    const text = read(activeSpec);
+    assert.match(text, /`code-simplifier`/);
+    assert.match(text, /delivery-shape/);
+    assert.match(text, /fallback/);
+    assert.doesNotMatch(text, /simplification-and-scope-control/);
+  }
 
   const reviewSkill = read("skills/review/SKILL.md");
   assert.match(reviewSkill, /Planning Artifact Boundary/);

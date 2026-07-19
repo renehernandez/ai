@@ -89,6 +89,14 @@ for (const file of entrypoints) {
     assert.match(text, /real package dependency/);
   });
 
+  test(`${file} keeps simplification as a core planning and execution reviewer`, () => {
+    const text = readFileSync(file, "utf-8");
+
+    assert.match(text, /`code-simplifier` is a core reviewer/);
+    assert.match(text, /always keeps\s+its own recorded outcome/);
+    assert.match(text, /another available model/);
+  });
+
   test(`${file} defaults non-trivial work to precedent discovery and reuse`, () => {
     const text = readFileSync(file, "utf-8");
 
@@ -211,11 +219,15 @@ test("implementation rules route semantically and enforce the full OpenSpec POC"
   assert.match(text, /first objective proof/);
   assert.match(
     text,
-    /independent findings-only `code-quality-review` and\s+`scrutinize`/,
+    /separate findings-only `code-simplifier` reviewer-run\s+identity/,
   );
   assert.match(
     text,
-    /completed stable POC.*publishes a.*hook-clean draft.*every completed-code.*review type/is,
+    /independent findings-only `code-quality-review` and `scrutinize`/,
+  );
+  assert.match(
+    text,
+    /completed stable POC publishes a hook-clean\s+draft, requests hosted review, then receives every completed-code\s+review type/i,
   );
 });
 
