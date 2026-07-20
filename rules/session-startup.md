@@ -16,6 +16,10 @@ Gather only the context required for the request:
 5. Search memory only when prior decisions, preferences, or continuity matter.
 6. Inspect directly affected files before expanding to generated or unrelated
    surfaces.
+7. Identify independent lanes, their concrete dependencies, and available
+   capacity. Start ready work within current authority immediately when
+   parallel execution will finish faster; do not turn Git order, one worktree
+   owner, or a later join point into a task-wide start gate.
 
 Prefer targeted `rg`, Git, and provider-CLI reads. Do not turn startup into a
 broad audit unless the first pass exposes a wider risk.
