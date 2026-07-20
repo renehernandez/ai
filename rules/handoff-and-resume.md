@@ -43,19 +43,6 @@ If live state differs from the handoff, state the difference and use live state
 as authoritative. Invalidate stale worktree ownership, exact-target Review, and
 publication evidence before continuing.
 
-For a pinned organizational agent, begin with the Root Agent Record, Current
-Memory Epoch, active Workstreams, unresolved Decisions and Escalations, and the
-live Codex task identity. Verify the prompt contract version, rendered prompt
-hash, workspace generation, scope, reporting line, and tool-policy attestation.
-A generation or identity mismatch permits reporting but blocks mutation until
-the workspace is re-attested.
-
-For an ephemeral Agent Run, persist the Run before spawn and carry its Run ID,
-invocation ID, workspace generation, model profile, authority, sources,
-acceptance, verification, stop condition, and next check time in the handoff.
-Resume the same Run after a recoverable spawn failure; do not create a duplicate
-to conceal partial state.
-
 ## Cross-Surface Notes
 
 Remote control of a local desktop agent should be treated as a local continuation when the host is connected. Hosted web agents or delegated cloud work should be treated as cloud work and need repo-visible context.

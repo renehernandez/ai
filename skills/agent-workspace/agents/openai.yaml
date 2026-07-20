@@ -1,4 +1,0 @@
-interface:
-  display_name: "Agent Workspace"
-  short_description: "Coordinate persistent agents and bounded Agent Runs"
-  default_prompt: "Use $agent-workspace to activate, resume, delegate to, message, open, or deactivate an organizational agent through its validated coordinator project and durable records."

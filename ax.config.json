@@ -4,6 +4,7 @@
     "installedProfiles": ["personal", "work"],
     "policyProfile": "work",
     "retiredSkills": [
+      "agent-workspace",
       "codex-review-feedback",
       "merge-followthrough",
       "plan-coordinate",
@@ -31,20 +32,6 @@
       "targets": {
         "claude": "~/.claude/hooks",
         "codex": "~/.codex/hooks"
-      }
-    },
-    "agents": {
-      "sourceDir": "agents",
-      "canonicalDir": "~/.agents/agents",
-      "targets": {
-        "codex": "~/.codex/agents"
-      }
-    },
-    "coordinatorProjects": {
-      "sourceDir": "coordinator-projects",
-      "targets": {
-        "delivery": "~/work/projects/rene.hernandez/agent-control/delivery",
-        "operations": "~/work/projects/rene.hernandez/agent-control/operations"
       }
     },
     "configs": {
@@ -128,7 +115,6 @@
           "localPath": "skills",
           "names": [
             "ai-readiness-upkeep",
-            "agent-workspace",
             "ax-cli",
             "brainstorming",
             "change-request-create",

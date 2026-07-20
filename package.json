@@ -13,9 +13,7 @@
     "skills:validate": "tsx scripts/skill-validate.ts",
     "test": "node --import tsx --test tests/unit/*.test.ts tests/integration/*.test.ts",
     "test:unit": "node --import tsx --test tests/unit/*.test.ts",
-    "test:integration": "node --import tsx --test tests/integration/*.test.ts",
-    "agents:validate": "tsx scripts/agent-validate.ts",
-    "agent-schemas:render": "tsx scripts/agent-schema-render.ts"
+    "test:integration": "node --import tsx --test tests/integration/*.test.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.16",
@@ -24,7 +22,6 @@
   },
   "packageManager": "pnpm@11.5.3",
   "dependencies": {
-    "ajv": "^8.20.0",
     "commander": "^15.0.0",
     "smol-toml": "^1.7.0"
   }

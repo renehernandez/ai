@@ -25,10 +25,6 @@ import {
   validateManagedConfigs,
 } from "./ax/config-sync.ts";
 import {
-  type CoordinatorTargets,
-  writeCoordinatorRegistration,
-} from "./ax/coordinator-project-runtime.ts";
-import {
   inspectOpenSpec,
   type OpenSpecConfig,
   syncOpenSpec,
@@ -75,8 +71,6 @@ type CommandOptions = {
   reviewConfig?: boolean;
   acceptConfigChanges?: boolean;
   json?: boolean;
-  deliveryProjectId?: string;
-  operationsProjectId?: string;
 };
 
 const CONFIG_FILE = "ax.config.json";
@@ -112,9 +106,7 @@ export function createProgram(
   addRuntimeScope(program, "skills", execute);
   addRuntimeScope(program, "instructions", execute);
   addRuntimeScope(program, "hooks", execute);
-  addRuntimeScope(program, "agents", execute);
   addRuntimeScope(program, "configs", execute);
-  addCoordinatorCommands(program, execute);
   addOpenSpecCommands(program, execute);
   addShimCommands(program, execute);
   return program;
@@ -303,66 +295,6 @@ function addRuntimeScope(
     });
   }
   addLegacyRuntimeCommands(parent, `ax ${scope}`, `ax ${scope} sync`);
-}
-
-function addCoordinatorCommands(
-  program: Command,
-  execute: CommandExecutor,
-): void {
-  const parent = program
-    .command("coordinators")
-    .description("Coordinator control-project runtime surface");
-  for (const command of runtimeCommands()) {
-    const subcommand = parent
-      .command(command)
-      .description(`${label(command)} managed coordinator projects`)
-      .option("--json", "Emit structured JSON");
-    subcommand.action((options: CommandOptions, commandObject: Command) => {
-      execute(parsedCommand("coordinators", command, options, commandObject));
-    });
-  }
-  parent
-    .command("register")
-    .description("Record the two manually saved Codex project IDs")
-    .requiredOption(
-      "--delivery-project-id <id>",
-      "Saved Delivery Coordination project ID",
-    )
-    .requiredOption(
-      "--operations-project-id <id>",
-      "Saved Executive Operations project ID",
-    )
-    .option("--json", "Emit structured JSON")
-    .action((options: CommandOptions, commandObject: Command) => {
-      const globals = commandObject.optsWithGlobals<CommandOptions>();
-      const context = createRuntimeInvocationContext(
-        globals.config ? resolve(globals.config) : undefined,
-      );
-      const config = readJson<AxRuntimeConfig>(context.configPath);
-      const coordinatorConfig = config.runtime.coordinatorProjects;
-      if (!coordinatorConfig) {
-        throw new Error("coordinator_projects_not_configured");
-      }
-      const runtimeRoot = globals.runtimeRoot
-        ? expandPath(globals.runtimeRoot, context.sourceRoot)
-        : join(resolve(process.env.HOME || homedir()), ".agents", "runtime");
-      const targets = Object.fromEntries(
-        Object.entries(coordinatorConfig.targets).map(([kind, target]) => [
-          kind,
-          expandPath(target, context.sourceRoot),
-        ]),
-      ) as CoordinatorTargets;
-      const result = writeCoordinatorRegistration({
-        runtimeRoot,
-        targets,
-        projectIds: {
-          delivery: options.deliveryProjectId ?? "",
-          operations: options.operationsProjectId ?? "",
-        },
-      });
-      printResult(result, options.json);
-    });
-  addLegacyRuntimeCommands(parent, "ax coordinators", "ax coordinators sync");
 }
 
 function addOpenSpecCommands(program: Command, execute: CommandExecutor): void {

@@ -167,18 +167,6 @@ grant remains a human action.
   bottom-to-top sequence that marks only the current MR ready immediately before
   its merge and waits for any review triggered by that transition.
 
-## Organizational agents
-
-- Use the `agent-workspace` skill to activate, resume, delegate to, message,
-  open, or deactivate pinned organizational agents and ephemeral Agent Runs.
-- Linear and Git own durable coordination state. Do not create a private
-  orchestration database or treat editable tracker text as authority.
-- Route delivery through the Delivery Executive Assistant and operations
-  drafting through the Executive Operations Assistant. Rene retains merge and
-  external-action authority unless an exact active policy grants it.
-- Manage generated custom-agent descriptors through the tracked `agents/`
-  source and `ax agents`; never edit installed TOML directly.
-
 ## AX runtime
 
 - Tracked `ax.config.json` is authoritative runtime state. It declares
