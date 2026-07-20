@@ -782,58 +782,121 @@ test("audit rejects a bare HTTP root as an objective-proof entrypoint", () => {
   );
 });
 
-test("audit accepts one setup-only deliverable before objective proof", () => {
+test("audit accepts one groundwork delivery unit before objective proof", () => {
   const result = runOpenSpecTasks(
     "audit",
     `# Tasks
 
-## 1. Delivery
+## 1. Extract target registration
 
 - [ ] 1.1 Register target metadata
-  - Target metadata is available to verification setup.
-  - run pnpm test:unit
-- [ ] 1.2 Add hw-admin verification path
+- [ ] 1.2 Preserve existing target behavior
+
+## 2. Deliver target verification
+
+- [ ] 2.1 Add hw-admin verification path
   - First real confirmation: run the hosted verification workflow entrypoint against hw-admin and observe success or failure evidence in the summary artifact.
+- [ ] 2.2 Add cleanup handling
 `,
   );
 
   assert.equal(result.status, 0);
 });
 
-test("audit rejects task 2 proof after a non-setup first task", () => {
+test("audit accepts two groundwork delivery units before objective proof", () => {
   const result = runOpenSpecTasks(
     "audit",
     `# Tasks
 
-## 1. Delivery
+## 1. Simplify target ownership
 
-- [ ] 1.1 Implement blueprint validation
-  - Valid blueprints pass validation.
-- [ ] 1.2 Add CLI validation path
-  - First real confirmation: run the plan-ready validate-blueprint CLI entrypoint and observe pass or failure output.
+- [ ] 1.1 Extract the canonical target owner
+- [ ] 1.2 Preserve current target behavior
+
+## 2. Establish target contracts
+
+- [ ] 2.1 Add the target result contract
+- [ ] 2.2 Preserve existing consumer behavior
+
+## 3. Deliver target verification
+
+- [ ] 3.1 Add the hosted verification path
+  - First real confirmation: run the hosted verification workflow entrypoint against hw-admin and observe success or failure evidence in the summary artifact.
+- [ ] 3.2 Add cleanup handling
+`,
+  );
+
+  assert.equal(result.status, 0);
+});
+
+test("audit accepts unit 3 proof that names its current task", () => {
+  const result = runOpenSpecTasks(
+    "audit",
+    `# Tasks
+
+## 1. Simplify target ownership
+
+- [ ] 1.1 Extract the canonical target owner
+- [ ] 1.2 Preserve current target behavior
+
+## 2. Establish target contracts
+
+- [ ] 2.1 Add the target result contract
+- [ ] 2.2 Preserve existing consumer behavior
+
+## 3. Deliver target verification
+
+- [ ] 3.1 Add the hosted verification path
+  - First real confirmation: run the task 3 hosted workflow entrypoint and observe success or failure evidence in the summary artifact.
+- [ ] 3.2 Add cleanup handling
+`,
+  );
+
+  assert.equal(result.status, 0);
+});
+
+test("audit rejects a proof marker that points to a later unit", () => {
+  const result = runOpenSpecTasks(
+    "audit",
+    `# Tasks
+
+## 1. Prepare target verification
+
+- [ ] 1.1 Add target metadata
+  - First real confirmation: task 3 will run the hosted workflow entrypoint and report success or failure output.
+- [ ] 1.2 Preserve current target behavior
 `,
   );
 
   assert.notEqual(result.status, 0);
-  assert.match(
-    result.stderr,
-    /objective proof is allowed only when task 1\.1 is setup-only/,
-  );
+  assert.match(result.stderr, /defers proof/);
 });
 
-test("audit rejects deliverable-shaped tasks with objective proof at task 3", () => {
+test("audit rejects objective proof after delivery unit 3", () => {
   const result = runOpenSpecTasks(
     "audit",
     `# Tasks
 
-## 1. Delivery
+## 1. Simplify target ownership
 
 - [ ] 1.1 Register target metadata
-  - Target metadata is available to verification setup.
-- [ ] 1.2 Generate target probes
-  - Generated probe metadata is available for the target.
-- [ ] 1.3 Add hw-admin verification path
+- [ ] 1.2 Preserve current behavior
+
+## 2. Establish target contracts
+
+- [ ] 2.1 Generate target probes
+- [ ] 2.2 Preserve current consumers
+
+## 3. Add target routing
+
+- [ ] 3.1 Route target requests
+- [ ] 3.2 Preserve fallback behavior
+
+## 4. Deliver target verification
+
+- [ ] 4.1 Add hw-admin verification path
   - First real confirmation: run the hosted verification workflow entrypoint against hw-admin and observe success or failure evidence in the summary artifact.
+- [ ] 4.2 Add cleanup handling
 `,
   );
 
@@ -841,7 +904,77 @@ test("audit rejects deliverable-shaped tasks with objective proof at task 3", ()
   const parsed = JSON.parse(result.stdout);
 
   assert.equal(parsed.status, "needs_spec_redesign");
-  assert.match(result.stderr, /objective proof first appears in task 1\.3/);
+  assert.match(
+    result.stderr,
+    /objective proof first appears in delivery unit 4/,
+  );
+});
+
+test("audit rejects nested work items that impersonate final MRs", () => {
+  const result = runOpenSpecTasks(
+    "audit",
+    `# Tasks
+
+## 1. One-Prompt Publishing
+
+- [ ] 1.1 Deliver root-to-live publishing. Final MR 1; targets main.
+  - Proof location: run the stat publish CLI entrypoint and observe success or failure output.
+- [ ] 1.2 Harden artifact publication. Final MR 2; targets the task 1.1 branch.
+`,
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /nested_final_change_mapping/);
+  assert.match(result.stderr, /top-level delivery unit/);
+});
+
+test("audit permits non-topology references to a final MR", () => {
+  const result = runOpenSpecTasks(
+    "audit",
+    `# Tasks
+
+## 1. Preserve review-only behavior
+
+- [ ] 1.1 Keep the rehearsal review-only and do not publish a final MR
+  - Proof location: run the rehearsal workflow entrypoint and observe success or failure output.
+- [ ] 1.2 Preserve cleanup behavior
+`,
+  );
+
+  assert.equal(result.status, 0);
+});
+
+test("audit permits ordinary maps-to-review prose", () => {
+  const result = runOpenSpecTasks(
+    "audit",
+    `# Tasks
+
+## 1. Preserve review-only behavior
+
+- [ ] 1.1 Keep the rehearsal review-only; this step maps to a PR review cycle
+  - Proof location: run the rehearsal workflow entrypoint and observe success or failure output.
+- [ ] 1.2 Preserve cleanup behavior
+`,
+  );
+
+  assert.equal(result.status, 0);
+});
+
+test("audit rejects explicit unnumbered final MR mappings", () => {
+  const result = runOpenSpecTasks(
+    "audit",
+    `# Tasks
+
+## 1. Preserve review-only behavior
+
+- [ ] 1.1 Keep the rehearsal review-only; this work item maps to a final MR.
+  - Proof location: run the rehearsal workflow entrypoint and observe success or failure output.
+- [ ] 1.2 Preserve cleanup behavior
+`,
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /nested_final_change_mapping/);
 });
 
 test("audit rejects missing and marker-only objective proof", () => {

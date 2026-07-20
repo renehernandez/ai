@@ -199,10 +199,21 @@ pass.
 Planning review verifies the artifact's reuse and deviation contract against
 the live repository. For `delivery-shape`, challenge both under-splitting and
 over-splitting. Each top-level OpenSpec unit must produce one reviewable
-outcome, remain correct and safe before successors, own objective proof, and
-have coherent reviewer, risk, rollback, and deployment boundaries. Combine
-checkbox-only units and split materially different ownership, activation,
-security, rollback, or deployment seams.
+outcome, remain correct and safe before successors, own local proof, and have
+coherent reviewer, risk, rollback, and deployment boundaries. Prefer stack
+objective proof in unit 1, but permit one or two groundwork units first when
+each has current standalone value, directly enables a named successor, and
+reduces the size or risk of the first outcome MR. Block a third pre-outcome
+unit, speculative or successor-dependent groundwork, and contradictory
+proposal/task/MR topology.
+
+When POC, prior implementation, MR, or incident evidence exists, stress-test
+the root unit against its actual footprint and ownership seams. A root unit that
+dominates the stack or crosses materially different ownership, activation,
+security, rollback, review, or deployment boundaries remains under-split even
+when it contains valid early objective proof. Combine checkbox-only units and
+split those independent seams without turning file count or churn into a
+universal threshold.
 
 ## Hosted Feedback
 

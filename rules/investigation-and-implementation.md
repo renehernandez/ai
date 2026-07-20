@@ -92,11 +92,17 @@ Before writing an OpenSpec, derive its top-level units from behavior, ownership,
 deployment, security, migration, rollback, verification, and repository
 boundaries. Treat existing headings as hypotheses and inspect prior
 implementation or POC evidence when available. Each unit must be safe and
-correct when merged before its successors, own objective proof, and have a
+correct when merged before its successors, own local proof, and have a
 coherent reviewer, risk, rollback, and deployment boundary. Split distinct
 shared prerequisites, feature behavior, proof infrastructure, activation,
 repositories or owners, security, rollback, and deployment seams. Combine
 unused-foundation, unverifiable-intermediate, and checkbox-only candidates.
+Prefer stack objective proof in unit 1, but allow one or two groundwork units
+first when each safely improves the current system, directly enables a named
+successor, and reduces the first outcome MR's size or risk. Proof after unit 3,
+speculative groundwork, or contradictory proposal/task/MR topology returns to
+Plan. Use actual implementation or POC footprint to stress-test a root unit
+that dominates the stack without turning churn into a universal threshold.
 
 Only primary atomic-plan Markdown belongs under `.agents/plans`. Reviewer
 requests, selections, blueprints, handoffs, ledgers, fingerprints, command
@@ -143,9 +149,9 @@ The POC:
    readiness checkpoint.
 8. Freezes after acceptance, closes unmerged, and removes its local worktree.
 
-At the POC's first objective proof, in slice 1 or slice 2 after at most one
-setup-only slice, Execute pauses before broadening. Review runs the exact-diff
-checkpoint with a separate findings-only `code-simplifier` reviewer-run
+At the POC's first stack objective proof, in unit 1, 2, or 3 after at most two
+reviewed groundwork units, Execute pauses before broadening. Review runs the
+exact-diff checkpoint with a separate findings-only `code-simplifier` reviewer-run
 identity and independent findings-only `code-quality-review` and `scrutinize`
 reviewer runs plus targeted verification of the real entrypoint and visible
 outcome. Any later architecture-affecting change invalidates that checkpoint.

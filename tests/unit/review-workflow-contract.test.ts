@@ -12,6 +12,7 @@ import {
   firstObjectiveProofBaseline,
   type PlanningReviewCheckpoint,
   requiredReviewTypesFor,
+  reviewerCatalog,
   reviewWavesFor,
   type TechnicalReadinessCheckpoint,
   validatePlanningReviewCheckpoint,
@@ -1036,6 +1037,22 @@ test("first objective proof requires three independent reviewers and targeted pr
       ),
     /poc_architecture_checkpoint_reviewer_not_passed:scrutinize:finding/,
   );
+});
+
+test("delivery-shape review bounds groundwork and checks topology", () => {
+  const contract = reviewerCatalog["delivery-shape"];
+
+  assert.match(
+    contract.evidenceQuestions.join("\n"),
+    /objective proof by unit 3/i,
+  );
+  assert.match(contract.evidenceQuestions.join("\n"), /groundwork units/i);
+  assert.match(
+    contract.evidenceQuestions.join("\n"),
+    /top-level task headings/i,
+  );
+  assert.match(contract.passedWhen, /non-speculative/i);
+  assert.match(contract.passedWhen, /delivery topology/i);
 });
 
 test("required reviewer skills are findings-only", () => {

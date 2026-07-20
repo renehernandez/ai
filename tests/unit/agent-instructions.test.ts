@@ -216,7 +216,7 @@ test("implementation rules route semantically and enforce the full OpenSpec POC"
     /Exact files, symbols, commands, exhaustive test or\s+edge-case matrices/,
   );
   assert.match(text, /Exact files.*remain task-local/is);
-  assert.match(text, /first objective proof/);
+  assert.match(text, /first stack objective proof/);
   assert.match(
     text,
     /separate findings-only `code-simplifier` reviewer-run\s+identity/,
@@ -244,6 +244,12 @@ test("documentation rules keep OpenSpec adapters explicit and task-shaped", () =
   assert.match(text, /No applicable precedent found/);
   assert.match(text, /Keep the OpenSpec artifacts complementary/);
   assert.match(text, /Tasks remain a high-level delivery queue/);
+  assert.match(text, /`groundwork`, `outcome`, or `hardening`/);
+  assert.match(text, /stack objective proof must appear by unit 3/i);
+  assert.match(
+    text,
+    /nested work items never declare themselves final PRs\/MRs/i,
+  );
   assert.match(
     text,
     /Planning artifacts preserve the objective, high-level approach/,

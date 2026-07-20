@@ -91,10 +91,12 @@ export const reviewerCatalog: Readonly<Record<ReviewerId, ReviewerContract>> = {
       "Verify that delivery units are cohesive, independently reviewable, and safely ordered.",
     targets: ["planning"],
     evidenceQuestions: [
-      "Does each unit own one outcome, proof, rollback, reviewer, and safe intermediate state?",
+      "Does each unit own one local outcome and proof, rollback, reviewer, and safe intermediate state, with stack objective proof by unit 3?",
+      "Are any preceding groundwork units independently valuable, directly consumed by a named successor, and smaller or safer than a forced root vertical slice?",
+      "Do proposal units, top-level task headings, tracker units, and intended PR/MR topology agree?",
     ],
     passedWhen:
-      "Units are neither under-split nor checkbox-only and have explicit dependencies.",
+      "Units are neither under-split nor checkbox-only, groundwork is bounded and non-speculative, and delivery topology and dependencies agree.",
     findingWhen: "Concrete seams require a split, merge, or ordering repair.",
     blockedWhen:
       "The accepted delivery shape cannot produce safe reviewable intermediate states.",

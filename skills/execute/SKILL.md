@@ -110,8 +110,8 @@ After the narrow proof passes, stage only intended files and use native hook-
 enabled Git commit behavior. Never use `--no-verify`. Fix a hook failure before
 starting the next boundary.
 
-For every OpenSpec POC, pause when the first objective proof exists: slice 1,
-or slice 2 after at most one setup-only slice. Before broadening the POC, run an
+For every OpenSpec POC, pause when the first stack objective proof exists: unit
+1, 2, or 3 after at most two reviewed groundwork units. Before broadening the POC, run an
 exact-diff checkpoint against the reviewed reuse contract, target-base SHA,
 diff fingerprint, inspected precedents, and triggered semantic tripwires. It
 must contain separate findings-only `code-quality-review` and `scrutinize`

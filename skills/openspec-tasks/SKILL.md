@@ -35,6 +35,11 @@ sub-bullet only for delivery-boundary justification, boundary-defining
 acceptance, or end-to-end proof; exact files, symbols, commands, exhaustive
 edge cases, and test matrices remain task-local implementation considerations.
 
+Nested work items must never declare themselves final PRs/MRs or encode a
+second stack topology. Proposal delivery count, `tasks.md` headings, tracker
+units when required, and intended predecessor order must agree. A contradiction
+returns `needs_spec_redesign` even when work-item count and proof markers pass.
+
 Task groups represent deliverable implementation areas. Do not use
 lifecycle-only groups anywhere in the file that only run documentation, linting,
 testing, review, validation, or verification. Those activities belong inside the
@@ -68,15 +73,21 @@ ask the user directly. Plan applies an unambiguous contract-preserving repair
 under its existing authority, or asks one focused question when the correction
 would change a material contract boundary.
 
-Existing `tasks.md` files must also identify earliest objective proof. The first
-delivery unit should prove the named capability by default. If the first
-delivery unit is setup-only, the second delivery unit must contain explicit
+Existing `tasks.md` files must also identify earliest stack objective proof.
+The first delivery unit should prove the named capability by default. Plan may
+place one or two independently valuable groundwork units first when each unit
+is safely mergeable, locally proved, and directly simplifies or enables a named
+successor. Planning Review owns that semantic judgment; this audit enforces the
+position and topology that can be checked deterministically.
+
+The stack objective proof must appear by top-level delivery unit 3 with explicit
 `Proof location:` or `First real confirmation:` wording. The marker can appear
-in the heading, checkbox text, or nested task-local bullets, but it must name the real
-entrypoint and visible success or failure evidence. Missing proof, proof first
-appearing after the second delivery unit, deferred proof markers,
+in the heading, checkbox text, or nested task-local bullets, but it must name
+the real entrypoint and visible success or failure evidence. Missing proof,
+proof first appearing after the third delivery unit, deferred proof markers,
 setup/config/metadata-only markers, and marker text without visible outcome
-evidence return `needs_spec_redesign`.
+evidence return `needs_spec_redesign`. Objective-proof position is evaluated
+across top-level headings, not flattened checkboxes.
 
 OpenSpec tasks must use the native checkbox format:
 
@@ -96,8 +107,9 @@ No tags, schema extensions, or hidden state are added.
    unit list is useful.
 3. Run `scripts/openspec-tasks.ts audit <tasks.md>`.
 4. Block when a delivery-unit heading is too broad, a checkbox lacks a heading,
-   a work-item ID is duplicated, sizing is invalid, or the unit hides multiple
-   reviewable outcomes that should split.
+   a work-item ID is duplicated, sizing is invalid, a nested work item declares
+   a final PR/MR, or the unit hides multiple reviewable outcomes that should
+   split.
 5. If the audit returns `status: needs_spec_redesign`, stop and return the
    structured blocker to Plan. Do not rewrite `tasks.md` automatically. Plan
    decides whether the accepted contract supplies a mechanical repair or a
@@ -163,7 +175,9 @@ lists, failed audits also emit structured output before exiting non-zero:
 | Treating a whole phase as one checkbox | Use the phase as the delivery-unit heading and list nested work items under it |
 | Treating every checkbox as its own MR | Deliver one checked heading per implementation MR, with nested work-item commits inside that MR |
 | Accepting documentation, testing, or validation phase groups anywhere | Return `needs_spec_redesign` unless that area is the feature being changed |
-| Accepting a delivery-unit-shaped task list where first real confirmation is unit 3 or later | Return `needs_spec_redesign` to Plan for a material redesign decision |
+| Treating nested checkboxes as separate final MRs | Return `needs_spec_redesign`; every final MR needs its own top-level heading. |
+| Accepting a task list where first real confirmation is unit 4 or later | Return `needs_spec_redesign` to Plan for a material redesign decision. |
+| Rejecting all groundwork because it is not end to end | Permit up to two locally proved, safely mergeable groundwork units when Plan and Review establish their standalone value and named successor. |
 | Asking the user about validator-compatible wording | Return the structured failure to Plan for automatic contract-preserving repair |
 | Expanding tasks with file lists, commands, and exhaustive cases | Keep the outcome and end-to-end proof in `tasks.md`; hand mechanics to Execute task-locally |
 | Sending manual tasks to Execute | Return `needs_human_action` |
@@ -175,3 +189,9 @@ lists, failed audits also emit structured output before exiting non-zero:
 - GREEN: OpenSpec parsing provides the delivery-unit heading, nested work-item
   identity, line, and manual/deliverable classification needed by Plan and
   Execute.
+- RED: the objective-proof audit flattened nested work items, so a proof marker
+  in checkbox 1.1 could pass even when four final MRs were encoded under one
+  heading; written guidance simultaneously rejected valid two-MR groundwork.
+- GREEN: proof position is evaluated across top-level units, unit 3 proof
+  passes, unit 4 proof fails, and nested final-MR declarations return
+  `needs_spec_redesign`.
