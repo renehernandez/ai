@@ -34,6 +34,7 @@ const retainedSpecialists = [
   "github-pr-create",
   "gitlab-adapter-review",
   "glab-mr-create",
+  "glab-stacked-diffs",
   "handoff-brief",
   "linear-breakdown",
   "linear-project-overview",

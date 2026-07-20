@@ -133,6 +133,7 @@
             "github-pr-create",
             "gitlab-adapter-review",
             "glab-mr-create",
+            "glab-stacked-diffs",
             "handoff-brief",
             "linear-breakdown",
             "linear-project-overview",
@@ -176,13 +177,7 @@
           "url": "https://git.fullscript.io/ai/skills.git",
           "ref": "main",
           "basePath": ".",
-          "names": [
-            "gitlab-ci",
-            "glab-cli",
-            "glab-stacked-diffs",
-            "legoland",
-            "terraform"
-          ]
+          "names": ["gitlab-ci", "glab-cli", "legoland", "terraform"]
         }
       ]
     }
