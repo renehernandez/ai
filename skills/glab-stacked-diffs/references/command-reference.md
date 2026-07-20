@@ -5,10 +5,16 @@ depending on a flag or side effect. These notes describe the behavior relevant
 to safe agent operation; they do not replace live help.
 
 The publication constraints were verified against `glab` 1.108.0 at commit
-[`5de20850`](https://gitlab.com/gitlab-org/cli/-/blob/5de20850a43cbcacf3768f846eee3dae06731ef3/internal/commands/stack/sync/stack_sync.go)
+[`5de20850`](https://gitlab.com/gitlab-org/cli/-/raw/5de20850a43cbcacf3768f846eee3dae06731ef3/internal/commands/stack/sync/stack_sync.go)
 and the official [`stack sync` documentation](https://docs.gitlab.com/cli/stack/sync/).
-If the installed implementation changes, revalidate draft-title derivation and
-push semantics before mutation.
+Append and reorder behavior was verified against the same commit's
+[`stack save`](https://gitlab.com/gitlab-org/cli/-/raw/5de20850a43cbcacf3768f846eee3dae06731ef3/internal/commands/stack/save/stack_save.go)
+and
+[`stack reorder`](https://gitlab.com/gitlab-org/cli/-/raw/5de20850a43cbcacf3768f846eee3dae06731ef3/internal/commands/stack/reorder/stack_reorder.go)
+implementations. Atomic and explicit lease semantics follow the official
+[`git push` documentation](https://git-scm.com/docs/git-push).
+If the installed implementation changes, revalidate draft creation, MR
+attachment, reorder, and push semantics before mutation.
 
 ## Contents
 
@@ -31,14 +37,14 @@ not grant permission to publish MRs.
 ### `glab stack save`
 
 ```bash
-glab stack save -m "Draft: <description>"
+glab stack save -m "<semantic description>"
 ```
 
-Saves staged changes as a new diff after the current position. It creates a
-commit and branch managed by the stack. Use an imperative description and keep
-hooks enabled. For a diff that will create a new MR, keep `Draft:` at the start
-of the first line: `glab` 1.108 derives the new MR title from this description,
-and GitLab recognizes that title as draft by construction.
+Saves staged changes as a new managed diff and creates its commit and branch.
+Use an imperative semantic description and keep hooks enabled. The description
+also becomes the commit subject, so do not encode provider state such as
+`Draft:` in it. In `glab` 1.108, save is append-only: even when another stack
+entry is selected, the new diff is appended after the current last entry.
 
 Relevant live flags in `glab` 1.108 include:
 
@@ -88,10 +94,11 @@ Relevant live flags in `glab` 1.108 include:
 - `--update-base` to rebase the whole stack onto the latest base
 - assignee, reviewer, and label flags for MR creation
 
-Do not use hook-bypass flags. Before sync creates a missing MR, verify its
-managed description begins with `Draft:`, its intended target is correct, and
-every already-published branch matches its remote head. After creation, read
-every MR back and require draft state before hosted gates begin.
+Do not use hook-bypass flags. Version 1.108 has no explicit draft option for MR
+creation. When a stack reference has no MR URL, sync creates a new MR
+unconditionally; it does not discover and attach a draft MR created separately
+by source branch. New-stack publication is therefore blocked under this policy
+until a tested draft-create-and-attach mechanism exists.
 
 Do not use `stack sync` to publish rewritten branches in an existing stack.
 Version 1.108 fetches the remote and then performs one bulk push with an
@@ -105,17 +112,19 @@ creation or updates and hosted readback.
 ### Exact-Leased Publication for an Existing Stack
 
 After `glab stack amend` has rebased the affected local branches, Finish pushes
-each existing branch from earliest to latest:
+the complete affected chain in one remote transaction:
 
 ```bash
-git push <selected-GitLab-url> refs/heads/<branch>:refs/heads/<branch> --force-with-lease=refs/heads/<branch>:<expected-remote-sha>
+git push --atomic --force-with-lease=refs/heads/<ancestor>:<ancestor-expected-sha> --force-with-lease=refs/heads/<descendant>:<descendant-expected-sha> <selected-GitLab-url> refs/heads/<ancestor>:refs/heads/<ancestor> refs/heads/<descendant>:refs/heads/<descendant>
 ```
 
-Run one command per branch. `<expected-remote-sha>` is the value read
-immediately before the publication wave. The explicit lease operand makes a
-concurrent remote update reject the push instead of being absorbed by an
-intervening fetch. After each push, read the live source SHA and target back
-before pushing the child.
+Include one explicit lease and one full refspec for every affected branch. Each
+expected SHA is read immediately before the publication wave. The explicit
+lease operands make any concurrent remote update reject the transaction instead
+of being absorbed by an intervening fetch. `--atomic` guarantees either every
+ref updates or none does; if the server lacks atomic capability, Git fails and
+the workflow stops without a sequential fallback. After success, read every
+live source SHA and target back.
 
 ## Navigation and Inspection
 
@@ -128,7 +137,7 @@ before pushing the child.
 | `glab stack prev` | Moves to the preceding diff |
 | `glab stack next` | Moves to the following diff |
 | `glab stack move` | Opens the interactive diff selector |
-| `glab stack reorder` | Reorders managed diffs and may rebase them |
+| `glab stack reorder` | Reorders local metadata and retargets hosted MRs; it does not repair Git ancestry |
 
 After every navigation command, run these as separate observations:
 
@@ -148,14 +157,13 @@ the normal base is cumulative and cannot prove MR boundaries.
 
 ### New stack
 
-An initial sync may create every planned MR together after the local units are
-complete and validated. Each managed description must start with `Draft:`.
-Finish then confirms targets, draft states, and descriptions before hosted
-gates begin.
+Local stack construction may complete after all units are validated. Provider
+publication is blocked under `glab` 1.108 because its sync path cannot both
+preserve semantic commit subjects and create or attach explicit draft MRs.
 
 ### Existing published stack
 
-After each substantive ancestor amendment, push the affected chain immediately
+After each substantive ancestor amendment, atomically push the affected chain
 with explicit per-branch expected-SHA leases before beginning the next
 substantive MR. Descendant head changes caused only by rebase are propagation,
 not new scope. Hosted gates can run concurrently once their corresponding
@@ -163,8 +171,12 @@ updated heads are visible.
 
 ### Reordered or rebased stack
 
-Reordering and base updates can change every effective diff. Inspect the whole
-chain, publish in predecessor order, and refresh all affected review gates.
+`glab stack reorder` changes local metadata and retargets hosted MRs, but does
+not repair Git ancestry. It is a Finish provider mutation, not an Execute-only
+restack tool. A mid-stack insertion or reorder returns to Plan for an explicitly
+accepted ancestry repair, exact source-versus-target diff proof, and hosted
+retarget sequence. Publish any accepted rewritten chain atomically and refresh
+all affected review gates.
 
 ## Safety Constraints
 

@@ -43,26 +43,23 @@ git add <paths>
 ```
 
 ```bash
-glab stack save -m "Draft: <imperative description>"
+glab stack save -m "<semantic imperative description>"
 ```
 
-Inspect the current incremental commit before starting the next unit. Keep the
-`Draft:` prefix on every managed description that will become an MR title.
+Inspect the current incremental commit before starting the next unit. The
+managed description is also the commit subject, so keep it semantic.
 
-### 4. Publish in Finish
+### 4. Stop Before Provider Publication
 
-Before initial sync, verify every managed description begins with `Draft:`.
-`glab` 1.108 uses that first line as the MR title, so the initial sync creates
-drafts by construction:
+Under `glab` 1.108, `stack sync` creates MRs from managed descriptions without
+an explicit draft option. Prefixing those descriptions with `Draft:` would also
+prefix the commit subjects. Pre-creating draft MRs through the provider does not
+solve the problem because sync does not discover and attach them to empty stack
+references.
 
-```bash
-glab stack sync
-```
-
-Read every MR back and require the live source heads, immediate-predecessor
-targets, and draft states. A non-draft MR blocks the workflow before hosted
-gates start. Create reviewer-facing descriptions through
-`change-request-create` and the selected GitLab adapter.
+Return to Plan for a tested draft-create-and-attach mechanism or a newer
+installed implementation. Do not create transient non-draft MRs, contaminate
+semantic commit subjects with provider state, or edit stack metadata ad hoc.
 
 ## Map a Published Stack
 
@@ -128,17 +125,19 @@ automatic rebase. Descendants without intentional incremental changes are
 propagation-only.
 
 Immediately before publication, re-read the affected remote heads. If they
-still match preflight, Finish publishes the existing branches earliest to
-latest with one exact-leased push per branch:
+still match preflight, Finish publishes the complete affected chain with one
+atomic push containing a full refspec and exact lease for every branch:
 
 ```bash
-git push <selected-GitLab-url> refs/heads/<branch>:refs/heads/<branch> --force-with-lease=refs/heads/<branch>:<expected-remote-sha>
+git push --atomic --force-with-lease=refs/heads/<ancestor>:<ancestor-expected-sha> --force-with-lease=refs/heads/<descendant>:<descendant-expected-sha> <selected-GitLab-url> refs/heads/<ancestor>:refs/heads/<ancestor> refs/heads/<descendant>:refs/heads/<descendant>
 ```
 
-After each push, verify that branch's live head and target before pushing its
-child. An expected unchanged remote head is a failed propagation signal. Apply
-description or navigation changes through `change-request-create`, request
-current hosted review, and begin independent gates concurrently.
+If any lease rejects, every ref remains unchanged. If the server lacks atomic
+push capability, stop without a sequential fallback. After success, verify
+every branch's live head and target. An expected unchanged remote head is a
+failed propagation signal. Apply description or navigation changes through
+`change-request-create`, request current hosted review, and begin independent
+gates concurrently.
 
 Only after this checkpoint is visible should Execute move to the next
 substantive MR and repeat. This yields early usable results and locates scope
@@ -147,10 +146,10 @@ movement at the boundary where it occurs.
 ### Coalescing rule
 
 The canonical multi-unit rule may coalesce unpublished implementation heads. In
-published-stack repair, if the same ancestor is amended again before its first
-branch push, Finish may skip the now-obsolete intermediate propagation. Once a
-substantive checkpoint starts publishing, complete and verify its descendant
-wave. Do not wait for hosted review, coalesce separate substantive MR
+published-stack repair, if the same ancestor is amended again before its atomic
+publication, Finish may skip the now-obsolete intermediate propagation. Once a
+substantive checkpoint is published, verify its complete descendant wave. Do
+not wait for hosted review, coalesce separate substantive MR
 checkpoints, or delay the first published checkpoint merely to reduce provider
 churn.
 
@@ -174,21 +173,20 @@ bottom-to-top.
 Adding a diff changes stack membership and is not part of an ordinary repair
 unless explicitly accepted.
 
-1. Navigate to the predecessor with `glab stack move`.
-2. Verify its branch and MR.
-3. Implement, stage, validate, and save the new diff with a `Draft:`-prefixed
-   imperative description.
-4. If needed, use `glab stack reorder` and inspect every affected incremental
-   diff.
-5. In Finish, publish every rewritten existing branch earliest to latest with
-   an explicit expected-SHA lease.
-6. Confirm every existing local branch now matches its remote, then run
-   `glab stack sync` to create the missing MR. It must not publish another
-   rewritten existing head.
-7. Read back all target branches and draft states before hosted gates begin.
+`glab stack save` in version 1.108 is append-only. It adds a new diff after the
+last entry even when another entry is selected. Appending a local unit therefore
+uses the normal semantic save workflow, but its provider publication remains
+blocked by the new-stack limitation above.
 
-Reordering can change every effective diff and therefore refreshes all affected
-gates.
+A mid-stack insertion or reorder returns to Plan. Version 1.108
+`glab stack reorder` changes local stack metadata and immediately retargets
+hosted MRs; it does not rebase Git ancestry. If Plan accepts a recovery, it must
+name the recoverable ancestry operation, exact source-versus-target diff proof,
+and total target order. Execute repairs and verifies local ancestry first.
+Finish alone may run `stack reorder` or otherwise retarget hosted MRs, followed
+by atomic exact-leased publication and refreshed gates for every changed
+effective diff. Do not present `stack save` plus `stack reorder` as an insertion
+or restack primitive.
 
 ## Rebase onto an Updated Base
 
@@ -200,8 +198,9 @@ or an explicit request. Avoid churn from routine freshness rebases.
 3. Record current remote heads.
 4. Rebase onto the resolved base commit.
 5. Resolve conflicts bottom-to-top and inspect every incremental diff.
-6. In Finish, publish the rewritten branches earliest to latest with explicit
-   expected-SHA leases and refresh changed effective-diff gates.
+6. In Finish, publish the rewritten chain with one atomic push containing an
+   explicit expected-SHA lease per branch, then refresh changed effective-diff
+   gates.
 
 ```bash
 git fetch origin <base>
@@ -227,7 +226,8 @@ This workflow requires explicit merge authority for the predecessor.
 4. Capture the child's exact remote source SHA.
 5. Restack the child using the merged commit and old predecessor head so the
    predecessor commits are not replayed.
-6. Publish the child with an explicit lease naming the captured remote head.
+6. Publish the child atomically with an explicit lease naming the captured
+   remote head.
 7. Refresh every changed effective-diff gate before the child can be marked
    ready.
 
@@ -252,6 +252,6 @@ host-neutral description policy.
    reviewer-facing body policy.
 6. Use the selected GitLab adapter for mutation and read the hosted body back.
 
-Run this after a sync only when MR membership, titles, targets, or navigation
-actually changed. Do not directly replace complete MR descriptions from shell
-variables or raw provider commands.
+Run this only when MR membership, titles, targets, or navigation actually
+changed. Do not directly replace complete MR descriptions from shell variables
+or raw provider commands.

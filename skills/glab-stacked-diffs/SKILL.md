@@ -30,9 +30,9 @@ changes have no predecessor relationship.
 - **Progressive publication:** for an existing published stack, finish one
   substantive MR, publish its affected chain, and verify it before editing the
   next substantive MR.
-- **Ordered propagation, concurrent gates:** publish changed descendants
-  bottom-to-top; start independent CI and hosted review as soon as each updated
-  MR is visible.
+- **Atomic propagation, concurrent gates:** publish each changed descendant
+  chain in one all-or-none remote transaction; start independent CI and hosted
+  review as soon as the updated MRs are visible.
 - **Managed history:** use `glab stack save` and `glab stack amend` for stack
   commits. Do not synthesize replacement history unless the user explicitly
   requests it or Plan accepts recovery because the managed stack cannot
@@ -71,27 +71,29 @@ Before any amendment or sync:
 
 For a fully published stack, do not use `glab stack sync` to propagate rewritten
 heads. In `glab` 1.108 it fetches before one bulk push with an unqualified lease,
-so it cannot enforce the captured expected SHA for each branch. Publish each
-affected branch explicitly as described below. `stack sync` remains limited to
-creating missing draft MRs after every existing branch matches its remote; it
-is experimental and may remove managed entries for merged MRs, so inspect all
+so it cannot enforce the captured expected SHA for each branch. Publish the
+affected chain as one atomic, exact-leased multi-ref push. `stack sync` also
+cannot safely create new final MRs under this policy: it has no draft option and
+cannot attach a separately created draft MR to an empty stack reference. It is
+experimental and may remove managed entries for merged MRs, so inspect all
 states first.
 
 See [workflows.md](references/workflows.md) for the concrete preflight and
 publication loop.
 
-## Creating a New Stack
+## Building a New Stack Locally
 
 1. Decide the incremental MR boundaries and one total order.
 2. Run `glab stack create <stack-name>`.
 3. Implement, stage, validate, and save each logical unit with
-   `glab stack save -m "Draft: <imperative description>"`. Verify every managed
-   description starts with `Draft:` before publication; `glab` derives the new
-   MR title from that first line.
-4. In Finish, run the initial sync. Read every MR back and require draft state
-   before starting hosted gates. A non-draft readback blocks the workflow.
-5. Apply reviewer-facing descriptions through `change-request-create`, then
-   use the selected GitLab adapter for mutation and readback.
+   `glab stack save -m "<semantic imperative description>"`. The description is
+   also the commit subject, so keep provider state such as `Draft:` out of it.
+4. Stop before provider publication under `glab` 1.108. `stack sync` creates an
+   MR from the managed description without an explicit draft field, while a
+   separately created draft MR is not attached back to an empty stack reference.
+5. Return to Plan for a tested draft-create-and-attach mechanism or a newer
+   installed implementation that proves the same contract. Do not publish a
+   transient non-draft MR or manually edit stack metadata as an ad hoc repair.
 
 The first MR targets the normal base. Every descendant targets its immediate
 predecessor branch.
@@ -112,20 +114,22 @@ For each substantively affected MR, earliest to latest:
    descendant changed by the automatic rebase.
 4. Re-read the affected remote source SHAs. If any changed since preflight,
    stop and reconcile ownership; do not retry against the new SHA blindly.
-5. In Finish, publish each affected branch immediately, earliest to latest,
-   with an exact lease naming its captured SHA. Run the command from
+5. In Finish, publish the complete affected chain immediately as one atomic,
+   multi-ref push with one exact lease per captured branch SHA. Run the command
+   from
    [command-reference.md](references/command-reference.md#exact-leased-publication-for-an-existing-stack)
-   once per branch. After each push, confirm the live head and target before
-   publishing its child. An unchanged expected head is failed propagation.
+   once for the chain. After it succeeds, confirm every live head and target.
+   An unchanged expected head is failed propagation. If the server does not
+   support atomic pushes, stop without falling back to partial publication.
 6. Apply any description/navigation changes through `change-request-create`.
    Request required hosted review for every changed effective diff and let
    independent gates run concurrently.
 7. Only then move to the next MR needing substantive work.
 
-This produces frequent reviewable checkpoints without weakening descendant
+This produces frequent reviewable MR checkpoints without weakening descendant
 consistency. The canonical multi-unit coalescing rule still applies to
 unpublished implementation heads. During published-stack repair, coalesce only
-a same-ancestor propagation head made obsolete before its first branch push;
+a same-ancestor propagation head made obsolete before its atomic publication;
 never wait for hosted review or coalesce distinct substantive checkpoints.
 
 ## Direct Commit or Unmanaged State
@@ -160,10 +164,10 @@ for ownership inspection. Refresh every changed effective-diff gate.
 | Need | Command |
 | --- | --- |
 | Create stack | `glab stack create <name>` |
-| Save staged work as a draft diff | `glab stack save -m "Draft: <description>"` |
+| Save staged work as a new local diff | `glab stack save -m "<semantic description>"` |
 | Amend the current managed diff | `glab stack amend` |
-| Create MRs for a preflighted new stack | `glab stack sync` |
-| Publish a rewritten existing branch | Use the exact refspec and lease in the command reference |
+| Publish a new stack under `glab` 1.108 | Blocked pending tested draft-create-and-attach support |
+| Publish a rewritten existing chain | Use the atomic refspecs and exact leases in the command reference |
 | Select a diff | `glab stack move` |
 | Inspect stacks | `glab stack list` |
 
@@ -178,8 +182,8 @@ Run the installed command's `--help` before relying on flags because
 | Reconstructing the complete final history first | Return to the earliest substantive MR and publish progressively. |
 | Amending all MRs before one publication wave | Publish and verify after each substantive MR. |
 | Treating rebased descendants as new substantive scope | Label them propagation-only and verify their incremental diffs. |
-| Using stack sync to push an existing published stack | Use predecessor-ordered per-branch pushes with exact expected-SHA leases. |
-| Creating a stack with ordinary titles | Save every diff with a `Draft:` first line and verify draft state after initial sync. |
+| Using stack sync to push an existing published stack | Use one atomic multi-ref push with exact expected-SHA leases. |
+| Using `Draft:` in a managed description | Keep commit subjects semantic; block new-stack publication until draft creation can attach safely. |
 | Ordinary `git commit` inside a managed stack | Preserve the tip, inspect metadata, and recover through amend/save. |
 | Re-running after a lease rejection | Inspect the external remote-head change and re-establish ownership. |
 | Updating descriptions directly | Apply `change-request-create`, then provider mechanics and readback. |

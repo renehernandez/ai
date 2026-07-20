@@ -23,8 +23,8 @@ keeps the requested MR's incremental boundary and descendant ownership visible.
 3. Stage only the resolved files.
 4. Continue the rebase.
 5. Inspect every later descendant's incremental diff.
-6. Publish the repaired branches with their captured exact-SHA leases only
-   after every incremental diff is verified.
+6. Publish the repaired chain with one atomic push containing every captured
+   exact-SHA lease only after each incremental diff is verified.
 
 ```bash
 git status
@@ -112,23 +112,25 @@ the ordinary commit or rebuild the full stack merely to satisfy the deadline.
 
 ## Lease Rejection or External Remote-Head Change
 
-**Symptom:** an exact-leased branch push is rejected, or a remote source SHA no
-longer matches the preflight value.
+**Symptom:** an atomic exact-leased chain push is rejected, or a remote source
+SHA no longer matches the preflight value.
 
 Stop. Fetch the branch, inspect the external commits and hosted artifact, and
 re-establish sole-writer ownership. Do not retry by accepting the new remote SHA
 blindly. Integrating another writer's work may change substantive ownership and
-can require Plan.
+can require Plan. An exact lease rejection leaves the whole atomic transaction
+unchanged. If the server rejects atomic capability, report that blocker and do
+not fall back to sequential publication.
 
 ## No-Op or Incomplete Propagation
 
 **Symptom:** an amendment should have changed the current MR or descendants,
-but an expected remote head remains unchanged after its branch push.
+but an expected remote head remains unchanged after the atomic push.
 
 1. Compare the local managed branches with the captured remote heads.
 2. Verify the intended branch was actually amended.
 3. Inspect whether descendants were rebased locally.
-4. Confirm the pushed source ref names the intended local managed branch.
+4. Confirm every pushed source ref names its intended local managed branch.
 5. Diagnose before another publication attempt.
 
 An exit code of zero is insufficient. Publication succeeds only when the live
@@ -137,11 +139,12 @@ updates.
 
 ## Closed, Merged, or Missing MR
 
-Initial `glab stack sync` may create an MR for a branch without one and may
+`glab stack sync` may create a non-draft MR for a branch without one and may
 remove entries whose MRs are merged. Therefore:
 
-- use initial sync only for preflighted draft-by-construction MR creation;
-- use exact-leased per-branch pushes for a fully published stack;
+- block new-stack publication under `glab` 1.108 until tested draft creation
+  can attach to stack metadata;
+- use one atomic multi-ref push with exact leases for a fully published stack;
 - stop if an expected MR is closed, merged, or missing;
 - after an authorized predecessor merge, follow the predecessor-merge workflow
   rather than ordinary feedback amendment; and
