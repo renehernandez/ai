@@ -140,7 +140,10 @@ Do not force-push, reset, or rebuild immediately.
    descendant remote heads.
 2. Preserve valuable tips with explicit recovery branches before rewriting.
 3. Determine whether the direct commit belongs in the current diff
-   (`glab stack amend`) or is a new diff (`glab stack save`).
+   (`glab stack amend`) or is a new tip diff. Use `glab stack save` only when
+   the current entry is the last stack entry and the new unit belongs after it.
+   From any middle entry, preserve the patch and return to Plan because version
+   1.108 would silently append it to the stack tip.
 4. Use a recoverable Git operation to return the changes to the index or work
    tree, then apply the supported stack command.
 5. Compare the resulting tree and incremental boundaries with the preserved

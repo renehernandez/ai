@@ -115,10 +115,14 @@ test("stack publication blocks unsafe creation and uses atomic exact leases", ()
 });
 
 test("append and reorder behavior stays inside supported authority", () => {
+  const skill = read("skills/glab-stacked-diffs/SKILL.md");
   const commandReference = read(
     "skills/glab-stacked-diffs/references/command-reference.md",
   );
   const workflows = read("skills/glab-stacked-diffs/references/workflows.md");
+  const troubleshooting = read(
+    "skills/glab-stacked-diffs/references/troubleshooting.md",
+  );
 
   assert.match(commandReference, /save is append-only/);
   assert.match(
@@ -130,6 +134,18 @@ test("append and reorder behavior stays inside supported authority", () => {
   assert.match(
     workflows,
     /Do not present `stack save` plus `stack reorder` as an insertion/,
+  );
+  assert.match(
+    skill,
+    /Use `glab stack save` only when\n {3}the current entry is the last stack entry/,
+  );
+  assert.match(
+    troubleshooting,
+    /middle entry: preserve it and return\n {2}to Plan/,
+  );
+  assert.match(
+    troubleshooting,
+    /current entry is\nlast and the patch belongs in a new tip diff/,
   );
 });
 

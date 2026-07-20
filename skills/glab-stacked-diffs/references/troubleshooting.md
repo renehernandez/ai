@@ -101,8 +101,11 @@ valuable tip with an explicit recovery branch. Then decide:
 
 - The patch belongs in the current MR: return it recoverably to the index or
   work tree and run `glab stack amend`.
-- The patch is a new reviewable unit after the current MR: return it
+- The patch is a new reviewable unit after the current MR, the current entry is
+  the last stack entry, and the new unit belongs at the tip: return it
   recoverably and run `glab stack save`.
+- The patch would need a new unit after a middle entry: preserve it and return
+  to Plan because version 1.108 `stack save` would append it to the tip.
 - The topology or intended owner is ambiguous: freeze writes and return to
   Plan with the inspected evidence.
 
@@ -157,8 +160,10 @@ preserve lost work. Inspect every stack entry because an automatic rebase may
 have moved the patch to a different commit identity.
 
 Do not cherry-pick directly into a managed stack entry. Recover the patch into
-the index or work tree and apply `glab stack amend` or `glab stack save` after
-identifying its correct incremental owner.
+the index or work tree and apply `glab stack amend` after identifying its
+current incremental owner. Use `glab stack save` only when the current entry is
+last and the patch belongs in a new tip diff; otherwise preserve it and return
+to Plan.
 
 ## Authentication or Repository Mismatch
 
