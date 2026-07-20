@@ -339,7 +339,11 @@ test("Execute blocks POC expansion until the exact architecture checkpoint passe
     /Direct Execute without a planning artifact performs the same read-only\s+precedent scan/,
   );
   assert.match(execute, /feature-specific branch inside shared infrastructure/);
-  assert.match(execute, /pause when the first objective proof exists/);
+  assert.match(execute, /pause when the first stack objective proof exists/);
+  assert.match(
+    execute,
+    /unit\s+1, 2, or 3 after at most two reviewed groundwork units/,
+  );
   assert.match(execute, /architecture-affecting change\s+invalidates/);
 });
 

@@ -301,6 +301,12 @@ export function validateDeliveryUnits(
       );
     }
 
+    if (task.kind === "deliverable" && declaresNestedFinalChange(task.text)) {
+      errors.push(
+        `needs_spec_redesign: task ${task.id} declares nested_final_change_mapping; each final PR/MR must be a top-level delivery unit`,
+      );
+    }
+
     if (task.kind === "needs_spec_redesign") {
       errors.push(
         `needs_spec_redesign: task ${task.id} is ${task.shape_reason ?? "not a deliverable implementation unit"}`,
@@ -310,9 +316,17 @@ export function validateDeliveryUnits(
 
   if (options.requireObjectiveProof) {
     const objectiveProof = analyzeObjectiveProof(
-      tasks
-        .filter((task) => task.kind === "deliverable")
-        .map((task) => ({ id: task.id, text: task.text })),
+      units
+        .filter((unit) => unit.kind === "deliverable")
+        .map((unit) => ({
+          id: unit.id,
+          text: [
+            unit.heading,
+            ...unit.work_items
+              .filter((workItem) => workItem.kind === "deliverable")
+              .map((workItem) => workItem.text),
+          ].join("\n"),
+        })),
     );
     if (objectiveProof.status === "needs_spec_redesign") {
       errors.push(...objectiveProof.issues.map((issue) => issue.message));
@@ -320,6 +334,17 @@ export function validateDeliveryUnits(
   }
 
   return errors;
+}
+
+function declaresNestedFinalChange(text: string): boolean {
+  return (
+    /\bfinal\s+(?:pull request|merge request|PR|MR)\s*(?:[#!]\s*)?\d+\b/i.test(
+      text,
+    ) ||
+    /\bmaps?\s+to\s+(?:a\s+)?(?:final\s+)?(?:pull request|merge request|PR|MR)(?=\s*(?:[#!]?\s*\d+\b|(?:that\s+)?target(?:s|ing)?\b|(?:on|from)\s+(?:the\s+)?[\w./-]+\s+branch\b|[.,;:!?)]|$))/i.test(
+      text,
+    )
+  );
 }
 
 export function firstUncheckedDeliverable(

@@ -54,6 +54,14 @@ boundaries, and tradeoffs. Specs own observable requirements and
 boundary-defining scenarios. Tasks remain a high-level delivery queue with
 end-to-end proof, not a duplicate specification or implementation log.
 
+For multiple final units, the proposal includes a concise delivery-shape table
+that identifies each unit as `groundwork`, `outcome`, or `hardening`, with its
+local outcome, dependency or enabled successor, local proof, and stack objective
+proof ownership. When prior implementation or POC evidence exists, include the
+affected ownership or review domains and evidence-backed split rationale.
+Proposal count, task headings, tracker units when required, and intended stack
+order must agree; nested work items never declare themselves final PRs/MRs.
+
 Derive top-level units from behavior, ownership, deployment, security,
 migration, rollback, verification, and repository boundaries before mapping
 tasks onto them. Existing headings are hypotheses, not accepted delivery
@@ -61,8 +69,8 @@ boundaries. When earlier implementation, POC, PR/MR, or incident evidence
 exists, use its actual footprint and findings to challenge the proposed split.
 
 Plan must establish one reviewable outcome, a safe merged intermediate state,
-owned objective proof, a coherent reviewer/risk/rollback/deployment boundary,
-and predecessor output and integration hotspots for each unit. The artifact
+owned local proof, a coherent reviewer/risk/rollback/deployment boundary, and
+predecessor output and integration hotspots for each unit. The artifact
 records the outcome, dependency, proof, and only material rollback or deployment
 decisions; detailed mechanics remain task-local. Split materially
 different shared prerequisites, feature behavior, proof infrastructure,
@@ -72,6 +80,15 @@ plumbing, an unverifiable or unsafe intermediate state, or checkbox-only
 PRs/MRs with the same review and rollback boundary. File count and diff size are
 evidence, not delivery-shape thresholds.
 
+Prefer stack objective proof in the first unit. Permit one or two groundwork
+units first only when each safely improves the current system, owns local proof,
+directly simplifies or enables a named successor, and reduces the size or risk
+of the first outcome MR. Stack objective proof must appear by unit 3. A third
+pre-outcome unit or speculative groundwork blocks readiness. When real footprint
+evidence shows that the root unit dominates the stack or crosses independent
+ownership, security, deployment, rollback, or review seams, replan it even if
+it contains valid early proof.
+
 - Use headings for reviewable implementation outcomes, never workflow phases.
 - Keep work items at the outcome level. Do not add exact files, symbols,
   commands, exhaustive edge cases, or test matrices unless they express a
@@ -79,9 +96,9 @@ evidence, not delivery-shape thresholds.
 - Put documentation, linting, testing, review, validation, verification, proof,
   cleanup, and archival inside the work item that owns the behavior. They are
   separate units only when that surface is itself the feature.
-- Put the first real objective confirmation in the first work item, or after at
-  most one setup-only item. Name the real entrypoint and visible pass/fail
-  evidence.
+- Put the first real stack objective confirmation by top-level delivery unit 3.
+  Name the real entrypoint and visible pass/fail evidence; every earlier
+  groundwork unit still owns local proof.
 - Target 2-6 nested work items. More than 6 and at most 8 requires a concrete
   delivery-boundary justification. More than 8 blocks readiness and requires a
   new breakdown.

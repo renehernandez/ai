@@ -90,10 +90,28 @@ Every proposed top-level unit must have:
 - one reviewable implementation outcome;
 - a safe merged intermediate state that does not rely on an unmerged future
   unit for correctness;
-- objective proof owned by the unit;
+- local proof owned by the unit;
 - one coherent reviewer, risk, rollback, and deployment boundary;
 - declared predecessor output and integration hotspots; and
 - a concrete reason its nested work belongs in one PR/MR.
+
+Prefer stack objective proof in the first unit. When forcing that vertical slice
+would combine materially distinct ownership, security, deployment, rollback, or
+review seams, allow one or two groundwork units first. Each groundwork unit
+must simplify or refactor a canonical owner, or establish a required boundary
+that a named successor directly consumes. It must remain useful and safe if the
+stack stops, own local proof, and reduce the size or risk of the first outcome
+MR. The first stack objective proof must appear by unit 3; a third pre-outcome
+unit returns to Plan for decomposition review.
+
+For a multi-unit OpenSpec, record a concise proposal delivery-shape table with
+each unit's kind (`groundwork`, `outcome`, or `hardening`), local outcome,
+dependency or enabled successor, local proof, and stack-objective-proof
+ownership. When prior implementation, POC, MR, or incident evidence exists,
+also record the affected ownership or review domains and evidence-backed split
+rationale. Proposal count, `tasks.md` headings, tracker units when required, and
+intended predecessor order must agree; every final PR/MR maps to one top-level
+heading, never a nested checkbox.
 
 Split a candidate unit when it combines materially different shared
 prerequisites, feature behavior, proof infrastructure, activation, repositories,
@@ -101,6 +119,9 @@ owners, security boundaries, rollback paths, or deployment mechanisms. Combine
 candidate units when a split would create unused plumbing, an unverifiable or
 unsafe intermediate state, or checkbox-only PRs/MRs with the same review and
 rollback boundary. File count and diff size are evidence, never thresholds.
+Stress-test the first unit separately when real footprint evidence shows that it
+dominates the stack or crosses several independent review seams; valid early
+objective proof does not excuse under-splitting.
 
 Keep resolving the delivery shape conversationally when these tests expose a
 material choice. Do not write an artifact and leave its top-level split for a
