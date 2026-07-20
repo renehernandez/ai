@@ -34,6 +34,33 @@ The system SHALL route ordinary discovery, planning, implementation, and complet
 - **THEN** that adapter may run as an explicit developer command
 - **AND** its authority remains limited to the invoked OpenSpec operation
 
+### Requirement: Completed OpenSpec archival stays in the lifecycle
+The system SHALL make completed-change archival part of the last final OpenSpec delivery unit rather than optional terminal cleanup.
+
+#### Scenario: Final OpenSpec unit completes
+- **WHEN** final implementation and verification satisfy every reconciled task and requirement
+- **THEN** Execute completes task state, synchronizes delta specs into canonical specs, and moves the change into the dated archive before the final hook-clean commit and draft publication
+- **AND** Review inspects implementation and canonical-spec/archive state on that same exact head
+
+#### Scenario: OpenSpec closure is incomplete
+- **WHEN** a reconciled task or requirement is incomplete or unverified
+- **THEN** Execute leaves the change in the active namespace and blocks completed-change archival
+- **AND** Finish cannot report technical readiness
+
+#### Scenario: Completed archive state reaches Finish
+- **WHEN** the last final-unit head reaches publication and hosted follow-through
+- **THEN** Finish requires synchronized canonical specs, absence of the completed active change, and its dated archive
+- **AND** Finish does not perform archival as merge follow-through or branch/worktree cleanup
+
+#### Scenario: Archive state changes after review
+- **WHEN** an archive or canonical-spec repair changes the final-unit head
+- **THEN** prior exact-head review and hosted evidence become stale
+
+#### Scenario: Ordinary delivery archives a completed change
+- **WHEN** ordinary lifecycle work reaches completed OpenSpec closure without naming an explicit developer adapter
+- **THEN** Execute follows the lifecycle-owned archive semantics
+- **AND** it does not infer the explicit-only `openspec-archive-change` adapter
+
 ### Requirement: Mode authority is visible and bounded
 The system SHALL announce non-trivial mode entry and authority expansion once and SHALL not infer authority beyond the request or activated project policy.
 

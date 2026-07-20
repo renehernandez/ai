@@ -122,6 +122,11 @@ grant remains a human action.
   no OpenSpec change for this repository.
 - Do not create a separate planning MR. An atomic plan and its implementation
   are one change set in one final MR, with no POC MR or POC phase.
+- In the last final OpenSpec unit, Execute completes task state, synchronizes
+  delta specs into canonical specs, and archives the verified change before the
+  final hook-clean commit and draft publication. Review inspects that exact
+  canonical-spec/archive head, and Finish treats it as a readiness input rather
+  than cleanup. Incomplete or unverified work remains active.
 - Review evidence stays task-local. After a hook-clean commit, publish the
   draft and request Nitro before local Review runs on that same head.
   `code-simplifier` is a core reviewer for planning artifacts, POC first

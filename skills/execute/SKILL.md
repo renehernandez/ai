@@ -79,6 +79,30 @@ another material architecture decision.
   Nested tasks become cohesive commits and are checked only when final
   implementation independently satisfies them.
 
+## Completed OpenSpec Closure
+
+In the last final OpenSpec unit, after implementation and focused proof satisfy
+every reconciled task and requirement, Execute owns the repository
+transformation that removes the completed change from active discovery:
+
+1. mark final task state complete;
+2. synchronize delta specs into their canonical specs;
+3. move the change into the dated archive; and
+4. validate the canonical specs and archived record.
+
+Perform this transformation before the final hook-clean commit and draft
+publication so implementation, completed tasks, canonical specs, and archive
+state share one exact review head. If any reconciled task or requirement is
+incomplete or unverified, leave the change active and block completed-change
+archival. A later archive or canonical-spec repair changes HEAD and refreshes
+affected review and hosted evidence.
+
+Archival is implementation state, not merge follow-through or branch/worktree
+cleanup. Ordinary delivery follows this lifecycle contract without inferring
+the explicit-only `openspec-archive-change` adapter. An abandoned or superseded
+change returns to Plan for an explicit disposition and is never silently marked
+complete.
+
 Final work starts from the normal target base plus reconciled planning state,
 never from POC ancestry. Do not merge, rebase, cherry-pick, or apply POC commits.
 
@@ -159,6 +183,7 @@ local Review, but never authorizes merge.
 | Manually running the full suite before Review | Run focused proof; let the native commit hook own the full suite once. |
 | Treating logical independence as missing Git order | Preserve one total predecessor chain. |
 | Treating draft publication as technical readiness | Publish hook-clean, then complete local and hosted review. |
+| Leaving a completed OpenSpec active for a later cleanup | Complete, synchronize, and archive it in the last Execute unit before the final commit. |
 
 ## Test Evidence
 
@@ -171,3 +196,9 @@ local Review, but never authorizes merge.
 - REFACTOR: fixture variants reject missing evidence, unresolved tripwires,
   stale fingerprints, missing reviewers, and later architecture changes without
   adding persistent workflow state.
+- RED: with only the previous final-unit archive sentence, a fresh agent could
+  not determine whether Execute archived before review or Finish archived as
+  cleanup, while the explicit adapter remained unavailable to ordinary wording.
+- GREEN: under deadline, authority, and sunk-review pressure, the revised
+  lifecycle consistently keeps completed-change archival in Execute before the
+  final commit, leaves unverified work active, and does not infer the adapter.

@@ -742,3 +742,48 @@ test("Finish resolves provider precedence and never infers merge from finish", (
     false,
   );
 });
+
+test("completed OpenSpec archival is owned by the final lifecycle head", () => {
+  const agents = read("instructions/AGENTS.md").replace(/\s+/g, " ");
+  const execute = read("skills/execute/SKILL.md").replace(/\s+/g, " ");
+  const review = read("skills/review/SKILL.md").replace(/\s+/g, " ");
+  const finish = read("skills/finish/SKILL.md").replace(/\s+/g, " ");
+  const modes = read("openspec/specs/agent-workflow-modes/spec.md").replace(
+    /\s+/g,
+    " ",
+  );
+
+  assert.match(
+    execute,
+    /Execute owns the repository transformation that removes the completed change from active discovery/,
+  );
+  assert.match(
+    execute,
+    /before the final hook-clean commit and draft publication/,
+  );
+  assert.match(
+    execute,
+    /If any reconciled task or requirement is incomplete or unverified, leave the change active/,
+  );
+  assert.match(
+    execute,
+    /without inferring the explicit-only `openspec-archive-change` adapter/,
+  );
+  assert.match(
+    review,
+    /canonical spec synchronization, absence of the completed change from the active namespace, and its dated archived record on one exact HEAD/,
+  );
+  assert.match(
+    finish,
+    /Missing or inconsistent archive state returns to the same Execute owner; Finish does not create it/,
+  );
+  assert.match(
+    agents,
+    /Finish requires it for readiness rather than performing archival as cleanup/,
+  );
+  assert.match(modes, /Completed OpenSpec archival stays in the lifecycle/);
+  assert.match(
+    modes,
+    /prior exact-head review and hosted evidence become stale/,
+  );
+});

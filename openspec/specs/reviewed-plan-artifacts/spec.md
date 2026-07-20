@@ -131,8 +131,13 @@ The system SHALL publish reconciled planning state with the owning final impleme
 
 #### Scenario: OpenSpec completes
 - **WHEN** every reconciled task and requirement is implemented and verified
-- **THEN** the last delivery unit carries final task completion and required archive changes
-- **AND** the planning baseline reviews the resulting canonical-spec/archive diff
+- **THEN** Execute completes task state, synchronizes delta specs into canonical specs, and archives the change before the last delivery unit's final hook-clean commit and draft publication
+- **AND** the planning baseline reviews the resulting canonical-spec/archive diff on the same exact implementation head
+- **AND** Finish requires that closure state for technical readiness rather than performing archival as cleanup
+
+#### Scenario: OpenSpec is not complete
+- **WHEN** a reconciled task or requirement remains incomplete or unverified
+- **THEN** the change remains active and completed-change archival is blocked
 
 #### Scenario: Plan is abandoned
 - **WHEN** an artifact will not be implemented

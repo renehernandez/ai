@@ -126,6 +126,12 @@ grant remains a human action.
   implementation are one change set in one final PR/MR, with no POC PR/MR or
   POC phase. OpenSpec produces one final PR/MR per top-level delivery unit, with
   nested work items implemented cohesively inside that unit.
+- In the last final OpenSpec unit, Execute completes task state, synchronizes
+  delta specs into canonical specs, and moves the verified change into the
+  dated archive before the final hook-clean commit and draft publication.
+  Incomplete or unverified requirements block archival. Review inspects that
+  canonical-spec/archive state on the exact implementation head, and Finish
+  requires it for readiness rather than performing archival as cleanup.
 - Review evidence and the technical-readiness checkpoint remain task-local.
   `code-simplifier` is a core reviewer for planning artifacts, POC first
   objective proof, completed POCs, and final implementations; it always keeps
