@@ -9,6 +9,7 @@ import {
   type PocArchitectureCheckpoint,
 } from "../../skills/execute/scripts/execution-contract.ts";
 import {
+  type DeliveryShapeEvidence,
   firstObjectiveProofBaseline,
   type PlanningReviewCheckpoint,
   requiredReviewTypesFor,
@@ -76,6 +77,49 @@ function passingPlanningCheckpoint(): PlanningReviewCheckpoint {
   };
 }
 
+function passingDeliveryShapeEvidence(): DeliveryShapeEvidence {
+  const assessment = (unitId: string) => ({
+    unitId,
+    status: "passed" as const,
+    observedDomains: [`${unitId}-owner`],
+    localOutcome: `${unitId} produces one reviewable outcome`,
+    safeStopState: `${unitId} remains safe before successors`,
+    localProof: `${unitId} owns visible local proof`,
+    securitySeam: "No separate security boundary remains inside the unit",
+    activationSeam: "The unit has one activation boundary",
+    rollbackSeam: "The unit has one rollback boundary",
+    deploymentSeam: "The unit has one deployment boundary",
+    splitAlternative: `Split ${unitId} by nested work item`,
+    splitRationale: "The split would create unproved unused plumbing",
+    mergeAlternative: `Merge ${unitId} with its successor`,
+    mergeRationale: "The merge would cross independent reviewer domains",
+    predecessorOutput: unitId === "unit-1" ? "Normal target base" : "unit-1",
+    integrationHotspots: [],
+  });
+
+  return {
+    pocHead: "poc-head-a",
+    footprintFingerprint: "sha256:poc-footprint-a",
+    provisionalUnitIds: ["unit-1", "unit-2"],
+    finalUnitIds: ["unit-1", "unit-2"],
+    unitAssessments: [assessment("unit-1"), assessment("unit-2")],
+    footprint: [
+      {
+        id: "cli-contract",
+        evidence: "The POC diff exercises the CLI contract owner",
+        domains: ["cli", "contracts"],
+        ownerUnitId: "unit-1",
+      },
+      {
+        id: "review-proof",
+        evidence: "The POC proof crosses the CLI and review harness boundary",
+        domains: ["cli", "review"],
+        integrationUnitIds: ["unit-1", "unit-2"],
+      },
+    ],
+  };
+}
+
 function repairFinding() {
   return {
     id: "finding-1",
@@ -137,6 +181,7 @@ test("planning completion requires a current explicit simplifier result", () => 
   const expected = {
     artifact: ".agents/plans/example.md",
     artifactFingerprint: "sha256:plan-a",
+    lifecycle: "atomic_or_pre_poc" as const,
   };
 
   assert.doesNotThrow(() =>
@@ -199,6 +244,7 @@ test("planning completion carries only nonblocking deferred considerations", () 
   const expected = {
     artifact: checkpoint.artifact,
     artifactFingerprint: checkpoint.artifactFingerprint,
+    lifecycle: "atomic_or_pre_poc" as const,
   };
 
   assert.doesNotThrow(() =>
@@ -243,6 +289,267 @@ test("planning completion carries only nonblocking deferred considerations", () 
         expected,
       ),
     /planning_review_finding_blocks_handoff:planning-consideration-1/,
+  );
+});
+
+test("post-POC planning requires complete cohesive delivery-shape evidence", () => {
+  const checkpoint = passingPlanningCheckpoint();
+  const evidence = passingDeliveryShapeEvidence();
+  const postPoc = {
+    acceptedPoc: {
+      head: evidence.pocHead,
+      footprintFingerprint: evidence.footprintFingerprint,
+      materialFootprintIds: evidence.footprint.map((entry) => entry.id),
+    },
+    provisionalUnitIds: evidence.provisionalUnitIds,
+    finalUnitIds: evidence.finalUnitIds,
+    materialTopologyChanged: false,
+    topologyChangeAccepted: false,
+  };
+  const withEvidence = {
+    ...checkpoint,
+    reviewResults: checkpoint.reviewResults.map((result) =>
+      result.reviewType === "delivery-shape"
+        ? { ...result, deliveryShapeEvidence: evidence }
+        : result,
+    ),
+  };
+  const expected = {
+    artifact: checkpoint.artifact,
+    artifactFingerprint: checkpoint.artifactFingerprint,
+    lifecycle: "post_poc" as const,
+    postPoc,
+  };
+
+  assert.doesNotThrow(() =>
+    validatePlanningReviewCheckpoint(withEvidence, expected),
+  );
+  assert.doesNotThrow(() =>
+    validatePlanningReviewCheckpoint(checkpoint, {
+      artifact: checkpoint.artifact,
+      artifactFingerprint: checkpoint.artifactFingerprint,
+      lifecycle: "atomic_or_pre_poc",
+    }),
+  );
+  assert.throws(
+    () =>
+      validatePlanningReviewCheckpoint(checkpoint, {
+        artifact: checkpoint.artifact,
+        artifactFingerprint: checkpoint.artifactFingerprint,
+      } as never),
+    /planning_review_lifecycle_unresolved/,
+  );
+  assert.throws(
+    () => validatePlanningReviewCheckpoint(checkpoint, expected),
+    /post_poc_delivery_shape_evidence_missing/,
+  );
+  assert.throws(
+    () =>
+      validatePlanningReviewCheckpoint(
+        {
+          ...withEvidence,
+          reviewResults: withEvidence.reviewResults.map((result) =>
+            result.reviewType === "delivery-shape"
+              ? {
+                  ...result,
+                  deliveryShapeEvidence: {
+                    ...evidence,
+                    pocHead: "stale-poc-head",
+                  },
+                }
+              : result,
+          ),
+        },
+        expected,
+      ),
+    /post_poc_delivery_shape_stale_poc/,
+  );
+  assert.throws(
+    () =>
+      validatePlanningReviewCheckpoint(
+        {
+          ...withEvidence,
+          reviewResults: withEvidence.reviewResults.map((result) =>
+            result.reviewType === "delivery-shape"
+              ? {
+                  ...result,
+                  deliveryShapeEvidence: {
+                    ...evidence,
+                    footprintFingerprint: "sha256:stale-footprint",
+                  },
+                }
+              : result,
+          ),
+        },
+        expected,
+      ),
+    /post_poc_delivery_shape_stale_footprint/,
+  );
+});
+
+test("post-POC planning rejects under-shaped or incomplete unit coverage", () => {
+  const checkpoint = passingPlanningCheckpoint();
+  const evidence = passingDeliveryShapeEvidence();
+  const expected = {
+    artifact: checkpoint.artifact,
+    artifactFingerprint: checkpoint.artifactFingerprint,
+    postPoc: {
+      acceptedPoc: {
+        head: evidence.pocHead,
+        footprintFingerprint: evidence.footprintFingerprint,
+        materialFootprintIds: evidence.footprint.map((entry) => entry.id),
+      },
+      provisionalUnitIds: evidence.provisionalUnitIds,
+      finalUnitIds: evidence.finalUnitIds,
+      materialTopologyChanged: false,
+      topologyChangeAccepted: false,
+    },
+    lifecycle: "post_poc" as const,
+  };
+  const validateEvidence = (candidate: DeliveryShapeEvidence) =>
+    validatePlanningReviewCheckpoint(
+      {
+        ...checkpoint,
+        reviewResults: checkpoint.reviewResults.map((result) =>
+          result.reviewType === "delivery-shape"
+            ? { ...result, deliveryShapeEvidence: candidate }
+            : result,
+        ),
+      },
+      expected,
+    );
+
+  assert.throws(
+    () =>
+      validateEvidence({
+        ...evidence,
+        footprint: evidence.footprint.slice(0, 1),
+      }),
+    /post_poc_delivery_shape_footprint_incomplete/,
+  );
+  assert.throws(
+    () =>
+      validateEvidence({
+        ...evidence,
+        unitAssessments: evidence.unitAssessments.slice(0, 1),
+      }),
+    /post_poc_delivery_shape_assessments_incomplete/,
+  );
+  assert.throws(
+    () =>
+      validateEvidence({
+        ...evidence,
+        unitAssessments: evidence.unitAssessments.map((assessment, index) =>
+          index === 1
+            ? { ...assessment, status: "split_required" as const }
+            : assessment,
+        ),
+      }),
+    /post_poc_delivery_shape_unit_not_cohesive:unit-2:split_required/,
+  );
+  assert.throws(
+    () =>
+      validateEvidence({
+        ...evidence,
+        footprint: evidence.footprint.map((entry, index) =>
+          index === 0
+            ? {
+                ...entry,
+                ownerUnitId: undefined,
+                integrationUnitIds: undefined,
+              }
+            : entry,
+        ),
+      }),
+    /post_poc_delivery_shape_footprint_assignment_invalid:cli-contract/,
+  );
+  assert.throws(
+    () =>
+      validateEvidence({
+        ...evidence,
+        footprint: [
+          ...evidence.footprint,
+          {
+            id: "invalid-hotspot",
+            evidence: "One-unit integration is not a cross-unit hotspot",
+            domains: ["review"],
+            integrationUnitIds: ["unit-1"],
+          },
+        ],
+      }),
+    /post_poc_delivery_shape_integration_hotspot_invalid:invalid-hotspot/,
+  );
+});
+
+test("post-POC planning requires acceptance for material topology changes", () => {
+  const checkpoint = passingPlanningCheckpoint();
+  const evidence = {
+    ...passingDeliveryShapeEvidence(),
+    provisionalUnitIds: ["combined-unit"],
+  };
+  const withEvidence = {
+    ...checkpoint,
+    reviewResults: checkpoint.reviewResults.map((result) =>
+      result.reviewType === "delivery-shape"
+        ? { ...result, deliveryShapeEvidence: evidence }
+        : result,
+    ),
+  };
+  const expected = {
+    artifact: checkpoint.artifact,
+    artifactFingerprint: checkpoint.artifactFingerprint,
+    lifecycle: "post_poc" as const,
+    postPoc: {
+      acceptedPoc: {
+        head: evidence.pocHead,
+        footprintFingerprint: evidence.footprintFingerprint,
+        materialFootprintIds: evidence.footprint.map((entry) => entry.id),
+      },
+      provisionalUnitIds: evidence.provisionalUnitIds,
+      finalUnitIds: evidence.finalUnitIds,
+      materialTopologyChanged: true,
+      topologyChangeAccepted: false,
+    },
+  };
+
+  assert.throws(
+    () => validatePlanningReviewCheckpoint(withEvidence, expected),
+    /post_poc_delivery_shape_change_unaccepted/,
+  );
+  assert.doesNotThrow(() =>
+    validatePlanningReviewCheckpoint(withEvidence, {
+      ...expected,
+      postPoc: { ...expected.postPoc, topologyChangeAccepted: true },
+    }),
+  );
+  const sameIdsEvidence = passingDeliveryShapeEvidence();
+  const sameIdsCheckpoint = {
+    ...checkpoint,
+    reviewResults: checkpoint.reviewResults.map((result) =>
+      result.reviewType === "delivery-shape"
+        ? { ...result, deliveryShapeEvidence: sameIdsEvidence }
+        : result,
+    ),
+  };
+  assert.throws(
+    () =>
+      validatePlanningReviewCheckpoint(sameIdsCheckpoint, {
+        ...expected,
+        postPoc: {
+          ...expected.postPoc,
+          acceptedPoc: {
+            head: sameIdsEvidence.pocHead,
+            footprintFingerprint: sameIdsEvidence.footprintFingerprint,
+            materialFootprintIds: sameIdsEvidence.footprint.map(
+              (entry) => entry.id,
+            ),
+          },
+          provisionalUnitIds: sameIdsEvidence.finalUnitIds,
+          finalUnitIds: sameIdsEvidence.finalUnitIds,
+          materialTopologyChanged: true,
+        },
+      }),
+    /post_poc_delivery_shape_change_unaccepted/,
   );
 });
 
@@ -1051,8 +1358,16 @@ test("delivery-shape review bounds groundwork and checks topology", () => {
     contract.evidenceQuestions.join("\n"),
     /top-level task headings/i,
   );
+  assert.match(
+    contract.evidenceQuestions.join("\n"),
+    /every final unit.*actual POC footprint/i,
+  );
+  assert.match(
+    contract.evidenceQuestions.join("\n"),
+    /one unit or a declared integration hotspot/i,
+  );
   assert.match(contract.passedWhen, /non-speculative/i);
-  assert.match(contract.passedWhen, /delivery topology/i);
+  assert.match(contract.passedWhen, /every final unit/i);
 });
 
 test("required reviewer skills are findings-only", () => {

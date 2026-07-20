@@ -214,13 +214,35 @@ reduces the size or risk of the first outcome MR. Block a third pre-outcome
 unit, speculative or successor-dependent groundwork, and contradictory
 proposal/task/MR topology.
 
+Before a POC, treat the proposed topology as provisional. After an accepted
+POC, the `delivery-shape` result is the authoritative final-topology gate. It
+must carry structured evidence bound to the accepted POC head and reconciled
+OpenSpec fingerprint, assess every proposed final unit, account for every
+material POC footprint entry through one owning unit or a declared cross-unit
+integration hotspot, compare that coverage with the authoritative material
+footprint identifiers and fingerprint derived from the accepted POC, and
+challenge the strongest plausible split and merge. The checkpoint lifecycle
+discriminator is mandatory: `post_poc` consumes that accepted-POC context;
+`atomic_or_pre_poc` is the only fast path without delivery-shape evidence.
+Missing, stale, incomplete, unassigned, `split_required`, or `merge_required`
+evidence blocks final Execute handoff. Record material topology change
+independently of unit IDs; any material change requires user acceptance.
+
+At the existing planning Review barrier, write the task-local checkpoint and
+expected lifecycle context as one JSON input, then run
+`pnpm exec tsx scripts/validate-planning-review.ts <task-local-checkpoint.json>`
+from this skill folder. A passing command is
+required before Plan hands the execution seed to Execute. Do not substitute
+prose inspection or a direct library call that omits the lifecycle context.
+
 When POC, prior implementation, MR, or incident evidence exists, stress-test
-the root unit against its actual footprint and ownership seams. A root unit that
+every unit against its actual footprint and ownership seams. A unit that
 dominates the stack or crosses materially different ownership, activation,
 security, rollback, review, or deployment boundaries remains under-split even
-when it contains valid early objective proof. Combine checkbox-only units and
-split those independent seams without turning file count or churn into a
-universal threshold.
+when the root contains valid early objective proof. Combine checkbox-only units
+and split those independent seams without turning file count or churn into a
+universal threshold. Keep exact footprint evidence task-local and retain only
+the final topology and concise split rationale in the OpenSpec.
 
 ## Hosted Feedback
 

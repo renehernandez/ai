@@ -1,3 +1,18 @@
+import {
+  type DeliveryShapeEvidence,
+  type PostPocPlanningContext,
+  validatePostPocDeliveryShapeEvidence,
+} from "./delivery-shape-evidence.ts";
+
+export type {
+  AcceptedPocContext,
+  DeliveryShapeAssessmentStatus,
+  DeliveryShapeEvidence,
+  DeliveryShapeFootprintEntry,
+  DeliveryShapeUnitAssessment,
+  PostPocPlanningContext,
+} from "./delivery-shape-evidence.ts";
+
 export type ReviewTarget = "planning" | "poc" | "final_implementation";
 
 export const planningReviewerCatalog = [
@@ -91,12 +106,13 @@ export const reviewerCatalog: Readonly<Record<ReviewerId, ReviewerContract>> = {
       "Verify that delivery units are cohesive, independently reviewable, and safely ordered.",
     targets: ["planning"],
     evidenceQuestions: [
-      "Does each unit own one local outcome and proof, rollback, reviewer, and safe intermediate state, with stack objective proof by unit 3?",
+      "Does each final unit own one local outcome and proof, rollback, reviewer, and safe intermediate state, with stack objective proof by unit 3?",
       "Are any preceding groundwork units independently valuable, directly consumed by a named successor, and smaller or safer than a forced root vertical slice?",
       "Do proposal units, top-level task headings, tracker units, and intended PR/MR topology agree?",
+      "After an accepted POC, does fingerprint-bound evidence assess every final unit against the actual POC footprint, assign every material footprint entry to one unit or a declared integration hotspot, and challenge plausible split and merge alternatives?",
     ],
     passedWhen:
-      "Units are neither under-split nor checkbox-only, groundwork is bounded and non-speculative, and delivery topology and dependencies agree.",
+      "Units are neither under-split nor checkbox-only, groundwork is bounded and non-speculative, delivery topology and dependencies agree, and post-POC evidence accounts for every final unit and material footprint entry.",
     findingWhen: "Concrete seams require a split, merge, or ordering repair.",
     blockedWhen:
       "The accepted delivery shape cannot produce safe reviewable intermediate states.",
@@ -320,7 +336,16 @@ export type PlanningReviewResult = {
   artifactFingerprint: string;
   status: "passed" | "finding" | "blocked";
   findings: readonly ReviewFinding[];
+  deliveryShapeEvidence?: DeliveryShapeEvidence;
 };
+
+export type PlanningReviewExpected = {
+  artifact: string;
+  artifactFingerprint: string;
+} & (
+  | { lifecycle: "atomic_or_pre_poc" }
+  | { lifecycle: "post_poc"; postPoc: PostPocPlanningContext }
+);
 
 export type PlanningReviewCheckpoint = {
   artifact: string;
@@ -397,11 +422,17 @@ function validateFinding(
 
 export function validatePlanningReviewCheckpoint(
   checkpoint: PlanningReviewCheckpoint,
-  expected: {
-    artifact: string;
-    artifactFingerprint: string;
-  },
+  expected: PlanningReviewExpected,
 ): void {
+  if (
+    expected.lifecycle !== "atomic_or_pre_poc" &&
+    expected.lifecycle !== "post_poc"
+  ) {
+    throw new Error("planning_review_lifecycle_unresolved");
+  }
+  if (expected.lifecycle === "post_poc" && !("postPoc" in expected)) {
+    throw new Error("post_poc_planning_context_missing");
+  }
   if (
     checkpoint.artifact !== expected.artifact ||
     checkpoint.artifactFingerprint !== expected.artifactFingerprint
@@ -479,6 +510,19 @@ export function validatePlanningReviewCheckpoint(
 
   if (checkpoint.blockers.some((blocker) => blocker.trim())) {
     throw new Error("planning_review_blocked");
+  }
+
+  if (expected.lifecycle === "post_poc") {
+    const deliveryShapeResult = checkpoint.reviewResults.find(
+      (result) => result.reviewType === "delivery-shape",
+    );
+    if (!deliveryShapeResult?.deliveryShapeEvidence) {
+      throw new Error("post_poc_delivery_shape_evidence_missing");
+    }
+    validatePostPocDeliveryShapeEvidence(
+      deliveryShapeResult.deliveryShapeEvidence,
+      expected.postPoc,
+    );
   }
 }
 

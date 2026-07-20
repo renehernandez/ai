@@ -422,6 +422,7 @@ test("multi-unit guidance supports parallel owners with ordered ancestry", () =>
 });
 
 test("OpenSpec guidance challenges delivery-unit cohesion before writing", () => {
+  const portableAgents = readFileSync("instructions/AGENTS.md", "utf-8");
   const implementationRules = readFileSync(
     "rules/investigation-and-implementation.md",
     "utf-8",
@@ -431,6 +432,7 @@ test("OpenSpec guidance challenges delivery-unit cohesion before writing", () =>
     "rules/testing-and-verification.md",
     "utf-8",
   );
+  const planAdapter = readFileSync("skills/plan/agents/openai.yaml", "utf-8");
   const reviewAdapter = readFileSync(
     "skills/review/agents/openai.yaml",
     "utf-8",
@@ -448,10 +450,28 @@ test("OpenSpec guidance challenges delivery-unit cohesion before writing", () =>
     );
     assert.match(text, /unused.*unverifiable.*checkbox-only/is);
     assert.match(text, /POC.*actual/is);
+    assert.match(text, /pre-POC topology.*provisional/is);
+    assert.match(text, /authoritative final-topology gate/is);
+    assert.match(text, /every material POC\s+footprint entry/is);
   }
 
   assert.match(testingRules, /delivery\s+shape/);
+  assert.match(testingRules, /accepted OpenSpec POC/);
+  assert.match(testingRules, /every final unit/);
+  assert.match(testingRules, /mandatory lifecycle discriminator/);
+  assert.match(testingRules, /accepted-footprint fingerprints/);
+  assert.match(portableAgents, /pre-POC OpenSpec units as provisional/);
+  assert.match(portableAgents, /authoritative final-topology gate/);
+  assert.match(portableAgents, /material change is recorded.*unit IDs/is);
+  assert.match(planAdapter, /pre-POC units as provisional/);
+  assert.match(planAdapter, /every final unit and material footprint entry/);
   assert.match(reviewAdapter, /every phase-specific review type/);
+  assert.match(reviewAdapter, /authoritative final-topology gate/);
+  assert.match(reviewAdapter, /every final unit and material footprint entry/);
+  assert.match(
+    readFileSync("skills/review/SKILL.md", "utf-8"),
+    /scripts\/validate-planning-review\.ts/,
+  );
   assert.doesNotMatch(reviewAdapter, /four-lane/);
 });
 

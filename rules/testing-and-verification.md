@@ -44,6 +44,13 @@ external blockers, and CI-only coverage as verification gaps.
   inline execution may cover them for a small coherent artifact, but
   `code-simplifier` keeps its own recorded outcome. Review verifies the reuse
   and deviation contract against live repository evidence.
+- After an accepted OpenSpec POC, the delivery-shape result also binds to the
+  POC head and reconciled OpenSpec fingerprint, assesses every final unit,
+  accounts for every material footprint entry, and blocks incomplete,
+  unassigned, split-required, merge-required, or unaccepted topology changes.
+  Its mandatory lifecycle discriminator prevents a post-POC handoff from using
+  the atomic or pre-POC fast path, and accepted-footprint fingerprints reject
+  reviewer-self-declared coverage.
 - At first objective proof, a POC uses separate `code-simplifier`,
   `code-quality-review`, and `scrutinize` reviewers plus targeted verification
   of the real entrypoint and visible outcome.

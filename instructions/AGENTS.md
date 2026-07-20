@@ -132,6 +132,13 @@ grant remains a human action.
   personal acceptance of the exact clean head, then closes unmerged.
 - Reconcile durable POC findings once per authorized cycle. Implement final
   code independently; never promote POC commits.
+- Treat pre-POC OpenSpec units as provisional. Post-POC planning Review is the
+  authoritative final-topology gate: bind structured delivery-shape evidence
+  for every final unit and material POC footprint entry to the accepted POC
+  head and reconciled OpenSpec fingerprint. Material topology changes return
+  to the user once; complete cohesive topology releases eligible final units.
+  The checkpoint lifecycle is explicit, and material change is recorded
+  independently of stable unit IDs.
 - Do not publish a separate planning PR/MR. An atomic plan and its
   implementation are one change set in one final PR/MR, with no POC PR/MR or
   POC phase. OpenSpec produces one final PR/MR per top-level delivery unit, with

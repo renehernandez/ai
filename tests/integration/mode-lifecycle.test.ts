@@ -229,6 +229,13 @@ test("Plan keeps atomic delivery in one change set and rehearses OpenSpec", () =
     skill,
     /rerun the delivery decomposition against the actual POC\s+footprint/,
   );
+  assert.match(skill, /pre-POC topology as provisional/);
+  assert.match(skill, /authoritative final-topology gate/);
+  assert.match(skill, /assess every final unit/);
+  assert.match(skill, /one owning unit or a\s+declared integration hotspot/);
+  assert.match(skill, /explicit `post_poc` lifecycle discriminator/);
+  assert.match(skill, /Only atomic and\s+pre-POC planning.*fast path/);
+  assert.match(skill, /invoke Review's runnable\s+planning-checkpoint gate/);
   assert.match(skill, /Reuse And Deviation Contract/);
   assert.match(skill, /inspected precedents and their canonical owners/);
   assert.match(skill, /never a\s+prerequisite for it/);

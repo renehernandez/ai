@@ -114,6 +114,16 @@ it contains valid early proof.
 - Re-run delivery decomposition after the POC using its actual implementation
   and review evidence. A material top-level-unit change returns to the user
   before final implementation; do not silently rewrite the accepted shape.
+- Treat the pre-POC topology as provisional. Post-POC planning Review is the
+  authoritative final-topology gate and must bind complete per-unit
+  delivery-shape evidence to the accepted POC head and reconciled OpenSpec
+  fingerprint before final implementation. Account for every material POC
+  footprint entry named by the authoritative post-POC identifiers through one
+  owning unit or a declared integration hotspot, and keep exact footprint
+  evidence task-local. The checkpoint must select `post_poc` explicitly, bind
+  the footprint fingerprint derived from the accepted POC, and record material
+  topology change independently of unit IDs; only atomic or pre-POC review may
+  use the evidence-free fast path.
 
 Do not publish a separate planning PR/MR or reconciliation-only PR/MR. The
 initial locally reviewed OpenSpec enters the POC. Reconciled planning state then
