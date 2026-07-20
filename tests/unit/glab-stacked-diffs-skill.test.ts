@@ -56,17 +56,23 @@ test("the fork records an immutable one-time upstream baseline", () => {
 test("published stack corrections produce progressive visible checkpoints", () => {
   const skill = read("skills/glab-stacked-diffs/SKILL.md");
   const workflows = read("skills/glab-stacked-diffs/references/workflows.md");
+  const progressiveSection = skill.match(
+    /## Updating a Published Stack Progressively\n([\s\S]*?)\n## /,
+  )?.[1];
 
   assert.match(
     skill,
     /finish one\n {2}substantive MR, publish its affected chain/,
   );
+  assert.ok(progressiveSection);
   assert.match(
-    skill,
-    /Never use .*amend every local branch, then sync once at the end/s,
+    progressiveSection,
+    /Use the published-stack workflow for the ordered amendment and publication\s+procedure: \[Update Published MRs Progressively\]\(references\/workflows\.md#update-published-mrs-progressively\)/,
   );
-  assert.match(skill, /publish the complete affected chain immediately/);
-  assert.match(skill, /let\n {3}independent gates run concurrently/);
+  assert.doesNotMatch(progressiveSection, /^\d+\.\s/m);
+  assert.doesNotMatch(progressiveSection, /```/);
+  assert.match(workflows, /publishes the complete affected chain/);
+  assert.match(workflows, /begin independent\ngates concurrently/);
   assert.match(workflows, /Only after this checkpoint is visible/);
   assert.match(workflows, /Do\nnot wait for hosted review/);
   assert.match(workflows, /Substantive MR/);
@@ -75,6 +81,7 @@ test("published stack corrections produce progressive visible checkpoints", () =
 
 test("managed stack preflight prevents accidental reconstruction and expansion", () => {
   const skill = read("skills/glab-stacked-diffs/SKILL.md");
+  const workflows = read("skills/glab-stacked-diffs/references/workflows.md");
   const troubleshooting = read(
     "skills/glab-stacked-diffs/references/troubleshooting.md",
   );
@@ -83,7 +90,7 @@ test("managed stack preflight prevents accidental reconstruction and expansion",
   assert.match(skill, /do not use `glab stack sync` to propagate/);
   assert.match(skill, /closed or merged MR/);
   assert.match(skill, /direct commit/);
-  assert.match(skill, /one exact lease per captured branch SHA/);
+  assert.match(workflows, /exact lease for every branch/);
   assert.match(skill, /Do not synthesize replacement history/);
   assert.match(troubleshooting, /Preserve each\nvaluable tip/);
   assert.match(troubleshooting, /freeze writes and return to\n {2}Plan/);
@@ -157,7 +164,10 @@ test("stack mechanics stay inside lifecycle and provider authority", () => {
   assert.match(skill, /`stack sync`.*\| Finish \|/);
   assert.match(skill, /technical readiness does not mark an MR ready/);
   assert.match(skill, /Explicit\n {2}merge authority/);
-  assert.match(skill, /Apply .* through `change-request-create`/s);
+  assert.match(
+    workflows,
+    /Apply description .* through\n`change-request-create`/s,
+  );
   assert.match(workflows, /Use the selected GitLab adapter/);
 });
 

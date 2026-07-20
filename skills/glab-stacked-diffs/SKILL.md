@@ -100,37 +100,12 @@ predecessor branch.
 
 ## Updating a Published Stack Progressively
 
-Never use “amend every local branch, then sync once at the end” for a published
-multi-MR correction. That hides boundaries and delays the user's first usable
-result.
-
-For each substantively affected MR, earliest to latest:
-
-1. Navigate with `glab stack move`. Verify the branch with
-   `git branch --show-current` and resolve the matching MR by source branch.
-2. Make only that MR's correction. Stage intended files and run the narrow
-   behavior-specific proof.
-3. Run `glab stack amend`. Inspect the current incremental diff and each
-   descendant changed by the automatic rebase.
-4. Re-read the affected remote source SHAs. If any changed since preflight,
-   stop and reconcile ownership; do not retry against the new SHA blindly.
-5. In Finish, publish the complete affected chain immediately as one atomic,
-   multi-ref push with one exact lease per captured branch SHA. Run the command
-   from
-   [command-reference.md](references/command-reference.md#exact-leased-publication-for-an-existing-stack)
-   once for the chain. After it succeeds, confirm every live head and target.
-   An unchanged expected head is failed propagation. If the server does not
-   support atomic pushes, stop without falling back to partial publication.
-6. Apply any description/navigation changes through `change-request-create`.
-   Request required hosted review for every changed effective diff and let
-   independent gates run concurrently.
-7. Only then move to the next MR needing substantive work.
-
-This produces frequent reviewable MR checkpoints without weakening descendant
-consistency. The canonical multi-unit coalescing rule still applies to
-unpublished implementation heads. During published-stack repair, coalesce only
-a same-ancestor propagation head made obsolete before its atomic publication;
-never wait for hosted review or coalesce distinct substantive checkpoints.
+Use the published-stack workflow for the ordered amendment and publication
+procedure: [Update Published MRs Progressively](references/workflows.md#update-published-mrs-progressively).
+It is the canonical owner for navigation, focused proof, exact-leased atomic
+propagation, live verification, concurrent gates, and coalescing boundaries.
+Keep the progressive-publication and atomic-propagation invariants above as the
+entrypoint policy; do not duplicate the procedural steps here.
 
 ## Direct Commit or Unmanaged State
 
