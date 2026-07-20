@@ -22,6 +22,16 @@ authority.
   readiness. Merge, deployment, and cleanup require explicit user authority or
   activated project policy.
 
+## User throughput priority
+
+Within accepted authority and safety boundaries, minimize user-visible latency.
+Start every safe, authorized, useful independent lane as soon as it is ready
+when doing so will finish faster, and backfill available capacity as
+dependencies resolve. If ready work and capacity exist, start it or state the
+concrete constraint that prevents starting it. Apply the canonical dependency,
+serialization, ownership, phase-barrier, and small-task contract in
+[investigation-and-implementation.md](../rules/investigation-and-implementation.md#schedule-for-user-throughput).
+
 Route authority before readiness. Every new substantive task begins in Explore
 and defaults to `brainstorming`; an opening request to fix, implement, change,
 or build does not itself authorize mutation. A materially different requested

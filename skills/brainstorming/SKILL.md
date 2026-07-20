@@ -1,7 +1,7 @@
 ---
 name: brainstorming
 description: Use when brainstorming, designing features, exploring requirements, thinking through problems, shaping plans, or turning rough ideas into implementation-ready designs.
-allowed-tools: Read, Glob, Grep, AskUserQuestion
+allowed-tools: Read, Glob, Grep, Task, AskUserQuestion
 ---
 
 # Brainstorming Ideas Into Designs
@@ -27,7 +27,12 @@ accepted.
    answer. For every non-trivial design, find the closest existing
    implementations and their canonical owners without waiting for the user to
    request reuse. Phrases such as "same approach as" only narrow this required
-   scan; they do not trigger it.
+   scan; they do not trigger it. Identify independent read-only evidence lanes.
+   When bounded delegation will lower latency, start them together with the
+   same minimal evidence contract and reconcile them once; keep a small
+   coherent scan inline when coordination would take longer. Do not combine
+   independent lanes into one nominal scan or delay their launch by designing
+   an elaborate packet.
 2. **Open the problem space.** Lead with an orientation map covering the
    intended outcome, motivation, domain terms, existing precedent, current
    constraints, alternative framings, working hypotheses, and discussion
@@ -297,6 +302,8 @@ After convergence is invited, also check that:
 | Asking `agree?` after every recommended default | State low-risk defaults together and ask only about unresolved material choices |
 | Skipping vocabulary because the topic feels obvious | Include a lightweight domain-terms pass every time |
 | Waiting for the user to ask for reuse | Scan for precedent for every non-trivial design; prompt wording only narrows the scan |
+| Inspecting independent evidence lanes one at a time | Start them together when bounded delegation will finish faster; keep only small coherent scans inline |
+| Calling several independent sources one coherent scan | Keep the lanes distinct and use only the minimal shared evidence contract needed for reconciliation |
 | Claiming there is no precedent without evidence | Name the inspected paths or searches before accepting a new mechanism |
 | Treating an opening "fix" or "implement" request as mutation authority | Complete the read-only opening pass and wait for a later explicit transition |
 | Choosing v1 or a first slice during the opening pass | Keep delivery guidance dormant until the user invites convergence |
@@ -356,3 +363,10 @@ After convergence is invited, also check that:
 - REFACTOR: the missing-precedent fixture blocks progress, while a documented
   `No applicable precedent found` result remains eligible for review.
 - GREEN: brainstorming now opens with a compact orientation map, always includes domain terms, caps the discussion queue, treats agreement as accepting defaults, and routes artifacts to OpenSpec, single plan files, ADRs, glossary/context updates, or no artifact.
+- RED: a fresh Explore pressure test could choose parallel evidence collection
+  only by relying on the user's live priority; the tracked brainstorming skill
+  lacked `Task`, a ready-lane rule, and a clear answer to the consistency
+  rationalization for serial reads.
+- GREEN: independent read-only evidence lanes start together under one evidence
+  contract when that reduces latency, while a small coherent scan remains
+  inline and the whole brainstorming turn stays read-only.

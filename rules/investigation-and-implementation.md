@@ -51,6 +51,32 @@ ownership, and the mandatory OpenSpec rehearsal boundary.
 - If the user rejects a name, structure, taxonomy, folder layout, API shape, or
   other design choice, present alternatives and tradeoffs before changing it.
 
+## Schedule for user throughput
+
+Within accepted authority and safety boundaries, optimize for the first useful
+checkpoint and total user-visible completion latency. Maintain a task-local
+dependency map and ready queue, start every safe, authorized, useful ready lane
+that will reduce latency, and backfill available capacity as dependencies
+resolve. This scheduling state is not a committed ledger or another lifecycle
+owner.
+
+Serialize only for a concrete constraint: an unresolved required input,
+exclusive mutation ownership, ordered Git or provider mutation, an unstable
+exact target, unavailable capacity, or an authority, safety, credential, or
+external-state blocker. Coordination cost is valid only when it makes a
+genuinely small coherent task faster inline. When ready work and capacity
+remain, start it or state the specific constraint. Do not combine several
+independent lanes into one nominal task to avoid starting them. One writer owns
+each worktree; that never prevents independent writers in separately owned
+worktrees or concurrent read-only lanes. A phase barrier is a join point for
+work already launched, not a start gate.
+
+Apply the same rule across modes: Explore overlaps independent evidence reads;
+Plan fixes dependencies and ownership; Execute starts semantically eligible
+units; Review fills ready reviewer capacity; and Finish overlaps stable local
+and hosted gates. Preserve a small coherent task inline when delegation,
+worktree setup, or handoff cost would increase latency.
+
 ## Route semantically
 
 After the initial Explore gate and later mutation authority, Direct Execute is
@@ -164,7 +190,10 @@ without checking the source `tasks.md` or archiving the live change. POC commits
 must never be merged, rebased, cherry-picked, or applied into final delivery.
 
 After acceptance, Plan reconciles durable findings into proposal, design, delta
-specs, tasks, and required tracker content once per authorized cycle. Local-only
+specs, tasks, and required tracker content once per authorized cycle. It also
+creates one task-local execution seed containing the frozen contract, final
+units, dependency classification, total Git order, worktree ownership, and
+required proof. The seed is a handoff, not a committed ledger. Local-only
 implementation observations remain transient. A materially unproved
 reconciliation delta returns to the user before another POC cycle.
 
