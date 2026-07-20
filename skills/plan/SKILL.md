@@ -198,6 +198,24 @@ and deployment seams. Split a unit that proved broader than planned before
 final implementation. Return material top-level-unit changes to the user; do
 not silently rewrite the accepted delivery contract.
 
+Treat the pre-POC topology as provisional. Post-POC planning Review is the
+authoritative final-topology gate and runs inside the existing parallel review
+barrier. Its `delivery-shape` result must assess every final unit against the
+accepted POC, cover every material footprint entry through one owning unit or a
+declared integration hotspot, compare that coverage with the authoritative
+material footprint identifiers and fingerprint derived from the accepted POC,
+and challenge plausible split and merge alternatives. The planning checkpoint
+requires an explicit `post_poc` lifecycle discriminator and binds that evidence
+to the accepted POC head and reconciled OpenSpec fingerprint. Only atomic and
+pre-POC planning use the evidence-free fast path. Missing, stale, incomplete,
+unassigned, or non-cohesive evidence blocks the execution seed. Preserve exact
+footprint evidence task-locally; reconcile only final unit decisions and
+concise split rationale into the OpenSpec.
+
+Before handing the execution seed to Execute, invoke Review's runnable
+planning-checkpoint gate with the task-local checkpoint and expected lifecycle
+context. The gate must pass; prose agreement does not replace it.
+
 ## Delivery Shape And Policy
 
 An atomic plan and its implementation are one change set in one final MR. It

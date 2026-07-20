@@ -203,6 +203,21 @@ If a unit proved broader than planned, split it before final implementation.
 Any material top-level-unit change returns to the user instead of silently
 rewriting the accepted delivery contract.
 
+The pre-POC topology is provisional. Post-POC planning Review is the
+authoritative final-topology gate inside the existing parallel review barrier.
+Require fingerprint-bound delivery-shape evidence for every final unit and
+every material POC footprint entry. Assign each footprint entry to one owning
+unit or a declared cross-unit integration hotspot, challenge plausible split
+and merge alternatives, and block the final execution seed for missing, stale,
+incomplete, unassigned, or non-cohesive evidence. Keep exact footprint evidence
+task-local; only final topology decisions and concise rationale are durable.
+The planning checkpoint must discriminate post-POC handoff from atomic or
+pre-POC review, derive the accepted POC head and footprint fingerprint from the
+accepted POC, and record material topology change independently of unit IDs.
+The existing Plan-to-Execute barrier runs Review's planning-checkpoint command
+against that task-local context; a library contract or prose-only pass is not
+handoff evidence.
+
 ## Deliver final artifacts by top-level unit
 
 - There is no separate planning MR and no reconciliation-only MR.
