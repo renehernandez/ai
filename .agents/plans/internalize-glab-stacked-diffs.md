@@ -43,10 +43,14 @@ installed and upstream skill content plus the !883 failure were inspected]
   audits continue concurrently. [confidence: 0.99 - certain | reason: this is
   the explicit correction from the !883 and !881-!890 workflows]
 - Require managed-stack preflight before mutation. A `glab stack`-managed diff
-  uses its amend/save metadata path; a no-op sync is failed propagation
-  evidence. Non-managed stacks use the repository's normal exact-head branch
-  workflow. [confidence: 0.98 - certain | reason: direct commit on !883 caused
-  `glab stack sync` to propagate nothing]
+  uses its amend/save metadata path locally. Initial MR creation uses
+  draft-prefixed managed descriptions because `stack sync` derives titles from
+  them. Existing published branches propagate through explicit, predecessor-
+  ordered Git pushes whose force-with-lease operands name the captured remote
+  SHAs; `stack sync` cannot supply that exact lease contract. Non-managed stacks
+  use the repository's normal exact-head branch workflow. [confidence: 0.99 -
+  certain | reason: exact glab 1.108 source confirms title-derived MR creation
+  and fetched bulk pushes with an unqualified lease]
 - Normalize imported guidance to Rene's portable rules: native hooks stay
   enabled, commands remain one per tool call, destructive recovery requires
   explicit authority, MR descriptions route through `change-request-create`,
@@ -131,11 +135,16 @@ runtime activation boundary, reviewer, and rollback path]
   change.
 - The skill cannot expand lifecycle authority and keeps final MRs draft until
   explicit merge authority.
+- Initial stack publication creates every MR as draft by construction from a
+  `Draft:` managed description and blocks hosted gates if live readback differs.
 - Managed-stack preflight prevents ordinary commits from bypassing `glab stack`
   metadata.
 - A published ancestor change starts descendant propagation without waiting for
   merge or current-MR hosted gates; linear descendants remain topologically
   ordered.
+- Every published-stack force update binds its branch to the exact remote SHA
+  captured immediately before mutation; the workflow does not use bulk
+  `stack sync` as a substitute for those expected-SHA leases.
 - Each substantive correction remains visible on its owning MR and no workflow
   recommends reconstructing the complete desired stack before publication.
 - No active guidance recommends `--no-verify`, compound shell commands,
@@ -176,7 +185,7 @@ move and the user-visible behavior that motivated it]
 | AX observes duplicate local and remote skill names | Add and remove the selection in one config change; preserve deterministic collision tests. |
 | The import silently misses newer upstream content | Refresh the upstream source first, record its exact commit, and compare the imported tree. |
 | Internalization creates a drifting dual source | Declare the AI repo authoritative and keep only one-time provenance; no sync mechanism. |
-| Eager propagation creates repeated churn | Trigger on published heads, not uncommitted edits; preserve topological order and exact leases. |
+| Eager propagation creates repeated churn | Trigger on completed substantive checkpoints; coalesce only a same-ancestor head made obsolete before its first push, then preserve topological order and exact leases. |
 | Parallelism violates Git dependencies | Run the propagation lane concurrently with independent gates while processing a linear chain in dependency order. |
 | The skill bypasses five-mode authority | State bounded mode ownership and test draft, publication, ready, merge, and recovery limits. |
 | Imported troubleshooting conflicts with safety rules | Remove bypass and destructive defaults; use explicit authority and recoverable inspection paths. |

@@ -65,9 +65,10 @@ test("published stack corrections produce progressive visible checkpoints", () =
     skill,
     /Never use .*amend every local branch, then sync once at the end/s,
   );
-  assert.match(skill, /substantive MR and every changed descendant/);
+  assert.match(skill, /publish each affected branch immediately/);
   assert.match(skill, /let\n {3}independent gates run concurrently/);
   assert.match(workflows, /Only after this checkpoint is visible/);
+  assert.match(workflows, /Do not wait for hosted review/);
   assert.match(workflows, /Substantive MR/);
   assert.match(workflows, /Propagation-only descendant/);
 });
@@ -79,13 +80,33 @@ test("managed stack preflight prevents accidental reconstruction and expansion",
   );
 
   assert.match(skill, /Managed-Stack Preflight/);
-  assert.match(skill, /glab stack sync --skip-mr-creation/);
+  assert.match(skill, /do not use `glab stack sync` to propagate/);
   assert.match(skill, /closed or merged MR/);
   assert.match(skill, /direct commit/);
-  assert.match(skill, /no-op sync as failed\n {3}propagation/);
+  assert.match(skill, /exact lease naming its captured SHA/);
   assert.match(skill, /Do not synthesize replacement history/);
   assert.match(troubleshooting, /Preserve each\nvaluable tip/);
   assert.match(troubleshooting, /freeze writes and return to\n {2}Plan/);
+});
+
+test("stack publication is draft by construction and exact leased", () => {
+  const skill = read("skills/glab-stacked-diffs/SKILL.md");
+  const commandReference = read(
+    "skills/glab-stacked-diffs/references/command-reference.md",
+  );
+  const workflows = read("skills/glab-stacked-diffs/references/workflows.md");
+  const content = packageText();
+
+  assert.match(skill, /glab stack save -m "Draft: <imperative description>"/);
+  assert.match(workflows, /initial sync creates\ndrafts by construction/);
+  assert.match(workflows, /A non-draft MR blocks the workflow/);
+  assert.match(
+    commandReference,
+    /--force-with-lease=refs\/heads\/<branch>:<expected-remote-sha>/,
+  );
+  assert.match(commandReference, /Run one command per branch/);
+  assert.match(workflows, /earliest to\nlatest with one exact-leased push/);
+  assert.doesNotMatch(content, /glab stack sync --skip-mr-creation/);
 });
 
 test("stack mechanics stay inside lifecycle and provider authority", () => {

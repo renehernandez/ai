@@ -5,7 +5,7 @@ keeps the requested MR's incremental boundary and descendant ownership visible.
 
 ## Contents
 
-- Sync or rebase conflict
+- Amend or rebase conflict
 - Wrong diff amended
 - Direct Git commit in a managed stack
 - Lease rejection or external remote-head change
@@ -14,18 +14,17 @@ keeps the requested MR's incremental boundary and descendant ownership visible.
 - Lost changes
 - Authentication or repository mismatch
 
-## Sync or Rebase Conflict
+## Amend or Rebase Conflict
 
-**Symptom:** `glab stack amend` or `glab stack sync` stops while rebasing a
-descendant.
+**Symptom:** `glab stack amend` stops while rebasing a descendant.
 
 1. Inspect the current rebase and branch.
 2. Resolve the earliest conflicted descendant.
 3. Stage only the resolved files.
 4. Continue the rebase.
 5. Inspect every later descendant's incremental diff.
-6. Re-run sync only after confirming the affected remote heads still match the
-   preflight expectations.
+6. Publish the repaired branches with their captured exact-SHA leases only
+   after every incremental diff is verified.
 
 ```bash
 git status
@@ -63,8 +62,8 @@ default recovery.
 3. Publish and verify that correction progressively.
 4. Add the change to the correct MR, amend, and publish its affected chain.
 
-Do not move the patch between several local branches and defer one large sync;
-that recreates the opaque boundary problem.
+Do not move the patch between several local branches and defer one large
+publication wave; that recreates the opaque boundary problem.
 
 ## Direct Git Commit in a Managed Stack
 
@@ -113,7 +112,7 @@ the ordinary commit or rebuild the full stack merely to satisfy the deadline.
 
 ## Lease Rejection or External Remote-Head Change
 
-**Symptom:** sync rejects a force-with-lease update, or a remote source SHA no
+**Symptom:** an exact-leased branch push is rejected, or a remote source SHA no
 longer matches the preflight value.
 
 Stop. Fetch the branch, inspect the external commits and hosted artifact, and
@@ -124,13 +123,13 @@ can require Plan.
 ## No-Op or Incomplete Propagation
 
 **Symptom:** an amendment should have changed the current MR or descendants,
-but sync reports no update or an expected remote head remains unchanged.
+but an expected remote head remains unchanged after its branch push.
 
 1. Compare the local managed branches with the captured remote heads.
 2. Verify the intended branch was actually amended.
 3. Inspect whether descendants were rebased locally.
-4. Confirm `--skip-mr-creation` did not expose a missing MR membership issue.
-5. Diagnose before another sync.
+4. Confirm the pushed source ref names the intended local managed branch.
+5. Diagnose before another publication attempt.
 
 An exit code of zero is insufficient. Publication succeeds only when the live
 MR heads and target chain reflect the expected substantive and propagation
@@ -138,10 +137,11 @@ updates.
 
 ## Closed, Merged, or Missing MR
 
-`glab stack sync` may create an MR for a branch without one and may remove
-entries whose MRs are closed or merged. Therefore:
+Initial `glab stack sync` may create an MR for a branch without one and may
+remove entries whose MRs are merged. Therefore:
 
-- use `--skip-mr-creation` for a fully published stack;
+- use initial sync only for preflighted draft-by-construction MR creation;
+- use exact-leased per-branch pushes for a fully published stack;
 - stop if an expected MR is closed, merged, or missing;
 - after an authorized predecessor merge, follow the predecessor-merge workflow
   rather than ordinary feedback amendment; and
