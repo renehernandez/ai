@@ -180,7 +180,7 @@ The system SHALL use one draft unmergeable POC artifact and one mergeable final 
 - **AND** local Review and provider policy still apply
 
 ### Requirement: OpenSpec changes stay in owning final artifacts
-The system SHALL include each unit's task/spec changes in its implementation MR and required OpenSpec archival in the last unit.
+The system SHALL include each unit's task/spec changes in its implementation MR and SHALL make completed-change archival part of the last unit's exact implementation head.
 
 #### Scenario: POC changes the contract
 - **WHEN** personal POC review completes with durable findings
@@ -188,9 +188,17 @@ The system SHALL include each unit's task/spec changes in its implementation MR 
 
 #### Scenario: Final implementation completes the change
 - **WHEN** the final implementation satisfies every reconciled task and requirement
-- **THEN** the last delivery-unit MR contains the necessary OpenSpec completion/archive changes
-- **AND** planning reviewers inspect the resulting canonical-spec/archive diff before publication
+- **THEN** Execute completes task state, synchronizes delta specs into canonical specs, and moves the change into the dated archive before the final hook-clean commit and draft publication
+- **AND** planning reviewers inspect the resulting canonical-spec/archive diff on the same exact implementation head
 - **AND** no later spec-only MR is required
+
+#### Scenario: Final closure state is incomplete
+- **WHEN** a reconciled task or requirement is incomplete or unverified
+- **THEN** the change remains active and completed-change archival is blocked
+
+#### Scenario: Archive state changes after review
+- **WHEN** a later archive or canonical-spec repair changes the final-unit head
+- **THEN** prior exact-head review and hosted evidence become stale
 
 #### Scenario: Final implementation discovers a material delta
 - **WHEN** final implementation requires a contract change beyond the reconciled OpenSpec

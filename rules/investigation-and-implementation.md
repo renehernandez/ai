@@ -194,8 +194,14 @@ rewriting the accepted delivery contract.
   units may implement and follow review concurrently in separately owned
   worktrees even though publication, restack propagation, and merge ancestry
   remain ordered.
-- Each final unit carries its own task/spec changes. The last unit carries task
-  completion and required OpenSpec archive changes.
+- Each final unit carries its own task/spec changes. In the last unit, Execute
+  completes task state, synchronizes delta specs into canonical specs, and
+  moves the verified change into the dated archive before the final hook-clean
+  commit and draft publication. Incomplete or unverified requirements block
+  archival.
+- Review inspects the resulting canonical-spec/archive state on the exact final
+  head. Finish consumes that state as a readiness gate and does not perform
+  archival as merge follow-through or branch/worktree cleanup.
 - A material final-implementation contract delta returns to Plan; the user
   decides whether another POC is required.
 

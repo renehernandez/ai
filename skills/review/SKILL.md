@@ -37,6 +37,13 @@ Another review type never substitutes for its simplification evidence.
 Atomic plans and OpenSpec artifacts are planning contracts. Review them here;
 do not also invoke Doc Smith reader personas.
 
+For the last final OpenSpec unit, inspect implementation, completed task state,
+canonical spec synchronization, absence of the completed change from the active
+namespace, and its dated archived record on one exact HEAD. Missing or
+inconsistent closure state is an Execute repair finding. Any archive or
+canonical-spec repair invalidates the prior exact-head result and refreshes the
+affected local and hosted evidence.
+
 ## Planning Artifact Boundary
 
 Classify every planning finding before returning it. It is an artifact finding
@@ -308,6 +315,7 @@ proof.
 | Producing elaborate review proof | Emit the compact receipt from already collected state. |
 | Persisting reviewer ledgers or gate state | Keep evidence task-local and recomputable. |
 | Treating Nitro or CI as local Review | Evaluate it as a separate hosted gate. |
+| Reviewing code while deferring completed archive state | Inspect implementation, canonical specs, tasks, and the dated archive on the same final head. |
 
 ## Test Evidence
 
@@ -319,6 +327,11 @@ proof.
   resolution per repair, reject a composite wrapper that preserves duplicate
   authority, escalate a handwritten parser, and keep correct single-owner and
   local-cleanup repairs bounded.
+- RED: the earlier archive sentence did not tell Review whether canonical specs
+  and the dated archive belonged to its final exact-head target.
+- GREEN: revised pressure scenarios keep implementation, completed tasks,
+  canonical specs, active-namespace absence, and the archive on one target and
+  invalidate that result after any closure repair.
 - REFACTOR: fixtures close missing, duplicate, unknown, unevidenced, incomplete-
   surface, and failed-verification loopholes, and replacement discovery
   supersedes old closure evidence without another review execution, persistent

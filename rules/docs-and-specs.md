@@ -104,8 +104,13 @@ it contains valid early proof.
   new breakdown.
 - One work item is acceptable only when risk, ownership, deployment, or
   reviewability explains the separate delivery boundary.
-- The last final unit carries task completion and required OpenSpec archival.
-  Planning reviewers inspect resulting canonical-spec and archive changes.
+- In the last final unit, Execute completes task state, synchronizes delta specs
+  into canonical specs, and moves the verified change into the dated archive
+  before the final hook-clean commit and draft publication. Incomplete or
+  unverified requirements block archival.
+- Planning reviewers inspect the resulting canonical-spec/archive state on the
+  exact implementation head. Finish requires that state for readiness and does
+  not perform archival as merge follow-through or branch/worktree cleanup.
 - Re-run delivery decomposition after the POC using its actual implementation
   and review evidence. A material top-level-unit change returns to the user
   before final implementation; do not silently rewrite the accepted shape.

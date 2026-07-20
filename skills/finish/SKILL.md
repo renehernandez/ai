@@ -104,9 +104,12 @@ diff.
 
 Report merge or stack readiness only when every declared final artifact has
 current local/provider gates, valid predecessor identity, complete task/spec
-state, and required tracker mapping. Report `draft_stack_ready` while every MR
-remains draft. Readiness, ready state, and review requests are not merge
-authority.
+state, and required tracker mapping. For completed OpenSpec delivery, the last
+final-unit head must also contain synchronized canonical specs and the dated
+archive while no completed change remains active. Missing or inconsistent
+archive state returns to the same Execute owner; Finish does not create it.
+Report `draft_stack_ready` while every MR remains draft. Readiness, ready state,
+and review requests are not merge authority.
 
 ## Terminal Actions
 
@@ -141,3 +144,13 @@ before cleanup; never force-delete as ordinary follow-through.
 | Splitting an atomic plan from its implementation | Publish both as one change set in one final PR/MR. |
 | Treating green POC CI as architecture approval | Require the current POC-specific local Review checkpoint for readiness. |
 | Merging because all gates are green | Require explicit merge authority or activated policy. |
+| Treating completed-change archival as terminal cleanup | Require the archive on the reviewed final-unit head and return missing state to Execute. |
+
+## Test Evidence
+
+- RED: the prior lifecycle left a fresh agent unable to distinguish final-unit
+  repository archival from Finish cleanup or place it relative to exact-head
+  publication and review.
+- GREEN: a green reviewed draft plus a closing merge window does not bypass the
+  archive gate; Finish returns the missing state to Execute and refreshes gates
+  for the resulting head.
