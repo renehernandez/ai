@@ -18,7 +18,6 @@ const restoredSpecialists = [
   "start-project",
 ];
 const retainedSpecialists = [
-  "agent-workspace",
   "ai-readiness-upkeep",
   "ax-cli",
   "brainstorming",
@@ -75,7 +74,7 @@ test("runtime profiles install five modes and bounded retained specialists", () 
     readFileSync(join(root, "ax.config.json"), "utf8"),
   ) as {
     blocks: { "personal-skills": { skills: Array<{ names: string[] }> } };
-    runtime: { hooks: { sourceDir: string } };
+    runtime: { hooks: { sourceDir: string }; retiredSkills: string[] };
   };
   const configuredNames = config.blocks["personal-skills"].skills[0].names;
 
@@ -84,6 +83,11 @@ test("runtime profiles install five modes and bounded retained specialists", () 
     [...modes, ...retainedSpecialists].toSorted(),
   );
   assert.equal(config.runtime.hooks.sourceDir, "hooks");
+  assert.ok(config.runtime.retiredSkills.includes("agent-workspace"));
+  assert.equal(
+    existsSync(join(root, "skills", "agent-workspace", "SKILL.md")),
+    false,
+  );
 });
 
 test("review routing is owned by Review and Finish without orphaned policy data", () => {

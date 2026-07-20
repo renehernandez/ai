@@ -11,6 +11,11 @@ const lifecycleRules = [
   "rules/git-and-review.md",
 ] as const;
 const modeNames = ["Explore", "Plan", "Execute", "Review", "Finish"] as const;
+const organizationalSurfaces = [
+  ...entrypoints,
+  "rules/agent-surface-routing.md",
+  "rules/handoff-and-resume.md",
+] as const;
 
 const retiredLifecycleReferences = [
   /\bsession-start\b/,
@@ -113,18 +118,25 @@ for (const file of entrypoints) {
     assert.match(text, /Readable Summary/);
     assert.match(text, /YAML or JSON|YAML\/JSON/);
   });
-
-  test(`${file} routes organizational agents through durable workspaces`, () => {
-    const text = readFileSync(file, "utf-8");
-
-    assert.match(text, /agent-workspace/);
-    assert.match(text, /Linear and Git own durable coordination state/);
-    assert.match(text, /Delivery Executive Assistant/);
-    assert.match(text, /Executive Operations Assistant/);
-    assert.match(text, /Rene retains merge/);
-    assert.match(text, /ax agents/);
-  });
 }
+
+test("active instructions contain no organizational-agent hierarchy", () => {
+  const retired = [
+    /agent-workspace/,
+    /Delivery Executive Assistant/,
+    /Executive Operations Assistant/,
+    /Linear Project Manager/,
+    /GitLab Project Manager/,
+    /Squad Lead/,
+  ] as const;
+
+  for (const file of organizationalSurfaces) {
+    const text = readFileSync(file, "utf-8");
+    for (const term of retired) {
+      assert.doesNotMatch(text, term, `${file} still references ${term}`);
+    }
+  }
+});
 
 test("active lifecycle rules contain no retired lifecycle entrypoints", () => {
   for (const file of lifecycleRules) {

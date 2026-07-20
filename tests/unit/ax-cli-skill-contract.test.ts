@@ -33,9 +33,6 @@ test("ax-cli skill retrieves the single-sync runtime contract", () => {
   assert.match(skill, /`pnpm ax skills sync`/);
   assert.match(skill, /`pnpm ax instructions sync`/);
   assert.match(skill, /`pnpm ax hooks sync`/);
-  assert.match(skill, /`pnpm ax agents sync`/);
-  assert.match(skill, /`pnpm ax coordinators sync`/);
-  assert.match(skill, /`ax coordinators register/);
   assert.match(skill, /`ax openspec sync`/);
 
   assert.match(skill, /`ax\.config\.json`[^\n]+desired state/i);
@@ -51,10 +48,6 @@ test("ax-cli skill retrieves the single-sync runtime contract", () => {
   assert.doesNotMatch(skill, /--recovery-file/);
   assert.doesNotMatch(skill, /sha256-tree-v1/);
   assert.match(skill, /status[^\n]+validate[^\n]+offline[^\n]+read-only/i);
-  assert.match(skill, /agents surface/i);
-  assert.match(skill, /refuses unmanaged agent targets/i);
-  assert.match(skill, /hashed\s+ownership inventory/i);
-  assert.match(skill, /preserves siblings/i);
 });
 
 test("ax-cli skill retrieves source, isolation, shim, and activation rules", () => {
@@ -63,8 +56,6 @@ test("ax-cli skill retrieves source, isolation, shim, and activation rules", () 
   assert.match(skill, /HOME=<isolated-home>/);
   assert.match(skill, /--runtime-root <isolated-runtime-root>/);
   assert.match(skill, /post-merge[\s\S]{0,80}`ax sync`/i);
-  assert.match(skill, /list_projects/);
-  assert.match(skill, /Hand-editing `control-projects\.json`/);
   assert.match(skill, /shim `install`, `status`, and `uninstall`/i);
 
   assert.match(metadata, /default_prompt:/);

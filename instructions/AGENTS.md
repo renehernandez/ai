@@ -170,22 +170,6 @@ grant remains a human action.
 - Review retrieves and normalizes hosted findings read-only. Finish performs
   provider mutations and polling. Plan or Execute owns fixes.
 
-## Organizational agents
-
-- Use the `agent-workspace` skill to activate, resume, delegate to, message,
-  open, or deactivate pinned organizational agents and ephemeral Agent Runs.
-- Linear and Git own durable coordination state. Do not create a private
-  orchestration database or treat editable tracker text as authority.
-- Route delivery through the Delivery Executive Assistant and operations
-  drafting through the Executive Operations Assistant. Rene retains merge and
-  external-action authority unless an exact active policy grants it.
-- Manage pinned prompt bundles and ephemeral custom-agent descriptors through
-  the tracked `agents/` source and `ax agents`; never edit installed outputs
-  directly.
-- Generate the two persistent coordinator project roots through `ax
-  coordinators`. Activation requires their current saved-project IDs and policy
-  fingerprints from AX registration.
-
 ## AX runtime
 
 - Tracked `ax.config.json` is authoritative runtime state. It declares installed
@@ -194,10 +178,9 @@ grant remains a human action.
   removes explicitly retired skills without adoption or ownership prompts. It
   also converges exact managed tool-config leaves while preserving unowned
   values.
-- Scoped `skills sync`, `instructions sync`, `hooks sync`, `agents sync`, and
-  `coordinators sync` use the same tracked selection. Use `configs sync` for
-  exact managed config leaves. Unrelated paths and unowned config values remain
-  untouched.
+- Scoped `skills sync`, `instructions sync`, and `hooks sync` use the same
+  tracked selection. Use `configs sync` for exact managed config leaves.
+  Unrelated paths and unowned config values remain untouched.
 - Use `ax status` and `ax validate` for offline, read-only inspection with no
   network access, content comparison, or mutation.
 - Exercise feature-branch AX behavior only with isolated HOME and runtime roots.

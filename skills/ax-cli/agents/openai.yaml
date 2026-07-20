@@ -1,4 +1,4 @@
 interface:
   display_name: "AX CLI"
   short_description: "Synchronize and inspect AX runtime assets"
-  default_prompt: "Use $ax-cli to inspect AX-managed state, choose top-level or scoped ax sync including agents and coordinator projects, preserve tracked desired state and exact target ownership, and validate the affected surface. Keep feature-branch proof on isolated runtime roots, register saved coordinator project IDs only after live post-merge sync, and activate live roots only from verified merged source."
+  default_prompt: "Use $ax-cli to inspect AX-managed state, choose top-level or scoped ax sync, preserve the separation between tracked desired state and local ownership state, and validate the affected surface. Keep feature-branch proof on isolated runtime roots and activate live roots only from verified merged source."

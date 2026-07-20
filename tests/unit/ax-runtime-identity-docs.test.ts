@@ -123,21 +123,6 @@ test("shim lifecycle remains distinct from runtime synchronization", () => {
   assert.match(content, /distinct from runtime/i);
 });
 
-test("AX reference documents the organizational agent surface", () => {
-  const content = readFileSync("docs/ax.md", "utf-8");
-  const workspace = readFileSync("docs/agent-workspaces.md", "utf-8");
-
-  assert.match(content, /pnpm ax agents sync/);
-  assert.match(content, /~\/\.agents\/agents/);
-  assert.match(content, /~\/\.codex\/agents/);
-  assert.match(content, /unmanaged file, directory, or wrong symlink/i);
-  assert.match(workspace, /Delivery Executive Assistant/);
-  assert.match(workspace, /Executive Operations Assistant/);
-  assert.match(workspace, /Agent Run.*before.*spawn/is);
-  assert.match(workspace, /Max and Ultra are manual-only/);
-  assert.match(workspace, /Rene must merge|merge authority/i);
-});
-
 test("AX reference documents exact managed config leaves", () => {
   const content = readFileSync("docs/ax.md", "utf-8");
   const config = JSON.parse(readFileSync("ax.config.json", "utf-8"));
@@ -158,4 +143,15 @@ test("AX reference documents exact managed config leaves", () => {
     agents: { max_depth: 1 },
     memories: { generate_memories: true, use_memories: true },
   });
+});
+
+test("AX no longer declares organizational-agent runtime surfaces", () => {
+  const content = readFileSync("docs/ax.md", "utf-8");
+  const config = JSON.parse(readFileSync("ax.config.json", "utf-8"));
+
+  assert.equal(config.runtime.agents, undefined);
+  assert.equal(config.runtime.coordinatorProjects, undefined);
+  assert.ok(config.runtime.retiredSkills.includes("agent-workspace"));
+  assert.doesNotMatch(content, /ax agents|ax coordinators/);
+  assert.doesNotMatch(content, /coordinator-projects|agent-workspaces/);
 });
