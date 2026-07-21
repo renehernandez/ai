@@ -38,6 +38,7 @@ const retainedSpecialists = [
   "handoff-brief",
   "linear-breakdown",
   "linear-project-overview",
+  "linearis",
   "nitro-review-feedback",
   "openspec-tasks",
   "project-health-brief",

@@ -57,14 +57,17 @@ test("linear-project-overview preserves lifecycle and mutation authority", () =>
   assert.match(skill, /immutable Linear project ID and link/);
   assert.match(
     skill,
-    /observed `summary`, `description`.*feedback item's identifier, resolution state, body, update timestamp, and anchored quoted text/,
+    /observed workflow `summary` \(`description` field\), workflow `description` \(`content` field\).*feedback item's identifier, resolution state, body, update timestamp, and anchored quoted text/,
   );
   assert.match(
     skill,
     /alignment, drift, feedback, and intentional-exclusion findings/,
   );
   assert.match(skill, /never creates a Linear project/);
-  assert.match(skill, /only `summary` and `description`/);
+  assert.match(
+    skill,
+    /update only the mapped `description` and `content` fields/,
+  );
   assert.match(
     routing,
     /Explore owns.*read-only `linear-project-overview` drafting and review/,
@@ -81,11 +84,11 @@ test("linear-project-overview revalidates feedback and drift before apply", () =
   assert.match(skill, /re-fetch the exact project/i);
   assert.match(
     skill,
-    /traverse every project-comment page until no next-page cursor remains, then select the relevant unresolved feedback/i,
+    /traverse every project discussion page through `pageInfo\.endCursor`, then traverse every relevant root thread's replies/i,
   );
   assert.match(
     skill,
-    /re-fetch the exact project, traverse every project-comment page until no next-page cursor remains, and only then select the relevant unresolved feedback/i,
+    /re-fetch the exact project by immutable ID, traverse every project discussion page and every relevant root thread's replies/i,
   );
   assert.match(skill, /Any mismatch stops the update.*refreshed preview/);
   assert.match(
@@ -99,6 +102,8 @@ test("linear-project-overview revalidates feedback and drift before apply", () =
   assert.match(skill, /require exact equality with the approved values/);
   assert.match(skill, /mismatch as failed verification/);
   assert.match(skill, /return the project link/);
+  assert.match(skill, /file-backed-input capability blocker/);
+  assert.match(skill, /Do not attempt the write/);
 });
 
 test("linear-project-overview routes adjacent work to canonical owners", () => {

@@ -1,7 +1,7 @@
 ---
 name: linear-breakdown
 description: Use when collaboratively turning plans, OpenSpec changes, specs, design docs, or implementation proposals into Linear issues, milestones, projects, or delivery slices.
-allowed-tools: Read, Glob, Grep, AskUserQuestion
+allowed-tools: Read, Glob, Grep, AskUserQuestion, Bash(linearis:*), Bash(jq:*)
 ---
 
 # Linear Breakdown
@@ -30,6 +30,11 @@ Phrases like "create the tickets," "move fast," "use your judgment," "don't walk
 If pressured to skip review, the correct action is to present the concise preview and ask one approval question. Do not infer permission.
 
 Read-only discovery is allowed before approval: inspect existing Linear projects, milestones, issues, labels, and duplicates when tools are available. Discovery never permits writes. If matching issues already exist, preview the update/reuse plan and ask before editing them.
+
+Use `linearis` for provider mechanics. Read the relevant live domain usage
+before acting, preserve immutable IDs, and exhaust every required cursor during
+read-only discovery and deduplication. Never use a Linear MCP, app, or plugin
+fallback.
 
 ## Workflow
 
@@ -75,7 +80,13 @@ linear_breakdown_preview:
   creation_mode: draft_only | create_after_approval | create_immediately
 ```
 
-6. Create or update Linear only after approval, then summarize issue keys, milestone link, ordering, and deferred work.
+6. Create or update Linear only after approval and only through a supported
+   `linearis` operation. Re-read each target immediately before the write,
+   apply only approved fields, then require exact readback. A required rich
+   issue description blocks the write until Linearis supports file-backed
+   input. Only description-free writes with bounded non-Markdown fields can
+   proceed in this delivery. Summarize issue keys, milestone link, ordering,
+   and deferred work only after verified writes.
 
 ## Approval Modes
 
@@ -256,6 +267,8 @@ Start with the real outcome ticket, then place only the minimum foundation insid
 | Treating generic green CI as proof for hosted/system behavior | Require evidence that the specific claimed path ran and produced the expected result |
 | Letting disabled flags, rules, or env hide the path | State whether disabled/skipped/absent means incomplete or blocked |
 | Leaving cross-system identifiers implicit | Name the canonical identifier representation in the ticket |
+| Sending an issue description as an inline shell argument | Return the `linearis` file-backed-input capability blocker |
+| Falling back to Linear MCP, app, or plugin tools | Report the unsupported CLI operation without a provider write |
 
 ## Test Evidence
 

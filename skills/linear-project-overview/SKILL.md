@@ -1,6 +1,7 @@
 ---
 name: linear-project-overview
 description: Use when drafting, reviewing, or updating a Linear project's summary or description, especially when the overview is unstable, overloaded with delivery detail, duplicates milestones or updates, or needs approval-safe provider mutation.
+allowed-tools: Read, Glob, Grep, AskUserQuestion, Bash(linearis:*), Bash(jq:*)
 ---
 
 # Linear Project Overview
@@ -10,6 +11,23 @@ description: Use when drafting, reviewing, or updating a Linear project's summar
 This is a bounded specialist, not a lifecycle owner. Explore owns drafting and
 review, which are read-only. Finish owns a later explicitly approved update.
 Never treat the initial request as permission to mutate Linear.
+
+Use `linearis` for every supported provider read or write and follow the
+`linearis` skill for CLI mechanics. Never use a Linear MCP, app, or plugin
+fallback.
+
+## Provider Field Mapping
+
+Keep workflow language distinct from Linearis field names:
+
+| Workflow term | Linearis project field |
+| --- | --- |
+| Summary | `description` |
+| Markdown description | `content` |
+
+The workflow summary is the short project outcome. The workflow description is
+the complete Markdown overview. Preserve this mapping in every preview,
+comparison, write, and readback.
 
 ## Content Contract
 
@@ -67,15 +85,18 @@ it from the delivery inventory.
 
 1. Identify the exact existing project, or establish that the request concerns
    a proposed project.
-2. Read relevant project fields, native resources, milestones, and updates
-   without mutation. Read accepted source artifacts when available.
-3. Traverse every project-comment page until no next-page cursor remains, then
-   select the relevant unresolved feedback.
+2. Use `linearis projects usage` and the relevant domain usage, then read the
+   project, project documents, milestones, and issues without mutation. Read
+   accepted source artifacts when available.
+3. Traverse every project discussion page through `pageInfo.endCursor`, then
+   traverse every relevant root thread's replies before selecting unresolved
+   feedback.
 4. Route unresolved purpose or scope before drafting.
 5. Return an exact preview containing:
    - the immutable Linear project ID and link, or `proposed project` when no
      provider target exists;
-   - the observed `summary`, `description`, and each relevant unresolved
+   - the observed workflow `summary` (`description` field), workflow
+     `description` (`content` field), and each relevant unresolved
      feedback item's identifier, resolution state, body, update timestamp, and
      anchored quoted text when present;
    - the proposed `summary` and complete `description`; and
@@ -89,20 +110,24 @@ Linear project.
 
 Proceed only after a later explicit instruction approves the exact preview.
 
-1. Re-fetch the exact project, traverse every project-comment page until no
-   next-page cursor remains, and only then select the relevant unresolved
-   feedback.
-2. Compare the current `summary` and `description` exactly with the observed
-   values in the approved snapshot. Any mismatch stops the update and returns a
-   refreshed preview for approval.
+1. Re-fetch the exact project by immutable ID, traverse every project
+   discussion page and every relevant root thread's replies, and only then
+   select the relevant unresolved feedback.
+2. Compare the current Linearis `description` and `content` fields exactly with
+   the observed workflow summary and description in the approved snapshot. Any
+   mismatch stops the update and returns a refreshed preview for approval.
 3. Compare each relevant unresolved feedback item's identifier, resolution
    state, body, update timestamp, and anchored quoted text exactly with the
    approved snapshot. New or changed material feedback stops the update and
    refreshes the preview; minor wording drift is reported without blocking.
-4. Update only `summary` and `description` with the approved values.
-5. Read both fields back, require exact equality with the approved values, and
-   return the project link. Report a mismatch as failed verification without
-   making another provider write.
+4. Because the approved workflow description requires a project `content`
+   write, return the `linearis` file-backed-input capability blocker. Do not
+   attempt the write or fall back to a Linear MCP, app, or plugin.
+5. After Linearis gains safe file-backed input in a separately accepted change,
+   update only the mapped `description` and `content` fields, read both fields
+   back, require exact equality with the approved values, and return the project
+   link. Report a mismatch as failed verification without another provider
+   write.
 
 Materially contradictory unresolved feedback blocks finalization. Minor wording
 feedback is reported but does not block. Never change teams, initiatives, lead,
@@ -127,4 +152,7 @@ documents, or native resources.
 | Keeping a status snapshot because it is useful today | Put transient progress in a project update |
 | Promoting possible future work into scope | Omit it or use a conditional non-goal when ambiguity is plausible |
 | Applying after the project changed | Refresh the preview and request approval again |
-| Updating related project fields for consistency | Change only the approved summary and description |
+| Confusing workflow terms with CLI fields | Map summary to `description` and Markdown description to `content` |
+| Sending approved Markdown as an inline argument | Return the file-backed-input capability blocker |
+| Falling back to a provider plugin | Report the CLI capability blocker and make no write |
+| Updating related project fields for consistency | Change only the approved mapped fields |
