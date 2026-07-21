@@ -59,7 +59,7 @@ The system SHALL expose `sync` as the sole runtime-content mutation verb and kee
 
 #### Scenario: Runtime profiles synchronize
 - **WHEN** a user runs `ax sync`
-- **THEN** AX reconciles skills, instructions, hooks, agents, and coordinators for the locally selected profile
+- **THEN** AX reconciles skills, instructions, and hooks for the locally selected profile
 - **AND** top-level sync does not mutate repo-local OpenSpec files
 
 #### Scenario: First sync selects one profile

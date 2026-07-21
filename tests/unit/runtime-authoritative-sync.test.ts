@@ -16,6 +16,7 @@ import {
   syncRuntime,
   validateRuntime,
 } from "../../scripts/ax/runtime-sync.ts";
+import { TransactionInterruption } from "../../scripts/ax/transaction-engine.ts";
 
 function withTempDir(callback: (root: string) => void): void {
   const root = mkdtempSync(join(tmpdir(), "runtime-authoritative-sync-"));
@@ -281,6 +282,49 @@ test("failed profile switch restores runtime and previous selection", () => {
       false,
     );
     assert.equal(validateRuntime(input).ok, true);
+  });
+});
+
+test("interrupted profile switch is reported and recovered by the next sync", () => {
+  withTempDir((root) => {
+    const input = fixture(root);
+    syncRuntime(input);
+    let interrupted = false;
+
+    assert.throws(
+      () =>
+        syncRuntime({
+          ...input,
+          profile: "work",
+          transactionFault: (point) => {
+            if (!interrupted && point.startsWith("after-target:")) {
+              interrupted = true;
+              throw new TransactionInterruption();
+            }
+          },
+        }),
+      TransactionInterruption,
+    );
+    const interruptedStatus = inspectRuntime(input);
+    assert.equal(interruptedStatus.selectedProfile, "personal");
+    assert.equal(interruptedStatus.transactions.length, 1);
+    assert.match(
+      interruptedStatus.findings.join("\n"),
+      /incomplete_transaction/,
+    );
+
+    syncRuntime({ ...input, profile: "work" });
+    const recoveredStatus = inspectRuntime(input);
+    assert.equal(recoveredStatus.ok, true);
+    assert.equal(recoveredStatus.selectedProfile, "work");
+    assert.equal(recoveredStatus.transactions.length, 0);
+    assert.equal(
+      readFileSync(
+        join(input.installRoot, "agents", "skills", "work-only", "SKILL.md"),
+        "utf-8",
+      ),
+      "# work-only\n",
+    );
   });
 });
 

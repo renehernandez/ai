@@ -14,18 +14,15 @@ OpenSpec target the current working directory.
 ## State model
 
 Tracked `ax.config.json` is authoritative for available profile definitions,
-source refs, exact targets, instructions, hooks, agents, coordinator projects,
-managed tool-config leaves, and `runtime.retiredSkills`. Each machine stores
-one selected profile in `<runtime-root>/selected-profile.json`; that profile
-controls both installed assets and workflow policy.
+source refs, exact targets, instructions, hooks, managed tool-config leaves,
+and `runtime.retiredSkills`. Each machine stores one selected profile in
+`<runtime-root>/selected-profile.json`; that profile controls both installed
+assets and workflow policy.
 
 AX replaces declared targets on every sync and leaves unrelated filesystem
 paths untouched. It stores a disposable remote-source cache under
 `~/.agents/runtime/cache` and temporary recovery journals plus verified backups
-under `~/.agents/runtime/transactions` and `~/.agents/runtime/backups`. The two
-coordinator targets carry local ownership markers, and their saved-project IDs live in
-`~/.agents/runtime/control-projects.json`; neither file is an orchestration
-database or canonical work state.
+under `~/.agents/runtime/transactions` and `~/.agents/runtime/backups`.
 
 ## Synchronize runtime profiles
 
