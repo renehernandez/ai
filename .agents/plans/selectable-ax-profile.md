@@ -32,6 +32,15 @@ not expose independent installed-profile and policy-profile selection.
 [confidence: 0.99 - certain | reason: the simplified one-profile model was
 explicitly accepted]
 
+An earlier implementation of this plan was merged through GitHub PR #6, then
+removed when the GitHub mirror's `main` was force-rewritten from the newer
+authoritative history. The preserved implementation branch is reusable
+evidence, not an accepted base: port its behavior onto the current `main` and
+reconcile every overlapping AX, workflow, agent, documentation, and test
+change rather than replaying it blindly. [confidence: 0.99 - certain | reason:
+live branch and provider inspection confirmed the preserved commits, merged PR,
+force-rewritten main, and overlapping current owners]
+
 ## Accepted Decisions
 
 ### Profile definition and local selection
@@ -179,6 +188,9 @@ explicitly accepted]
   `tests/unit/runtime-sync-safety.test.ts`, and
   `tests/integration/ax-cli.test.ts` own the current parser, desired-state,
   safety, and end-to-end CLI coverage.
+- The preserved `codex/selectable-ax-profiles` implementation is the closest
+  behavior precedent. Reuse its state schema and transaction adapter while
+  retaining all newer current-`main` behavior in overlapping owners.
 - `docs/ax.md`, `skills/ax-cli/SKILL.md`, `rules/command-and-tools.md`,
   `instructions/AGENTS.md`, root `AGENTS.md`, and their contract tests own the
   active guidance.
@@ -214,11 +226,16 @@ one durable machine-local choice and nothing more]
   isolated HOME/runtime and configured fake remote executors, assert that the
   personal and Cloudflare sources are resolved, assert that the Fullscript URL
   is never requested, and assert that status reports `personal`.
+- Add an isolated local Git remote for the work-only block and run the real CLI
+  with `--profile work`; assert that the work-only asset installs and the
+  selection persists without depending on live Fullscript credentials.
 
 **First real confirmation:** the actual top-level CLI completes a personal
-profile sync without touching `git.fullscript.io`, then a second plain
-`ax sync` reuses the persisted personal selection. [confidence: 0.97 - certain
-| reason: this directly proves the user-visible capability in the first slice]
+profile sync without touching `git.fullscript.io`, a second plain `ax sync`
+reuses the persisted personal selection, and an isolated work-profile CLI run
+installs its work-only asset from a credential-free local Git fixture.
+[confidence: 0.97 - certain | reason: this proves both user-visible profile
+paths through the real entrypoint in the first slice]
 
 ### 2. Complete switching, cleanup, and recovery semantics
 
@@ -281,6 +298,8 @@ profile sync without touching `git.fullscript.io`, then a second plain
 - `git diff --check`
 - Isolated-HOME/runtime CLI proof that personal initialization and repeat sync
   do not resolve the Fullscript URL.
+- Isolated-HOME/runtime CLI proof that work initialization resolves and installs
+  a work-only source through a local Git fixture.
 - After merge only: from the verified clean `main` worktree, run
   `pnpm ax sync --profile personal` and `pnpm ax validate` for live activation.
 
