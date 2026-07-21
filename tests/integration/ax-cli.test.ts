@@ -179,6 +179,36 @@ function gitInit(root: string): void {
   assert.equal(result.status, 0, result.stderr || result.stdout);
 }
 
+function createWorkSkillRemote(root: string): string {
+  const remoteRoot = join(root, "work-skills");
+  mkdirSync(join(remoteRoot, "private-skill"), { recursive: true });
+  writeFileSync(
+    join(remoteRoot, "private-skill", "SKILL.md"),
+    "---\nname: private-skill\ndescription: Work-only fixture\n---\n# Private skill\n",
+    "utf-8",
+  );
+  const env = {
+    ...withoutGitRepositoryEnv(),
+    GIT_AUTHOR_NAME: "AX Test",
+    GIT_AUTHOR_EMAIL: "ax-test@example.invalid",
+    GIT_COMMITTER_NAME: "AX Test",
+    GIT_COMMITTER_EMAIL: "ax-test@example.invalid",
+  };
+  for (const args of [
+    ["init", "--initial-branch", "main"],
+    ["add", "."],
+    ["commit", "-m", "fixture: add work skill"],
+  ]) {
+    const result = spawnSync("git", args, {
+      cwd: remoteRoot,
+      encoding: "utf-8",
+      env,
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+  }
+  return pathToFileURL(remoteRoot).href;
+}
+
 test("CLI synchronizes an isolated runtime and reports offline local state", () => {
   withTempDir((root) => {
     const fixture = createRuntimeSource(root);
@@ -252,6 +282,44 @@ test("CLI synchronizes an isolated runtime and reports offline local state", () 
       (JSON.parse(repeated.stdout) as { selectedProfile: string })
         .selectedProfile,
       "personal",
+    );
+    assert.equal(
+      existsSync(
+        join(fixture.installRoot, "agents", "skills", "private-skill"),
+      ),
+      false,
+    );
+
+    const tracked = JSON.parse(readFileSync(fixture.configPath, "utf-8"));
+    tracked.blocks.fullscript.skills[0].url = createWorkSkillRemote(root);
+    writeFileSync(
+      fixture.configPath,
+      `${JSON.stringify(tracked, null, 2)}\n`,
+      "utf-8",
+    );
+    const work = runAx(
+      [
+        "--config",
+        fixture.configPath,
+        "--runtime-root",
+        fixture.runtimeRoot,
+        "sync",
+        "--profile",
+        "work",
+        "--json",
+      ],
+      { cwd: target, sourceRoot: fixture.sourceRoot },
+    );
+    assert.equal(work.status, 0, work.stderr || work.stdout);
+    assert.equal(
+      (JSON.parse(work.stdout) as { selectedProfile: string }).selectedProfile,
+      "work",
+    );
+    assert.equal(
+      lstatSync(
+        join(fixture.installRoot, "codex", "skills", "private-skill"),
+      ).isSymbolicLink(),
+      true,
     );
   });
 });
