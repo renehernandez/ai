@@ -45,6 +45,15 @@ These rules apply to command execution, network access, and tool installation ac
 - In Codex, apply shell instructions to the available shell command tool.
 - If a rule names a tool that is unavailable in the current harness, use the closest safe equivalent and report the fallback when it affects verification or behavior.
 
+## Provider CLIs
+
+- Use the authenticated organization-aware CLI selected for the provider.
+- Use `linearis` for supported Linear provider reads and writes. Read its live
+  `usage` output before an unfamiliar operation.
+- Do not use Linear MCP, app, or plugin tools as a fallback. Report an
+  unsupported Linearis operation as a capability blocker.
+- Credential entry through `linearis auth login` remains a human action.
+
 ## AX runtime convergence
 
 Tracked `ax.config.json` is authoritative runtime state. It declares installed

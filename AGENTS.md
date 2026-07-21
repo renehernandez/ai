@@ -98,7 +98,9 @@ grant remains a human action.
   `scrutinize` for adversarial validation. Atomic plans and OpenSpec artifacts
   use planning Review instead of Doc Smith reader personas.
   No mandatory frontend-design skill is currently selected.
-- Prefer authenticated organization-aware CLIs: `gh`, `glab`, and `wrangler`.
+- Prefer authenticated organization-aware CLIs: `gh`, `glab`, `linearis`, and
+  `wrangler`. Use `linearis` for supported Linear provider operations. Do not
+  use Linear MCP, app, or plugin tools as a fallback.
 - Do not use vague verification labels. Name the exact unit, integration,
   browser, route, console, deployment, or other verification performed.
 - Before machine-readable YAML or JSON, include a concise `## Readable Summary`.
