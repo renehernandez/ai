@@ -13,9 +13,11 @@ test("brainstorming opens the problem space with working hypotheses", () => {
   assert.match(skill, /\*\*Discussion Queue\*\*/);
   assert.match(skill, /\*\*Working Hypotheses\*\*/);
   assert.match(skill, /\*\*Next step\*\*/);
-  assert.match(skill, /Always include a lightweight domain-terms pass/);
-  assert.match(skill, /intended outcome, motivation, domain terms/);
-  assert.match(skill, /alternative framings, working hypotheses/);
+  assert.match(skill, /quick or narrow request/);
+  assert.match(skill, /Do not use the orientation map for this route/);
+  assert.match(skill, /domain-terms pass only when terminology is fuzzy/);
+  assert.match(skill, /objective, problem framing, material domain terms/);
+  assert.match(skill, /approach, working hypotheses/);
   assert.match(skill, /omit the question, recommend readiness/);
 });
 

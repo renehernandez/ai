@@ -20,11 +20,11 @@ Use this rubric during both the quality gate (writing phase) and structured anal
 |-----------|---------------|
 | **Diataxis fit** | Structure matches the inferred doc type; sections appear in the correct order for that type; the doc does not mix tutorial and reference material in a way that degrades both |
 | **Accuracy** | Spot-check technical claims against source code via `Read` and `Grep`; verify command syntax, config keys, API names, and version references are correct |
-| **Completeness** | All required Diataxis template sections are present; no unfilled placeholders (`TODO`, `TBD`, `<insert…>`); prerequisites and outcomes stated |
+| **Completeness** | Required sections are present; no unfilled placeholders (`TODO`, `TBD`, `<insert…>`); prerequisites and outcomes are stated when the reader task needs them |
 | **Actionability** | A reader can follow instructions without needing outside help; steps are unambiguous; commands are complete and runnable |
 | **Tone and slop** | No weasel words ("simply", "just", "easily", "straightforward"); no filler phrases ("it's worth noting", "keep in mind that"); no hedging in instructions ("might want to", "could potentially"); imperative mood used for steps |
-| **Formatting** | Frontmatter present and complete; code blocks have language identifiers; headings are sentence-cased; no emojis in headings; tables used appropriately; relative links for internal docs |
-| **Cross-links** | See Also section present; internal links use relative paths; no obviously broken references; related docs are linked where the reader would naturally want them |
+| **Formatting** | Required frontmatter is complete; code blocks have language identifiers; headings are sentence-cased; no emojis in headings; tables are used appropriately; internal links are relative |
+| **Cross-links** | Required cross-links are present; internal links use relative paths; no obviously broken references; related docs are linked where the reader task needs them |
 
 For the **Accuracy** dimension, use `Grep` to locate relevant source files and `Read` to verify technical claims. Do not flag accuracy issues without evidence — either confirm via code search or explicitly label the finding as unverified.
 
@@ -36,13 +36,13 @@ Before presenting a near-final draft, self-assess against every criterion below.
 
 | Criterion | Check |
 |-----------|-------|
-| Completeness | All scaffold sections are filled; no placeholders remain |
+| Completeness | All required sections are filled; no placeholders remain |
 | Accuracy | No technical claims made without reading source code or confirming with user |
 | Structure | Sections follow the Diataxis template for the confirmed type |
 | Actionability | A reader can follow instructions without needing to ask someone else |
 | Tone | Direct, imperative, concise — no hedging or filler |
 | Formatting | Code blocks have language identifiers; tables used for comparisons; no emojis in headings |
-| Cross-links | Related docs linked in See Also; internal links use relative paths |
+| Cross-links | Reader-required related docs are linked; internal links use relative paths |
 
 ---
 

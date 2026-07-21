@@ -13,7 +13,9 @@ allowed-tools: Read, Glob, Grep, Bash(git:*), Write, Edit, AskUserQuestion, Task
 
 # doc-smith
 
-Write or review engineering documentation through a unified linear pipeline. The same pipeline handles both modes — writing a new doc follows all five stages; reviewing an existing doc enters at Stage 3.
+Write or review engineering documentation with a compact note path and a full
+documentation pipeline. Use the smallest path that preserves accuracy and the
+reader's outcome.
 
 ## Arguments
 
@@ -53,14 +55,33 @@ Write or review engineering documentation through a unified linear pipeline. The
 ## Pipeline overview
 
 ```text
+Compact note: inspect source → draft directly → run focused quality gate
 Stage 1: Mode and intake      → determine write vs review, gather doc + context
 Stage 2: Context (write only) → topic, doc type, location, source material, clarifying questions
 Stage 3: Structured analysis  → rubric review across seven dimensions
 Stage 4: Draft or fix plan    → section-by-section drafting (write) or findings report (review)
-Stage 5: Reader testing       → one final parallel persona wave when audience comprehension is in scope
+Stage 5: Reader testing       → one final wave when acceptance or material comprehension risk requires it
 ```
 
-Review mode enters at Stage 3. Writing mode runs all five stages.
+Review mode enters at Stage 3. Full writing mode runs all five stages.
+
+## Compact note path
+
+Use this path for one bounded operational or reference note when the audience,
+outcome, source material, and target location are known or clear from the
+repository. Do not use it for tutorials, onboarding, multi-step guides, or
+documents with unresolved scope.
+
+1. Verify the claim and local document convention from source.
+2. Draft the complete note directly. Keep only the content needed to understand
+   or use it.
+3. Run focused accuracy, actionability, tone, and formatting checks.
+
+Do not ask questions the repository already answers. Do not require Diataxis
+classification, frontmatter, prerequisites, a recap, or a See Also section
+unless the target format or reader task requires them. Skip the scaffold and
+section-by-section approval. Run reader personas only when audience
+comprehension is part of acceptance or a material comprehension risk remains.
 
 ---
 
@@ -87,7 +108,8 @@ When multiple `.md` files are in scope, review each completely before moving to 
 
 ## Stage 2: Context gathering (writing mode only)
 
-Never skip this stage. Writing without context produces generic, inaccurate docs.
+Never skip this stage on the full writing path. The compact note path gathers
+the same facts from the prompt and repository without a questionnaire.
 
 ### Step 1: Understand the topic
 
@@ -209,11 +231,12 @@ Fix: Add `- [Rollout playbook](./rollout_playbook.md)` to See Also.
 
 ## Stage 5: Reader testing
 
-Reserve reader testing for user-facing or operational documentation where
-audience comprehension is part of acceptance. Never use it for atomic plans or
-OpenSpec artifacts. Run one persona wave, in parallel, against the final stable
-document text after structured analysis and drafting are complete; do not rerun
-personas after every intermediate edit.
+Reserve reader testing for user-facing or operational documentation when
+audience comprehension is part of acceptance or a material comprehension risk
+remains. Never use it for atomic plans or OpenSpec artifacts. Run one persona
+wave, in parallel, against the final stable document text after structured
+analysis and drafting are complete; do not rerun personas after every
+intermediate edit.
 
 Use the `Task` tool and pass only the final stable document text—no conversation
 history or surrounding context. Substitute `<target reader profile>` with the
@@ -253,12 +276,13 @@ Document:
 <doc text>
 ```
 
-**Writing mode** — reader testing is optional. Proactively offer it; run it unless the user declines. If reader testing surfaces gaps or issues, loop back to Stage 4 Step 2 and revise the affected sections before proceeding to the file-writing step.
+**Writing mode** — run reader testing only when audience comprehension is part
+of acceptance or a material comprehension risk remains. If it surfaces gaps,
+loop back to Stage 4 Step 2 and revise the affected sections before writing.
 
-**Review mode** — for user-facing or operational documentation, run both
-personas once and fold their findings into the report using the source labels
-from `references/quality-rubric.md`. For other documentation, stop after the
-structured rubric unless audience testing is explicitly required.
+**Review mode** — use the same trigger. When it applies, run both personas once
+and fold their findings into the report using the source labels from
+`references/quality-rubric.md`. Otherwise stop after the structured rubric.
 
 ---
 
@@ -267,24 +291,25 @@ structured rubric unless audience testing is explicitly required.
 After Stage 5 reader testing is complete (or skipped):
 
 1. Use the `Write` tool for new documents or the `Edit` tool for additions to existing documents.
-2. Tell the user:
+2. Return the result to the invoking lifecycle owner. For a standalone
+   invocation, tell the user:
    - The file has been written or updated.
    - The absolute path to the file.
-   - That committing is their responsibility — do not commit automatically.
+3. Doc Smith does not commit by itself. An enclosing Execute owner retains its
+   existing commit authority.
 
 ---
 
 ## Constraints
 
-- **Never skip Stage 2** in writing mode — writing without context produces generic, inaccurate docs
-- **Always confirm doc type** with the user before scaffolding
-- **Always confirm file path** with the user before writing
+- **Never skip Stage 2** on the full writing path — writing without context produces generic, inaccurate docs
+- **Confirm doc type** before scaffolding on the full writing path
+- **Confirm file path** when the prompt and repository do not already establish it
 - **Never fabricate technical details** — read source code or ask the user
-- **Scope per invocation** — writing mode: one new doc per invocation. Review mode: multiple files allowed (see Stage 1), reviewed one at a time
-- **Sub-agent reader tests are optional in writing mode** — proactively offer; run unless the user declines. If gaps are found, loop back to Stage 4 to fix them
-- **Reader tests are scoped in review mode** — run both once for stable user-facing or operational documentation; never for planning contracts
+- **Scope per invocation** — writing mode: one new or existing document per invocation. Review mode: multiple files allowed (see Stage 1), reviewed one at a time
+- **Reader tests have one trigger** — run them only when audience comprehension is part of acceptance or a material comprehension risk remains; never run them for planning contracts
 - **Review output is inline only** — do NOT write the review report to a file; the user decides what to fix
-- **Do not commit** — writing the file is the final step; committing is the user's responsibility
+- **Do not commit as Doc Smith** — return control to the enclosing lifecycle owner, which retains its existing authority
 - **Never flag accuracy issues without evidence** — confirm via code search or explicitly label as unverified
 
 ---
@@ -293,17 +318,18 @@ After Stage 5 reader testing is complete (or skipped):
 
 | Mistake | Fix |
 |---------|-----|
-| Jumping to writing without Stage 2 | Always complete all five steps of Stage 2 before scaffolding |
+| Skipping context on the full path | Complete Stage 2 before scaffolding |
 | Bare code blocks without language identifiers | Every code block must have a language (e.g. `ruby`, `bash`, `yaml`) |
 | Using kebab-case filenames | Use snake_case: `feature_flags.md` not `feature-flags.md` |
-| Missing frontmatter | Every doc needs `id`, `title`, `sidebar_position`, and `description` |
+| Adding document ceremony by habit | Use the compact note path when its bounded criteria hold |
+| Missing required frontmatter | Add it when the repository format requires it |
 | Passive or hedging tone | Use imperative mood; state what to do, not what the reader "might" do |
 | AI slop phrases | Scan for "simply", "just", "it's worth noting" and remove all instances |
-| Skipping scaffold confirmation | Confirm the outline structure before writing any prose |
-| Missing See Also section | Every doc ends with See Also and relative markdown links |
+| Skipping scaffold confirmation on the full path | Confirm the outline before writing prose |
+| Missing required See Also section | Add it when the reader task or repository format requires it |
 | Fabricating technical details | Read source code or ask the user — never invent API names, config keys, or behavior |
-| Writing the whole doc at once | Draft section by section and get user approval at each step |
-| Ignoring neighboring docs | Read 2-3 neighbors to match the project's tone and sidebar_position numbering |
+| Writing a full-path doc at once | Draft section by section and get user approval at each step |
+| Ignoring neighboring docs on the full path | Read 2-3 neighbors to match the project's conventions |
 | Running reader tests on planning contracts | Route atomic plans and OpenSpec artifacts through planning Review. |
 | Repeating reader tests after intermediate edits | Run one parallel wave against final stable document text. |
 | Writing review report to a file | Report output is inline in the conversation only |
@@ -328,3 +354,10 @@ After Stage 5 reader testing is complete (or skipped):
 ## See Also
 
 - `writing-skills` — TDD-based approach for authoring the skills themselves (useful when updating this skill or adding a sibling)
+
+## Test Evidence
+
+- RED: a bounded operational note expanded to 171 words with frontmatter,
+  prerequisites, a recap, and See Also despite a fully known reader and claim.
+- GREEN: the compact note path preserved the verified behavior and confidence
+  annotation in 32 words without document ceremony.

@@ -6,7 +6,7 @@ These conventions apply to all docs produced or reviewed by this skill.
 
 ## Docusaurus frontmatter
 
-Every doc must start with a frontmatter block:
+Docusaurus documents must start with a frontmatter block:
 
 ```markdown
 ---
@@ -89,7 +89,7 @@ Do not use tables for prose that flows naturally as paragraphs.
 
 ## See Also
 
-Every doc must end with a See Also section:
+Add a See Also section when the reader task or repository format requires one:
 
 ```markdown
 ## See Also

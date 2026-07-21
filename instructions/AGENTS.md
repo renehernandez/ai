@@ -93,13 +93,14 @@ grant remains a human action.
 - Troubleshooting stays read-only through diagnosis and report. Enter Execute
   only when the user requests a fix.
 - Use confidence scores from [rules/confidence.md](../rules/confidence.md).
+- Follow [rules/communication.md](../rules/communication.md) for concise agent
+  conversation and durable prose. Keep required evidence and confidence scores.
 - Use `doc-smith` for non-trivial user-facing or operational documentation and
   `scrutinize` for adversarial validation. Atomic plans and OpenSpec artifacts
   use planning Review instead of Doc Smith reader personas.
   No mandatory frontend-design skill is currently selected.
 - Prefer authenticated organization-aware CLIs: `gh`, `glab`, and `wrangler`.
 - Name the exact verification layer performed; do not use vague shorthand.
-- Avoid generic AI filler and formulaic contrast phrasing.
 - Before a machine-readable YAML or JSON contract, add a concise
   `## Readable Summary`.
 
