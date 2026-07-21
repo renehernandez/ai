@@ -201,7 +201,7 @@ export function syncRuntime(options: RuntimeSyncOptions): RuntimeSyncResult {
         surface: options.surface ?? null,
       },
       validateApplied: () => {
-        const report = inspectRuntime({ ...options, ignoreTransactions: true });
+        const report = inspectRuntimeState(options, true);
         if (!report.ok) {
           throw new Error(
             `runtime_post_sync_validation_failed:\n${report.findings.map((finding) => `- ${finding}`).join("\n")}`,
@@ -264,8 +264,19 @@ export function inspectRuntime(input: {
   config: AxRuntimeConfig;
   runtimeRoot?: string;
   surface?: RuntimeSurface;
-  ignoreTransactions?: boolean;
 }): RuntimeStatusReport {
+  return inspectRuntimeState(input, false);
+}
+
+function inspectRuntimeState(
+  input: {
+    sourceRoot: string;
+    config: AxRuntimeConfig;
+    runtimeRoot?: string;
+    surface?: RuntimeSurface;
+  },
+  ignoreTransactions: boolean,
+): RuntimeStatusReport {
   const sourceRoot = resolve(input.sourceRoot);
   const paths = runtimePaths(input.runtimeRoot);
   const findings: string[] = [];
@@ -281,7 +292,7 @@ export function inspectRuntime(input: {
   } catch (error) {
     findings.push(error instanceof Error ? error.message : String(error));
   }
-  if (!input.ignoreTransactions) {
+  if (!ignoreTransactions) {
     try {
       transactions = inspectTransactions(paths.transactionsRoot);
       for (const transaction of transactions) {
