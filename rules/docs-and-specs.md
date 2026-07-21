@@ -2,20 +2,23 @@
 
 ## Documentation
 
-- Use `doc-smith` for non-trivial user-facing or operational documentation
-  creation, editing, review, or audit, including work under `docs/` and
-  substantial Markdown guides, references, explanations, onboarding material,
-  ADRs, or solution notes.
+- Follow [communication.md](communication.md). Keep durable prose focused on
+  the reader's task, required evidence, and durable decisions rather than an
+  execution diary.
+- Use [`doc-smith`](../skills/doc-smith/SKILL.md) for non-trivial user-facing or
+  operational documentation creation, editing, review, or audit, including
+  work under `docs/` and substantial Markdown guides, references,
+  explanations, onboarding material, ADRs, or solution notes.
 - Atomic plans and OpenSpec artifacts are planning contracts. Review them with
-  the planning baseline and do not run Doc Smith reader personas.
+  the [`Review` planning baseline](../skills/review/SKILL.md). Do not run Doc Smith reader personas.
 - Run Doc Smith reader personas once, in parallel, against final stable document
-  text when audience comprehension is part of acceptance. Do not rerun them
-  after every intermediate edit.
+  text when audience comprehension is part of acceptance or a material
+  comprehension risk remains. Do not rerun them after every intermediate edit.
 - Trivial typo, stale-path, and one-line clarity fixes do not require the full
   documentation workflow.
 - Verify commands, configuration keys, paths, and behavior against source.
-- Prefer direct, imperative prose. Remove filler, formulaic contrast phrases,
-  unexplained terms, and steps that depend on unstated context.
+- Prefer direct, imperative prose. Remove unexplained terms and steps that
+  depend on unstated context.
 
 ## Machine-readable thread contracts
 

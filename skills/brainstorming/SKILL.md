@@ -33,9 +33,12 @@ accepted.
    coherent scan inline when coordination would take longer. Do not combine
    independent lanes into one nominal scan or delay their launch by designing
    an elaborate packet.
-2. **Open the problem space.** Lead with an orientation map covering the
-   intended outcome, motivation, domain terms, existing precedent, current
-   constraints, alternative framings, working hypotheses, and discussion
+2. **Choose the smallest useful response shape.** For a quick or narrow request
+   with a known objective and no material ambiguity, use the compact route:
+   answer, one reason, and the next decision only when needed. Do not use the
+   orientation map for this route. For non-trivial or open-ended work, lead with
+   an orientation map covering the objective, problem framing, material domain
+   terms, existing precedent, approach, working hypotheses, and discussion
    queue. Do not choose v1, implementation slices, proof location, or capture
    artifact during this opening phase.
 3. **Keep the discussion queue short.** Pick 1-3 high-leverage decisions to
@@ -60,8 +63,8 @@ artifact writes, implementation, or terminal actions as accepted.
 
 ## Orientation Map
 
-The first substantive brainstorming response should be compact and scannable.
-Use this structure unless the user asks for a different format:
+Use the orientation map for non-trivial or open-ended opening responses. Do not
+use it for the compact route or when the user asks for a quick or narrow answer:
 
 ```markdown
 **Orientation Map**
@@ -97,10 +100,11 @@ found` only after showing the inspected paths or searches that support it.
 
 ## Domain Terms
 
-Always include a lightweight domain-terms pass. Identify 2-5 terms that could
-be fuzzy, overloaded, or inconsistent with the repo's language. Compare the
-user's wording against `CONTEXT.md`, glossary files, existing docs, or code when
-available.
+Include a domain-terms pass only when terminology is fuzzy, overloaded,
+inconsistent with the repository, or material to the decision. Keep a single
+term clarification inline on the compact route. For broader work, identify 2-5
+material terms and compare the user's wording against `CONTEXT.md`, glossary
+files, existing docs, or code when available.
 
 For each term, either:
 - propose a canonical meaning,
@@ -264,12 +268,13 @@ inspect them and present the finding.
 ## Before Ending The Opening Pass
 
 Check that:
-- the orientation map opened the problem space with working hypotheses and a
-  short discussion queue,
+- the response used the compact route for a narrow request or the orientation
+  map opened a non-trivial problem with working hypotheses and a short
+  discussion queue,
 - the closest implementations and canonical owners were inspected and shown,
 - reused or extended elements, new concepts, and material deviations were
   explicit,
-- domain terms were included,
+- domain terms were included only when material,
 - the discussion queue stayed at 1-3 items unless the user asked for more,
 - clear agreement accepted the explicit recommendation or bundle it referred
   to without expanding into unstated scope or authority,
@@ -300,7 +305,8 @@ After convergence is invited, also check that:
 | Walking every branch of the decision tree | Show the whole tree, then drill into 1-3 high-leverage decisions |
 | Treating every "agree" as acceptance of the whole map | Accept the explicit recommendation or bundle the response refers to, never unstated scope |
 | Asking `agree?` after every recommended default | State low-risk defaults together and ask only about unresolved material choices |
-| Skipping vocabulary because the topic feels obvious | Include a lightweight domain-terms pass every time |
+| Over-structuring a quick take | Give the answer, one reason, and only a material next decision |
+| Skipping material vocabulary | Add only the term clarification needed for the decision |
 | Waiting for the user to ask for reuse | Scan for precedent for every non-trivial design; prompt wording only narrows the scan |
 | Inspecting independent evidence lanes one at a time | Start them together when bounded delegation will finish faster; keep only small coherent scans inline |
 | Calling several independent sources one coherent scan | Keep the lanes distinct and use only the minimal shared evidence contract needed for reconciliation |
@@ -318,6 +324,10 @@ After convergence is invited, also check that:
 
 ## Test Evidence
 
+- RED: a user asking for a quick CLI naming take received a 252-word orientation
+  map, discussion queue, hypotheses, and next-step section.
+- GREEN: the compact route returned the recommendation, semantic distinction,
+  and confidence annotation in 25 words without losing the decision boundary.
 - RED: an opening-fix pressure test without this contract chose immediate
   Execute because the user explicitly requested implementation, the worktree
   was clean, the likely change was one line, and urgency made a separate
