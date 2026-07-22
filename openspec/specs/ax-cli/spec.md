@@ -32,84 +32,69 @@ The system SHALL provide an `ax` command through an AX-managed `~/.local/bin/ax`
 - **AND** shim `install` remains distinct from runtime synchronization
 
 ### Requirement: Desired and managed runtime state are separate
-The system SHALL treat tracked `ax.config.json` as desired state, local `~/.agents/runtime/managed-runtime.json` as AX ownership state, and the filesystem as observed state.
+The system SHALL treat tracked `ax.config.json` as available desired-state definitions, local `<runtime-root>/selected-profile.json` as the machine selection, and the filesystem as observed state.
 
 #### Scenario: Desired state is declared
 - **WHEN** AX reads `ax.config.json`
-- **THEN** it derives profiles, source URLs and refs, selected names, target paths, hooks, instructions, and OpenSpec settings
+- **THEN** it derives available profiles, source URLs and refs, selected names, target paths, hooks, instructions, and OpenSpec settings
+- **AND** tracked config does not select a profile for every machine
 
 #### Scenario: Hook source is resolved
 - **WHEN** AX builds hook candidates
 - **THEN** `runtime.hooks.sourceDir` resolves repository-relative `hooks` inside the local source snapshot
 - **AND** no machine-specific checkout path is required
 
-#### Scenario: Successful sync records ownership
+#### Scenario: Successful sync records selection
 - **WHEN** runtime synchronization succeeds
-- **THEN** `managed-runtime.json` records schema version, installed profiles, one `policyProfile`, AX-owned installed paths, and content hashes
-- **AND** it records the canonical hash version but no URL, ref, resolved commit, timestamp, cache path, transaction data, or duplicated desired configuration
+- **THEN** `selected-profile.json` records schema version and exactly one selected profile
+- **AND** it records no URL, ref, resolved commit, timestamp, cache path, transaction data, policy selector, or duplicated desired configuration
 
-#### Scenario: Legacy runtime is adopted
-- **WHEN** the local manifest is absent
-- **THEN** AX previews exact-hash `manage` for candidate-matching desired paths, `replace-managed` for approved drifted desired paths, and `remove` for canonical retired or stale paths
-- **AND** interactive use confirms every action while headless use requires `--adoption-file <path>` with exact path, hash, and action
-- **AND** replacement or removal creates a verified backup before mutation
-- **AND** unapproved or hash-drifted occupied paths remain unmanaged collisions
-- **AND** AX never reads or recreates `ax.lock.json`
-
-#### Scenario: Drifted desired legacy path is replaced
-- **WHEN** a `replace-managed` approval matches the observed canonical path and hash
-- **THEN** AX backs up the observed entry, installs the validated candidate, and records only the candidate hash in the new manifest
-
-#### Scenario: Managed content leaves desired state
-- **WHEN** desired state no longer includes a manifest-owned entry
-- **THEN** AX may remove that entry and its managed links
-- **AND** an occupied path without verified ownership blocks as an unmanaged collision
+#### Scenario: Previous profile content leaves desired state
+- **WHEN** a successful profile switch no longer includes a path owned only by the previous profile
+- **THEN** AX removes that path and its managed links transactionally
+- **AND** unrelated paths outside exact AX targets remain untouched
 
 ### Requirement: Sync is the only runtime convergence command
 The system SHALL expose `sync` as the sole runtime-content mutation verb and keep `status` and `validate` read-only.
 
 #### Scenario: Runtime profiles synchronize
 - **WHEN** a user runs `ax sync`
-- **THEN** AX reconciles skills, instructions, and hooks for profiles recorded in the local manifest
+- **THEN** AX reconciles skills, instructions, and hooks for the locally selected profile
 - **AND** top-level sync does not mutate repo-local OpenSpec files
 
-#### Scenario: Installed profiles differ from workflow policy
-- **WHEN** one or more profiles are synchronized
-- **THEN** the manifest records installed inventory and exactly one workflow-policy profile from that set
-- **AND** profile defaults are not combined
+#### Scenario: First sync selects one profile
+- **WHEN** no selected profile exists
+- **THEN** top-level sync requires `--profile <name>`
+- **AND** validates that name before source resolution or mutation
+- **AND** performs no interactive selection and has no silent default
 
-#### Scenario: First interactive sync runs
-- **WHEN** no manifest or selected profile exists and the process is interactive
-- **THEN** AX previews available profiles, records installed profiles plus one workflow-policy profile, and synchronizes the confirmed selection
+#### Scenario: Later sync reuses selection
+- **WHEN** one valid selected profile exists and top-level sync has no profile flag
+- **THEN** AX reuses that selected profile
 
-#### Scenario: First headless sync runs
-- **WHEN** no manifest or selected profile exists and the process is noninteractive
-- **THEN** AX requires `--profile` or `--all-profiles` plus `--policy-profile <name>`
-- **AND** those explicit values authorize the first selection
-- **AND** performs no mutation when selection is missing
+#### Scenario: Profile switch succeeds
+- **WHEN** top-level sync names a different valid profile
+- **THEN** AX builds the complete candidate before mutation, removes previous-profile-only owned paths, and commits the new selection last
+- **AND** the selected profile controls both installed assets and workflow policy
+
+#### Scenario: Profile switch fails
+- **WHEN** candidate construction, target replacement, deletion, validation, or selection commit fails
+- **THEN** AX restores the previous profile-owned runtime and previous selection
+- **AND** leaves the failed profile unselected
 
 #### Scenario: Scoped surface synchronizes
 - **WHEN** a user runs skills, instructions, or hooks `sync`
-- **THEN** AX requires an existing valid manifest and consumes its installed/policy profile selection
-- **AND** reconciles only that surface's owned paths/hashes with the same snapshot and transaction rules
-- **AND** never creates the manifest or changes profile selection
+- **THEN** AX requires an existing valid selected profile and consumes it
+- **AND** reconciles only that surface's owned paths with the same snapshot and transaction rules
+- **AND** never creates or changes profile selection
 
 #### Scenario: Scoped sync has no manifest
 - **WHEN** a scoped sync runs before top-level initialization
-- **THEN** it exits with `runtime_not_initialized` and points to `ax sync`
+- **THEN** it exits with `runtime_profile_uninitialized` and points to top-level `ax sync --profile <name>`
 
-#### Scenario: Stored profile selection changes
-- **WHEN** a later interactive sync changes installed or policy profile selection
-- **THEN** AX previews the exact replacement/addition and requires confirmation
-
-#### Scenario: Stored profile selection changes headlessly
-- **WHEN** a later noninteractive sync changes installed or policy profile selection
-- **THEN** it requires `--profile-selection-file <path>` containing current manifest hash, exact replacement installed profiles, and one policy profile
-- **AND** hash drift or incomplete selection blocks without mutation
-
-#### Scenario: Policy profile is invalid
-- **WHEN** policy profile is missing, duplicated, or absent from installed profiles
-- **THEN** sync and validation fail with `policy_profile_ambiguous`
+#### Scenario: Scoped selection flag is passed
+- **WHEN** a caller passes `--profile` to a scoped sync
+- **THEN** command parsing rejects the unsupported option and performs no mutation
 
 #### Scenario: Legacy runtime command is invoked
 - **WHEN** a caller invokes runtime `install` or `update` at top level or a scoped surface
@@ -140,7 +125,7 @@ The system SHALL build each synchronization candidate from one immutable snapsho
 - **THEN** AX performs no target replacement, backup creation, or manifest rewrite
 
 ### Requirement: Content identity is canonical and versioned
-The system SHALL use `sha256-tree-v1` for every runtime ownership, snapshot, adoption, journal, backup, and recovery identity.
+The system SHALL use `sha256-tree-v1` for every runtime snapshot, journal, backup, and recovery identity.
 
 #### Scenario: Tree content is hashed
 - **WHEN** AX hashes a directory tree
@@ -152,7 +137,7 @@ The system SHALL use `sha256-tree-v1` for every runtime ownership, snapshot, ado
 - **THEN** `sha256-tree-v1` remains stable
 
 #### Scenario: Identity-bearing input uses another version
-- **WHEN** a manifest, adoption file, profile-selection file, journal, backup, or recovery file declares an unknown hash version
+- **WHEN** a runtime journal or backup declares an unknown hash version
 - **THEN** AX rejects it before mutation
 
 ### Requirement: Source caches are disposable
@@ -179,16 +164,16 @@ The system SHALL validate a complete candidate before touching live entries and 
 - **THEN** AX reclaims the lock and recovers its journal before new candidate work
 
 #### Scenario: Candidate validation passes
-- **WHEN** candidate skills, instructions, hooks, profiles, links, ownership, and collision checks pass
+- **WHEN** candidate skills, instructions, hooks, selected profile, links, and collision checks pass
 - **THEN** AX records verified preimages, previous/candidate manifest hashes, expected old/new target hashes, and phase in a journal under `~/.agents/runtime/transactions/<id>`
-- **AND** retains hash-verified candidate payloads and deletion markers in that transaction directory until finalize, rollback, or operator resolution completes
+- **AND** retains hash-verified candidate payloads and deletion markers in that transaction directory until finalize or rollback completes
 - **AND** applies entries with same-filesystem temporary renames
-- **AND** atomically replaces `managed-runtime.json` last and marks `manifest_committed`
+- **AND** atomically replaces `selected-profile.json` last and marks `manifest_committed`
 
 #### Scenario: Application fails
 - **WHEN** a target replacement or post-apply validation fails
 - **THEN** AX restores every touched entry from the journal
-- **AND** leaves the previous manifest unchanged
+- **AND** restores the previous selected-profile state or its absence
 
 #### Scenario: A process terminates unexpectedly
 - **WHEN** a later mutating AX invocation finds an incomplete journal
@@ -204,42 +189,6 @@ The system SHALL validate a complete candidate before touching live entries and 
 #### Scenario: Recovery cannot restore state
 - **WHEN** rollback fails after recovery begins
 - **THEN** AX records `recovery_failed`, preserves recovery material, and blocks later mutation
-
-#### Scenario: Operator resolves recovery through sync
-- **WHEN** `ax sync --recovery-file <path>` names the transaction/domain, exact current target and manifest hashes, and `restore-previous|apply-candidate|preserve-unmanaged` for every path whose previous and candidate ownership records differ
-- **THEN** `restore-previous` selects the previous manifest record or absence, `apply-candidate` selects the candidate record or deletion marker, and `preserve-unmanaged` retains current content while removing AX ownership
-- **AND** when previous and candidate profile metadata differ the file selects exact-hash-bound `profileSelectionState: previous|candidate` for both `installedProfiles` and `policyProfile`
-- **AND** AX writes the resulting hash-verified derived manifest into the transaction directory before changing targets
-- **AND** applies only hash-matching authorized actions under the runtime-root lock, atomically installs the derived manifest last, and validates selected hashes, ownership, manifest structure, and untouched targets before removing recovery state
-- **AND** reports any intentionally retained desired drift for a later normal sync rather than treating it as failed recovery
-
-#### Scenario: Recovery resolution mixes actions
-- **WHEN** one recovery file restores a previous entry, applies another candidate, and preserves a third entry as unmanaged
-- **THEN** the derived manifest records the previous hash/ownership for the first, candidate hash/ownership for the second, and no ownership for the third when both owned paths belong to the selected profile inventory
-- **AND** a process death before or after derived-manifest replacement resumes to that same selected state by hash
-
-#### Scenario: Recovery changes installed or policy profile
-- **WHEN** previous and candidate manifests have different installed profiles or policy profiles
-- **THEN** recovery requires `profileSelectionState: previous|candidate` and uses both top-level fields from that selected manifest
-- **AND** rejects an action that would own a path outside the selected inventory before any mutation
-- **AND** permits `preserve-unmanaged` to retain out-of-profile content without AX ownership
-
-#### Scenario: First-sync recovery selects previous state
-- **WHEN** the transaction began without `managed-runtime.json` and recovery selects `profileSelectionState: previous`
-- **THEN** the derived outcome is a journaled manifest-deletion marker with zero owned paths rather than fabricated profile metadata
-- **AND** restored previous content and preserved current content remain unmanaged
-- **AND** an `apply-candidate` action that would retain AX ownership is rejected before mutation
-- **AND** a process death before or after manifest deletion resumes to the same absent-manifest state by hash
-
-#### Scenario: Recovered in-profile content is older than desired
-- **WHEN** `restore-previous` keeps an older hash for a path present in the selected profile inventory
-- **THEN** the derived manifest records that observed owned hash and recovery may complete
-- **AND** offline status reports desired drift for a later normal sync
-
-#### Scenario: Disposable source state changes during recovery
-- **WHEN** a recovery conflict remains after cache deletion, local-source mutation, or remote-ref advancement
-- **THEN** `apply-candidate` uses the retained payload whose hash was authorized for that transaction
-- **AND** does not rebuild the candidate from current source state
 
 #### Scenario: Recovery resolution is stale
 - **WHEN** a recovery-file current target or manifest hash differs from observed state

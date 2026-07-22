@@ -15,19 +15,19 @@ The system SHALL provide a read-only, offline `ax status` command that compares 
 - **WHEN** status runs from the managed shim or package script
 - **THEN** it reports shim ownership, executable state, PATH resolution, shadowing, stale targets, and detached/disposable worktree targets
 
-#### Scenario: Status reports installed profiles
-- **WHEN** a local manifest exists
-- **THEN** status reports installed profiles and the single `policyProfile`, then compares desired inventory with manifest-owned and observed entries
-- **AND** it fails when `policyProfile` is missing or outside the installed set
+#### Scenario: Status reports selected profile
+- **WHEN** valid local selected-profile state exists
+- **THEN** status reports exactly one selected profile and compares its desired inventory with observed entries
+- **AND** that profile determines both installed assets and workflow policy
 
 #### Scenario: First-run selection is missing
-- **WHEN** no local manifest or selected profile exists
-- **THEN** status reports `profile_selection_required`
+- **WHEN** no selected profile exists
+- **THEN** status reports `runtime_profile_uninitialized` and the `ax sync --profile <name>` initialization command
 - **AND** performs no interactive selection or mutation
 
 #### Scenario: Status aggregates managed surfaces
 - **WHEN** status runs
-- **THEN** it reports skill, instruction, hook, link, ownership, content-hash, collision, and retained-profile state
+- **THEN** it reports selected profile, skill, instruction, hook, link, collision, and observed runtime state
 
 #### Scenario: Incomplete transaction exists
 - **WHEN** status finds a temporary AX journal that has not completed
@@ -37,8 +37,6 @@ The system SHALL provide a read-only, offline `ax status` command that compares 
 #### Scenario: Recovery resolution is needed
 - **WHEN** status finds `recovery_conflict` or `recovery_failed`
 - **THEN** JSON output includes transaction ID, domain/root, current target and manifest hashes, and allowed per-path recovery actions with their resulting ownership/hash state
-- **AND** when profile metadata differs it reports allowed `profileSelectionState` values and incompatible ownership choices
-- **AND** when the previous manifest was absent it reports that selecting `previous` deletes the manifest and permits zero owned paths
 - **AND** status remains read-only
 
 #### Scenario: Another sync holds the mutation lock

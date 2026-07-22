@@ -34,8 +34,6 @@ function config(): AxRuntimeConfig {
   return {
     version: 1,
     runtime: {
-      installedProfiles: ["personal"],
-      policyProfile: "personal",
       canonicalSkillsDir: "~/.agents/skills",
       skillSymlinkTargets: ["~/.codex/skills"],
       configs: {

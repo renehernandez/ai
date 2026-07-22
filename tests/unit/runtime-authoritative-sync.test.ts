@@ -16,6 +16,7 @@ import {
   syncRuntime,
   validateRuntime,
 } from "../../scripts/ax/runtime-sync.ts";
+import { TransactionInterruption } from "../../scripts/ax/transaction-engine.ts";
 
 function withTempDir(callback: (root: string) => void): void {
   const root = mkdtempSync(join(tmpdir(), "runtime-authoritative-sync-"));
@@ -40,6 +41,9 @@ function fixture(root: string): {
     mkdirSync(skill, { recursive: true });
     writeFileSync(join(skill, "SKILL.md"), `# ${name}\n`, "utf-8");
   }
+  const workSkill = join(sourceRoot, "work-skills", "work-only");
+  mkdirSync(workSkill, { recursive: true });
+  writeFileSync(join(workSkill, "SKILL.md"), "# work-only\n", "utf-8");
   mkdirSync(join(sourceRoot, "instructions"), { recursive: true });
   writeFileSync(
     join(sourceRoot, "instructions", "AGENTS.md"),
@@ -52,8 +56,6 @@ function fixture(root: string): {
   const config: AxRuntimeConfig = {
     version: 1,
     runtime: {
-      installedProfiles: ["personal"],
-      policyProfile: "personal",
       retiredSkills: ["retired-skill"],
       canonicalSkillsDir: join(installRoot, "agents", "skills"),
       skillSymlinkTargets: [join(installRoot, "codex", "skills")],
@@ -74,6 +76,12 @@ function fixture(root: string): {
           { sourcePath: "instructions/AGENTS.md", targetPath: "AGENTS.md" },
         ],
       },
+      work: {
+        include: ["modes", "work"],
+        paths: [
+          { sourcePath: "instructions/AGENTS.md", targetPath: "AGENTS.md" },
+        ],
+      },
     },
     blocks: {
       modes: {
@@ -84,12 +92,21 @@ function fixture(root: string): {
           },
         ],
       },
+      work: {
+        skills: [{ localPath: "work-skills", names: ["work-only"] }],
+      },
     },
   };
+  mkdirSync(runtimeRoot, { recursive: true });
+  writeFileSync(
+    join(runtimeRoot, "selected-profile.json"),
+    '{"schemaVersion":1,"selectedProfile":"personal"}\n',
+    "utf-8",
+  );
   return { sourceRoot, runtimeRoot, installRoot, config };
 }
 
-test("sync authoritatively replaces declared targets without adoption or a manifest", () => {
+test("sync authoritatively replaces declared targets using persisted profile state", () => {
   withTempDir((root) => {
     const input = fixture(root);
     const explore = join(
@@ -117,16 +134,11 @@ test("sync authoritatively replaces declared targets without adoption or a manif
       mkdirSync(join(path, ".."), { recursive: true });
       writeFileSync(path, "# Existing\n", "utf-8");
     }
-    mkdirSync(join(input.runtimeRoot, "transactions", "old"), {
-      recursive: true,
-    });
-    mkdirSync(join(input.runtimeRoot, "backups", "old"), { recursive: true });
     writeFileSync(
       join(input.runtimeRoot, "managed-runtime.json"),
       "{}\n",
       "utf-8",
     );
-    writeFileSync(join(input.runtimeRoot, "mutation.lock"), "{}\n", "utf-8");
 
     const first = syncRuntime(input);
     assert.equal(first.status, "synchronized");
@@ -137,9 +149,12 @@ test("sync authoritatively replaces declared targets without adoption or a manif
       existsSync(join(input.runtimeRoot, "managed-runtime.json")),
       false,
     );
-    assert.equal(existsSync(join(input.runtimeRoot, "transactions")), false);
-    assert.equal(existsSync(join(input.runtimeRoot, "backups")), false);
-    assert.equal(existsSync(join(input.runtimeRoot, "mutation.lock")), false);
+    assert.equal(
+      JSON.parse(
+        readFileSync(join(input.runtimeRoot, "selected-profile.json"), "utf-8"),
+      ).selectedProfile,
+      "personal",
+    );
 
     writeFileSync(explore, "# Local drift\n", "utf-8");
     const second = syncRuntime(input);
@@ -152,7 +167,7 @@ test("sync authoritatively replaces declared targets without adoption or a manif
   });
 });
 
-test("scoped sync initializes its declared surface without runtime state", () => {
+test("scoped sync uses persisted profile state", () => {
   withTempDir((root) => {
     const input = fixture(root);
     const result = syncRuntime({ ...input, surface: "hooks" });
@@ -162,22 +177,154 @@ test("scoped sync initializes its declared surface without runtime state", () =>
       existsSync(join(input.installRoot, "agents", "hooks", "startup.ts")),
       true,
     );
-    assert.equal(
-      existsSync(join(input.runtimeRoot, "managed-runtime.json")),
-      false,
-    );
+    assert.equal(result.selectedProfile, "personal");
   });
 });
 
 test("status reports invalid config without a secondary exception", () => {
   withTempDir((root) => {
     const input = fixture(root);
-    input.config.runtime.installedProfiles = [];
+    input.config.profiles = {};
 
     const report = inspectRuntime(input);
 
     assert.equal(report.ok, false);
-    assert.match(report.findings.join("\n"), /installedProfiles is required/);
+    assert.match(report.findings.join("\n"), /profiles are required/);
+  });
+});
+
+test("uninitialized runtime requires an explicit profile before network or mutation", () => {
+  withTempDir((root) => {
+    const input = fixture(root);
+    rmSync(join(input.runtimeRoot, "selected-profile.json"));
+
+    assert.throws(
+      () => syncRuntime(input),
+      /runtime_profile_uninitialized.*ax sync --profile <name>.*personal/,
+    );
+    assert.equal(existsSync(input.installRoot), false);
+
+    const result = syncRuntime({ ...input, profile: "personal" });
+    assert.equal(result.selectedProfile, "personal");
+    assert.equal(inspectRuntime(input).selectedProfile, "personal");
+  });
+});
+
+test("malformed or unknown persisted profile state fails read-only inspection", () => {
+  withTempDir((root) => {
+    const input = fixture(root);
+    const statePath = join(input.runtimeRoot, "selected-profile.json");
+    writeFileSync(statePath, "{not-json}\n", "utf-8");
+    assert.match(
+      inspectRuntime(input).findings.join("\n"),
+      /selected_profile_invalid/,
+    );
+
+    writeFileSync(
+      statePath,
+      '{"schemaVersion":1,"selectedProfile":"missing"}\n',
+      "utf-8",
+    );
+    assert.match(
+      inspectRuntime(input).findings.join("\n"),
+      /selected_profile_unknown.*missing.*personal.*work/,
+    );
+  });
+});
+
+test("switching profiles removes previous-only paths and commits selection last", () => {
+  withTempDir((root) => {
+    const input = fixture(root);
+    syncRuntime(input);
+    const workOnly = join(
+      input.installRoot,
+      "agents",
+      "skills",
+      "work-only",
+      "SKILL.md",
+    );
+
+    syncRuntime({ ...input, profile: "work" });
+    assert.equal(readFileSync(workOnly, "utf-8"), "# work-only\n");
+    assert.equal(inspectRuntime(input).selectedProfile, "work");
+
+    syncRuntime({ ...input, profile: "personal" });
+    assert.equal(existsSync(join(workOnly, "..")), false);
+    assert.equal(inspectRuntime(input).selectedProfile, "personal");
+  });
+});
+
+test("failed profile switch restores runtime and previous selection", () => {
+  withTempDir((root) => {
+    const input = fixture(root);
+    syncRuntime(input);
+    let injected = false;
+
+    assert.throws(
+      () =>
+        syncRuntime({
+          ...input,
+          profile: "work",
+          transactionFault: (point) => {
+            if (!injected && point.startsWith("after-target:")) {
+              injected = true;
+              throw new Error("injected profile switch failure");
+            }
+          },
+        }),
+      /injected profile switch failure/,
+    );
+    assert.equal(inspectRuntime(input).selectedProfile, "personal");
+    assert.equal(
+      existsSync(
+        join(input.installRoot, "agents", "skills", "work-only", "SKILL.md"),
+      ),
+      false,
+    );
+    assert.equal(validateRuntime(input).ok, true);
+  });
+});
+
+test("interrupted profile switch is reported and recovered by the next sync", () => {
+  withTempDir((root) => {
+    const input = fixture(root);
+    syncRuntime(input);
+    let interrupted = false;
+
+    assert.throws(
+      () =>
+        syncRuntime({
+          ...input,
+          profile: "work",
+          transactionFault: (point) => {
+            if (!interrupted && point.startsWith("after-target:")) {
+              interrupted = true;
+              throw new TransactionInterruption();
+            }
+          },
+        }),
+      TransactionInterruption,
+    );
+    const interruptedStatus = inspectRuntime(input);
+    assert.equal(interruptedStatus.selectedProfile, "personal");
+    assert.equal(interruptedStatus.transactions.length, 1);
+    assert.match(
+      interruptedStatus.findings.join("\n"),
+      /incomplete_transaction/,
+    );
+
+    syncRuntime({ ...input, profile: "work" });
+    const recoveredStatus = inspectRuntime(input);
+    assert.equal(recoveredStatus.ok, true);
+    assert.equal(recoveredStatus.selectedProfile, "work");
+    assert.equal(recoveredStatus.transactions.length, 0);
+    assert.equal(
+      readFileSync(
+        join(input.installRoot, "agents", "skills", "work-only", "SKILL.md"),
+        "utf-8",
+      ),
+      "# work-only\n",
+    );
   });
 });
 

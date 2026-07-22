@@ -95,8 +95,6 @@ function createRuntimeSource(root: string): {
       {
         version: 1,
         runtime: {
-          installedProfiles: ["personal"],
-          policyProfile: "personal",
           retiredSkills: [],
           canonicalSkillsDir: join(installRoot, "agents", "skills"),
           skillSymlinkTargets: [
@@ -134,6 +132,13 @@ function createRuntimeSource(root: string): {
               "rules/base.md",
             ],
           },
+          work: {
+            include: ["modes", "fullscript"],
+            paths: [
+              { sourcePath: "instructions/AGENTS.md", targetPath: "AGENTS.md" },
+              "rules/base.md",
+            ],
+          },
         },
         blocks: {
           modes: {
@@ -141,6 +146,16 @@ function createRuntimeSource(root: string): {
               {
                 localPath: "skills",
                 names: ["explore", "plan", "execute", "review", "finish"],
+              },
+            ],
+          },
+          fullscript: {
+            skills: [
+              {
+                url: "https://git.fullscript.invalid/ai/skills.git",
+                ref: "main",
+                basePath: ".",
+                names: ["private-skill"],
               },
             ],
           },
@@ -164,6 +179,36 @@ function gitInit(root: string): void {
   assert.equal(result.status, 0, result.stderr || result.stdout);
 }
 
+function createWorkSkillRemote(root: string): string {
+  const remoteRoot = join(root, "work-skills");
+  mkdirSync(join(remoteRoot, "private-skill"), { recursive: true });
+  writeFileSync(
+    join(remoteRoot, "private-skill", "SKILL.md"),
+    "---\nname: private-skill\ndescription: Work-only fixture\n---\n# Private skill\n",
+    "utf-8",
+  );
+  const env = {
+    ...withoutGitRepositoryEnv(),
+    GIT_AUTHOR_NAME: "AX Test",
+    GIT_AUTHOR_EMAIL: "ax-test@example.invalid",
+    GIT_COMMITTER_NAME: "AX Test",
+    GIT_COMMITTER_EMAIL: "ax-test@example.invalid",
+  };
+  for (const args of [
+    ["init", "--initial-branch", "main"],
+    ["add", "."],
+    ["commit", "-m", "fixture: add work skill"],
+  ]) {
+    const result = spawnSync("git", args, {
+      cwd: remoteRoot,
+      encoding: "utf-8",
+      env,
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+  }
+  return pathToFileURL(remoteRoot).href;
+}
+
 test("CLI synchronizes an isolated runtime and reports offline local state", () => {
   withTempDir((root) => {
     const fixture = createRuntimeSource(root);
@@ -176,6 +221,8 @@ test("CLI synchronizes an isolated runtime and reports offline local state", () 
         "--runtime-root",
         fixture.runtimeRoot,
         "sync",
+        "--profile",
+        "personal",
         "--json",
       ],
       { cwd: target, sourceRoot: fixture.sourceRoot },
@@ -184,8 +231,13 @@ test("CLI synchronizes an isolated runtime and reports offline local state", () 
     const result = JSON.parse(first.stdout) as { status: string };
     assert.equal(result.status, "synchronized");
     assert.equal(
-      existsSync(join(fixture.runtimeRoot, "managed-runtime.json")),
-      false,
+      JSON.parse(
+        readFileSync(
+          join(fixture.runtimeRoot, "selected-profile.json"),
+          "utf-8",
+        ),
+      ).selectedProfile,
+      "personal",
     );
     assert.equal(existsSync(join(fixture.sourceRoot, "ax.lock.json")), false);
     assert.equal(existsSync(join(fixture.sourceRoot, ".ax", "cache")), false);
@@ -213,6 +265,62 @@ test("CLI synchronizes an isolated runtime and reports offline local state", () 
     );
     assert.equal(status.status, 0, status.stderr || status.stdout);
     assert.equal((JSON.parse(status.stdout) as { ok: boolean }).ok, true);
+
+    const repeated = runAx(
+      [
+        "--config",
+        fixture.configPath,
+        "--runtime-root",
+        fixture.runtimeRoot,
+        "sync",
+        "--json",
+      ],
+      { cwd: target, sourceRoot: fixture.sourceRoot },
+    );
+    assert.equal(repeated.status, 0, repeated.stderr || repeated.stdout);
+    assert.equal(
+      (JSON.parse(repeated.stdout) as { selectedProfile: string })
+        .selectedProfile,
+      "personal",
+    );
+    assert.equal(
+      existsSync(
+        join(fixture.installRoot, "agents", "skills", "private-skill"),
+      ),
+      false,
+    );
+
+    const tracked = JSON.parse(readFileSync(fixture.configPath, "utf-8"));
+    tracked.blocks.fullscript.skills[0].url = createWorkSkillRemote(root);
+    writeFileSync(
+      fixture.configPath,
+      `${JSON.stringify(tracked, null, 2)}\n`,
+      "utf-8",
+    );
+    const work = runAx(
+      [
+        "--config",
+        fixture.configPath,
+        "--runtime-root",
+        fixture.runtimeRoot,
+        "sync",
+        "--profile",
+        "work",
+        "--json",
+      ],
+      { cwd: target, sourceRoot: fixture.sourceRoot },
+    );
+    assert.equal(work.status, 0, work.stderr || work.stdout);
+    assert.equal(
+      (JSON.parse(work.stdout) as { selectedProfile: string }).selectedProfile,
+      "work",
+    );
+    assert.equal(
+      lstatSync(
+        join(fixture.installRoot, "codex", "skills", "private-skill"),
+      ).isSymbolicLink(),
+      true,
+    );
   });
 });
 
@@ -266,6 +374,28 @@ exit 23
     chmodSync(fakeCodex, 0o755);
     const env = { HOME: home, PATH: `${fakeBin}:/usr/bin:/bin` };
 
+    const uninitializedTopLevelSync = runAx(
+      [
+        "--config",
+        fixture.configPath,
+        "--runtime-root",
+        fixture.runtimeRoot,
+        "sync",
+        "--json",
+      ],
+      { cwd: root, sourceRoot: fixture.sourceRoot, env },
+    );
+    assert.notEqual(uninitializedTopLevelSync.status, 0);
+    assert.match(
+      uninitializedTopLevelSync.stderr,
+      /runtime_profile_uninitialized.*ax sync --profile <name>/,
+    );
+    assert.match(
+      readFileSync(configPath, "utf-8"),
+      /max_concurrent_threads_per_session = 4/,
+    );
+    assert.equal(existsSync(fixture.runtimeRoot), false);
+
     const rejectedTopLevelSync = runAx(
       [
         "--config",
@@ -273,6 +403,8 @@ exit 23
         "--runtime-root",
         fixture.runtimeRoot,
         "sync",
+        "--profile",
+        "personal",
         "--json",
       ],
       { cwd: root, sourceRoot: fixture.sourceRoot, env },
@@ -355,6 +487,8 @@ exit 0
         "--runtime-root",
         fixture.runtimeRoot,
         "sync",
+        "--profile",
+        "personal",
         "--json",
       ],
       { cwd: root, sourceRoot: fixture.sourceRoot, env },
