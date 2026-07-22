@@ -22,6 +22,32 @@ When handing off non-trivial work, include:
 
 For cloud handoffs, include repo-visible file paths and avoid relying only on local `~/.agents` rules or machine memory.
 
+## Immutable Publication Packet
+
+When a frozen MR unit becomes publication-ready, the coordinator gives its
+provider-only Finish subagent one task-local immutable publication packet with:
+
+- unit and current Execute owner;
+- Finish lane identity and monotonically increasing provider-ownership
+  generation;
+- provider route;
+- source branch and exact source SHA;
+- target branch and expected target-base identity;
+- draft title and incremental scope;
+- issue relationship or completion semantics;
+- configured reviewer policy; and
+- the delegated lane's explicit mutation ceiling.
+
+The packet transfers no repository-write ownership. Live Git and provider state
+remain authoritative. A changed source SHA, target-base identity, Finish lane
+identity, or provider-ownership generation invalidates the packet and requires a
+refreshed handoff before further provider mutation. Replacement permanently
+revokes the prior generation. A lane holding a revoked generation is read-only
+and returns status unless the coordinator explicitly reactivates it with a new
+generation. Keep the packet and the coordinator's current generation
+designation task-local, out of commits, hosted descriptions, and durable
+workflow state.
+
 ## Resume Pass
 
 When resuming from a handoff, do not restart discovery from scratch. First verify the handoff against live state:

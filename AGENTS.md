@@ -34,6 +34,11 @@ authority expansion, state the mode, mutation authority, and goal once.
   Merge, deployment, and cleanup require explicit user authority or activated
   project policy.
 
+Lifecycle authority is lane-scoped within a task. An Execute coordinator and
+MR-scoped Finish subagents may operate concurrently after a delivery-unit head
+is frozen. Each delegated Finish lane is provider-only and never becomes a
+repository writer.
+
 Route authority before readiness. Every new substantive task begins in Explore
 and defaults to `brainstorming`; an opening request to fix, implement, change,
 or build does not itself authorize mutation. A materially different requested

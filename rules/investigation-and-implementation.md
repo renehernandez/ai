@@ -81,6 +81,59 @@ units; Review fills ready reviewer capacity; and Finish overlaps stable local
 and hosted gates. Preserve a small coherent task inline when delegation,
 worktree setup, or handoff cost would increase latency.
 
+One MR per unit is an artifact boundary, not a user approval checkpoint. Once
+a multi-unit delivery is accepted, continue every eligible unit and publish
+each hook-clean artifact. Do not wait for `continue`, user review, or approval
+between units. Wording such as "update each MR separately" defines that
+boundary, not a pause. Stop only when the user explicitly requests a staged
+checkpoint or a normal authority, contract, ownership, safety, or provider
+blocker requires it.
+
+Each MR-specific Finish lane must remain active through draft technical
+readiness. If it exits, errors, or stalls before then, the coordinator replaces
+it with another provider-only subagent using a refreshed immutable packet that
+preserves the delivery fields and advances the provider-ownership generation.
+Before replacement, revoke the prior generation, confirm the prior lane exited
+or explicitly interrupt it at a safe boundary, and confirm it is inactive.
+Reinspect live provider state, revalidate source and target identities, and
+designate exactly one replacement as the current provider owner before provider
+mutation. A resumed lane holding the revoked generation is read-only and
+returns status. Monitoring continuity does not require a user prompt.
+
+A hook-clean, frozen multi-MR unit is `publication-ready`. Publication
+authority, provider routing, credentials, and a known stable target-base identity
+are launch prerequisites, not readiness conditions. Missing prerequisites do
+not revoke publication readiness.
+
+That transition creates a task-wide dispatch barrier. Before any agent begins
+another repository mutation, the coordinator signals every active Execute
+owner to pause. A repository mutation already in flight may finish, but its
+owner pauses at the next safe tool boundary and acknowledges that it is paused
+before its next mutation. The coordinator starts one MR-specific, provider-only
+Finish subagent with the immutable publication packet. If capacity is unavailable,
+free one worker slot for the Finish subagent by ending or interrupting other
+non-Finish subagent work at a safe boundary. If no slot can be freed safely, the
+barrier remains closed.
+
+A credential, authority, provider-routing, target-base identity, or remaining
+capacity blocker does not release the dispatch barrier. Only explicit
+withdrawal or supersession of the unit may release it without starting the
+lane. Successfully starting the Finish subagent releases the barrier; the
+coordinator then signals the paused Execute owners to resume. Execute lanes
+continue without waiting for MR creation, CI, or hosted review. Report the
+launch or concrete blocker once in task commentary and rely on the subagent and
+live Git/provider state afterward. The small coherent inline exception applies
+to single-MR work with no useful overlap; a multi-unit or multi-MR delivery is
+not eligible for that exception while descendant or other useful work is ready.
+
+This task-wide hold is intentional when the MR-specific Finish lane for a
+publication-ready unit cannot launch. It prioritizes publication correctness and
+progressive MR visibility over temporary throughput so later mutation cannot
+bypass the accepted publication boundary or consume the capacity reserved to
+make that boundary visible. The cost is bounded: eligible mutation resumes
+immediately after the lane starts, or after explicit withdrawal or supersession
+releases the unit.
+
 ## Route semantically
 
 After the initial Explore gate and later mutation authority, Direct Execute is

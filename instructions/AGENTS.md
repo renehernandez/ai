@@ -22,6 +22,11 @@ authority.
   readiness. Merge, deployment, and cleanup require explicit user authority or
   activated project policy.
 
+Lifecycle authority is lane-scoped within a task. An Execute coordinator and
+MR-scoped Finish subagents may operate concurrently after a delivery-unit head
+is frozen. Each delegated Finish lane is provider-only and never becomes a
+repository writer.
+
 ## User throughput priority
 
 Within accepted authority and safety boundaries, minimize user-visible latency.

@@ -535,6 +535,8 @@ test("accepted atomic plans continue through automated draft delivery", () => {
 });
 
 test("multi-unit guidance supports parallel owners with ordered ancestry", () => {
+  const repoAgents = readFileSync("AGENTS.md", "utf-8");
+  const portableAgents = readFileSync("instructions/AGENTS.md", "utf-8");
   const implementationRules = readFileSync(
     "rules/investigation-and-implementation.md",
     "utf-8",
@@ -553,6 +555,24 @@ test("multi-unit guidance supports parallel owners with ordered ancestry", () =>
   );
   assert.match(gitRules, /coalesce\s+superseded upstream heads/);
   assert.match(gitRules, /exact expected remote-head lease/);
+
+  for (const text of [repoAgents, portableAgents]) {
+    assert.match(text, /Execute.*MR-scoped Finish.*concurrently/is);
+    assert.match(text, /Finish.*provider-only/is);
+  }
+  assert.match(implementationRules, /task-wide dispatch barrier/);
+  assert.match(
+    implementationRules,
+    /already in flight.*next safe tool boundary/is,
+  );
+  assert.match(
+    implementationRules,
+    /blocker.*does not release.*dispatch barrier/is,
+  );
+  assert.doesNotMatch(
+    implementationRules,
+    /persistent (?:publication )?(?:scheduler|ledger|queue)/i,
+  );
 });
 
 test("OpenSpec guidance challenges delivery-unit cohesion before writing", () => {

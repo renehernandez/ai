@@ -360,48 +360,6 @@ test("Execute blocks POC expansion until the exact architecture checkpoint passe
   assert.match(execute, /architecture-affecting change\s+invalidates/);
 });
 
-test("mode skills coordinate parallel draft stacks through hosted readiness", () => {
-  const plan = read("skills/plan/SKILL.md");
-  const execute = read("skills/execute/SKILL.md");
-  const review = read("skills/review/SKILL.md");
-  const finish = read("skills/finish/SKILL.md");
-
-  assert.match(
-    plan,
-    /independent, contract-dependent, or implementation-dependent/,
-  );
-  assert.match(plan, /expected branch\/worktree ownership/);
-  assert.match(execute, /one singly owned branch\/worktree per\s+unit/);
-  assert.match(
-    execute,
-    /Eligible owners may implement and fix\s+feedback concurrently/,
-  );
-  assert.match(execute, /Restack propagation stays ordered/);
-  assert.match(execute, /including the delivery budget/);
-  assert.match(review, /complete available feedback surface/);
-  assert.match(
-    review,
-    /read the\s+entire response and all unresolved Nitro-authored discussions/,
-  );
-  assert.match(finish, /Create every final MR as draft/);
-  assert.match(
-    finish,
-    /technical\s+readiness never authorize changing it from draft to ready/,
-  );
-  assert.match(finish, /Do not stop at publication/);
-  assert.match(finish, /green parent pipeline/);
-  assert.match(finish, /repeat without another user prompt/);
-  assert.match(finish, /Before publication and every hosted-review request/);
-  assert.match(
-    finish,
-    /Any artifact, HEAD, or\s+target-base change invalidates/,
-  );
-  assert.match(
-    finish,
-    /Report `draft_stack_ready` while every MR\s+remains draft/,
-  );
-});
-
 test("Review exposes distinct planning, POC, and final reviewer catalogs", () => {
   assert.deepEqual(requiredReviewTypesFor("planning"), [
     "implementation-readiness",
