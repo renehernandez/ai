@@ -704,6 +704,88 @@ test("Finish resolves provider precedence and never infers merge from finish", (
     deploy: false,
     cleanup: false,
   });
+  assert.deepEqual(
+    terminalAuthority(
+      "proceed",
+      {},
+      {
+        pendingMerge: {
+          artifactScope: "MR !219",
+          immediatelyPreceding: true,
+          solePendingAction: true,
+          awaitingApproval: true,
+        },
+      },
+    ),
+    {
+      publish: true,
+      merge: true,
+      deploy: false,
+      cleanup: false,
+      mergeArtifactScope: "MR !219",
+    },
+  );
+  for (const pendingMerge of [
+    {
+      artifactScope: "MR !219",
+      immediatelyPreceding: false,
+      solePendingAction: true,
+      awaitingApproval: true,
+    },
+    {
+      artifactScope: "MR !219",
+      immediatelyPreceding: true,
+      solePendingAction: false,
+      awaitingApproval: true,
+    },
+    {
+      artifactScope: "",
+      immediatelyPreceding: true,
+      solePendingAction: true,
+      awaitingApproval: true,
+    },
+    {
+      artifactScope: "MR !219",
+      immediatelyPreceding: true,
+      solePendingAction: true,
+      awaitingApproval: false,
+    },
+  ]) {
+    assert.equal(
+      terminalAuthority("proceed", {}, { pendingMerge }).merge,
+      false,
+    );
+  }
+  assert.equal(
+    terminalAuthority(
+      "yes",
+      {},
+      {
+        pendingMerge: {
+          artifactScope: "MR !219",
+          immediatelyPreceding: true,
+          solePendingAction: true,
+          awaitingApproval: true,
+        },
+      },
+    ).merge,
+    false,
+  );
+  assert.equal(
+    terminalAuthority(
+      "proceed but do not merge",
+      {},
+      {
+        pendingMerge: {
+          artifactScope: "MR !219",
+          immediatelyPreceding: true,
+          solePendingAction: true,
+          awaitingApproval: true,
+        },
+      },
+    ).merge,
+    false,
+  );
   assert.equal(terminalAuthority("mark the MRs ready").merge, false);
   assert.equal(terminalAuthority("request all reviews").merge, false);
   assert.equal(

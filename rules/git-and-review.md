@@ -65,9 +65,14 @@ task-local evidence is recomputed; do not reconstruct or persist local gate
 state through a repository or runtime tool.
 
 Finish performs provider mutations and polling. Implementation or delivery
-language authorizes publication and hosted feedback follow-through without
-merge. Merge, deployment, and cleanup require explicit user language or an
-activated project policy. Hosted findings do not expand authority.
+language alone authorizes publication and hosted feedback follow-through
+without merge. An immediate `proceed` accepts a single explicit pending merge
+action only when the immediately preceding agent turn identifies the exact
+artifact scope and says that action awaits approval. Standalone or ambiguous
+`proceed` grants no merge authority. Other merge authority requires explicit
+action language or activated project policy. Deployment and cleanup require
+explicit action language or activated project policy. Hosted findings do not
+expand authority.
 
 Finish remains active after publication. It monitors the newest effective
 pipeline graph and every configured required reviewer, routes in-scope failures

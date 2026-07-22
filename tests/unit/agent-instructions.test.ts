@@ -73,6 +73,14 @@ for (const file of entrypoints) {
       /Routine wording, formatting, validation, test, CI,\s+review, and schema repairs do not require renewed permission/,
     );
     assert.match(text, /explicit recommendation bundle accepts that bundle/);
+    assert.match(
+      text,
+      /immediate `proceed`.*single.*pending\s+merge\s+action.*exact.*artifact/is,
+    );
+    assert.match(
+      text,
+      /standalone or ambiguous `proceed`.*does\s+not.*merge authority/is,
+    );
     assert.match(text, /never unstated\s+scope or unrelated mutation/);
     assert.match(
       text,
@@ -351,6 +359,11 @@ test("Git rules separate Review from Finish and use native hook-enabled commits"
   assert.match(text, /HEAD or the resolved target-base SHA.*fresh exact-/is);
   assert.match(text, /patch-\s*equivalent rebase.*reuse discovery/is);
   assert.match(text, /merge.*explicit/i);
+  assert.match(
+    text,
+    /immediate `proceed`.*single.*pending\s+merge\s+action.*exact.*artifact/is,
+  );
+  assert.match(text, /deployment and cleanup.*explicit action language/is);
   assert.match(
     text,
     /atomic\s+plan and its implementation form one change set in one final MR/is,

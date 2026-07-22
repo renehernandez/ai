@@ -17,14 +17,20 @@ Authority resolves as follows:
 
 | User wording | Maximum default authority |
 | --- | --- |
-| `implement`, `deliver`, `proceed`, `publish`, `open/update the PR/MR`, `finish` | Publish and follow hosted feedback; no merge |
+| `implement`, `deliver`, context-free `proceed`, `publish`, `open/update the PR/MR`, `finish` | Publish and follow hosted feedback; no merge |
 | `merge`, `ship`, `proceed to merge`, `merge when green`, `add to merge queue` | Merge or queue after current gates |
 | `deploy` | Deployment after required delivery state |
 | `clean up` | Only the named branch/worktree cleanup |
 
-Ambiguous terminal language requires confirmation. Local-only, Execute-only,
-Review-only, or status-only wording stops at that boundary. Hosted feedback
-never expands authority.
+An immediate `proceed` grants merge authority when the immediately preceding
+agent turn presents one merge action over one exact artifact scope as the sole
+pending action awaiting approval. Bind that authority to the proposed artifact
+scope. Standalone or ambiguous `proceed` remains publication-only. Contextual
+assent never grants deployment or cleanup authority.
+
+Other ambiguous terminal language requires confirmation. Local-only,
+Execute-only, Review-only, or status-only wording stops at that boundary.
+Hosted feedback never expands authority.
 
 ## Human-Readable Provider Messages
 
@@ -122,13 +128,14 @@ and review requests are not merge authority.
 
 ## Terminal Actions
 
-Merge only under explicit merge language or activated project policy, after
-current checks and approvals. Merge dependency chains bottom-to-top. Mark only
-the current bottom MR ready immediately before its merge and wait for any
-configured review triggered by that transition. After a squash merge, verify
-the remote merged commit, retarget and restack the next draft child without
-replaying predecessor commits, and refresh changed effective-diff gates before
-marking that child ready.
+Merge only under explicit merge language, the narrowly bound contextual
+`proceed` above, or activated project policy, after current checks and
+approvals. Merge dependency chains bottom-to-top. Mark only the current bottom
+MR ready immediately before its merge and wait for any configured review
+triggered by that transition. After a squash merge, verify the remote merged
+commit, retarget and restack the next draft child without replaying predecessor
+commits, and refresh changed effective-diff gates before marking that child
+ready.
 
 Restack pushes use an exact expected remote-head lease. If it is rejected, stop
 and inspect external commits and ownership; never retry by simply accepting the
@@ -143,6 +150,7 @@ before cleanup; never force-delete as ordinary follow-through.
 | Mistake | Required response |
 | --- | --- |
 | Treating `finish` as permission to merge | Publish/follow gates, then report readiness. |
+| Requiring magic merge wording after one exact merge action is already awaiting approval | Treat the user's immediate `proceed` as authority for only that artifact scope. |
 | Marking a technically ready MR ready | Leave it draft until explicit merge authority starts its turn. |
 | Stopping at MR creation or green parent CI | Monitor the full current pipeline/review cycle and route failures. |
 | Trusting `No findings` without reading the note | Read the full response and applicable unresolved discussions. |

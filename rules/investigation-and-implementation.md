@@ -44,7 +44,11 @@ ownership, and the mandatory OpenSpec rehearsal boundary.
 - When a user response clearly accepts an explicit recommendation bundle, treat
   every recommendation in that bundle as accepted. Do not infer unstated scope,
   repository mutation, provider mutation, or terminal authority from that
-  agreement.
+  agreement. The narrow exception is an immediate `proceed` after the agent
+  presents one exact artifact scope and one merge action as the sole pending
+  action awaiting approval; it grants only that merge authority. Standalone or
+  ambiguous `proceed` grants no merge authority, and contextual assent never
+  grants deployment or cleanup.
 - Every non-trivial design starts with a repository precedent scan. Reuse is
   the default even when the request does not mention an existing approach;
   similarity wording narrows the scan but never triggers it.
