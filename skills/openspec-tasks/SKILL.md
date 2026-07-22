@@ -60,6 +60,14 @@ log. Requirements and scenarios own observable behavior. Design owns durable
 technical decisions and boundaries. Do not repeat either as step-by-step task
 prose merely to make the handoff self-contained.
 
+Plan and delivery-shape Review forecast each final unit against its planned
+predecessor. Target at most 10 changed files and 500 additions plus deletions;
+more than 15 files or 1,000 changed lines blocks the forecast. After an
+effective diff exists, only an artifact-bound explicit user exception can
+exceed the cap. Create more top-level tasks and final MRs when needed. The
+complete disposable POC is exempt. These budgets do not permit checkbox-only
+or unsafe semantic splits.
+
 Target 2-6 nested work items per delivery unit. More than 6 and at most 8 work
 items is a split smell and requires an explicit `Justification:` note attached
 to the delivery unit before the first checkbox. More than 8 work items returns

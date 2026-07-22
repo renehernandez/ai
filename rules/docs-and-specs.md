@@ -80,8 +80,16 @@ different shared prerequisites, feature behavior, proof infrastructure,
 activation, repositories or owners, security boundaries, rollback paths, and
 deployment mechanisms. Combine candidates that would otherwise leave unused
 plumbing, an unverifiable or unsafe intermediate state, or checkbox-only
-PRs/MRs with the same review and rollback boundary. File count and diff size are
-evidence, not delivery-shape thresholds.
+PRs/MRs with the same review and rollback boundary. Numeric budgets constrain
+the final shape but never justify an unsafe mechanical partition.
+
+Plan targets at most 10 changed files and 500 additions plus deletions for each
+atomic implementation MR and final OpenSpec unit. Above either target, record
+an unsafe-to-split rationale. A forecast above 15 files or 1,000 changed lines
+blocks. A measured diff can exceed the cap only with user approval bound to its
+artifact, HEAD, target-base SHA, counts, rationale, consequences, and approval
+evidence. Repairs and restacks invalidate stale exceptions. The complete POC
+is exempt.
 
 Prefer stack objective proof in the first unit. Permit one or two groundwork
 units first only when each safely improves the current system, owns local proof,

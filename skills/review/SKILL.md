@@ -228,6 +228,14 @@ Missing, stale, incomplete, unassigned, `split_required`, or `merge_required`
 evidence blocks final Execute handoff. Record material topology change
 independently of unit IDs; any material change requires user acceptance.
 
+Every atomic implementation MR and final OpenSpec unit carries a delivery
+budget assessment. Plan targets at most 10 changed files and 500 additions plus
+deletions. A unit above either target needs an unsafe-to-split rationale. More
+than 15 files or 1,000 changed lines blocks a forecast. A measured effective
+diff can exceed the cap only with explicit user approval bound to its artifact,
+source HEAD, target-base SHA, counts, rationale, review consequences, and
+task-local approval evidence. The complete disposable POC is exempt.
+
 At the existing planning Review barrier, write the task-local checkpoint and
 expected lifecycle context as one JSON input, then run
 `pnpm exec tsx scripts/validate-planning-review.ts <task-local-checkpoint.json>`
@@ -240,8 +248,8 @@ every unit against its actual footprint and ownership seams. A unit that
 dominates the stack or crosses materially different ownership, activation,
 security, rollback, review, or deployment boundaries remains under-split even
 when the root contains valid early objective proof. Combine checkbox-only units
-and split those independent seams without turning file count or churn into a
-universal threshold. Keep exact footprint evidence task-local and retain only
+and split those independent seams while applying the numeric budget as an outer
+constraint, not an automatic partitioner. Keep exact footprint evidence task-local and retain only
 the final topology and concise split rationale in the OpenSpec.
 
 ## Hosted Feedback
@@ -297,6 +305,8 @@ current for the exact hosted target:
 - artifact identity;
 - target-base ref, resolved SHA, and implementation HEAD;
 - inspected target-base diff and hook evidence;
+- a delivery-budget assessment bound to that target-base SHA and implementation
+  HEAD for final implementations; POCs are exempt;
 - every phase-specific review type and selected affected-domain specialist;
 - one evidence-bearing resolution for every enumerated repair finding, covering
   its remediation outcome, invalidated surfaces, and affected verification;

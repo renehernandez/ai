@@ -248,6 +248,12 @@ test("Plan keeps atomic delivery in one change set and rehearses OpenSpec", () =
     skill,
     /earliest real entrypoint\s+with visible success or failure evidence/,
   );
+  assert.match(skill, /at most 10\s+changed files and 500 changed lines/);
+  assert.match(
+    skill,
+    /forecast above 15 files or 1,000 changed lines\s+blocks handoff/,
+  );
+  assert.match(skill, /complete disposable POC MR is exempt/);
   assert.match(skill, /step-by-step instructions/);
   assert.match(skill, /exhaustive test or edge-case\s+matrices/);
   assert.match(
@@ -371,6 +377,7 @@ test("mode skills coordinate parallel draft stacks through hosted readiness", ()
     /Eligible owners may implement and fix\s+feedback concurrently/,
   );
   assert.match(execute, /Restack propagation stays ordered/);
+  assert.match(execute, /including the delivery budget/);
   assert.match(review, /complete available feedback surface/);
   assert.match(
     review,
@@ -384,6 +391,11 @@ test("mode skills coordinate parallel draft stacks through hosted readiness", ()
   assert.match(finish, /Do not stop at publication/);
   assert.match(finish, /green parent pipeline/);
   assert.match(finish, /repeat without another user prompt/);
+  assert.match(finish, /Before publication and every hosted-review request/);
+  assert.match(
+    finish,
+    /Any artifact, HEAD, or\s+target-base change invalidates/,
+  );
   assert.match(
     finish,
     /Report `draft_stack_ready` while every MR\s+remains draft/,
@@ -531,6 +543,14 @@ test("Review rejects stale readiness checkpoints and hosted feedback", () => {
     targetBase: "main",
     targetBaseSha: "base-a",
     head: "new",
+    deliveryBudget: {
+      artifact: "MR !199",
+      sourceHead: "new",
+      targetBaseSha: "base-a",
+      fileCount: 8,
+      additions: 300,
+      deletions: 100,
+    },
     diffInspected: true,
     hooksPassed: true,
     requiredSpecialists: [] as string[],

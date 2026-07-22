@@ -54,6 +54,14 @@ local Review against that same exact hosted head so both can proceed
 concurrently. The hook evidence is the full local-suite proof for the commit;
 local Review and review subagents do not rerun that suite.
 
+Before publication and every hosted-review request, measure the complete
+effective diff. Final implementations target at most 10 changed files and 500
+additions plus deletions and cap at 15 files or 1,000 changed lines. An
+above-cap diff returns to Plan unless the user approved an exception bound to
+the exact artifact, source HEAD, target-base SHA, counts, rationale, review
+consequences, and task-local approval evidence. Any artifact, HEAD, or
+target-base change invalidates it. The complete disposable POC is exempt.
+
 Technical readiness consumes a current Review
 `technical_readiness_checkpoint` bound to the hosted artifact, target base, and
 HEAD. It carries every required phase review type, selected affected-domain
@@ -101,7 +109,7 @@ repairs, request refreshed hosted review for the new head, then Review runs
 bounded closure only for affected types and verification. It starts new
 discovery only for a material contract or review-risk change. Every changed
 source head or resolved target-base SHA refreshes local readiness, CI, and
-hosted gates.
+hosted gates, including the delivery budget and any exact-diff exception.
 
 Do not stop at publication, a pending pipeline, a green parent pipeline, a
 review request, or reassuring summary language. Continue monitoring the newest

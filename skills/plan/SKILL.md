@@ -26,8 +26,9 @@ means is a material repair even when expressed as a wording edit.
 
 ## Choose One Artifact Semantically
 
-Use `scripts/plan-contract.ts` when a deterministic route check helps. Never use
-file count, changed lines, or effort thresholds.
+Use `scripts/plan-contract.ts` when a deterministic route check helps. Select
+the artifact from the semantic contract, then apply the delivery budget below
+to its implementation MRs.
 
 | Contract | Artifact |
 | --- | --- |
@@ -95,6 +96,17 @@ Every proposed top-level unit must have:
 - declared predecessor output and integration hotspots; and
 - a concrete reason its nested work belongs in one PR/MR.
 
+Every atomic implementation MR and final OpenSpec unit plans for at most 10
+changed files and 500 changed lines, counted as additions plus deletions across
+the complete effective diff. Tests, fixtures, generated files, documentation,
+and planning artifacts count. A forecast above either planning budget requires
+an unsafe-to-split rationale; a forecast above 15 files or 1,000 changed lines
+blocks handoff. After an effective diff exists, only the user can approve an
+exception bound to its artifact, source HEAD, resolved target-base SHA, counts,
+rationale, review consequences, and task-local approval evidence. Exceptions
+do not transfer across artifacts, units, MRs, HEADs, or target bases. The
+complete disposable POC MR is exempt.
+
 Prefer stack objective proof in the first unit. When forcing that vertical slice
 would combine materially distinct ownership, security, deployment, rollback, or
 review seams, allow one or two groundwork units first. Each groundwork unit
@@ -118,7 +130,8 @@ prerequisites, feature behavior, proof infrastructure, activation, repositories,
 owners, security boundaries, rollback paths, or deployment mechanisms. Combine
 candidate units when a split would create unused plumbing, an unverifiable or
 unsafe intermediate state, or checkbox-only PRs/MRs with the same review and
-rollback boundary. File count and diff size are evidence, never thresholds.
+rollback boundary. Numeric budgets constrain the result but never justify a
+mechanical file partition that breaks semantic cohesion.
 Stress-test the first unit separately when real footprint evidence shows that it
 dominates the stack or crosses several independent review seams; valid early
 objective proof does not excuse under-splitting.

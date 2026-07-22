@@ -8,6 +8,7 @@ import {
   firstObjectiveProofReviewers,
   type PocArchitectureCheckpoint,
 } from "../../skills/execute/scripts/execution-contract.ts";
+import { deliveryReviewBudget } from "../../skills/review/scripts/delivery-shape-evidence.ts";
 import {
   type DeliveryShapeEvidence,
   firstObjectiveProofBaseline,
@@ -35,12 +36,28 @@ const implementationReviewerCatalog = [
   "scrutinize",
 ] as const;
 
+function passingDeliveryBudget(
+  sourceHead = "head-a",
+  targetBaseSha = "base-a",
+  artifact = "MR !199",
+) {
+  return {
+    artifact,
+    sourceHead,
+    targetBaseSha,
+    fileCount: 8,
+    additions: 300,
+    deletions: 100,
+  };
+}
+
 function passingCheckpoint(): TechnicalReadinessCheckpoint {
   return {
     artifact: "MR !199",
     targetBase: "main",
     targetBaseSha: "base-a",
     head: "head-a",
+    deliveryBudget: passingDeliveryBudget(),
     diffInspected: true,
     hooksPassed: true,
     requiredSpecialists: [],
@@ -64,6 +81,14 @@ function passingPlanningCheckpoint(): PlanningReviewCheckpoint {
   return {
     artifact: ".agents/plans/example.md",
     artifactFingerprint: "sha256:plan-a",
+    deliveryBudgets: [
+      {
+        unitId: "atomic-change",
+        fileCount: 8,
+        additions: 300,
+        deletions: 100,
+      },
+    ],
     requiredSpecialists: [],
     reviewResults: requiredReviewTypesFor("planning").map((reviewType) => ({
       reviewType,
@@ -95,6 +120,12 @@ function passingDeliveryShapeEvidence(): DeliveryShapeEvidence {
     mergeRationale: "The merge would cross independent reviewer domains",
     predecessorOutput: unitId === "unit-1" ? "Normal target base" : "unit-1",
     integrationHotspots: [],
+    budget: {
+      unitId,
+      fileCount: 8,
+      additions: 300,
+      deletions: 100,
+    },
   });
 
   return {
@@ -182,6 +213,7 @@ test("planning completion requires a current explicit simplifier result", () => 
     artifact: ".agents/plans/example.md",
     artifactFingerprint: "sha256:plan-a",
     lifecycle: "atomic_or_pre_poc" as const,
+    deliveryUnitIds: ["atomic-change"],
   };
 
   assert.doesNotThrow(() =>
@@ -245,6 +277,7 @@ test("planning completion carries only nonblocking deferred considerations", () 
     artifact: checkpoint.artifact,
     artifactFingerprint: checkpoint.artifactFingerprint,
     lifecycle: "atomic_or_pre_poc" as const,
+    deliveryUnitIds: ["atomic-change"],
   };
 
   assert.doesNotThrow(() =>
@@ -329,6 +362,7 @@ test("post-POC planning requires complete cohesive delivery-shape evidence", () 
       artifact: checkpoint.artifact,
       artifactFingerprint: checkpoint.artifactFingerprint,
       lifecycle: "atomic_or_pre_poc",
+      deliveryUnitIds: ["atomic-change"],
     }),
   );
   assert.throws(
@@ -553,6 +587,140 @@ test("post-POC planning requires acceptance for material topology changes", () =
   );
 });
 
+test("delivery budgets require rationale, enforce caps, and bind exceptions", () => {
+  const planning = passingPlanningCheckpoint();
+  const expectedPlanning = {
+    artifact: planning.artifact,
+    artifactFingerprint: planning.artifactFingerprint,
+    lifecycle: "atomic_or_pre_poc" as const,
+    deliveryUnitIds: ["over-budget"],
+  };
+  const setForecast = (
+    fileCount: number,
+    additions: number,
+    deletions: number,
+    overBudgetRationale?: string,
+  ) => {
+    planning.deliveryBudgets = [
+      {
+        unitId: "over-budget",
+        fileCount,
+        additions,
+        deletions,
+        overBudgetRationale,
+      },
+    ];
+  };
+
+  setForecast(
+    deliveryReviewBudget.plannedFiles + 1,
+    deliveryReviewBudget.plannedChangedLines,
+    0,
+  );
+  assert.throws(
+    () =>
+      validatePlanningReviewCheckpoint(planning, {
+        ...expectedPlanning,
+        deliveryUnitIds: ["over-budget", "missing-unit"],
+      }),
+    /planning_review_delivery_budget_coverage_mismatch/,
+  );
+  assert.throws(
+    () => validatePlanningReviewCheckpoint(planning, expectedPlanning),
+    /delivery_budget_rationale_missing:over-budget/,
+  );
+  setForecast(
+    deliveryReviewBudget.plannedFiles,
+    deliveryReviewBudget.plannedChangedLines,
+    1,
+  );
+  assert.throws(
+    () => validatePlanningReviewCheckpoint(planning, expectedPlanning),
+    /delivery_budget_rationale_missing:over-budget/,
+  );
+  setForecast(11, 500, 1, "The shared owners must change atomically.");
+  assert.doesNotThrow(() =>
+    validatePlanningReviewCheckpoint(planning, expectedPlanning),
+  );
+  setForecast(16, 500, 1, "The shared owners must change atomically.");
+  assert.throws(
+    () => validatePlanningReviewCheckpoint(planning, expectedPlanning),
+    /delivery_budget_hard_cap_exceeded:over-budget/,
+  );
+  setForecast(10, 1_000, 1, "The shared owners must change atomically.");
+  assert.throws(
+    () => validatePlanningReviewCheckpoint(planning, expectedPlanning),
+    /delivery_budget_hard_cap_exceeded:over-budget/,
+  );
+
+  const readiness = passingCheckpoint();
+  const oversized = {
+    artifact: readiness.artifact,
+    sourceHead: readiness.head,
+    targetBaseSha: readiness.targetBaseSha,
+    fileCount: deliveryReviewBudget.maximumFiles + 1,
+    additions: deliveryReviewBudget.maximumChangedLines,
+    deletions: 1,
+  };
+  const expectedReadiness = () => ({
+    target: "final_implementation" as const,
+    targetBase: readiness.targetBase,
+    targetBaseSha: readiness.targetBaseSha,
+    head: readiness.head,
+  });
+  readiness.deliveryBudget = oversized;
+  assert.throws(
+    () => validateTechnicalReadinessCheckpoint(readiness, expectedReadiness()),
+    /delivery_budget_exception_missing_or_stale/,
+  );
+  const validException = {
+    ...oversized,
+    rationale: "No safe semantic split exists for this exact diff.",
+    reviewConsequences: "Nitro automatic review may be unavailable.",
+    approvalEvidence: "The user explicitly approved MR !199 at this diff.",
+    explicitUserApproval: true as const,
+  };
+  for (const exception of [
+    { ...validException, fileCount: oversized.fileCount - 1 },
+    { ...validException, approvalEvidence: "" },
+  ]) {
+    readiness.deliveryBudget = { ...oversized, exception };
+    assert.throws(
+      () =>
+        validateTechnicalReadinessCheckpoint(readiness, expectedReadiness()),
+      /delivery_budget_exception_missing_or_stale/,
+    );
+  }
+  readiness.deliveryBudget = {
+    ...oversized,
+    exception: validException,
+  };
+  assert.doesNotThrow(() =>
+    validateTechnicalReadinessCheckpoint(readiness, expectedReadiness()),
+  );
+  readiness.head = "changed-head";
+  assert.throws(
+    () => validateTechnicalReadinessCheckpoint(readiness, expectedReadiness()),
+    /technical_readiness_delivery_budget_stale/,
+  );
+  readiness.head = readiness.deliveryBudget.sourceHead;
+  readiness.artifact = "MR !200";
+  assert.throws(
+    () => validateTechnicalReadinessCheckpoint(readiness, expectedReadiness()),
+    /technical_readiness_delivery_budget_stale/,
+  );
+  const poc = passingCheckpoint();
+  delete poc.deliveryBudget;
+  assert.doesNotThrow(() =>
+    validateTechnicalReadinessCheckpoint(poc, {
+      target: "poc",
+      targetBase: poc.targetBase,
+      targetBaseSha: poc.targetBaseSha,
+      head: poc.head,
+    }),
+  );
+});
+
 test("technical readiness requires every phase review type", () => {
   const checkpoint = passingCheckpoint();
   assert.doesNotThrow(() =>
@@ -764,6 +932,7 @@ test("technical readiness rejects incomplete or blocking normalized findings", (
         {
           ...checkpoint,
           head: "head-b",
+          deliveryBudget: passingDeliveryBudget("head-b"),
           reviewResults: checkpoint.reviewResults.map((result) =>
             result.reviewType === "diff-review"
               ? {
@@ -806,6 +975,7 @@ test("technical readiness rejects incomplete or blocking normalized findings", (
         {
           ...checkpoint,
           head: "head-b",
+          deliveryBudget: passingDeliveryBudget("head-b"),
           reviewResults: checkpoint.reviewResults.map((result) =>
             result.reviewType === "diff-review"
               ? {
@@ -833,6 +1003,7 @@ test("one closure check resolves only the repair batch and affected proof", () =
   const checkpoint: TechnicalReadinessCheckpoint = {
     ...discovery,
     head: "head-b",
+    deliveryBudget: passingDeliveryBudget("head-b"),
     reviewResults: discovery.reviewResults.map((result) =>
       result.reviewType === "diff-review"
         ? {
@@ -994,6 +1165,7 @@ test("material-risk rediscovery supersedes the earlier closure checkpoint", () =
   const rediscovered: TechnicalReadinessCheckpoint = {
     ...discovery,
     head: "head-b",
+    deliveryBudget: passingDeliveryBudget("head-b"),
     reviewResults: discovery.reviewResults.map((result) => ({
       ...result,
       head: "head-b",
@@ -1037,6 +1209,7 @@ test("patch-equivalent rebase refreshes the checkpoint without rediscovery", () 
   const checkpoint: TechnicalReadinessCheckpoint = {
     ...discovery,
     targetBaseSha: "base-b",
+    deliveryBudget: passingDeliveryBudget("head-a", "base-b"),
     rebaseEvidence,
   };
 
@@ -1072,6 +1245,7 @@ test("patch-equivalent rebase refreshes the checkpoint without rediscovery", () 
   const repairedAfterRebase: TechnicalReadinessCheckpoint = {
     ...checkpoint,
     head: "head-b",
+    deliveryBudget: passingDeliveryBudget("head-b", "base-b"),
     reviewResults: discovery.reviewResults.map((result) =>
       result.reviewType === "diff-review"
         ? {
