@@ -147,6 +147,67 @@ test("active lifecycle rules contain no retired lifecycle entrypoints", () => {
   }
 });
 
+test("Linear start-work ownership follows the authenticated user without stealing assigned work", () => {
+  const text = readFileSync("rules/git-and-review.md", "utf-8");
+  const normalized = text.replace(/\s+/g, " ");
+
+  assert.match(
+    normalized,
+    /before repository implementation begins.*re-reads? the issue.*when present.*its project/i,
+  );
+  assert.match(
+    normalized,
+    /issue without a project skips only the project-lead branch/i,
+  );
+  assert.match(
+    normalized,
+    /route one pre-implementation ownership step through Finish/i,
+  );
+  assert.match(
+    normalized,
+    /Finish as the sole provider-write owner, not as a transition into terminal Finish work/i,
+  );
+  assert.match(
+    normalized,
+    /unassigned.*assign it to the authenticated Linear user/i,
+  );
+  assert.match(
+    normalized,
+    /already assigned to the authenticated Linear user.*continue/i,
+  );
+  assert.match(
+    normalized,
+    /assigned to another user.*stop.*ask the user for instructions/i,
+  );
+  assert.match(
+    normalized,
+    /project has no lead.*verified creator is the authenticated Linear user.*assign that user as the project lead/i,
+  );
+  assert.match(normalized, /never infer project creation identity/i);
+  assert.match(normalized, /preserve an existing project lead/i);
+  assert.match(
+    normalized,
+    /project lead or creator metadata is unavailable.*skip and report the project-lead update.*do not block an otherwise verified issue assignment/i,
+  );
+  assert.match(
+    normalized,
+    /apply.*start-work ownership mutations without another prompt/i,
+  );
+  assert.match(
+    normalized,
+    /accepted start-work policy is confirmation.*eligible scalar writes.*conditional project-lead update.*does not confirm any other provider action/i,
+  );
+  assert.match(normalized, /verify the changed fields by readback/i);
+  assert.match(
+    normalized,
+    /block implementation.*ownership read, authenticated-user resolution, write, or readback.*unavailable, fails, or does not match/i,
+  );
+  assert.match(
+    normalized,
+    /pre-implementation Finish step grants no publication, merge, deployment, cleanup, or unrelated provider authority/i,
+  );
+});
+
 test("entrypoints route bounded specialists through the five mode owners", () => {
   for (const file of entrypoints) {
     const text = readFileSync(file, "utf-8");

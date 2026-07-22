@@ -215,6 +215,32 @@ review feedback. `codex-review-feedback` remains retired.
 
 ## Linear
 
+- Before repository implementation begins for a Linear-tracked issue, route one
+  pre-implementation ownership step through Finish. Finish re-reads the issue
+  and, when present, its project through `linearis`, then resolves the
+  authenticated Linear user. An issue without a project skips only the
+  project-lead branch. This invokes Finish as the sole provider-write owner,
+  not as a transition into terminal Finish work.
+- If the issue is unassigned, assign it to the authenticated Linear user. If it
+  is already assigned to the authenticated Linear user, continue. If it is
+  assigned to another user, stop before repository or provider mutation and ask
+  the user for instructions.
+- When the issue's project has no lead and its verified creator is the
+  authenticated Linear user, assign that user as the project lead. Never infer
+  project creation identity, and preserve an existing project lead. When
+  project lead or creator metadata is unavailable, skip and report the
+  project-lead update; do not block an otherwise verified issue assignment.
+- Once start-work authority exists and no assignee conflict remains, apply the
+  eligible start-work ownership mutations without another prompt. Change only
+  the eligible assignee and project-lead fields, then verify the changed fields
+  by readback before implementation starts. The accepted start-work policy is
+  confirmation for these eligible scalar writes, including the conditional
+  project-lead update; it does not confirm any other provider action.
+- Block implementation and report the concrete failure when a required
+  ownership read, authenticated-user resolution, write, or readback is
+  unavailable, fails, or does not match. This pre-implementation Finish step
+  grants no publication, merge, deployment, cleanup, or unrelated provider
+  authority.
 - Never assign an automated agent as a Linear delegate without explicit user
   confirmation.
 - Create issues in the project's delivery-ready status required by active
