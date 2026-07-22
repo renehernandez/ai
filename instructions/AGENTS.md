@@ -53,6 +53,12 @@ scope or unrelated mutation or terminal authority. Existing authenticated
 commands do not require renewed approval; credential entry or a new credential
 grant remains a human action.
 
+An immediate `proceed` accepts a single explicit pending merge action when the
+immediately preceding agent turn identifies the exact artifact scope and says
+that merge awaits the user's approval. Standalone or ambiguous `proceed` does
+not grant merge authority. This contextual acceptance never grants deployment
+or cleanup authority.
+
 ## Operating rules
 
 - Keep commands simple: one command per tool call, no compound shell chains,
@@ -173,8 +179,10 @@ grant remains a human action.
   Finish continues monitoring configured CI and hosted review after publication
   and routes in-scope failures to the current lane owner without another user
   prompt.
-- Implementation or delivery wording authorizes Finish publication and hosted
-  follow-through, not merge. Merge, deployment, and cleanup remain explicit.
+- Implementation or delivery wording alone authorizes Finish publication and
+  hosted follow-through, not merge. Merge requires explicit action wording,
+  activated policy, or the narrowly bound contextual `proceed` above.
+  Deployment and cleanup remain explicit.
 
 ## Provider policy
 

@@ -25,6 +25,16 @@ export type TerminalAuthority = {
   merge: boolean;
   deploy: boolean;
   cleanup: boolean;
+  mergeArtifactScope?: string;
+};
+
+export type TerminalAuthorityContext = {
+  pendingMerge?: {
+    artifactScope: string;
+    immediatelyPreceding: boolean;
+    solePendingAction: boolean;
+    awaitingApproval: boolean;
+  };
 };
 
 function explicitlyRequests(
@@ -53,7 +63,8 @@ function explicitlyRequests(
 
 export function terminalAuthority(
   request: string,
-  projectPolicy: Partial<TerminalAuthority> = {},
+  projectPolicy: Partial<Omit<TerminalAuthority, "mergeArtifactScope">> = {},
+  context: TerminalAuthorityContext = {},
 ): TerminalAuthority {
   const normalized = request.toLowerCase();
   const denialSegments = [
@@ -67,11 +78,19 @@ export function terminalAuthority(
         new RegExp(`\\b(?:${actionPattern})\\b`).test(segment),
       ),
     );
+  const pendingMerge = context.pendingMerge;
+  const contextualMerge =
+    normalized.trim() === "proceed" &&
+    pendingMerge?.immediatelyPreceding === true &&
+    pendingMerge.solePendingAction === true &&
+    pendingMerge.awaitingApproval === true &&
+    pendingMerge.artifactScope.trim().length > 0;
   const merge =
     (/\bmerge when green\b|\badd to (?:the )?merge queue\b/.test(normalized) ||
       explicitlyRequests(normalized, "merge") ||
       explicitlyRequests(normalized, "ship") ||
-      explicitlyRequests(normalized, "proceed to merge")) &&
+      explicitlyRequests(normalized, "proceed to merge") ||
+      contextualMerge) &&
     !denies("merg(?:e|es|ed|ing)", "ship(?:s|ped|ping)?");
 
   const publishDenied = denies(
@@ -108,5 +127,8 @@ export function terminalAuthority(
       (projectPolicy.cleanup === true ||
         explicitlyRequests(normalized, "clean up") ||
         explicitlyRequests(normalized, "cleanup")),
+    ...(contextualMerge && merge
+      ? { mergeArtifactScope: pendingMerge.artifactScope.trim() }
+      : {}),
   };
 }
