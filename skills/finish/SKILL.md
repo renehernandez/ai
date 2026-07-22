@@ -26,6 +26,15 @@ Ambiguous terminal language requires confirmation. Local-only, Execute-only,
 Review-only, or status-only wording stops at that boundary. Hosted feedback
 never expands authority.
 
+## Human-Readable Provider Messages
+
+Before Finish submits any human-readable GitLab or Linear message through the
+user's identity, it MUST apply the destination-bound confirmation contract in
+`rules/git-and-review.md#agent-authored-provider-messages`. General
+implementation, delivery, Finish, or prior provider-write authority never
+bypasses that checkpoint. Keep command-only review requests on their exact
+command path.
+
 ## Provider And Publication
 
 Resolve host and reviewer policy in this order: direct user instruction,
@@ -137,6 +146,7 @@ before cleanup; never force-delete as ordinary follow-through.
 | Marking a technically ready MR ready | Leave it draft until explicit merge authority starts its turn. |
 | Stopping at MR creation or green parent CI | Monitor the full current pipeline/review cycle and route failures. |
 | Trusting `No findings` without reading the note | Read the full response and applicable unresolved discussions. |
+| Posting human-readable GitLab or Linear prose under general Finish authority | Show the exact destination-bound draft and obtain message-specific confirmation. |
 | Waiting for local Review before creating the draft | Publish the hook-clean commit, request hosted review, then run local Review on the same head. |
 | Reusing a stale checkpoint after repair or rebase | Refresh hosted review and run bounded closure or patch-equivalence validation on the new head. |
 | Letting provider choice follow the first remote | Apply policy precedence and block ambiguity. |
@@ -148,6 +158,13 @@ before cleanup; never force-delete as ordinary follow-through.
 
 ## Test Evidence
 
+- RED: baseline agents treated accepted Finish follow-through and an approved
+  Linear outline as authority to publish unseen provider prose.
+- GREEN: the canonical destination-bound contract forced the exact rendered
+  draft, disclosure, and explicit confirmation before submission; changed
+  content or destinations required confirmation again.
+- REFACTOR: blanket prior approval did not bypass the message checkpoint, and
+  mixed command-plus-prose output kept only the command-only note exempt.
 - RED: the prior lifecycle left a fresh agent unable to distinguish final-unit
   repository archival from Finish cleanup or place it relative to exact-head
   publication and review.

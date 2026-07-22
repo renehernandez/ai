@@ -96,7 +96,12 @@ linear_breakdown_preview:
 | `create_after_approval` | Default for all breakdown work | Only after preview approval |
 | `create_immediately` | User explicitly says to skip review/preview and write now | Yes |
 
-Read-only dedupe is compatible with every mode. Creating, updating, linking, moving, labeling, or commenting on issues is a write and follows the approval mode.
+Read-only dedupe is compatible with every mode. Creating, updating, linking,
+moving, or labeling issues is a write and follows the approval mode. A
+human-readable Linear comment additionally follows the destination-bound
+message confirmation contract in
+`rules/git-and-review.md#agent-authored-provider-messages`; breakdown preview
+approval or `create_immediately` does not confirm an unseen comment draft.
 
 ## Slicing Bias
 
@@ -269,6 +274,7 @@ Start with the real outcome ticket, then place only the minimum foundation insid
 | Leaving cross-system identifiers implicit | Name the canonical identifier representation in the ticket |
 | Sending an issue description as an inline shell argument | Return the `linearis` file-backed-input capability blocker |
 | Falling back to Linear MCP, app, or plugin tools | Report the unsupported CLI operation without a provider write |
+| Treating breakdown approval as approval for a later comment | Show the exact destination and rendered draft, then obtain the message-specific confirmation required by `rules/git-and-review.md`. |
 
 ## Test Evidence
 
@@ -279,3 +285,6 @@ Start with the real outcome ticket, then place only the minimum foundation insid
 - REFACTOR: subagent `019eb4cb-3041-7711-8a6d-00d2f0e52784` treated read-only dedupe as permission to write immediately, so discovery is now explicitly read-only and does not bypass preview approval.
 - GREEN: subagent `019eb4ca-72f3-73f3-b9c2-9ec01f64c888` refused to create issues from "just create the tickets," proposed an E2E-first sequence, emitted `creation_mode: create_after_approval`, and asked for approval.
 - GREEN: subagent `019eb4cc-a401-7f30-82f8-9d88c49d03d3` kept dedupe read-only, previewed update/reuse actions for existing stale Linear artifacts, and asked for approval before writes.
+- GREEN: message-specific pressure scenarios kept an approved breakdown from
+  authorizing an unseen Linear comment and required renewed confirmation after
+  body or destination changes.
