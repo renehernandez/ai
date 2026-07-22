@@ -3,6 +3,45 @@ export type DeliveryShapeAssessmentStatus =
   | "split_required"
   | "merge_required";
 
+export const deliveryReviewBudget = {
+  plannedFiles: 10,
+  plannedChangedLines: 500,
+  maximumFiles: 15,
+  maximumChangedLines: 1_000,
+} as const;
+
+export type DeliveryBudgetForecast = {
+  unitId: string;
+  fileCount: number;
+  additions: number;
+  deletions: number;
+  overBudgetRationale?: string;
+};
+
+export type DeliveryBudgetException = {
+  artifact: string;
+  sourceHead: string;
+  targetBaseSha: string;
+  fileCount: number;
+  additions: number;
+  deletions: number;
+  rationale: string;
+  reviewConsequences: string;
+  approvalEvidence: string;
+  explicitUserApproval: true;
+};
+
+export type EffectiveDiffBudget = {
+  artifact: string;
+  sourceHead: string;
+  targetBaseSha: string;
+  fileCount: number;
+  additions: number;
+  deletions: number;
+  overBudgetRationale?: string;
+  exception?: DeliveryBudgetException;
+};
+
 export type DeliveryShapeUnitAssessment = {
   unitId: string;
   status: DeliveryShapeAssessmentStatus;
@@ -20,6 +59,7 @@ export type DeliveryShapeUnitAssessment = {
   mergeRationale: string;
   predecessorOutput: string;
   integrationHotspots: readonly string[];
+  budget: DeliveryBudgetForecast;
 };
 
 export type DeliveryShapeFootprintEntry = {
@@ -233,6 +273,72 @@ function validateDeliveryShapeAssessment(
       `post_poc_delivery_shape_assessment_incomplete:${assessment.unitId}:integrationHotspots`,
     );
   }
+  if (assessment.budget.unitId !== assessment.unitId) {
+    throw new Error(
+      `post_poc_delivery_shape_budget_unit_stale:${assessment.unitId}`,
+    );
+  }
+  validateDeliveryBudgetForecast(assessment.budget);
+}
+
+export function validateDeliveryBudgetForecast(
+  forecast: DeliveryBudgetForecast,
+): void {
+  requireCount(forecast.fileCount, "delivery_budget_file_count_invalid");
+  requireCount(forecast.additions, "delivery_budget_additions_invalid");
+  requireCount(forecast.deletions, "delivery_budget_deletions_invalid");
+  const changedLines = forecast.additions + forecast.deletions;
+  if (
+    forecast.fileCount > deliveryReviewBudget.maximumFiles ||
+    changedLines > deliveryReviewBudget.maximumChangedLines
+  ) {
+    throw new Error(`delivery_budget_hard_cap_exceeded:${forecast.unitId}`);
+  }
+  if (
+    (forecast.fileCount > deliveryReviewBudget.plannedFiles ||
+      changedLines > deliveryReviewBudget.plannedChangedLines) &&
+    !forecast.overBudgetRationale?.trim()
+  ) {
+    throw new Error(`delivery_budget_rationale_missing:${forecast.unitId}`);
+  }
+}
+
+export function validateEffectiveDiffDeliveryBudget(
+  budget: EffectiveDiffBudget,
+): void {
+  requireNonEmpty(budget.artifact, "delivery_budget_artifact_missing");
+  requireNonEmpty(budget.sourceHead, "delivery_budget_source_head_missing");
+  requireNonEmpty(
+    budget.targetBaseSha,
+    "delivery_budget_target_base_sha_missing",
+  );
+  requireCount(budget.fileCount, "delivery_budget_file_count_invalid");
+  requireCount(budget.additions, "delivery_budget_additions_invalid");
+  requireCount(budget.deletions, "delivery_budget_deletions_invalid");
+  const changedLines = budget.additions + budget.deletions;
+  const exceedsMaximum =
+    budget.fileCount > deliveryReviewBudget.maximumFiles ||
+    changedLines > deliveryReviewBudget.maximumChangedLines;
+  if (!exceedsMaximum) {
+    validateDeliveryBudgetForecast({ unitId: "effective-diff", ...budget });
+    return;
+  }
+
+  const exception = budget.exception;
+  if (
+    !exception?.explicitUserApproval ||
+    exception.artifact !== budget.artifact ||
+    exception.sourceHead !== budget.sourceHead ||
+    exception.targetBaseSha !== budget.targetBaseSha ||
+    exception.fileCount !== budget.fileCount ||
+    exception.additions !== budget.additions ||
+    exception.deletions !== budget.deletions ||
+    !exception.rationale.trim() ||
+    !exception.reviewConsequences.trim() ||
+    !exception.approvalEvidence.trim()
+  ) {
+    throw new Error("delivery_budget_exception_missing_or_stale");
+  }
 }
 
 function requireNonEmpty(value: string, error: string): void {
@@ -243,6 +349,12 @@ function requireNonEmpty(value: string, error: string): void {
 
 function requireNonEmptyList(values: readonly string[], error: string): void {
   if (values.length === 0 || values.some((value) => !value.trim())) {
+    throw new Error(error);
+  }
+}
+
+function requireCount(value: number, error: string): void {
+  if (!Number.isSafeInteger(value) || value < 0) {
     throw new Error(error);
   }
 }

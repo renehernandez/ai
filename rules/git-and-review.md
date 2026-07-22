@@ -158,6 +158,14 @@ change: either the source HEAD or resolved target-base SHA. Latest-effective-dif
 Nitro feedback must complete without unresolved actionable findings. Feedback
 tied to an earlier source HEAD or target-base SHA is stale.
 
+Before publishing or requesting hosted review for a final implementation,
+measure its complete effective diff. Target at most 10 changed files and 500
+additions plus deletions. More than 15 files or 1,000 changed lines returns to
+Plan unless the user approved an exception bound to the exact artifact, source
+HEAD, target-base SHA, counts, rationale, consequences, and task-local approval
+evidence. Any artifact, HEAD, or target-base change invalidates it. The complete
+disposable POC is exempt.
+
 GitHub PR review does not request, poll, normalize, or gate on Codex-authored
 review feedback. `codex-review-feedback` remains retired.
 
@@ -200,8 +208,8 @@ review feedback. `codex-review-feedback` remains retired.
 - Restack pushes use an exact expected remote-head lease. On lease rejection,
   inspect external commits and re-establish ownership before integrating them;
   never retry by blindly accepting the new remote SHA.
-- Every changed descendant effective diff reruns local Review, CI, approvals,
-  and configured hosted automated review before its merge.
+- Every changed descendant effective diff reruns its delivery budget, local
+  Review, CI, approvals, and configured hosted automated review before merge.
 - Stop before the next merge when default-branch CI for the landed predecessor
   is failed, blocked, or unavailable under project policy.
 - Technical stack readiness leaves every MR draft. Explicit merge authority

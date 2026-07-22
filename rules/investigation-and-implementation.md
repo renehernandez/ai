@@ -132,7 +132,16 @@ first when each safely improves the current system, directly enables a named
 successor, and reduces the first outcome MR's size or risk. Proof after unit 3,
 speculative groundwork, or contradictory proposal/task/MR topology returns to
 Plan. Use actual implementation or POC footprint to stress-test a root unit
-that dominates the stack without turning churn into a universal threshold.
+that dominates the stack.
+
+Every atomic implementation MR and final OpenSpec unit plans for at most 10
+changed files and 500 additions plus deletions across its complete effective
+diff. Above either target, record why another safe semantic split is
+impractical. A forecast above 15 files or 1,000 changed lines returns to Plan.
+After an effective diff exists, only explicit user approval bound to its
+artifact, HEAD, target-base SHA, counts, rationale, consequences, and task-local
+approval evidence can exceed the cap. Recheck after repairs or restacks; the
+complete POC is exempt.
 
 Only primary atomic-plan Markdown belongs under `.agents/plans`. Reviewer
 requests, selections, blueprints, handoffs, ledgers, fingerprints, command

@@ -1,15 +1,22 @@
 import {
+  type DeliveryBudgetForecast,
   type DeliveryShapeEvidence,
+  type EffectiveDiffBudget,
   type PostPocPlanningContext,
+  validateDeliveryBudgetForecast,
+  validateEffectiveDiffDeliveryBudget,
   validatePostPocDeliveryShapeEvidence,
 } from "./delivery-shape-evidence.ts";
 
 export type {
   AcceptedPocContext,
+  DeliveryBudgetException,
+  DeliveryBudgetForecast,
   DeliveryShapeAssessmentStatus,
   DeliveryShapeEvidence,
   DeliveryShapeFootprintEntry,
   DeliveryShapeUnitAssessment,
+  EffectiveDiffBudget,
   PostPocPlanningContext,
 } from "./delivery-shape-evidence.ts";
 
@@ -343,13 +350,14 @@ export type PlanningReviewExpected = {
   artifact: string;
   artifactFingerprint: string;
 } & (
-  | { lifecycle: "atomic_or_pre_poc" }
+  | { lifecycle: "atomic_or_pre_poc"; deliveryUnitIds: readonly string[] }
   | { lifecycle: "post_poc"; postPoc: PostPocPlanningContext }
 );
 
 export type PlanningReviewCheckpoint = {
   artifact: string;
   artifactFingerprint: string;
+  deliveryBudgets?: readonly DeliveryBudgetForecast[];
   requiredSpecialists: readonly string[];
   reviewResults: readonly PlanningReviewResult[];
   blockers: readonly string[];
@@ -387,6 +395,7 @@ export type TechnicalReadinessCheckpoint = {
   targetBase: string;
   targetBaseSha: string;
   head: string;
+  deliveryBudget?: EffectiveDiffBudget;
   diffInspected: boolean;
   hooksPassed: boolean;
   requiredSpecialists: readonly string[];
@@ -512,6 +521,31 @@ export function validatePlanningReviewCheckpoint(
     throw new Error("planning_review_blocked");
   }
 
+  if (expected.lifecycle === "atomic_or_pre_poc") {
+    if (!checkpoint.deliveryBudgets?.length) {
+      throw new Error("planning_review_delivery_budget_missing");
+    }
+    const expectedUnitIds = expected.deliveryUnitIds;
+    if (
+      !expectedUnitIds.length ||
+      expectedUnitIds.some((unitId) => !unitId.trim()) ||
+      new Set(expectedUnitIds).size !== expectedUnitIds.length
+    ) {
+      throw new Error("planning_review_delivery_units_invalid");
+    }
+    if (
+      checkpoint.deliveryBudgets.length !== expectedUnitIds.length ||
+      checkpoint.deliveryBudgets.some(
+        (budget, index) => budget.unitId !== expectedUnitIds[index],
+      )
+    ) {
+      throw new Error("planning_review_delivery_budget_coverage_mismatch");
+    }
+    for (const budget of checkpoint.deliveryBudgets) {
+      validateDeliveryBudgetForecast(budget);
+    }
+  }
+
   if (expected.lifecycle === "post_poc") {
     const deliveryShapeResult = checkpoint.reviewResults.find(
       (result) => result.reviewType === "delivery-shape",
@@ -550,6 +584,19 @@ export function validateTechnicalReadinessCheckpoint(
   }
   if (!checkpoint.provider.trim()) {
     throw new Error("provider_route_unresolved");
+  }
+  if (expected.target === "final_implementation") {
+    if (!checkpoint.deliveryBudget) {
+      throw new Error("technical_readiness_delivery_budget_missing");
+    }
+    if (
+      checkpoint.deliveryBudget.artifact !== checkpoint.artifact ||
+      checkpoint.deliveryBudget.sourceHead !== checkpoint.head ||
+      checkpoint.deliveryBudget.targetBaseSha !== checkpoint.targetBaseSha
+    ) {
+      throw new Error("technical_readiness_delivery_budget_stale");
+    }
+    validateEffectiveDiffDeliveryBudget(checkpoint.deliveryBudget);
   }
 
   const required = [

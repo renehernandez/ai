@@ -118,7 +118,7 @@ published head before first publication. Eligible owners may implement and fix
 feedback concurrently. Restack propagation stays ordered and coalesces obsolete
 upstream heads. After a predecessor squash-merges, retarget the immediate child
 to the normal target and restack it without replaying predecessor commits, then
-refresh every changed effective-diff gate.
+refresh every changed effective-diff gate, including the delivery budget.
 
 ## Commit And Review Loop
 
@@ -133,6 +133,15 @@ the target base before attributing it to the diff.
 After the narrow proof passes, stage only intended files and use native hook-
 enabled Git commit behavior. Never use `--no-verify`. Fix a hook failure before
 starting the next boundary.
+
+Before the hook-clean publication commit, measure the complete effective diff
+against its resolved target-base SHA. Final implementation targets at most 10
+changed files and 500 additions plus deletions. Above either target, retain the
+accepted unsafe-to-split rationale. More than 15 files or 1,000 changed lines
+returns to Plan unless the user approved an exception for this exact source
+artifact, HEAD, target-base SHA, counts, rationale, review consequences, and
+task-local approval evidence. Any later artifact, HEAD, or target-base change
+invalidates that exception. The complete disposable POC is exempt.
 
 For every OpenSpec POC, pause when the first stack objective proof exists: unit
 1, 2, or 3 after at most two reviewed groundwork units. Before broadening the POC, run an
