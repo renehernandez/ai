@@ -143,6 +143,27 @@ artifact, HEAD, target-base SHA, counts, rationale, review consequences, and
 task-local approval evidence. Any later artifact, HEAD, or target-base change
 invalidates that exception. The complete disposable POC is exempt.
 
+## Publication-Ready Dispatch
+
+In a multi-MR delivery, a hook-clean commit freezes that unit at its source
+branch and exact SHA. Apply the canonical scheduling rule in
+`rules/investigation-and-implementation.md`; it owns publication readiness, the
+task-wide barrier, pause and resume signaling, capacity recovery, blockers, and
+user-checkpoint semantics. Resolve its launch prerequisites and assemble the
+canonical Immutable Publication Packet from `rules/handoff-and-resume.md`, then
+start one MR-specific Finish subagent. Do not begin another repository mutation
+until the canonical scheduling rule releases the barrier.
+
+The packet is not a repository ownership handoff. The Finish subagent never
+becomes a writer, and implementation findings return to the current Execute
+owner as one deduplicated batch. Report the lane launch or concrete blocker once
+in task commentary; maintain no parallel status representation. Single-MR work
+with no useful concurrent lane may keep Finish inline, but the speed of MR
+creation does not make a multi-MR delivery eligible for that exception.
+
+One MR per unit is an artifact boundary, not a user approval checkpoint. Apply
+the canonical rule without inventing a pause between accepted eligible units.
+
 For every OpenSpec POC, pause when the first stack objective proof exists: unit
 1, 2, or 3 after at most two reviewed groundwork units. Before broadening the POC, run an
 exact-diff checkpoint against the reviewed reuse contract, target-base SHA,
@@ -191,6 +212,7 @@ local Review, but never authorizes merge.
 | Restarting discovery after every repair | Run one bounded closure check unless the contract or review risk materially changed. |
 | Manually running the full suite before Review | Run focused proof; let the native commit hook own the full suite once. |
 | Treating logical independence as missing Git order | Preserve one total predecessor chain. |
+| Treating a separately owned active writer as exempt from publication dispatch | Let its in-flight mutation finish, then pause it at the next safe tool boundary until the Finish subagent starts. |
 | Treating draft publication as technical readiness | Publish hook-clean, then complete local and hosted review. |
 | Leaving a completed OpenSpec active for a later cleanup | Complete, synchronize, and archive it in the last Execute unit before the final commit. |
 
@@ -211,3 +233,9 @@ local Review, but never authorizes merge.
 - GREEN: under deadline, authority, and sunk-review pressure, the revised
   lifecycle consistently keeps completed-change archival in Execute before the
   final commit, leaves unverified work active, and does not infer the adapter.
+- RED: after a hook-clean ancestor commit, a baseline delegated publication but
+  claimed that a separately owned descendant writer did not pause because its
+  worktree remained semantically eligible.
+- GREEN: the task-wide dispatch barrier pauses every writer only at its next
+  mutation until the MR-specific Finish subagent starts, then restores all
+  eligible Execute concurrency without waiting for provider completion.

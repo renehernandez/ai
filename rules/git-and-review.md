@@ -43,6 +43,11 @@ draft PR/MR, requests configured hosted review, and starts local Review against
 the same hosted head. Review and its subagents consume the pre-commit hook's
 full-suite evidence instead of rerunning that suite.
 
+For a delegated Finish lane, bind provider mutation to its immutable publication
+packet. A changed source HEAD or resolved target-base SHA invalidates the packet
+and every dependent hosted gate. The coordinator must refresh the packet before
+that lane pushes, creates or updates an artifact, or requests review.
+
 Review then emits a task-local `technical_readiness_checkpoint` containing:
 
 - hosted artifact, target base, and exact HEAD;
@@ -199,6 +204,10 @@ review feedback. `codex-review-feedback` remains retired.
   worktrees. Keep publication and restack propagation ordered, and coalesce
   superseded upstream heads into one restack onto the newest reviewed
   predecessor.
+- A descendant Finish lane may start as soon as its immutable packet is known,
+  while provider mutation waits for the target branch to exist remotely and
+  match the packet's expected target-base identity. CI and hosted review for
+  already published units continue independently of that ordered mutation.
 - Set formal GitLab blocking dependencies when the provider supports them.
 - Merge explicitly authorized final units from the bottom of the chain to the
   top. Use each live source HEAD as the merge guard.

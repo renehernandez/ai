@@ -99,17 +99,51 @@ Create every final MR as draft and verify its live provider state after
 creation or update. Local Review, CI, approvals, hosted review, and technical
 readiness never authorize changing it from draft to ready.
 
+## Provider-Only Delegated Lanes
+
+An MR-specific Finish subagent is a provider-only delegated lane. Its immutable
+publication packet must match the canonical Immutable Publication Packet in
+`rules/handoff-and-resume.md`; do not replace it with a partial field list.
+Before every provider mutation, validate the exact source SHA, expected
+target-base identity, Finish lane identity, and provider-ownership generation
+against live state and the coordinator's current task-local designation;
+invalidate the packet when any changes.
+
+The lane may inspect Git/provider state, push only the handed-off exact ref,
+reuse or create the draft artifact through `change-request-create` and the
+selected adapter, verify live state, request hosted review, and monitor current
+gates. It may not edit files, change commits, switch the coordinator's worktree,
+rebase, restack, resolve implementation findings, mark ready, merge, deploy, or
+clean up. Its mutation ceiling overrides any broader task-level terminal
+authority. It returns provider evidence and findings to the current Execute
+owner and never accepts repository-write ownership.
+
+The lane must remain active through draft technical readiness. The coordinator
+replaces an exited, errored, or stalled lane only through the canonical
+scheduling rule in `rules/investigation-and-implementation.md`. A lane holding a
+revoked provider-ownership generation remains read-only and returns status. A
+replacement inherits no broader mutation authority.
+
+A descendant delegated lane may start before its target branch exists remotely.
+It waits inside Finish before provider mutation until that branch exists and
+matches the packet's expected target-base identity. Unrelated published lanes
+keep monitoring concurrently.
+
 ## Hosted Feedback Loop
 
 Perform configured provider review requests and polling, then hand provider,
 artifact URL, target base, exact target-base SHA, source head, status, and the
 complete available feedback to Review for normalization. Route actionable
-implementation findings to the current Execute lane owner as one batch. After
-repairs, request refreshed hosted review for the new head, then Review runs
-bounded closure only for affected types and verification. It starts new
-discovery only for a material contract or review-risk change. Every changed
-source head or resolved target-base SHA refreshes local readiness, CI, and
-hosted gates, including the delivery budget and any exact-diff exception.
+implementation findings that require no user decision or authority expansion to
+the current Execute lane owner as one automatic repair batch. An actionable
+Nitro finding remains actionable when labeled nonblocking. Diagnose each
+pipeline failure and route its in-scope repair to the current Execute owner
+without another user prompt. After repairs, request refreshed hosted review for
+the new head, then Review runs bounded closure only for affected types and
+verification. It starts new discovery only for a material contract or
+review-risk change. Every changed source head or resolved target-base SHA
+refreshes local readiness, CI, and hosted gates, including the delivery budget
+and any exact-diff exception.
 
 Do not stop at publication, a pending pipeline, a green parent pipeline, a
 review request, or reassuring summary language. Continue monitoring the newest
@@ -167,6 +201,7 @@ before cleanup; never force-delete as ordinary follow-through.
 | Reusing a stale checkpoint after repair or rebase | Refresh hosted review and run bounded closure or patch-equivalence validation on the new head. |
 | Letting provider choice follow the first remote | Apply policy precedence and block ambiguity. |
 | Writing a PR/MR body directly in Finish | Invoke `change-request-create`, then delegate provider mechanics. |
+| Applying task-level merge authority inside a provider-only delegated lane | The packet's narrower mutation ceiling controls; return terminal work to the coordinator. |
 | Splitting an atomic plan from its implementation | Publish both as one change set in one final PR/MR. |
 | Treating green POC CI as architecture approval | Require the current POC-specific local Review checkpoint for readiness. |
 | Merging because all gates are green | Require explicit merge authority or activated policy. |
