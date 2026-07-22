@@ -71,14 +71,16 @@ The skill adapts based on context:
 1. Fetch ticket via project management API (Linear, Jira, GitHub Issues)
 2. Extract description, docs, linked MRs
 3. Scan codebase for feature context
-4. Output: report as ticket comment
+4. Output: draft report for a ticket comment; apply Post-Review Actions before
+   provider submission
 
 **MR/PR Mode** (e.g., `@nitro security review` or "review this PR"):
 1. Read MR/PR title, description, labels
 2. Fetch the full diff
 3. Identify linked tickets for context
 4. Scan codebase around changed files
-5. Output: report as MR/PR comment
+5. Output: draft report for an MR/PR comment; apply Post-Review Actions before
+   provider submission
 
 **Feature Mode** (e.g., "threat model user authentication"):
 1. Use description as input
@@ -446,10 +448,16 @@ Only if regulated data is involved.
 ## Post-Review Actions
 
 ### Ticket Mode
-Post the full report as a comment on the ticket.
+Draft the full report for the ticket. When posting through the user's GitLab or
+Linear identity, route the exact destination and rendered comment through
+`rules/git-and-review.md#agent-authored-provider-messages` before submission.
+Invoking this skill does not confirm the message. Output published through a
+distinct security-review service identity keeps its service-owned path.
 
 ### MR/PR Mode
-Post as MR/PR comment. If too long, split into:
+Draft the MR/PR comment. When posting through the user's GitLab identity, apply
+the same destination-bound message confirmation before submission. If too
+long, split into separately confirmed destination-bound drafts:
 1. **Summary** (Executive Summary + Checklist)
 2. **Full report** (collapsed `<details>` tag)
 

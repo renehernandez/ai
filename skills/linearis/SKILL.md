@@ -17,6 +17,12 @@ Explore and Review stay read-only. Only Finish performs a Linear provider write
 after the owning semantic workflow's preview and approval contract is
 satisfied.
 
+Before submitting a human-readable Linear comment, discussion reply, or
+project update through the user's identity, Finish MUST also apply
+`rules/git-and-review.md#agent-authored-provider-messages`. Semantic workflow
+approval or general write authority does not replace that message-specific
+checkpoint.
+
 ## Discover the Current CLI
 
 1. Run `linearis usage` when the available domain is unknown.
@@ -86,6 +92,7 @@ date, boolean, or similarly bounded non-Markdown scalar.
 | Mistake | Correction |
 | --- | --- |
 | Treating the CLI skill as write approval | Return to the owning semantic workflow and lifecycle mode. |
+| Treating semantic approval as approval for unseen provider prose | Route the exact destination and rendered draft through the canonical agent-authored provider-message checkpoint. |
 | Reading only the first page | Follow `pageInfo.endCursor` until `hasNextPage` is false. |
 | Filtering away pagination evidence | Preserve `nodes` and `pageInfo`, or use raw JSON. |
 | Assuming `Done` is universal | Resolve the target team's completed status. |
