@@ -42,8 +42,10 @@ archive work.
 - Finish publishes artifacts and performs authorized completion actions.
 
 Every OpenSpec receives one complete disposable implementation POC before final
-implementation. The POC remains draft, review-only, and closes unmerged after
-current automated review and personal exact-head acceptance.
+implementation. The POC remains draft and review-only after current automated
+review and personal exact-head acceptance. It closes unmerged only when the
+user explicitly requests closure or states that the work is ready to proceed
+to stack breakdown.
 
 ## OpenSpec task shape
 
@@ -84,12 +86,22 @@ PRs/MRs with the same review and rollback boundary. Numeric budgets constrain
 the final shape but never justify an unsafe mechanical partition.
 
 Plan targets at most 10 changed files and 500 additions plus deletions for each
-atomic implementation MR and final OpenSpec unit. Above either target, record
-an unsafe-to-split rationale. A forecast above 15 files or 1,000 changed lines
-blocks. A measured diff can exceed the cap only with user approval bound to its
-artifact, HEAD, target-base SHA, counts, rationale, consequences, and approval
-evidence. Repairs and restacks invalidate stale exceptions. The complete POC
-is exempt.
+non-removal atomic implementation MR and final OpenSpec unit. Above either
+target, record an unsafe-to-split rationale. A forecast above 15 files or 1,000
+changed lines blocks. A measured diff can exceed the cap only with user
+approval bound to the named artifact, accepted outcome, and unsafe-to-split
+rationale. Contract-preserving repairs and restacks preserve that authority;
+material scope, ownership, behavior, deployment, review-boundary, or practical
+split changes require renewal. A non-removal final MR may never exceed 50
+changed files.
+
+A removal-only MR has no numeric file or line cap when its sole outcome is
+retirement or deletion plus necessary fallout in existing paths. A new file,
+replacement behavior, a new dependency, a migration, or unrelated refactoring
+restores ordinary budgets. The complete POC is exempt.
+Final removal-only readiness binds the declared diff to Git and the semantic
+classification to the passed exact-head `diff-review`; the agent does not treat
+self-authored removal labels as proof.
 
 Prefer stack objective proof in the first unit. Permit one or two groundwork
 units first only when each safely improves the current system, owns local proof,
@@ -135,6 +147,10 @@ it contains valid early proof.
   the footprint fingerprint derived from the accepted POC, and record material
   topology change independently of unit IDs; only atomic or pre-POC review may
   use the evidence-free fast path.
+- Capture durable POC implementation and review learnings as they arise, then
+  automatically reconcile one consolidated batch against the accepted POC head
+  before closure and final implementation. Contract-preserving reconciliation
+  needs no new prompt; materially unproved changes return to the user.
 
 Do not publish a separate planning PR/MR or reconciliation-only PR/MR. The
 initial locally reviewed OpenSpec enters the POC. Reconciled planning state then

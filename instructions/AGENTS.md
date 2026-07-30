@@ -4,6 +4,10 @@ This is the portable entrypoint for agents running as `rene.hernandez`. Apply
 higher-priority system, developer, and direct user instructions first, then the
 project `AGENTS.md` and relevant files under [rules/](../rules/).
 
+The [agent development workflow charter](../rules/agent-development-workflow-charter.md)
+governs every kind of work. Specialized rules and skills implement its
+mechanics without weakening or duplicating its principles.
+
 ## Five-mode workflow
 
 Explore, Plan, Execute, Review, and Finish are the only inferred lifecycle
@@ -123,7 +127,8 @@ or cleanup authority.
   specialists operate inside them: Explore uses `brainstorming` and
   `start-project`; Plan uses `openspec-tasks`; Review uses the GitHub/GitLab
   host adapters and `nitro-review-feedback` when policy selects Nitro; Finish
-  uses `change-request-create` plus the selected creation adapter.
+  uses `change-request-create` as the only selectable creation and description
+  owner; provider mechanics are its internal references.
 - `codex-review-feedback` remains retired. GitHub PR review does not request,
   poll, normalize, or gate on Codex-authored review feedback.
 
@@ -143,9 +148,14 @@ or cleanup authority.
   rehearsal.
 - Every OpenSpec receives one complete disposable implementation POC. The POC is
   a draft review-only PR/MR that receives local and hosted automated review plus
-  personal acceptance of the exact clean head, then closes unmerged.
-- Reconcile durable POC findings once per authorized cycle. Implement final
-  code independently; never promote POC commits.
+  personal acceptance of the exact clean head. It remains open until explicit
+  closure or contextual authority to proceed to stack breakdown, then closes
+  unmerged.
+- Capture durable POC implementation and review learnings continuously, then
+  reconcile one automatic batch against the accepted POC head before closure
+  and final implementation. Keep the accepted POC open until the user
+  explicitly requests closure or states readiness to proceed to stack
+  breakdown. Implement final code independently; never promote POC commits.
 - Treat pre-POC OpenSpec units as provisional. Post-POC planning Review is the
   authoritative final-topology gate: bind structured delivery-shape evidence
   for every final unit and material POC footprint entry to the accepted POC
@@ -178,8 +188,9 @@ or cleanup authority.
   material contract or review-risk changes require new discovery.
 - For multiple final units, Plan records semantic eligibility and one total Git
   order. Execute may develop eligible units concurrently when each has a singly
-  owned branch/worktree; publication and restack propagation preserve the Git
-  predecessor order.
+  owned branch/worktree. Create every initial real-diff MR sequentially in Git
+  order, do not restack descendants while a predecessor is open, and restack
+  only the immediate child after its predecessor merges.
 - Final MRs remain draft through implementation and technical readiness.
   Finish continues monitoring configured CI and hosted review after publication
   and routes in-scope failures to the current lane owner without another user
@@ -196,10 +207,9 @@ or cleanup authority.
 - Project instructions select the review host, target branch, automated
   reviewer, approvals, and direct-publication policy.
 - Nitro applies only to Fullscript GitLab projects whose active policy selects
-  it. A review request is a new top-level note containing only
-  `/request_review @nitro`. Read the complete response and unresolved
-  Nitro-authored discussions; actionable feedback anywhere in the response must
-  be fixed or explicitly dispositioned before readiness.
+  it. Apply the installed Fullscript Nitro rule as the canonical owner for
+  source-head request timing, size routing, feedback closure, and human
+  escalation.
 - Review retrieves and normalizes hosted findings read-only. Finish performs
   provider mutations and polling. Plan or Execute owns fixes.
 

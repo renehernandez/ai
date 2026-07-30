@@ -1,4 +1,0 @@
-interface:
-  display_name: "GitLab MR Create"
-  short_description: "Perform GitLab MR publication mechanics"
-  default_prompt: "Use $glab-mr-create within Finish after change-request-create has produced a reviewer-facing body and current Review evidence authorizes publication."

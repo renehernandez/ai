@@ -1,31 +1,22 @@
----
-name: github-pr-create
-description: Use when creating GitHub pull requests, opening PRs, preparing GitHub branches for review, or converting completed work into a draft GitHub PR.
-allowed-tools: Bash(gh pr:*), Bash(gh auth:*), Bash(git:*)
----
-
-# GitHub PR Create
+# GitHub Provider Mechanics
 
 Create GitHub pull requests with `gh` after verifying branch, remote, and duplicate-PR state. Prefer draft PRs unless the user explicitly asks for a ready PR.
 
 ## Mode Boundary
 
-This is a bounded Finish provider adapter. It performs mechanics only after
-Finish supplies mutation authority, a native hook-clean commit, and a body
-approved by `change-request-create`. Explicitly naming this adapter does not
-bypass `change-request-create` or grant publication or merge authority.
+These are internal GitHub mechanics owned by `change-request-create`. They run
+only after Finish supplies mutation authority, a native hook-clean commit, and
+an approved title and body. This reference is not a selectable skill and does
+not independently grant publication or merge authority.
 
 ## When to Use
 
 - Feature work or a bug fix is ready for GitHub review.
 - The user explicitly asks to create, open, draft, or prepare a GitHub PR.
 - Finish resolves GitHub as the provider and needs the PR creation or update step.
-- `change-request-create` selected GitHub as the provider adapter.
 
-Do not use for GitLab merge requests; use the GitLab MR creation skill instead.
-Always use `change-request-create` before this adapter, including when the user
-explicitly names GitHub, `gh`, or this skill. This adapter consumes the body; it
-does not approve it.
+Do not use these mechanics for GitLab merge requests. Explicit GitHub or `gh`
+wording still enters through `change-request-create`.
 
 ## Workflow
 
@@ -48,7 +39,12 @@ does not approve it.
    ```bash
    gh pr list --head "<current-branch>" --state open
    ```
-   If a PR exists, return it and ask whether to update it instead of creating another.
+   If a PR exists, fetch its current title, body, draft state, base, head, and
+   URL, then continue through the central update-safety policy:
+   ```bash
+   gh pr view "<number-or-url>" --json number,title,body,isDraft,baseRefName,headRefName,url
+   ```
+   Reuse that PR; never create a duplicate.
 
 4. For local agent-authored work, confirm the final personal publication
    checkpoint is current for the branch diff and exact HEAD SHA before pushing
@@ -71,10 +67,10 @@ does not approve it.
 
 7. Consume the exact title and body approved by `change-request-create`.
    Do not rebuild, fill, template-expand, or otherwise change either value in
-   this adapter. If either value is absent or needs revision, return to
+   these provider mechanics. If either value is absent or needs revision, return to
    `change-request-create` before provider mutation.
 
-8. Create a draft PR:
+8. Create a draft PR when none exists:
    ```bash
    gh pr create \
      --base "<base>" \
@@ -87,7 +83,22 @@ does not approve it.
    by project convention. Do not add `--template` or `--fill` after description
    approval.
 
-9. Return the created PR URL, base/head branch, draft/readiness state, and any verification gaps.
+   For an existing PR, update only the centrally approved title and body:
+   ```bash
+   gh pr edit "<number-or-url>" \
+     --title "<type>: <description>" \
+     --body "<body>"
+   ```
+
+9. Read the hosted title and body back after every creation or update:
+   ```bash
+   gh pr view "<number-or-url>" --json number,title,body,isDraft,baseRefName,headRefName,url
+   ```
+   Confirm manual content, links, checklist state, and protected sections
+   remain intact. Restore the prior body when safe or block with the exact
+   recovery gap; command success alone does not pass.
+
+10. Return the PR URL, base/head branch, draft/readiness state, and any verification gaps.
 
 ## Quick Reference
 
@@ -96,7 +107,8 @@ does not approve it.
 | Existing PR | `gh pr list --head "<branch>" --state open` |
 | Current upstream | `git rev-parse --abbrev-ref --symbolic-full-name @{u}` |
 | Create draft PR | `gh pr create --base "<base>" --head "<branch>" --title "<title>" --body "<body>" --draft` |
-| Review current PR state | `gh pr status` |
+| Update existing PR | `gh pr edit "<number-or-url>" --title "<title>" --body "<body>"` |
+| Read hosted content back | `gh pr view "<number-or-url>" --json number,title,body,isDraft,baseRefName,headRefName,url` |
 
 ## GitHub Gotchas
 
@@ -111,6 +123,7 @@ does not approve it.
 | --- | --- |
 | Using `glab mr create` for GitHub | Use `gh pr create` |
 | Creating a duplicate PR | Check `gh pr list --head "<branch>" --state open` first |
+| Returning without updating an existing PR | Fetch its body, apply central update safety, update it, and read it back |
 | Opening a ready PR by default | Use `--draft` unless the user asks for ready review |
 | Guessing base branch | Read remote HEAD, branch config, or project docs |
 | Hiding verification gaps | Put behavior-specific proof or reviewer-facing gaps in the PR body, and keep routine gate state in workflow evidence |
@@ -121,12 +134,15 @@ does not approve it.
 ## Validation Scenarios
 
 - GitHub branch with an existing open PR: pass only if the agent checks `gh pr list --head` before creating a duplicate.
+- Existing GitHub PR update: pass only if the current body is fetched, the
+  centrally approved update uses `gh pr edit`, and hosted title/body state is
+  read back afterward.
 - GitHub side-project branch with no upstream: pass only if the agent pushes or verifies the intended fork/head before `gh pr create`.
 - User asks for a ready PR: pass only if the agent does not force `--draft` and reports the readiness choice.
-- User asks for a host-neutral change request: pass only if the agent routes through `change-request-create` instead of this provider adapter directly.
+- User asks for a host-neutral change request: pass only if the agent routes through `change-request-create` instead of starting at provider mechanics.
 - User explicitly asks for a GitHub PR or `gh pr create`: pass only if
-  `change-request-create` owns the exact final title and body and this adapter
-  consumes them unchanged.
+  `change-request-create` owns the exact final title and body and its provider
+  mechanics consume them unchanged.
 - Process-heavy change with local plans, pressure tests, internal review gates,
   or private plan support artifacts: pass only if the PR body includes
   self-contained reviewer evidence, omits references to excluded local

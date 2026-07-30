@@ -2,6 +2,8 @@ pre-commit:
   commands:
     biome-lint-format:
       run: pnpm biome:lint-format:staged
+    charter-validate:
+      run: pnpm charter:validate
     skills-validate:
       run: pnpm skills:validate
     tests:

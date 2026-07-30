@@ -28,13 +28,30 @@ Missing `glab` access or authentication returns `unavailable` with evidence.
    glab mr view "<iid-or-url>" --output json
    glab api "projects/<project>/merge_requests/<iid>"
    ```
-2. Capture latest MR head SHA from MR metadata.
-3. Read discussions and notes:
+2. From this skill directory, collect the MR, notes, discussions, and MR
+   versions into the validator envelope:
    ```bash
-   glab api "projects/<project>/merge_requests/<iid>/discussions?per_page=100"
-   glab api "projects/<project>/merge_requests/<iid>/notes?per_page=100"
+   pnpm exec tsx scripts/gitlab-evidence-collect.ts \
+     <iid> <artifact-lifecycle> <artifact-classification> \
+     > /tmp/nitro-gitlab-evidence.json
    ```
-4. Identify Nitro-authored feedback by author, bot identity, command response, or org convention visible in the payload.
+   The collector calls `glab api --include` page by page, preserving each raw
+   `X-Page` and `X-Next-Page` value through the empty terminal value.
+3. Run
+   `scripts/nitro-feedback-gate.ts validate-gitlab-evidence --file
+   /tmp/nitro-gitlab-evidence.json`
+   so readiness is derived from raw provider identities, chronology, current
+   head transition from MR versions, diff count, actual request event,
+   completion note, and unresolved discussions. The raw validator derives the
+   required command and treats GitLab's capped `1000+` count as above the
+   50-file route without claiming an exact count. For a larger POC or
+   removal-only MR it requires the non-system authored `@nitro review` note with
+   a nonempty requesting username rather than trusting task context or the
+   generic reviewer-assignment event.
+4. Identify every Nitro-authored response after the request by author, bot
+   identity, command response, or org convention visible in the payload. The
+   latest completion owns receipt identity, but actionable language in any
+   completion keeps the gate blocked.
 5. Classify feedback as pending, no issues, findings, unavailable, or stale.
 6. Normalize actionable findings to the shared contract.
 7. Convert Nitro status into `nitro_feedback_gate` with
@@ -44,17 +61,10 @@ Missing `glab` access or authentication returns `unavailable` with evidence.
 
 Do not request Nitro from this read-only specialist. When
 latest-effective-diff feedback is absent and policy requires Nitro, return the
-pending request state to Finish. Finish posts a new top-level
-`/request_review @nitro` note after MR creation and material effective-diff
-changes unless a current review is already in flight.
-
-Material follow-up pushes include feedback fixes, restacks, conflict fixes,
-pipeline fixes, user edits, rebases, and plan or documentation feedback fixes.
-
-Use a 10-minute timeout only for Nitro acknowledgement or review start, polling
-every 1 minute. If Nitro starts but does not complete, return
-`nitro_review_completion_pending` through the shared gate instead of treating
-the review as passed or failed.
+pending request state to Finish. The selected Fullscript Nitro rule is the
+canonical owner for request timing, command selection, duplicate suppression,
+source-head classification, and acknowledgement timeout. This specialist
+records that evidence without restating or mutating the policy.
 
 ## Output Contract
 
@@ -62,6 +72,23 @@ the review as passed or failed.
 reviewer: nitro
 artifact: <MR URL>
 head_sha: <sha-or-unknown>
+head_evidence:
+  - <provider MR-head readback>
+artifact_lifecycle: poc | final_implementation
+artifact_classification: standard | poc | removal-only
+classification_evidence:
+  - <accepted OpenSpec POC or final delivery checkpoint>
+effective_diff_files: <non-negative integer>
+effective_diff_head_sha: <latest MR head sha>
+effective_diff_evidence:
+  - <provider diff-stat readback>
+request_note_id: <GitLab note id>
+request_note_url: <GitLab note URL>
+request_author: <requesting user>
+request_body: <exact command-only note body>
+request_observed_head_sha: <MR head read back immediately after request>
+request_evidence:
+  - <provider note and post-note head readback>
 feedback_kind: <inline | summary | discussion | review>
 status: <pending | no issues | findings | unavailable | stale>
 findings: <normalized diff-review findings or none>
@@ -71,17 +98,35 @@ verification_gaps: <none | list>
 
 ## Shared Gate Contract
 
-Return and validate this gate before Review or Finish treats Nitro as complete:
+Return this normalized gate for downstream reviewers. Its YAML validation checks
+shape and internal consistency; only `validate-gitlab-evidence` over raw GitLab
+payloads can satisfy hosted readiness:
 
 ```yaml
 nitro_feedback_gate:
   artifact: <Fullscript GitLab MR URL>
-  head_sha: <latest MR head sha>
+  artifact_lifecycle: poc | final_implementation
+  artifact_classification: standard | poc | removal-only
+  classification_evidence:
+    - <accepted OpenSpec POC or final delivery checkpoint>
+  head:
+    sha: <latest MR head sha>
+    evidence:
+      - <provider MR-head readback>
+  effective_diff:
+    head_sha: <latest MR head sha>
+    files: <non-negative integer>
+    evidence:
+      - <provider diff-stat readback for that head>
   request:
     required: true
-    requested_after_latest_push: true
+    note_id: <GitLab note id>
+    note_url: <GitLab note URL>
+    author: <requesting user>
+    body: <exact command-only note body>
+    observed_head_sha: <MR head read back immediately after request>
     evidence:
-      - <request command, note URL, or discussion evidence>
+      - <provider note and post-note head readback>
   start:
     status: started | blocked | pending
     timeout_minutes: 10
@@ -90,6 +135,10 @@ nitro_feedback_gate:
       - <Nitro pending review, acknowledgement, or start evidence>
   completion:
     status: clean | findings | stale | unavailable | pending
+    head_sha: <reviewed MR head sha, when Nitro responded>
+    author: <Nitro provider identity, when Nitro responded>
+    note_id: <Nitro note or discussion id, when Nitro responded>
+    note_url: <Nitro note or discussion URL, when Nitro responded>
     evidence:
       - <Nitro latest-head completion evidence>
   unresolved_actionable_feedback: []
@@ -113,16 +162,40 @@ Status mapping:
 | Mistake | Fix |
 | --- | --- |
 | Treating all GitLab feedback as Nitro | Identify Nitro-authored feedback explicitly |
-| Waiting forever when routing requires an explicit Nitro request | Post `/request_review @nitro`, then poll for latest-head Nitro feedback |
+| Reimplementing request mechanics in Review | Return the pending state to Finish and apply the canonical Fullscript Nitro rule |
 | Requesting Nitro repeatedly when a latest-head review is already in flight | Record the pending state, head SHA, and request evidence |
 | Passing old Nitro comments as clean | Compare feedback to the latest MR head SHA |
 | Hiding missing Nitro access | Return `unavailable` with evidence |
+| Assuming a push starts Nitro | Return an explicit request requirement to Finish |
+| Stopping after a Nitro repair push | Re-request Nitro and monitor the new source head |
 
 ## Validation Scenarios
 
-- Explicit Nitro MR: pass only if the agent requests Nitro, waits for Nitro-authored discussions/notes, and ties them to the latest head.
+- Explicit Nitro MR: pass only if the normalized evidence preserves the
+  accepted lifecycle classification, provider-bound effective diff, actual
+  request note plus its post-note head readback, and Nitro-authored response
+  bound to the latest source head. The normalizer never invents acknowledgement
+  or completion evidence.
+- Raw provider gate: pass only when GitLab MR metadata supplies the current head
+  and diff count, a provider request event follows the latest source push, an
+  exact `nitro`-authored completion follows that request, and no resolvable,
+  unresolved Nitro-authored discussion thread remains. Older resolvable,
+  unresolved threads carry forward; non-resolvable historical
+  `individual_note` summaries do not independently masquerade as unresolved
+  threads. A short completion passes only when it is composed entirely of
+  complete standalone reassurance or neutral review-completion sentences. A
+  structured Nitro receipt additionally requires exactly one explicitly clean
+  first `Verdict` sentence and no current feedback heading or severity marker.
+  This deterministic receipt gate does not replace Finish's semantic read:
+  Finish must read the complete response and unresolved discussions, and
+  actionable feedback anywhere remains blocking. Technical readiness must carry
+  Finish's exact-head semantic-review evidence; a passing raw receipt alone
+  cannot satisfy readiness. Duplicate or malformed receipt structures after the
+  latest request fail closed.
 - Missing Nitro feedback: pass only if status is `pending` or `unavailable`, not clean.
 - Stale Nitro feedback: pass only if stale feedback does not satisfy the review gate.
+- Actionable feedback loop: pass only if every repair push receives a new
+  request until the latest head is clean or a human decision blocks that MR.
 
 ## Test Evidence
 

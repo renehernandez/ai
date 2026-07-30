@@ -1,19 +1,27 @@
+// charter-contracts: change-request-owner
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import test from "node:test";
+import { read } from "../../scripts/charter-validator-reader.ts";
 
-const root = process.cwd();
+test("RED change-request-owner: retired provider adapters are not selectable", () => {
+  const config = JSON.parse(read("ax.config.json")) as {
+    blocks: { "personal-skills": { skills: Array<{ names: string[] }> } };
+  };
+  const names = config.blocks["personal-skills"].skills[0].names;
 
-function read(path: string): string {
-  return readFileSync(join(root, path), "utf8");
-}
+  assert.ok(!names.includes("github-pr-create"));
+  assert.ok(!names.includes("glab-mr-create"));
+});
 
-test("change-request-create owns every provider route", () => {
+test("GREEN change-request-owner: change-request-create owns every provider route", () => {
   const skill = read("skills/change-request-create/SKILL.md");
   const rules = read("rules/git-and-review.md");
-  const github = read("skills/github-pr-create/SKILL.md");
-  const gitlab = read("skills/glab-mr-create/SKILL.md");
+  const github = read(
+    "skills/change-request-create/references/github-provider.md",
+  );
+  const gitlab = read(
+    "skills/change-request-create/references/gitlab-provider.md",
+  );
 
   assert.match(skill, /^name: change-request-create$/m);
   assert.match(skill, /^description: Use when /m);
@@ -29,18 +37,11 @@ test("change-request-create owns every provider route", () => {
 
   assert.match(
     rules,
-    /For host-neutral PR\/MR creation or description updates, Finish uses\s+`change-request-create` before the selected provider adapter/,
+    /For every PR\/MR creation or description update.*`change-request-create`/s,
   );
-  assert.match(
-    github,
-    /Always use `change-request-create` before this adapter/,
-  );
-  assert.match(
-    gitlab,
-    /Always use `change-request-create` before this adapter/,
-  );
-  assert.match(github, /does not approve it/);
-  assert.match(gitlab, /does not approve it/);
+  assert.match(github, /not a selectable skill/);
+  assert.match(gitlab, /not a selectable skill/);
+  assert.match(skill, /only\s+selectable creation owner/);
   assert.match(github, /Consume the exact title and body approved/);
   assert.match(gitlab, /Consume the exact title and body approved/);
   assert.doesNotMatch(github, /Fallback body|--fill --draft/);
@@ -79,7 +80,7 @@ test("change-request-create protects human-owned sections and POC descriptions",
   );
   assert.match(
     finish,
-    /Before every PR\/MR creation or description update, invoke\s+`change-request-create`/,
+    /Before every PR\/MR creation or description update.*invoke `change-request-create`/s,
   );
 });
 
@@ -105,7 +106,9 @@ test("change-request-create rejects GitLab description leaks while keeping revie
 
 test("change-request-create preserves GitHub templates and asks on multi-template ambiguity", () => {
   const skill = read("skills/change-request-create/SKILL.md");
-  const github = read("skills/github-pr-create/SKILL.md");
+  const github = read(
+    "skills/change-request-create/references/github-provider.md",
+  );
 
   assert.match(skill, /\.github\/pull_request_template\.md/);
   assert.match(skill, /\.github\/PULL_REQUEST_TEMPLATE\.md/);
@@ -115,6 +118,16 @@ test("change-request-create preserves GitHub templates and asks on multi-templat
     /If multiple templates match .* ask which template to use/s,
   );
   assert.match(github, /Do not rebuild, fill, template-expand/);
+  assert.match(github, /gh pr edit "<number-or-url>"/);
+  assert.match(
+    github,
+    /gh pr view "<number-or-url>" --json number,title,body,isDraft,baseRefName,headRefName,url/,
+  );
+  assert.match(
+    github,
+    /Read the hosted title and body back after every creation or update/,
+  );
+  assert.match(github, /command success alone does not pass/);
 });
 
 test("change-request-create preserves existing artifact bodies through managed sections", () => {
@@ -122,7 +135,7 @@ test("change-request-create preserves existing artifact bodies through managed s
 
   assert.match(
     skill,
-    /Preserve reviewer notes, links, resolved checklist state, and\s+manual sections/,
+    /Preserve reviewer notes, links, resolved\s+checklist state, and manual sections/,
   );
   assert.match(skill, /<!-- change-request-create:start -->/);
   assert.match(skill, /<!-- change-request-create:end -->/);
@@ -157,8 +170,12 @@ test("change-request-create includes hosted failures without restating routine g
 
 test("change-request-create keeps targeted evidence out of automatic verification noise", () => {
   const skill = read("skills/change-request-create/SKILL.md");
-  const gitlab = read("skills/glab-mr-create/SKILL.md");
-  const github = read("skills/github-pr-create/SKILL.md");
+  const gitlab = read(
+    "skills/change-request-create/references/gitlab-provider.md",
+  );
+  const github = read(
+    "skills/change-request-create/references/github-provider.md",
+  );
 
   assert.match(skill, /Verification sections are for reviewer-risk evidence/);
   assert.match(skill, /Do not list commands just because they were run/);
@@ -187,7 +204,9 @@ test("change-request-create encodes thread 019edf9e verification-drift regressio
 
 test("change-request-create classifies Linear relationships before GitLab mutation", () => {
   const skill = read("skills/change-request-create/SKILL.md");
-  const gitlab = read("skills/glab-mr-create/SKILL.md");
+  const gitlab = read(
+    "skills/change-request-create/references/gitlab-provider.md",
+  );
   const fixture = read(
     "tests/fixtures/change-request/linear-relationship-handoff.md",
   );

@@ -7,6 +7,7 @@ import {
   validateEffectiveDiffDeliveryBudget,
   validatePostPocDeliveryShapeEvidence,
 } from "./delivery-shape-evidence.ts";
+import { validateRemovalOnlySemanticReview } from "./removal-only-readiness.ts";
 
 export type {
   AcceptedPocContext,
@@ -390,6 +391,18 @@ export type RebaseEvidence = {
   affectedVerificationPassed: boolean;
 };
 
+export type HostedFeedbackSemanticReview = {
+  reviewer: "finish";
+  provider: "nitro";
+  targetBaseSha: string;
+  head: string;
+  completeResponseRead: boolean;
+  unresolvedDiscussionsRead: boolean;
+  evidence: string;
+  status: "passed" | "blocked";
+  actionableFeedback: readonly string[];
+};
+
 export type TechnicalReadinessCheckpoint = {
   artifact: string;
   targetBase: string;
@@ -402,6 +415,7 @@ export type TechnicalReadinessCheckpoint = {
   reviewResults: readonly ReviewResult[];
   closureResult?: ClosureResult;
   rebaseEvidence?: RebaseEvidence;
+  hostedFeedbackSemanticReview?: HostedFeedbackSemanticReview;
   provider: string;
   blockers: readonly string[];
 };
@@ -585,6 +599,33 @@ export function validateTechnicalReadinessCheckpoint(
   if (!checkpoint.provider.trim()) {
     throw new Error("provider_route_unresolved");
   }
+  if (checkpoint.provider === "fullscript-gitlab-nitro") {
+    const semanticReview = checkpoint.hostedFeedbackSemanticReview;
+    if (!semanticReview) {
+      throw new Error("technical_readiness_nitro_semantic_review_missing");
+    }
+    if (
+      semanticReview.reviewer !== "finish" ||
+      semanticReview.provider !== "nitro" ||
+      semanticReview.targetBaseSha !== expected.targetBaseSha ||
+      semanticReview.head !== expected.head
+    ) {
+      throw new Error("technical_readiness_nitro_semantic_review_stale");
+    }
+    if (
+      !semanticReview.completeResponseRead ||
+      !semanticReview.unresolvedDiscussionsRead ||
+      !semanticReview.evidence.trim()
+    ) {
+      throw new Error("technical_readiness_nitro_semantic_review_incomplete");
+    }
+    if (
+      semanticReview.status !== "passed" ||
+      semanticReview.actionableFeedback.length > 0
+    ) {
+      throw new Error("technical_readiness_nitro_semantic_review_blocked");
+    }
+  }
   if (expected.target === "final_implementation") {
     if (!checkpoint.deliveryBudget) {
       throw new Error("technical_readiness_delivery_budget_missing");
@@ -634,6 +675,8 @@ export function validateTechnicalReadinessCheckpoint(
     }
     return results[0];
   });
+
+  validateRemovalOnlySemanticReview(checkpoint.deliveryBudget, requiredResults);
 
   const discoveryTarget = requiredResults[0];
   for (const result of requiredResults.slice(1)) {

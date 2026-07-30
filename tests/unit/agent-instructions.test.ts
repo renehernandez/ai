@@ -456,8 +456,9 @@ test("AI repo Finish policy remains GitLab and Nitro specific", () => {
 
   assert.match(repoAgents, /GitLab `origin`/);
   assert.match(repoAgents, /Nitro/);
-  assert.match(repoAgents, /\/request_review @nitro/);
+  assert.match(repoAgents, /Fullscript Nitro rule.*canonical/is);
   assert.match(portableAgents, /Nitro.*Fullscript GitLab/is);
+  assert.match(portableAgents, /Fullscript Nitro rule.*canonical/is);
   assert.match(
     gitRules,
     /direct user instruction.*project policy.*workflow-policy profile/is,
@@ -465,9 +466,9 @@ test("AI repo Finish policy remains GitLab and Nitro specific", () => {
   assert.match(nitroRules, /Fullscript repositories/);
   assert.match(
     nitroRules,
-    /Finish requests Nitro.*\/request_review @nitro.*after initial publication and every effective-diff\s+change: either the source HEAD or resolved target-base SHA/is,
+    /Finish explicitly requests it.*after initial publication and every source-head push.*\/request_review @nitro/is,
   );
-  assert.match(nitroRules, /latest-effective-diff/);
+  assert.match(nitroRules, /latest-source-head/);
   assert.doesNotMatch(gitRules, /GitLab `origin` MRs targeting `main`/);
   assert.match(
     gitRules,
@@ -519,8 +520,8 @@ test("delivery guidance keeps final MRs draft and follows hosted gates", () => {
   assert.match(gitRules, /green parent\s+pipeline.*is not completion/is);
   assert.match(repoAgents, /reactivates the current\s+Execute owner to fix/);
   assert.match(nitroRules, /Read every Nitro response in full/);
-  assert.match(nitroRules, /same effective diff/);
-  assert.match(nitroRules, /source HEAD plus resolved target-base SHA/);
+  assert.match(nitroRules, /same\s+source head and effective diff/);
+  assert.match(nitroRules, /target-only movement/);
   assert.match(nitroRules, /still applies/);
   assert.match(nitroRules, /worth addressing before merge/);
 });
@@ -551,9 +552,9 @@ test("multi-unit guidance supports parallel owners with ordered ancestry", () =>
   );
   assert.match(
     gitRules,
-    /each descendant MR targets its immediate predecessor/,
+    /each (?:stacked )?descendant.*targets its immediate predecessor/,
   );
-  assert.match(gitRules, /coalesce\s+superseded upstream heads/);
+  assert.match(gitRules, /Deeper\s+descendants remain untouched/);
   assert.match(gitRules, /exact expected remote-head lease/);
 
   for (const text of [repoAgents, portableAgents]) {

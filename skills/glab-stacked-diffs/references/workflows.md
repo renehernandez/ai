@@ -1,15 +1,15 @@
 # Stacked Diffs Workflows
 
-These workflows preserve visible MR boundaries while propagating one Git
-predecessor order. Lifecycle authority remains with Explore, Plan, Execute,
-Review, and Finish.
+These workflows preserve visible MR boundaries and one Git predecessor order
+without spending resources on speculative descendant restacks. Lifecycle
+authority remains with Explore, Plan, Execute, Review, and Finish.
 
 ## Contents
 
 - Create a stack
 - Map a published stack
-- Update published MRs progressively
-- Review substantive and propagation-only diffs
+- Update one published MR
+- Review provisional descendants
 - Add or reorder a diff
 - Rebase onto an updated base
 - Handle a predecessor merge
@@ -49,17 +49,12 @@ glab stack save -m "<semantic imperative description>"
 Inspect the current incremental commit before starting the next unit. The
 managed description is also the commit subject, so keep it semantic.
 
-### 4. Stop Before Provider Publication
+### 4. Publish real diffs sequentially
 
-Under `glab` 1.108, `stack sync` creates MRs from managed descriptions without
-an explicit draft option. Prefixing those descriptions with `Draft:` would also
-prefix the commit subjects. Pre-creating draft MRs through the provider does not
-solve the problem because sync does not discover and attach them to empty stack
-references.
-
-Return to Plan for a tested draft-create-and-attach mechanism or a newer
-installed implementation. Do not create transient non-draft MRs, contaminate
-semantic commit subjects with provider state, or edit stack metadata ad hoc.
+After each branch contains a coherent implementation, invoke
+`change-request-create` and publish its draft MR. Create the root first, then
+each child one after another in total Git order so its immediate predecessor
+branch already exists. Never create an empty placeholder MR.
 
 ## Map a Published Stack
 
@@ -81,28 +76,18 @@ Stop before mutation if:
 - the working tree contains unrelated changes; or
 - another writer changed a remote head.
 
-Classify the requested work separately:
+## Update One Published MR
 
-| Classification | Meaning |
-| --- | --- |
-| Substantive MR | Its incremental source-vs-target diff intentionally changes |
-| Propagation-only descendant | Its commit identity changes only because an ancestor changed |
-| Unaffected MR | Neither its incremental diff nor effective base changes |
-
-## Update Published MRs Progressively
-
-Suppose MRs !881 through !890 need corrections owned by several different
-incremental diffs. Do not reconstruct the ten-commit destination and do not
-amend all ten before one publication wave.
-
-For the earliest substantive MR:
+When feedback changes one MR, amend and publish only that MR:
 
 1. Select it with `glab stack move`.
 2. Verify the current branch.
 3. Resolve the live MR for that exact source branch.
 4. Apply only that MR's correction.
 5. Stage intended files and run focused proof.
-6. Amend the managed diff.
+6. Amend only the selected source branch with native hooks enabled. Use
+   `glab stack amend` only when the selected entry is the stack tip; otherwise
+   use `git commit --amend` so descendant refs do not move.
 
 ```bash
 git branch --show-current
@@ -117,52 +102,34 @@ git add <paths>
 ```
 
 ```bash
-glab stack amend
+git commit --amend --no-edit
 ```
 
-Inspect the amended MR's incremental diff and every descendant changed by the
-automatic rebase. Descendants without intentional incremental changes are
-propagation-only.
+Do not accept an automatic descendant rewrite or invoke the stack tool's
+descendant-rewriting amendment path for a published non-tip MR. Preserve the
+descendants' existing source heads and mark their gates provisional.
 
-Immediately before publication, re-read the affected remote heads. If they
-still match preflight, Finish publishes the complete affected chain with one
-atomic push containing a full refspec and exact lease for every branch:
+Immediately before publication, re-read this MR's remote head. If it still
+matches preflight, Finish publishes only this branch with an exact lease:
 
 ```bash
-git push --atomic --force-with-lease=refs/heads/<ancestor>:<ancestor-expected-sha> --force-with-lease=refs/heads/<descendant>:<descendant-expected-sha> <selected-GitLab-url> refs/heads/<ancestor>:refs/heads/<ancestor> refs/heads/<descendant>:refs/heads/<descendant>
+git push --force-with-lease=refs/heads/<branch>:<expected-sha> <selected-GitLab-url> refs/heads/<branch>:refs/heads/<branch>
 ```
 
-If any lease rejects, every ref remains unchanged. If the server lacks atomic
-push capability, stop without a sequential fallback. After success, verify
-every branch's live head and target. An expected unchanged remote head is a
-failed propagation signal. Apply description or navigation changes through
-`change-request-create`, request current hosted review, and begin independent
-gates concurrently.
+After success, verify that branch's live head and target, update reviewer-facing
+content through `change-request-create`, and explicitly request current hosted
+review. Do not restack or request Nitro for target-only movement on descendants.
 
-Only after this checkpoint is visible should Execute move to the next
-substantive MR and repeat. This yields early usable results and locates scope
-movement at the boundary where it occurs.
-
-### Coalescing rule
-
-The canonical multi-unit rule may coalesce unpublished implementation heads. In
-published-stack repair, if the same ancestor is amended again before its atomic
-publication, Finish may skip the now-obsolete intermediate propagation. Once a
-substantive checkpoint is published, verify its complete descendant wave. Do
-not wait for hosted review, coalesce separate substantive MR
-checkpoints, or delay the first published checkpoint merely to reduce provider
-churn.
-
-## Review Substantive and Propagation-Only Diffs
+## Review Provisional Descendants
 
 Review bottom-to-top. For each MR:
 
 1. Compare its source branch with its current target branch.
 2. Confirm substantive changes live in their declared owning MR.
-3. For propagation-only descendants, confirm the incremental patch is
-   semantically unchanged even though commit identities moved.
-4. Refresh base-sensitive proof, CI, approvals, and hosted automated review for
-   every changed effective diff.
+3. Treat every unpromoted descendant gate as provisional after an ancestor
+   changes.
+4. Refresh proof, CI, approvals, and hosted review only when that descendant is
+   promoted after predecessor merge.
 
 A green pipeline from an older source head or older predecessor head is stale.
 Review gates can execute concurrently, but readiness and merge order remain
@@ -175,8 +142,9 @@ unless explicitly accepted.
 
 `glab stack save` in version 1.108 is append-only. It adds a new diff after the
 last entry even when another entry is selected. Appending a local unit therefore
-uses the normal semantic save workflow, but its provider publication remains
-blocked by the new-stack limitation above.
+uses the normal semantic save workflow. After acceptance and local proof,
+publish its coherent real-diff draft through `change-request-create` against
+the current last branch.
 
 A mid-stack insertion or reorder returns to Plan. Version 1.108
 `glab stack reorder` changes local stack metadata and immediately retargets
@@ -184,9 +152,11 @@ hosted MRs; it does not rebase Git ancestry. If Plan accepts a recovery, it must
 name the recoverable ancestry operation, exact source-versus-target diff proof,
 and total target order. Execute repairs and verifies local ancestry first.
 Finish alone may run `stack reorder` or otherwise retarget hosted MRs, followed
-by atomic exact-leased publication and refreshed gates for every changed
-effective diff. Do not present `stack save` plus `stack reorder` as an insertion
-or restack primitive.
+by one exact-leased source publication at a time in the accepted total order
+and refreshed gates for every materially changed effective diff. This is an
+explicit topology repair, not automatic descendant propagation after ordinary
+feedback. Do not present `stack save` plus `stack reorder` as an insertion or
+restack primitive.
 
 ## Rebase onto an Updated Base
 
@@ -198,9 +168,9 @@ or an explicit request. Avoid churn from routine freshness rebases.
 3. Record current remote heads.
 4. Rebase onto the resolved base commit.
 5. Resolve conflicts bottom-to-top and inspect every incremental diff.
-6. In Finish, publish the rewritten chain with one atomic push containing an
-   explicit expected-SHA lease per branch, then refresh changed effective-diff
-   gates.
+6. If this changes an already published predecessor, publish only that branch
+   with an exact expected-SHA lease. Do not propagate the rewrite to
+   descendants before predecessor merge.
 
 ```bash
 git fetch origin <base>
@@ -230,6 +200,7 @@ This workflow requires explicit merge authority for the predecessor.
    remote head.
 7. Refresh every changed effective-diff gate before the child can be marked
    ready.
+8. Leave deeper descendants untouched until their own predecessor merges.
 
 If the lease is rejected, stop and inspect external commits. Do not accept the
 new remote SHA and retry blindly.
@@ -250,7 +221,8 @@ host-neutral description policy.
    permits them.
 5. Invoke `change-request-create` to preserve human-owned content and apply the
    reviewer-facing body policy.
-6. Use the selected GitLab adapter for mutation and read the hosted body back.
+6. Let its internal GitLab mechanics mutate the artifact and read the hosted
+   body back.
 
 Run this only when MR membership, titles, targets, or navigation actually
 changed. Do not directly replace complete MR descriptions from shell variables

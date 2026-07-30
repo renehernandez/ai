@@ -1,6 +1,6 @@
 ---
 name: glab-stacked-diffs
-description: Use when creating or managing stacked GitLab merge requests with `glab stack`, especially when amending published ancestors, propagating descendants, or recovering stack-managed history.
+description: Use when creating or managing stacked GitLab merge requests with `glab stack`, especially when publishing real diffs in order, promoting a child after predecessor merge, or recovering stack-managed history.
 allowed-tools: Bash(glab:*), Bash(git:*), AskUserQuestion
 ---
 
@@ -14,7 +14,7 @@ or cleanup authority.
 ## When to Use
 
 - A change has several independently reviewable, sequential MRs.
-- A published ancestor must change and descendants must be restacked.
+- A published ancestor must change without restacking descendants.
 - A direct Git operation may have diverged from `glab stack` metadata.
 - A predecessor merged and the next child must be retargeted and restacked.
 
@@ -27,16 +27,17 @@ changes have no predecessor relationship.
   until that predecessor merges.
 - **One substantive owner:** identify the MR whose incremental diff owns each
   requested change. Descendants changed only by rebase are propagation-only.
-- **Progressive publication:** for an existing published stack, finish one
-  substantive MR, publish its affected chain, and verify it before editing the
-  next substantive MR.
-- **Atomic propagation, concurrent gates:** publish each changed descendant
-  chain in one all-or-none remote transaction; start independent CI and hosted
-  review as soon as the updated MRs are visible.
-- **Managed history:** use `glab stack save` and `glab stack amend` for stack
-  commits. Do not synthesize replacement history unless the user explicitly
-  requests it or Plan accepts recovery because the managed stack cannot
-  represent the live topology.
+- **Sequential initial publication:** create every real-diff draft MR one after
+  another in total Git order. Never create empty placeholders.
+- **Promotion-only restacking:** an open predecessor push does not restack
+  descendants. After it merges, restack only its immediate child; keep deeper
+  descendants untouched.
+- **Managed history:** use `glab stack save` for new stack commits and
+  `glab stack amend` only during unpublished construction or at the tip. Amend
+  a published non-tip source branch natively so descendant refs stay fixed.
+  Do not synthesize replacement history unless the user explicitly requests it
+  or Plan accepts recovery because the managed stack cannot represent the live
+  topology.
 - **Hooks stay enabled:** never use a hook-bypass flag.
 - **Draft is durable:** technical readiness does not mark an MR ready. Explicit
   merge authority controls ready state and bottom-to-top merging.
@@ -70,9 +71,9 @@ Before any amendment or sync:
    it.
 
 For a fully published stack, do not use `glab stack sync` to propagate rewritten
-heads. In `glab` 1.108 it fetches before one bulk push with an unqualified lease,
-so it cannot enforce the captured expected SHA for each branch. Publish the
-affected chain as one atomic, exact-leased multi-ref push. `stack sync` also
+heads. An open predecessor change stays local to that MR. After predecessor
+merge, promote the immediate child with an exact expected-head lease.
+`stack sync` also
 cannot safely create new final MRs under this policy: it has no draft option and
 cannot attach a separately created draft MR to an empty stack reference. It is
 experimental and may remove managed entries for merged MRs, so inspect all
@@ -88,24 +89,18 @@ publication loop.
 3. Implement, stage, validate, and save each logical unit with
    `glab stack save -m "<semantic imperative description>"`. The description is
    also the commit subject, so keep provider state such as `Draft:` out of it.
-4. Stop before provider publication under `glab` 1.108. `stack sync` creates an
-   MR from the managed description without an explicit draft field, while a
-   separately created draft MR is not attached back to an empty stack reference.
-5. Return to Plan for a tested draft-create-and-attach mechanism or a newer
-   installed implementation that proves the same contract. Do not publish a
-   transient non-draft MR or manually edit stack metadata as an ad hoc repair.
+4. Publish each coherent real diff sequentially through
+   `change-request-create`, preserving the immediate-predecessor target and
+   draft state. Do not create an empty placeholder to reserve stack topology.
 
 The first MR targets the normal base. Every descendant targets its immediate
 predecessor branch.
 
-## Updating a Published Stack Progressively
+## Updating a Published Stack
 
-Use the published-stack workflow for the ordered amendment and publication
-procedure: [Update Published MRs Progressively](references/workflows.md#update-published-mrs-progressively).
-It is the canonical owner for navigation, focused proof, exact-leased atomic
-propagation, live verification, concurrent gates, and coalescing boundaries.
-Keep the progressive-publication and atomic-propagation invariants above as the
-entrypoint policy; do not duplicate the procedural steps here.
+Amend and publish only the substantive MR. Do not restack its descendants;
+their current gates remain provisional. Use the published-stack workflow for
+navigation, focused proof, live verification, and promotion after merge.
 
 ## Direct Commit or Unmanaged State
 
@@ -114,8 +109,11 @@ Do not force-push, reset, or rebuild immediately.
 1. Inspect the current branch, HEAD, reflog, `glab stack list`, MR mapping, and
    descendant remote heads.
 2. Preserve valuable tips with explicit recovery branches before rewriting.
-3. Determine whether the direct commit belongs in the current diff
-   (`glab stack amend`) or is a new tip diff. Use `glab stack save` only when
+3. Determine whether the direct commit belongs in the current diff or is a new
+   tip diff. For a published non-tip MR, recover it through a native
+   hook-enabled amendment that leaves descendant refs untouched. Use
+   `glab stack amend` only before publication or at the stack tip.
+   Use `glab stack save` only when
    the current entry is the last stack entry and the new unit belongs after it.
    From any middle entry, preserve the patch and return to Plan because version
    1.108 would silently append it to the stack tip.
@@ -135,7 +133,8 @@ After an explicitly authorized predecessor merge, follow the canonical Finish
 contract: verify the merged commit, confirm the immediate child retargeted to
 the normal base, and restack without replaying predecessor commits. Capture the
 expected child remote head before its push. A rejected lease stops the sequence
-for ownership inspection. Refresh every changed effective-diff gate.
+for ownership inspection. Refresh that child's gates and leave deeper
+descendants untouched.
 
 ## Quick Reference
 
@@ -143,9 +142,10 @@ for ownership inspection. Refresh every changed effective-diff gate.
 | --- | --- |
 | Create stack | `glab stack create <name>` |
 | Save staged work as a new local diff | `glab stack save -m "<semantic description>"` |
-| Amend the current managed diff | `glab stack amend` |
-| Publish a new stack under `glab` 1.108 | Blocked pending tested draft-create-and-attach support |
-| Publish a rewritten existing chain | Use the atomic refspecs and exact leases in the command reference |
+| Amend an unpublished or tip diff | `glab stack amend` |
+| Amend a published non-tip MR | Native hook-enabled `git commit --amend`; do not move descendant refs |
+| Publish a new stack | Create each coherent real-diff draft sequentially through `change-request-create` |
+| Publish an amended MR | Exact-lease only its source branch; leave descendants untouched |
 | Select a diff | `glab stack move` |
 | Inspect stacks | `glab stack list` |
 
@@ -157,11 +157,10 @@ Run the installed command's `--help` before relying on flags because
 
 | Mistake | Required response |
 | --- | --- |
-| Reconstructing the complete final history first | Return to the earliest substantive MR and publish progressively. |
-| Amending all MRs before one publication wave | Publish and verify after each substantive MR. |
-| Treating rebased descendants as new substantive scope | Label them propagation-only and verify their incremental diffs. |
-| Using stack sync to push an existing published stack | Use one atomic multi-ref push with exact expected-SHA leases. |
-| Using `Draft:` in a managed description | Keep commit subjects semantic; block new-stack publication until draft creation can attach safely. |
+| Creating empty placeholder MRs | Implement coherent real diffs and create MRs one after another. |
+| Restacking descendants after an open predecessor changes | Publish only the predecessor; descendants remain provisional. |
+| Using stack sync to push an existing published stack | Wait for predecessor merge, then promote only the immediate child with an exact lease. |
+| Using `Draft:` in a managed description | Keep commit subjects semantic; `change-request-create` owns the hosted draft title and body. |
 | Ordinary `git commit` inside a managed stack | Preserve the tip, inspect metadata, and recover through amend/save. |
 | Re-running after a lease rejection | Inspect the external remote-head change and re-establish ownership. |
 | Updating descriptions directly | Apply `change-request-create`, then provider mechanics and readback. |
@@ -176,6 +175,5 @@ Run the installed command's `--help` before relying on flags because
   safety constraints
 - [upstream.md](references/upstream.md) — fork provenance
 
-Use `glab-cli` for general GitLab operations and `glab-mr-create` for a single,
-non-stacked MR. Use `change-request-create` before creating or changing any
-reviewer-facing MR description.
+Use `glab-cli` for general GitLab inspection. Use `change-request-create` as the
+only selectable owner for creating or changing any reviewer-facing MR.

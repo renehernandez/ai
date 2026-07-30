@@ -10,9 +10,7 @@ const restoredSpecialists = [
   "brainstorming",
   "change-request-create",
   "github-adapter-review",
-  "github-pr-create",
   "gitlab-adapter-review",
-  "glab-mr-create",
   "nitro-review-feedback",
   "openspec-tasks",
   "start-project",
@@ -31,9 +29,7 @@ const retainedSpecialists = [
   "docs-alignment-review",
   "explain-diff-html",
   "github-adapter-review",
-  "github-pr-create",
   "gitlab-adapter-review",
-  "glab-mr-create",
   "glab-stacked-diffs",
   "handoff-brief",
   "linear-breakdown",
@@ -52,6 +48,8 @@ const retainedSpecialists = [
 ];
 const retiredLifecycleSkills = [
   "codex-review-feedback",
+  "github-pr-create",
+  "glab-mr-create",
   "merge-followthrough",
   "plan-orchestrator",
   "plan-poc",
@@ -115,8 +113,6 @@ test("restored specialists declare one five-mode owner without expanding authori
     "gitlab-adapter-review": "Review",
     "nitro-review-feedback": "Review",
     "change-request-create": "Finish",
-    "github-pr-create": "Finish",
-    "glab-mr-create": "Finish",
   };
 
   for (const [name, owner] of Object.entries(owners)) {

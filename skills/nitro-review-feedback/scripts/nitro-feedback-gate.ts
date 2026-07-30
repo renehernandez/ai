@@ -1,5 +1,12 @@
 #!/usr/bin/env tsx
 import { pathToFileURL } from "node:url";
+import { validateGitLabEvidence } from "./gitlab-evidence.ts";
+import { normalizeFeedback, printTemplate } from "./nitro-feedback-render.ts";
+import {
+  expectedNitroRequest,
+  nitroArtifactClassifications,
+  nitroArtifactLifecycles,
+} from "./nitro-request-policy.ts";
 import {
   extractSection,
   extractYaml,
@@ -20,18 +27,12 @@ const COMPLETION_STATUSES = [
   "pending",
 ] as const;
 const GATE_OUTCOMES = ["passed", "blocked", "pending"] as const;
-const NITRO_STATUSES = [
-  "pending",
-  "no issues",
-  "findings",
-  "unavailable",
-  "stale",
-] as const;
 
 type Command =
   | "template"
   | "validate"
   | "normalize-feedback"
+  | "validate-gitlab-evidence"
   | "validate-route";
 
 if (
@@ -46,7 +47,7 @@ function main(): void {
 
   if (!isCommand(command)) {
     fail(
-      "Usage: nitro-feedback-gate.ts <template|validate|normalize-feedback|validate-route> [--file path]",
+      "Usage: nitro-feedback-gate.ts <template|validate|normalize-feedback|validate-gitlab-evidence|validate-route> [--file path]",
     );
   }
 
@@ -61,46 +62,15 @@ function main(): void {
     return;
   }
   if (command === "normalize-feedback") {
-    normalizeFeedback(input);
+    normalizeFeedback(input, nitroFeedbackGateErrors);
+    return;
+  }
+  if (command === "validate-gitlab-evidence") {
+    validateGitLabEvidence(input);
     return;
   }
 
   validateRoute(input);
-}
-
-function printTemplate(): void {
-  console.log(`## Readable Summary
-
-- Status: Nitro feedback gate evidence is ready to validate.
-- Request: latest-head Nitro review was requested after the last material push.
-- Start wait: 10 minutes, polled every 1 minute.
-- Completion: latest-head Nitro review is clean, pending, or blocked with evidence.
-
-\`\`\`yaml
-nitro_feedback_gate:
-  artifact: <Fullscript GitLab MR URL>
-  head_sha: <latest MR head sha>
-  request:
-    required: true
-    requested_after_latest_push: true
-    evidence:
-      - <request command, note URL, or discussion evidence>
-  start:
-    status: started | blocked | pending
-    timeout_minutes: 10
-    poll_interval_minutes: 1
-    evidence:
-      - <Nitro pending review, acknowledgement, or start evidence>
-  completion:
-    status: clean | findings | stale | unavailable | pending
-    evidence:
-      - <Nitro latest-head completion evidence>
-  unresolved_actionable_feedback: []
-  non_actionable_feedback: []
-  stale_feedback_ignored: []
-  gate_outcome: passed | blocked | pending
-\`\`\`
-`);
 }
 
 export function nitroFeedbackGateErrors(input: string): string[] {
@@ -108,11 +78,27 @@ export function nitroFeedbackGateErrors(input: string): string[] {
   const gate = parseGate(input);
 
   requireValue(gate.artifact, "nitro_feedback_gate.artifact", errors);
-  requireValue(gate.headSha, "nitro_feedback_gate.head_sha", errors);
-  requireValue(gate.requestRequired, "request.required", errors);
+  requireValue(gate.headSha, "head.sha", errors);
   requireValue(
-    gate.requestedAfterLatestPush,
-    "request.requested_after_latest_push",
+    gate.artifactLifecycle,
+    "nitro_feedback_gate.artifact_lifecycle",
+    errors,
+  );
+  requireValue(
+    gate.artifactClassification,
+    "nitro_feedback_gate.artifact_classification",
+    errors,
+  );
+  requireValue(gate.effectiveDiffHeadSha, "effective_diff.head_sha", errors);
+  requireValue(gate.effectiveDiffFiles, "effective_diff.files", errors);
+  requireValue(gate.requestRequired, "request.required", errors);
+  requireValue(gate.requestNoteId, "request.note_id", errors);
+  requireValue(gate.requestNoteUrl, "request.note_url", errors);
+  requireValue(gate.requestAuthor, "request.author", errors);
+  requireValue(gate.requestBody, "request.body", errors);
+  requireValue(
+    gate.requestObservedHeadSha,
+    "request.observed_head_sha",
     errors,
   );
   requireValue(gate.startStatus, "start.status", errors);
@@ -124,8 +110,28 @@ export function nitroFeedbackGateErrors(input: string): string[] {
   if (gate.requestRequired !== "true") {
     errors.push("request.required must be true");
   }
-  if (gate.requestedAfterLatestPush !== "true") {
-    errors.push("request.requested_after_latest_push must be true");
+  if (
+    gate.artifactLifecycle &&
+    !includes(nitroArtifactLifecycles, gate.artifactLifecycle)
+  ) {
+    errors.push(
+      `artifact_lifecycle must be one of: ${nitroArtifactLifecycles.join(", ")}`,
+    );
+  }
+  if (
+    gate.artifactClassification &&
+    !includes(nitroArtifactClassifications, gate.artifactClassification)
+  ) {
+    errors.push(
+      `artifact_classification must be one of: ${nitroArtifactClassifications.join(", ")}`,
+    );
+  }
+  const effectiveDiffFiles = Number(gate.effectiveDiffFiles);
+  if (
+    gate.effectiveDiffFiles &&
+    (!Number.isSafeInteger(effectiveDiffFiles) || effectiveDiffFiles < 0)
+  ) {
+    errors.push("effective_diff_files must be a non-negative integer");
   }
   if (gate.timeoutMinutes !== "10") {
     errors.push("start.timeout_minutes must be 10");
@@ -147,14 +153,67 @@ export function nitroFeedbackGateErrors(input: string): string[] {
   if (gate.gateOutcome && !includes(GATE_OUTCOMES, gate.gateOutcome)) {
     errors.push(`gate_outcome must be one of: ${GATE_OUTCOMES.join(", ")}`);
   }
+  if (gate.classificationEvidence.length === 0) {
+    errors.push("classification_evidence is required");
+  }
+  if (gate.headEvidence.length === 0) {
+    errors.push("head.evidence is required");
+  }
+  if (gate.effectiveDiffEvidence.length === 0) {
+    errors.push("effective_diff.evidence is required");
+  }
+  if (
+    gate.headSha &&
+    gate.effectiveDiffHeadSha &&
+    gate.effectiveDiffHeadSha !== gate.headSha
+  ) {
+    errors.push("effective_diff.head_sha must match head.sha");
+  }
+  if (
+    gate.headSha &&
+    gate.requestObservedHeadSha &&
+    gate.requestObservedHeadSha !== gate.headSha
+  ) {
+    errors.push(
+      "request.observed_head_sha must match head.sha; request Nitro again after the latest source-head push",
+    );
+  }
+  let expectedRequest: string | undefined;
+  if (
+    gate.artifactLifecycle &&
+    includes(nitroArtifactLifecycles, gate.artifactLifecycle) &&
+    gate.artifactClassification &&
+    includes(nitroArtifactClassifications, gate.artifactClassification) &&
+    Number.isSafeInteger(effectiveDiffFiles) &&
+    effectiveDiffFiles >= 0
+  ) {
+    try {
+      expectedRequest = expectedNitroRequest({
+        artifactLifecycle: gate.artifactLifecycle,
+        artifactClassification: gate.artifactClassification,
+        effectiveDiffFiles,
+      });
+    } catch (error) {
+      errors.push(
+        error instanceof Error ? error.message : "nitro_request_policy_invalid",
+      );
+    }
+  }
+  if (expectedRequest && gate.requestBody !== expectedRequest) {
+    errors.push(`request.body must equal ${expectedRequest}`);
+  }
   if (gate.requestEvidence.length === 0) {
     errors.push("request.evidence is required");
   } else if (
-    !gate.requestEvidence.some((evidence) =>
-      evidence.includes("/request_review @nitro"),
+    gate.requestNoteId &&
+    gate.requestNoteUrl &&
+    !gate.requestEvidence.some(
+      (evidence) =>
+        evidence.includes(gate.requestNoteId ?? "") ||
+        evidence.includes(gate.requestNoteUrl ?? ""),
     )
   ) {
-    errors.push("request.evidence must include /request_review @nitro");
+    errors.push("request.evidence must identify the provider note");
   }
   if (gate.startStatus !== "blocked" && gate.startEvidence.length === 0) {
     errors.push("start.evidence is required unless start.status is blocked");
@@ -176,6 +235,34 @@ export function nitroFeedbackGateErrors(input: string): string[] {
   ) {
     errors.push("completion.evidence must cite Nitro hosted review evidence");
   }
+  if (
+    gate.completionStatus &&
+    ["clean", "findings", "stale"].includes(gate.completionStatus)
+  ) {
+    requireValue(gate.completionHeadSha, "completion.head_sha", errors);
+    requireValue(gate.completionAuthor, "completion.author", errors);
+    requireValue(gate.completionNoteId, "completion.note_id", errors);
+    requireValue(gate.completionNoteUrl, "completion.note_url", errors);
+    if (gate.completionAuthor && !/nitro/i.test(gate.completionAuthor)) {
+      errors.push("completion.author must identify Nitro");
+    }
+    if (
+      gate.completionStatus !== "stale" &&
+      gate.completionHeadSha &&
+      gate.headSha &&
+      gate.completionHeadSha !== gate.headSha
+    ) {
+      errors.push("completion.head_sha must match head.sha");
+    }
+    if (
+      gate.completionStatus === "stale" &&
+      gate.completionHeadSha &&
+      gate.headSha &&
+      gate.completionHeadSha === gate.headSha
+    ) {
+      errors.push("stale completion must identify an older head");
+    }
+  }
 
   validateGateOutcome(gate, errors);
 
@@ -193,20 +280,6 @@ function validateGate(input: string): void {
   }
 
   console.log("nitro_feedback_gate valid");
-}
-
-function normalizeFeedback(input: string): void {
-  const body = extractYaml(input);
-  const status = scalar(body, "status");
-  const artifact = scalar(body, "artifact") ?? "<MR URL>";
-  const headSha = scalar(body, "head_sha") ?? "<latest MR head sha>";
-
-  if (!status || !includes(NITRO_STATUSES, status)) {
-    fail(`status must be one of: ${NITRO_STATUSES.join(", ")}`);
-  }
-
-  const normalized = normalizedGateForStatus(status, artifact, headSha);
-  console.log(normalized);
 }
 
 function validateRoute(input: string): void {
@@ -280,21 +353,38 @@ function validateGateOutcome(
 function parseGate(input: string) {
   const body = extractYaml(input);
   const section = extractSection(body, "nitro_feedback_gate");
+  const head = extractSection(section, "head");
+  const effectiveDiff = extractSection(section, "effective_diff");
   const request = extractSection(section, "request");
   const start = extractSection(section, "start");
   const completion = extractSection(section, "completion");
 
   return {
     artifact: scalar(section, "artifact"),
-    headSha: scalar(section, "head_sha"),
+    headSha: scalar(head, "sha"),
+    headEvidence: list(head, "evidence"),
+    artifactLifecycle: scalar(section, "artifact_lifecycle"),
+    artifactClassification: scalar(section, "artifact_classification"),
+    classificationEvidence: list(section, "classification_evidence"),
+    effectiveDiffHeadSha: scalar(effectiveDiff, "head_sha"),
+    effectiveDiffFiles: scalar(effectiveDiff, "files"),
+    effectiveDiffEvidence: list(effectiveDiff, "evidence"),
     requestRequired: scalar(request, "required"),
-    requestedAfterLatestPush: scalar(request, "requested_after_latest_push"),
+    requestNoteId: scalar(request, "note_id"),
+    requestNoteUrl: scalar(request, "note_url"),
+    requestAuthor: scalar(request, "author"),
+    requestBody: scalar(request, "body"),
+    requestObservedHeadSha: scalar(request, "observed_head_sha"),
     requestEvidence: list(request, "evidence"),
     startStatus: scalar(start, "status"),
     timeoutMinutes: scalar(start, "timeout_minutes"),
     pollIntervalMinutes: scalar(start, "poll_interval_minutes"),
     startEvidence: list(start, "evidence"),
     completionStatus: scalar(completion, "status"),
+    completionHeadSha: scalar(completion, "head_sha"),
+    completionAuthor: scalar(completion, "author"),
+    completionNoteId: scalar(completion, "note_id"),
+    completionNoteUrl: scalar(completion, "note_url"),
     completionEvidence: list(completion, "evidence"),
     unresolvedActionableFeedback: list(
       section,
@@ -304,62 +394,12 @@ function parseGate(input: string) {
   };
 }
 
-function normalizedGateForStatus(
-  status: (typeof NITRO_STATUSES)[number],
-  artifact: string,
-  headSha: string,
-): string {
-  const startStatus = status === "unavailable" ? "blocked" : "started";
-  const completionStatus = status === "no issues" ? "clean" : status;
-  const gateOutcome =
-    status === "no issues"
-      ? "passed"
-      : status === "pending"
-        ? "pending"
-        : "blocked";
-  const unresolved =
-    status === "findings" ? "\n    - latest-head Nitro findings" : " []";
-  const startEvidence =
-    status === "unavailable"
-      ? []
-      : ["Nitro request acknowledged or review state observed"];
-  const completionEvidence =
-    status === "pending" ? [] : [`Nitro normalized status: ${status}`];
-
-  return `nitro_feedback_gate:
-  artifact: ${artifact}
-  head_sha: ${headSha}
-  request:
-    required: true
-    requested_after_latest_push: true
-    evidence:
-      - /request_review @nitro posted for latest head
-  start:
-    status: ${startStatus}
-    timeout_minutes: 10
-    poll_interval_minutes: 1
-    evidence:${formatEvidence(startEvidence)}
-  completion:
-    status: ${completionStatus}
-    evidence:${formatEvidence(completionEvidence)}
-  unresolved_actionable_feedback:${unresolved}
-  non_actionable_feedback: []
-  stale_feedback_ignored: []
-  gate_outcome: ${gateOutcome}`;
-}
-
-function formatEvidence(values: string[]): string {
-  if (values.length === 0) {
-    return " []";
-  }
-  return `\n${values.map((value) => `      - ${value}`).join("\n")}`;
-}
-
 function isCommand(command: string | undefined): command is Command {
   return [
     "template",
     "validate",
     "normalize-feedback",
+    "validate-gitlab-evidence",
     "validate-route",
   ].includes(command ?? "");
 }

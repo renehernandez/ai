@@ -1,4 +1,0 @@
-interface:
-  display_name: "GitHub PR Create"
-  short_description: "Perform GitHub PR publication mechanics"
-  default_prompt: "Use $github-pr-create within Finish after change-request-create has produced a reviewer-facing body and current Review evidence authorizes publication."

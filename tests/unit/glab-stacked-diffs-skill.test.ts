@@ -53,30 +53,15 @@ test("the fork records an immutable one-time upstream baseline", () => {
   assert.match(provenance, /no automatic upstream synchronization/i);
 });
 
-test("published stack corrections produce progressive visible checkpoints", () => {
+test("published stack corrections preserve descendant heads until promotion", () => {
   const skill = read("skills/glab-stacked-diffs/SKILL.md");
   const workflows = read("skills/glab-stacked-diffs/references/workflows.md");
-  const progressiveSection = skill.match(
-    /## Updating a Published Stack Progressively\n([\s\S]*?)\n## /,
-  )?.[1];
 
-  assert.match(
-    skill,
-    /finish one\n {2}substantive MR, publish its affected chain/,
-  );
-  assert.ok(progressiveSection);
-  assert.match(
-    progressiveSection,
-    /Use the published-stack workflow for the ordered amendment and publication\s+procedure: \[Update Published MRs Progressively\]\(references\/workflows\.md#update-published-mrs-progressively\)/,
-  );
-  assert.doesNotMatch(progressiveSection, /^\d+\.\s/m);
-  assert.doesNotMatch(progressiveSection, /```/);
-  assert.match(workflows, /publishes the complete affected chain/);
-  assert.match(workflows, /begin independent\ngates concurrently/);
-  assert.match(workflows, /Only after this checkpoint is visible/);
-  assert.match(workflows, /Do\nnot wait for hosted review/);
-  assert.match(workflows, /Substantive MR/);
-  assert.match(workflows, /Propagation-only descendant/);
+  assert.match(skill, /Amend and publish only the substantive MR/);
+  assert.match(skill, /Do not restack its descendants/);
+  assert.match(workflows, /Preserve the\s+descendants' existing source heads/);
+  assert.match(workflows, /Do not accept an automatic descendant rewrite/);
+  assert.match(workflows, /promoted after predecessor merge/);
 });
 
 test("managed stack preflight prevents accidental reconstruction and expansion", () => {
@@ -90,13 +75,13 @@ test("managed stack preflight prevents accidental reconstruction and expansion",
   assert.match(skill, /do not use `glab stack sync` to propagate/);
   assert.match(skill, /closed or merged MR/);
   assert.match(skill, /direct commit/);
-  assert.match(workflows, /exact lease for every branch/);
+  assert.match(workflows, /exact lease/);
   assert.match(skill, /Do not synthesize replacement history/);
   assert.match(troubleshooting, /Preserve each\nvaluable tip/);
   assert.match(troubleshooting, /freeze writes and return to\n {2}Plan/);
 });
 
-test("stack publication blocks unsafe creation and uses atomic exact leases", () => {
+test("stack publication creates real-diff drafts sequentially and leases only the amended MR", () => {
   const skill = read("skills/glab-stacked-diffs/SKILL.md");
   const commandReference = read(
     "skills/glab-stacked-diffs/references/command-reference.md",
@@ -105,18 +90,28 @@ test("stack publication blocks unsafe creation and uses atomic exact leases", ()
   const content = packageText();
 
   assert.match(skill, /glab stack save -m "<semantic imperative description>"/);
-  assert.match(skill, /Stop before provider publication under `glab` 1\.108/);
   assert.match(
-    workflows,
-    /does not\nsolve.*attach them to empty stack\nreferences/s,
+    skill,
+    /Publish a new stack.*Create each coherent real-diff draft sequentially through `change-request-create`/,
   );
-  assert.match(commandReference, /git push --atomic --force-with-lease=/);
+  assert.match(workflows, /Never create an empty placeholder MR/);
   assert.match(
     commandReference,
-    /--force-with-lease=refs\/heads\/<ancestor>:<ancestor-expected-sha>/,
+    /--force-with-lease=refs\/heads\/<branch>:<expected-sha>/,
   );
-  assert.match(commandReference, /either every\nref updates or none does/);
-  assert.match(workflows, /without a sequential fallback/);
+  assert.match(
+    commandReference,
+    /Leave every descendant source head untouched/,
+  );
+  assert.match(workflows, /publishes only this branch with an exact lease/);
+  assert.doesNotMatch(
+    content,
+    /new-stack publication (?:is |remains )?blocked/i,
+  );
+  assert.doesNotMatch(
+    content,
+    /(?:atomic|atomically).{0,80}(?:affected chain|descendant)/is,
+  );
   assert.doesNotMatch(content, /glab stack sync --skip-mr-creation/);
   assert.doesNotMatch(content, /glab stack save -m "Draft:/);
 });
@@ -164,11 +159,8 @@ test("stack mechanics stay inside lifecycle and provider authority", () => {
   assert.match(skill, /`stack sync`.*\| Finish \|/);
   assert.match(skill, /technical readiness does not mark an MR ready/);
   assert.match(skill, /Explicit\n {2}merge authority/);
-  assert.match(
-    workflows,
-    /Apply description .* through\n`change-request-create`/s,
-  );
-  assert.match(workflows, /Use the selected GitLab adapter/);
+  assert.match(workflows, /Invoke `change-request-create`/);
+  assert.match(workflows, /internal GitLab mechanics/);
 });
 
 test("the fork excludes unsafe and policy-bypassing examples", () => {

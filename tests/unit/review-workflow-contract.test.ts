@@ -1,5 +1,8 @@
+// charter-contracts: removal-only-evidence
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
@@ -8,7 +11,16 @@ import {
   firstObjectiveProofReviewers,
   type PocArchitectureCheckpoint,
 } from "../../skills/execute/scripts/execution-contract.ts";
-import { deliveryReviewBudget } from "../../skills/review/scripts/delivery-shape-evidence.ts";
+import {
+  deliveryReviewBudget,
+  validateEffectiveDiffDeliveryBudgetAgainst,
+} from "../../skills/review/scripts/delivery-shape-evidence.ts";
+import {
+  parseGitNameStatus,
+  parseGitNumstat,
+  resolveGitEffectiveDiff,
+} from "../../skills/review/scripts/effective-diff.ts";
+import { validateRemovalOnlySemanticReview } from "../../skills/review/scripts/removal-only-readiness.ts";
 import {
   type DeliveryShapeEvidence,
   firstObjectiveProofBaseline,
@@ -72,9 +84,17 @@ function passingCheckpoint(): TechnicalReadinessCheckpoint {
     })),
     closureResult: undefined,
     rebaseEvidence: undefined,
+    hostedFeedbackSemanticReview: undefined,
     provider: "gitlab",
     blockers: [],
   };
+}
+
+function deliveryBudgetOf(
+  checkpoint: TechnicalReadinessCheckpoint,
+): NonNullable<TechnicalReadinessCheckpoint["deliveryBudget"]> {
+  assert.ok(checkpoint.deliveryBudget);
+  return checkpoint.deliveryBudget;
 }
 
 function passingPlanningCheckpoint(): PlanningReviewCheckpoint {
@@ -587,7 +607,321 @@ test("post-POC planning requires acceptance for material topology changes", () =
   );
 });
 
-test("delivery budgets require rationale, enforce caps, and bind exceptions", () => {
+test("authoritative removal-only evidence rejects a differing declaration", () => {
+  const checkpoint = passingCheckpoint();
+  const diffReview = checkpoint.reviewResults.find(
+    (result) => result.reviewType === "diff-review",
+  );
+  assert.ok(diffReview);
+  checkpoint.deliveryBudget = {
+    ...passingDeliveryBudget(),
+    classification: "removal-only",
+    fileCount: 1,
+    additions: 0,
+    deletions: 100,
+    removalOnlyEvidence: {
+      removedBehavior: "Retired provider adapter.",
+      files: [
+        {
+          path: "declared.ts",
+          additions: 0,
+          deletions: 100,
+          status: "deleted",
+        },
+      ],
+      replacementBehaviorAdded: false,
+      dependencyAdded: false,
+      migrationRequired: false,
+      unrelatedRefactoringIncluded: false,
+      semanticReview: {
+        reviewType: "diff-review",
+        executionId: diffReview.executionId,
+        targetBaseSha: diffReview.targetBaseSha,
+        head: diffReview.head,
+      },
+    },
+  };
+
+  assert.throws(
+    () =>
+      validateEffectiveDiffDeliveryBudgetAgainst(deliveryBudgetOf(checkpoint), [
+        {
+          path: "observed.ts",
+          additions: 0,
+          deletions: 100,
+          status: "deleted",
+        },
+      ]),
+    /delivery_budget_removal_only_git_diff_mismatch/,
+  );
+});
+
+test("RED removal-only-evidence: production readiness cannot accept injected diff evidence", () => {
+  const checkpoint = passingCheckpoint();
+  checkpoint.deliveryBudget = {
+    ...deliveryBudgetOf(checkpoint),
+    classification: "removal-only",
+  };
+
+  assert.throws(
+    () =>
+      validateTechnicalReadinessCheckpoint(checkpoint, {
+        target: "final_implementation",
+        targetBase: checkpoint.targetBase,
+        targetBaseSha: checkpoint.targetBaseSha,
+        head: checkpoint.head,
+      }),
+    /delivery_budget_removal_only_git_diff_unavailable/,
+  );
+});
+
+test("GREEN removal-only-evidence: production readiness owns the authoritative Git diff", () => {
+  const repository = mkdtempSync(join(tmpdir(), "removal-only-readiness-"));
+  const originalCwd = process.cwd();
+  const gitEnvironmentKeys = [
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+  ] as const;
+  const originalGitEnvironment = new Map(
+    gitEnvironmentKeys.map((key) => [key, process.env[key]]),
+  );
+  try {
+    for (const key of gitEnvironmentKeys) {
+      delete process.env[key];
+    }
+    execFileSync("git", ["init", "--quiet"], { cwd: repository });
+    execFileSync("git", ["config", "user.name", "Review Test"], {
+      cwd: repository,
+    });
+    execFileSync("git", ["config", "user.email", "review@example.com"], {
+      cwd: repository,
+    });
+    writeFileSync(join(repository, "retired.ts"), "retired\n");
+    execFileSync("git", ["add", "retired.ts"], { cwd: repository });
+    execFileSync("git", ["commit", "--quiet", "-m", "add retired file"], {
+      cwd: repository,
+    });
+    const targetBaseSha = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: repository,
+      encoding: "utf8",
+    }).trim();
+    rmSync(join(repository, "retired.ts"));
+    execFileSync("git", ["add", "--all"], { cwd: repository });
+    execFileSync("git", ["commit", "--quiet", "-m", "remove retired file"], {
+      cwd: repository,
+    });
+    const head = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: repository,
+      encoding: "utf8",
+    }).trim();
+
+    const checkpoint = passingCheckpoint();
+    checkpoint.targetBaseSha = targetBaseSha;
+    checkpoint.head = head;
+    checkpoint.reviewResults = checkpoint.reviewResults.map((result) => ({
+      ...result,
+      targetBaseSha,
+      head,
+    }));
+    const diffReview = checkpoint.reviewResults.find(
+      (result) => result.reviewType === "diff-review",
+    );
+    assert.ok(diffReview);
+    checkpoint.deliveryBudget = {
+      artifact: checkpoint.artifact,
+      sourceHead: head,
+      targetBaseSha,
+      fileCount: 1,
+      additions: 0,
+      deletions: 1,
+      classification: "removal-only",
+      removalOnlyEvidence: {
+        removedBehavior: "Retired obsolete source.",
+        files: [
+          {
+            path: "retired.ts",
+            additions: 0,
+            deletions: 1,
+            status: "deleted",
+          },
+        ],
+        replacementBehaviorAdded: false,
+        dependencyAdded: false,
+        migrationRequired: false,
+        unrelatedRefactoringIncluded: false,
+        semanticReview: {
+          reviewType: "diff-review",
+          executionId: diffReview.executionId,
+          targetBaseSha,
+          head,
+        },
+      },
+    };
+    const expected = {
+      target: "final_implementation" as const,
+      targetBase: checkpoint.targetBase,
+      targetBaseSha,
+      head,
+    };
+
+    process.chdir(repository);
+    assert.doesNotThrow(() =>
+      validateTechnicalReadinessCheckpoint(checkpoint, expected),
+    );
+
+    const forged = structuredClone(checkpoint);
+    if (forged.deliveryBudget?.removalOnlyEvidence) {
+      forged.deliveryBudget.removalOnlyEvidence.files = [
+        {
+          path: "fabricated.ts",
+          additions: 0,
+          deletions: 1,
+          status: "deleted",
+        },
+      ];
+    }
+    assert.throws(
+      () => validateTechnicalReadinessCheckpoint(forged, expected),
+      /delivery_budget_removal_only_git_diff_mismatch/,
+    );
+  } finally {
+    process.chdir(originalCwd);
+    for (const key of gitEnvironmentKeys) {
+      const value = originalGitEnvironment.get(key);
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+    rmSync(repository, { recursive: true, force: true });
+  }
+});
+
+test("GREEN removal-only-evidence: enforces semantic exceptions and classification caps", () => {
+  assert.deepEqual(resolveGitEffectiveDiff("HEAD", "HEAD"), []);
+  assert.deepEqual(
+    parseGitNumstat(
+      "-\t-\tretired-logo.png\0",
+      parseGitNameStatus("D\0retired-logo.png\0"),
+    ),
+    [
+      {
+        path: "retired-logo.png",
+        additions: 0,
+        deletions: 0,
+        binary: true,
+        status: "deleted",
+      },
+    ],
+  );
+  const binaryAddition = passingCheckpoint();
+  const binaryDiffReview = binaryAddition.reviewResults.find(
+    (result) => result.reviewType === "diff-review",
+  );
+  assert.ok(binaryDiffReview);
+  binaryAddition.deliveryBudget = {
+    artifact: binaryAddition.artifact,
+    sourceHead: binaryAddition.head,
+    targetBaseSha: binaryAddition.targetBaseSha,
+    fileCount: 1,
+    additions: 0,
+    deletions: 0,
+    classification: "removal-only",
+    removalOnlyEvidence: {
+      removedBehavior: "Retired binary asset.",
+      files: [
+        {
+          path: "logo.png",
+          additions: 0,
+          deletions: 0,
+          binary: true,
+          status: "added",
+        },
+      ],
+      replacementBehaviorAdded: false,
+      dependencyAdded: false,
+      migrationRequired: false,
+      unrelatedRefactoringIncluded: false,
+      semanticReview: {
+        reviewType: "diff-review",
+        executionId: binaryDiffReview.executionId,
+        targetBaseSha: binaryDiffReview.targetBaseSha,
+        head: binaryDiffReview.head,
+      },
+    },
+  };
+  assert.throws(
+    () =>
+      validateEffectiveDiffDeliveryBudgetAgainst(
+        deliveryBudgetOf(binaryAddition),
+        binaryAddition.deliveryBudget?.removalOnlyEvidence?.files ?? [],
+      ),
+    /delivery_budget_removal_only_file_invalid/,
+  );
+  const textAddition = structuredClone(binaryAddition);
+  if (textAddition.deliveryBudget?.removalOnlyEvidence) {
+    textAddition.deliveryBudget.removalOnlyEvidence.files = [
+      {
+        path: "replacement.ts",
+        additions: 20,
+        deletions: 0,
+        status: "added",
+        necessaryFallout: "Claimed retirement documentation.",
+      },
+    ];
+    textAddition.deliveryBudget.additions = 20;
+  }
+  assert.throws(
+    () =>
+      validateEffectiveDiffDeliveryBudgetAgainst(
+        deliveryBudgetOf(textAddition),
+        textAddition.deliveryBudget?.removalOnlyEvidence?.files ?? [],
+      ),
+    /delivery_budget_removal_only_file_invalid/,
+  );
+  const missingStatus = structuredClone(textAddition);
+  if (missingStatus.deliveryBudget?.removalOnlyEvidence) {
+    missingStatus.deliveryBudget.removalOnlyEvidence.files = [
+      {
+        path: "retired.ts",
+        additions: 0,
+        deletions: 20,
+        status: undefined as never,
+      },
+    ];
+    missingStatus.deliveryBudget.additions = 0;
+    missingStatus.deliveryBudget.deletions = 20;
+  }
+  assert.throws(
+    () =>
+      validateEffectiveDiffDeliveryBudgetAgainst(
+        deliveryBudgetOf(missingStatus),
+        missingStatus.deliveryBudget?.removalOnlyEvidence?.files ?? [],
+      ),
+    /delivery_budget_removal_only_file_invalid/,
+  );
+  const uncappedModifiedFallout = structuredClone(textAddition);
+  if (uncappedModifiedFallout.deliveryBudget?.removalOnlyEvidence) {
+    uncappedModifiedFallout.deliveryBudget.removalOnlyEvidence.files = [
+      {
+        path: "retired.ts",
+        additions: 2_000,
+        deletions: 1,
+        status: "modified",
+        necessaryFallout: "Updated retirement references in the existing file.",
+      },
+    ];
+    uncappedModifiedFallout.deliveryBudget.additions = 2_000;
+    uncappedModifiedFallout.deliveryBudget.deletions = 1;
+  }
+  assert.doesNotThrow(() =>
+    validateEffectiveDiffDeliveryBudgetAgainst(
+      deliveryBudgetOf(uncappedModifiedFallout),
+      uncappedModifiedFallout.deliveryBudget?.removalOnlyEvidence?.files ?? [],
+    ),
+  );
   const planning = passingPlanningCheckpoint();
   const expectedPlanning = {
     artifact: planning.artifact,
@@ -661,12 +995,15 @@ test("delivery budgets require rationale, enforce caps, and bind exceptions", ()
     fileCount: deliveryReviewBudget.maximumFiles + 1,
     additions: deliveryReviewBudget.maximumChangedLines,
     deletions: 1,
+    acceptedOutcome: "One coherent charter workflow change.",
+    unsafeToSplitRationale:
+      "Splitting would leave contradictory active workflow owners.",
   };
-  const expectedReadiness = () => ({
+  const expectedReadiness = (checkpoint = readiness) => ({
     target: "final_implementation" as const,
-    targetBase: readiness.targetBase,
-    targetBaseSha: readiness.targetBaseSha,
-    head: readiness.head,
+    targetBase: checkpoint.targetBase,
+    targetBaseSha: checkpoint.targetBaseSha,
+    head: checkpoint.head,
   });
   readiness.deliveryBudget = oversized;
   assert.throws(
@@ -674,14 +1011,15 @@ test("delivery budgets require rationale, enforce caps, and bind exceptions", ()
     /delivery_budget_exception_missing_or_stale/,
   );
   const validException = {
-    ...oversized,
-    rationale: "No safe semantic split exists for this exact diff.",
+    artifact: oversized.artifact,
+    acceptedOutcome: oversized.acceptedOutcome,
+    unsafeToSplitRationale: oversized.unsafeToSplitRationale,
     reviewConsequences: "Nitro automatic review may be unavailable.",
-    approvalEvidence: "The user explicitly approved MR !199 at this diff.",
+    approvalEvidence: "The user approved this semantic exception.",
     explicitUserApproval: true as const,
   };
   for (const exception of [
-    { ...validException, fileCount: oversized.fileCount - 1 },
+    { ...validException, acceptedOutcome: "A different outcome." },
     { ...validException, approvalEvidence: "" },
   ]) {
     readiness.deliveryBudget = { ...oversized, exception };
@@ -698,17 +1036,189 @@ test("delivery budgets require rationale, enforce caps, and bind exceptions", ()
   assert.doesNotThrow(() =>
     validateTechnicalReadinessCheckpoint(readiness, expectedReadiness()),
   );
-  readiness.head = "changed-head";
-  assert.throws(
-    () => validateTechnicalReadinessCheckpoint(readiness, expectedReadiness()),
-    /technical_readiness_delivery_budget_stale/,
+
+  readiness.deliveryBudget = {
+    ...oversized,
+    fileCount: oversized.fileCount + 2,
+    exception: validException,
+  };
+  assert.doesNotThrow(() =>
+    validateTechnicalReadinessCheckpoint(readiness, expectedReadiness()),
   );
-  readiness.head = readiness.deliveryBudget.sourceHead;
-  readiness.artifact = "MR !200";
+
+  const excessiveStandard = passingCheckpoint();
+  excessiveStandard.deliveryBudget = {
+    ...passingDeliveryBudget(),
+    fileCount: 51,
+    acceptedOutcome: validException.acceptedOutcome,
+    unsafeToSplitRationale: validException.unsafeToSplitRationale,
+    exception: validException,
+  };
   assert.throws(
-    () => validateTechnicalReadinessCheckpoint(readiness, expectedReadiness()),
-    /technical_readiness_delivery_budget_stale/,
+    () =>
+      validateTechnicalReadinessCheckpoint(
+        excessiveStandard,
+        expectedReadiness(),
+      ),
+    /delivery_budget_absolute_file_ceiling_exceeded/,
   );
+
+  const removal = passingCheckpoint();
+  const removalDiffReview = removal.reviewResults.find(
+    (result) => result.reviewType === "diff-review",
+  );
+  assert.ok(removalDiffReview);
+  removal.deliveryBudget = {
+    ...passingDeliveryBudget(),
+    classification: "removal-only",
+    fileCount: 500,
+    additions: 0,
+    deletions: 50_000,
+    removalOnlyEvidence: {
+      removedBehavior: "Retired provider adapter packages.",
+      files: Array.from({ length: 500 }, (_, index) => ({
+        path: `removed-${index}.ts`,
+        additions: 0,
+        deletions: 100,
+        status: "deleted" as const,
+      })),
+      replacementBehaviorAdded: false,
+      dependencyAdded: false,
+      migrationRequired: false,
+      unrelatedRefactoringIncluded: false,
+      semanticReview: {
+        reviewType: "diff-review",
+        executionId: removalDiffReview.executionId,
+        targetBaseSha: removalDiffReview.targetBaseSha,
+        head: removalDiffReview.head,
+      },
+    },
+  };
+  assert.doesNotThrow(() =>
+    validateEffectiveDiffDeliveryBudgetAgainst(
+      deliveryBudgetOf(removal),
+      removal.deliveryBudget?.removalOnlyEvidence?.files ?? [],
+    ),
+  );
+  assert.doesNotThrow(() =>
+    validateRemovalOnlySemanticReview(
+      removal.deliveryBudget,
+      removal.reviewResults,
+    ),
+  );
+
+  const unreviewedRemoval = structuredClone(removal);
+  if (unreviewedRemoval.deliveryBudget?.removalOnlyEvidence?.semanticReview) {
+    unreviewedRemoval.deliveryBudget.removalOnlyEvidence.semanticReview.executionId =
+      "self-declared-review";
+  }
+  assert.throws(
+    () =>
+      validateRemovalOnlySemanticReview(
+        unreviewedRemoval.deliveryBudget,
+        unreviewedRemoval.reviewResults,
+      ),
+    /technical_readiness_removal_only_semantic_review_mismatch/,
+  );
+
+  const fabricatedRemoval = structuredClone(removal);
+  assert.throws(
+    () =>
+      validateEffectiveDiffDeliveryBudgetAgainst(
+        deliveryBudgetOf(fabricatedRemoval),
+        [
+          {
+            path: "actual-deleted.ts",
+            additions: 0,
+            deletions: 50_000,
+            status: "deleted",
+          },
+        ],
+      ),
+    /delivery_budget_removal_only_git_diff_mismatch/,
+  );
+
+  const dependencyRemoval = structuredClone(removal);
+  if (dependencyRemoval.deliveryBudget?.removalOnlyEvidence) {
+    dependencyRemoval.deliveryBudget.removalOnlyEvidence.removedDependencies = [
+      "retired-package",
+    ];
+  }
+  assert.doesNotThrow(() =>
+    validateEffectiveDiffDeliveryBudgetAgainst(
+      deliveryBudgetOf(dependencyRemoval),
+      dependencyRemoval.deliveryBudget?.removalOnlyEvidence?.files ?? [],
+    ),
+  );
+
+  const unevidencedRemoval = passingCheckpoint();
+  unevidencedRemoval.deliveryBudget = {
+    ...passingDeliveryBudget(),
+    classification: "removal-only",
+    fileCount: 500,
+  };
+  assert.throws(
+    () =>
+      validateEffectiveDiffDeliveryBudgetAgainst(
+        unevidencedRemoval.deliveryBudget,
+        [],
+      ),
+    /delivery_budget_removal_only_evidence_invalid/,
+  );
+
+  const mismatchedRemoval = passingCheckpoint();
+  mismatchedRemoval.deliveryBudget = {
+    ...passingDeliveryBudget(),
+    classification: "removal-only",
+    fileCount: 2,
+    additions: 0,
+    deletions: 200,
+    removalOnlyEvidence: {
+      removedBehavior: "Retired provider adapter packages.",
+      files: [
+        {
+          path: "removed.ts",
+          additions: 0,
+          deletions: 200,
+          status: "deleted",
+        },
+      ],
+      replacementBehaviorAdded: false,
+      dependencyAdded: false,
+      migrationRequired: false,
+      unrelatedRefactoringIncluded: false,
+      semanticReview: {
+        reviewType: "diff-review",
+        executionId: "main-agent-review",
+        targetBaseSha: "base-a",
+        head: "head-a",
+      },
+    },
+  };
+  assert.throws(
+    () =>
+      validateEffectiveDiffDeliveryBudgetAgainst(
+        mismatchedRemoval.deliveryBudget,
+        mismatchedRemoval.deliveryBudget.removalOnlyEvidence?.files ?? [],
+      ),
+    /delivery_budget_removal_only_diff_mismatch/,
+  );
+
+  const mislabeledFinal = passingCheckpoint();
+  mislabeledFinal.deliveryBudget = {
+    ...passingDeliveryBudget(),
+    classification: "poc" as never,
+    fileCount: 51,
+  };
+  assert.throws(
+    () =>
+      validateTechnicalReadinessCheckpoint(
+        mislabeledFinal,
+        expectedReadiness(),
+      ),
+    /delivery_budget_absolute_file_ceiling_exceeded/,
+  );
+
   const poc = passingCheckpoint();
   delete poc.deliveryBudget;
   assert.doesNotThrow(() =>
@@ -758,6 +1268,94 @@ test("technical readiness requires every phase review type", () => {
         },
       ),
     /technical_readiness_artifact_unresolved/,
+  );
+});
+
+test("Nitro raw receipt cannot yield readiness without Finish semantic review", () => {
+  const checkpoint: TechnicalReadinessCheckpoint = {
+    ...passingCheckpoint(),
+    provider: "fullscript-gitlab-nitro",
+  };
+  const expected = {
+    target: "final_implementation" as const,
+    targetBase: "main",
+    targetBaseSha: "base-a",
+    head: "head-a",
+  };
+  assert.throws(
+    () =>
+      validateTechnicalReadinessCheckpoint(
+        { ...checkpoint, hostedFeedbackSemanticReview: undefined },
+        expected,
+      ),
+    /technical_readiness_nitro_semantic_review_missing/,
+  );
+
+  const semanticReview = {
+    reviewer: "finish" as const,
+    provider: "nitro" as const,
+    targetBaseSha: "base-a",
+    head: "head-a",
+    completeResponseRead: true,
+    unresolvedDiscussionsRead: true,
+    evidence: "Complete Nitro response and unresolved discussions read.",
+    status: "blocked" as const,
+    actionableFeedback: ["One issue remains after the clean receipt."],
+  };
+  assert.throws(
+    () =>
+      validateTechnicalReadinessCheckpoint(
+        {
+          ...checkpoint,
+          hostedFeedbackSemanticReview: {
+            ...semanticReview,
+            head: "stale-head",
+          },
+        },
+        expected,
+      ),
+    /technical_readiness_nitro_semantic_review_stale/,
+  );
+
+  for (const hostedFeedbackSemanticReview of [
+    { ...semanticReview, completeResponseRead: false },
+    { ...semanticReview, unresolvedDiscussionsRead: false },
+    { ...semanticReview, evidence: "" },
+  ]) {
+    assert.throws(
+      () =>
+        validateTechnicalReadinessCheckpoint(
+          { ...checkpoint, hostedFeedbackSemanticReview },
+          expected,
+        ),
+      /technical_readiness_nitro_semantic_review_incomplete/,
+    );
+  }
+
+  assert.throws(
+    () =>
+      validateTechnicalReadinessCheckpoint(
+        {
+          ...checkpoint,
+          hostedFeedbackSemanticReview: semanticReview,
+        },
+        expected,
+      ),
+    /technical_readiness_nitro_semantic_review_blocked/,
+  );
+
+  assert.doesNotThrow(() =>
+    validateTechnicalReadinessCheckpoint(
+      {
+        ...checkpoint,
+        hostedFeedbackSemanticReview: {
+          ...semanticReview,
+          status: "passed",
+          actionableFeedback: [],
+        },
+      },
+      expected,
+    ),
   );
 });
 

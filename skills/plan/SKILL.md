@@ -96,16 +96,21 @@ Every proposed top-level unit must have:
 - declared predecessor output and integration hotspots; and
 - a concrete reason its nested work belongs in one PR/MR.
 
-Every atomic implementation MR and final OpenSpec unit plans for at most 10
-changed files and 500 changed lines, counted as additions plus deletions across
-the complete effective diff. Tests, fixtures, generated files, documentation,
-and planning artifacts count. A forecast above either planning budget requires
-an unsafe-to-split rationale; a forecast above 15 files or 1,000 changed lines
-blocks handoff. After an effective diff exists, only the user can approve an
-exception bound to its artifact, source HEAD, resolved target-base SHA, counts,
-rationale, review consequences, and task-local approval evidence. Exceptions
-do not transfer across artifacts, units, MRs, HEADs, or target bases. The
-complete disposable POC MR is exempt.
+Every non-removal atomic implementation MR and final OpenSpec unit plans for at
+most 10 changed files and 500 changed lines, counted as additions plus deletions
+across the complete effective diff. A forecast above either target requires an
+unsafe-to-split rationale; above 15 files or 1,000 changed lines blocks
+handoff. After an effective diff exists, only the user can approve a semantic
+exception bound to the named artifact, accepted outcome, and unsafe-to-split
+rationale. Contract-preserving identity, footprint, and repair changes preserve
+that authority; material outcome, ownership, behavior, deployment,
+review-boundary, or practical split changes require renewal. A non-removal
+final MR may never exceed 50 files.
+
+A removal-only MR has no numeric file or line cap when it solely retires or
+deletes behavior plus necessary fallout. Replacement behavior, a dependency,
+a migration, or unrelated refactoring fails the classification. The complete
+disposable POC MR is exempt.
 
 Prefer stack objective proof in the first unit. When forcing that vertical slice
 would combine materially distinct ownership, security, deployment, rollback, or
@@ -196,14 +201,17 @@ clean final implementation. The POC:
   disposable repository copy;
 - receives local implementation Review, configured CI and hosted automated
   review, and explicit personal acceptance of the latest exact head;
-- is published by Finish as draft `POC: ...`, marked review-only, then closed
-  unmerged; and
+- is published by Finish as draft `POC: ...` and remains open and review-only
+  until explicit closure or contextual authority to proceed to stack
+  breakdown; and
 - never supplies commits, ancestry, patches, or a Git predecessor to final
   implementation.
 
 Personal acceptance is exact-SHA task-local evidence. A changed POC head makes
-it stale. After acceptance, reconcile durable findings into the OpenSpec once
-for that authorized cycle and rerun planning Review. Do not start another POC
+it stale. Capture durable implementation and feedback learnings continuously.
+After acceptance, automatically reconcile one consolidated batch against that
+head and rerun planning Review before closure and final implementation.
+Contract-preserving reconciliation needs no prompt. Do not start another POC
 automatically; ask if reconciliation introduces materially unproved behavior.
 During reconciliation, rerun the delivery decomposition against the actual POC
 footprint, affected owners, review findings, operational proof, rollback needs,

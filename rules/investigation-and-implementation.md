@@ -187,14 +187,30 @@ speculative groundwork, or contradictory proposal/task/MR topology returns to
 Plan. Use actual implementation or POC footprint to stress-test a root unit
 that dominates the stack.
 
-Every atomic implementation MR and final OpenSpec unit plans for at most 10
-changed files and 500 additions plus deletions across its complete effective
-diff. Above either target, record why another safe semantic split is
+Every non-removal atomic implementation MR and final OpenSpec unit plans for at
+most 10 changed files and 500 additions plus deletions across its complete
+effective diff. Above either target, record why another safe semantic split is
 impractical. A forecast above 15 files or 1,000 changed lines returns to Plan.
-After an effective diff exists, only explicit user approval bound to its
-artifact, HEAD, target-base SHA, counts, rationale, consequences, and task-local
-approval evidence can exceed the cap. Recheck after repairs or restacks; the
-complete POC is exempt.
+After an effective diff exists, explicit user approval bound to the named
+artifact, accepted outcome, and unsafe-to-split rationale may exceed that cap,
+but a non-removal final MR may never exceed 50 changed files.
+
+A removal-only MR has no numeric file or line cap when its sole outcome is
+retirement or deletion plus necessary reference, test, configuration, and
+documentation fallout in existing paths. A new file, replacement behavior, a
+new dependency, a migration, or unrelated refactoring fails the classification
+and restores normal budgets.
+The declared paths and counts must equal the authoritative target-base-to-
+source-head Git diff, and the semantic classification must match the passed
+exact-head `diff-review`; removing an obsolete dependency remains eligible
+fallout.
+
+Report current HEAD, target base, and counts after repairs or restacks.
+Contract-preserving rebases, base advancement, Review, Nitro, CI, validation,
+and necessary path repairs preserve an accepted semantic exception. Renew
+authority only when the accepted outcome, ownership, behavior, deployment or
+review boundary, or practical split rationale changes. The complete POC is
+exempt.
 
 Only primary atomic-plan Markdown belongs under `.agents/plans`. Reviewer
 requests, selections, blueprints, handoffs, ledgers, fingerprints, command
@@ -239,7 +255,8 @@ The POC:
    the exact clean HEAD.
 7. Runs bounded closure after repairs and emits a fresh exact-head technical-
    readiness checkpoint.
-8. Freezes after acceptance, closes unmerged, and removes its local worktree.
+8. Freezes after acceptance and remains open until explicit user closure or
+   contextual authority that the work is ready to proceed to stack breakdown.
 
 At the POC's first stack objective proof, in unit 1, 2, or 3 after at most two
 reviewed groundwork units, Execute pauses before broadening. Review runs the
@@ -255,9 +272,17 @@ The POC rehearses task completion and archival in a disposable repository copy
 without checking the source `tasks.md` or archiving the live change. POC commits
 must never be merged, rebased, cherry-picked, or applied into final delivery.
 
-After acceptance, Plan reconciles durable findings into proposal, design, delta
-specs, tasks, and required tracker content once per authorized cycle. It also
-creates one task-local execution seed containing the frozen contract, final
+Capture durable implementation and hosted-feedback learnings while the POC is
+active. After acceptance, Plan automatically reconciles them in one batch
+against the accepted POC head across proposal, design, delta specs, tasks, and
+required tracker content. Contract-preserving reconciliation needs no new
+prompt; materially unproved scope, architecture, safety, or delivery changes
+return to the user. After reconciliation, Finish closes the POC unmerged only
+when the user explicitly requests closure or states that the work is ready to
+proceed to stack breakdown. Technical readiness and acceptance alone never
+close it.
+
+Plan also creates one task-local execution seed containing the frozen contract, final
 units, dependency classification, total Git order, worktree ownership, and
 required proof. The seed is a handoff, not a committed ledger. Local-only
 implementation observations remain transient. A materially unproved
@@ -304,6 +329,12 @@ handoff evidence.
   units may implement and follow review concurrently in separately owned
   worktrees even though publication, restack propagation, and merge ancestry
   remain ordered.
+- Create initial real-diff draft MRs sequentially in total Git order after each
+  branch has a coherent implementation; empty placeholder MRs are prohibited.
+  Once the initial stack exists, an open predecessor push never triggers
+  descendant restacks. After a predecessor merges, restack only its immediate
+  child onto the verified merged result. Deeper descendants remain untouched
+  until their own predecessor merges.
 - Each final unit carries its own task/spec changes. In the last unit, Execute
   completes task state, synchronizes delta specs into canonical specs, and
   moves the verified change into the dated archive before the final hook-clean
