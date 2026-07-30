@@ -36,14 +36,17 @@ test("ax-cli skill retrieves the single-sync runtime contract", () => {
   assert.match(skill, /`ax openspec sync`/);
 
   assert.match(skill, /`ax\.config\.json`[^\n]+desired state/i);
-  assert.match(skill, /installedProfiles/);
-  assert.match(skill, /policyProfile/);
+  assert.match(skill, /selected-profile\.json/);
+  assert.match(skill, /sync --profile <name>/);
+  assert.match(skill, /selected profile[\s\S]{0,100}workflow policy/i);
   assert.match(skill, /authoritative/i);
   assert.match(skill, /replace|overwrite/i);
   assert.match(skill, /retiredSkills/);
   assert.match(skill, /unrelated[^\n]+untouched/i);
   assert.doesNotMatch(skill, /managed-runtime\.json/);
   assert.doesNotMatch(skill, /--profile-selection-file/);
+  assert.doesNotMatch(skill, /--policy-profile/);
+  assert.doesNotMatch(skill, /--all-profiles/);
   assert.doesNotMatch(skill, /--adoption-file/);
   assert.doesNotMatch(skill, /--recovery-file/);
   assert.doesNotMatch(skill, /sha256-tree-v1/);

@@ -33,6 +33,7 @@ import {
 import {
   type AxRuntimeConfig,
   inspectRuntime,
+  preflightRuntimeSync,
   type RuntimeSurface,
   syncRuntime,
   validateRuntime,
@@ -48,6 +49,7 @@ type ParsedArgs = {
   shimCommand?: ShimCommand;
   configPath: string;
   runtimeRoot?: string;
+  profile?: string;
   recoveryFile?: string;
   contextFile?: string;
   reviewConfig?: boolean;
@@ -66,6 +68,7 @@ type CommandExecutor = (input: ParsedArgs) => void;
 type CommandOptions = {
   config?: string;
   runtimeRoot?: string;
+  profile?: string;
   recoveryFile?: string;
   contextFile?: string;
   reviewConfig?: boolean;
@@ -181,18 +184,21 @@ export function executeParsedCommand(input: ParsedArgs): void {
   }
 
   if (input.command === "sync") {
-    const preparedConfigs = input.scope
-      ? undefined
-      : prepareManagedConfigs(managedConfigOptions);
-    const result = syncRuntime({
+    const runtimeOptions = {
       sourceRoot: context.sourceRoot,
       config,
       runtimeRoot,
       surface: input.scope,
-    });
+      profile: input.profile,
+    };
+    preflightRuntimeSync(runtimeOptions);
+    const preparedConfigs = input.scope
+      ? undefined
+      : prepareManagedConfigs(managedConfigOptions);
     const managedConfigs = preparedConfigs
       ? applyPreparedManagedConfigs(preparedConfigs)
       : undefined;
+    const result = syncRuntime(runtimeOptions);
     printResult(
       managedConfigs
         ? {
@@ -272,6 +278,12 @@ function addRuntimeCommand(
     .command(command)
     .description(`${label(command)} all managed runtime assets`)
     .option("--json", "Emit structured JSON");
+  if (command === "sync") {
+    subcommand.option(
+      "--profile <name>",
+      "Select or switch the machine runtime profile",
+    );
+  }
   subcommand.action((options: CommandOptions, commandObject: Command) => {
     execute(parsedCommand(undefined, command, options, commandObject));
   });
@@ -386,6 +398,7 @@ function parsedCommand(
     runtimeRoot: globals.runtimeRoot
       ? expandPath(globals.runtimeRoot, sourceRoot)
       : undefined,
+    profile: options.profile,
     recoveryFile: resolveOptional(options.recoveryFile),
     contextFile: resolveOptional(options.contextFile),
     reviewConfig: options.reviewConfig,

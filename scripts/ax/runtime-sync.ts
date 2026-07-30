@@ -7,9 +7,9 @@ import {
   readdirSync,
   readlinkSync,
   realpathSync,
-  renameSync,
   rmSync,
   symlinkSync,
+  writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
 import {
@@ -20,7 +20,18 @@ import {
   relative,
   resolve,
 } from "node:path";
+import {
+  readSelectedProfile,
+  selectedProfilePath,
+  selectedProfilePayload,
+} from "./profile-state.ts";
 import { copyPath, SourceSnapshotManager } from "./source-snapshot.ts";
+import {
+  applyTransaction,
+  inspectTransactions,
+  type TransactionInspection,
+  type TransactionOperationInput,
+} from "./transaction-engine.ts";
 
 export type RuntimeSurface = "skills" | "instructions" | "hooks";
 
@@ -35,8 +46,6 @@ export type InstructionPathConfig =
 export type AxRuntimeConfig = {
   version: 1;
   runtime: {
-    installedProfiles: string[];
-    policyProfile: string;
     retiredSkills?: string[];
     canonicalSkillsDir: string;
     skillSymlinkTargets: string[];
@@ -65,6 +74,10 @@ export type AxRuntimeConfig = {
 export type RuntimePaths = {
   runtimeRoot: string;
   cacheRoot: string;
+  transactionsRoot: string;
+  backupsRoot: string;
+  lockPath: string;
+  selectedProfilePath: string;
 };
 
 export type RuntimeSyncOptions = {
@@ -72,12 +85,13 @@ export type RuntimeSyncOptions = {
   config: AxRuntimeConfig;
   runtimeRoot?: string;
   surface?: RuntimeSurface;
+  profile?: string;
+  transactionFault?: Parameters<typeof applyTransaction>[0]["fault"];
 };
 
 export type RuntimeSyncResult = {
   status: "synchronized";
-  installedProfiles: string[];
-  policyProfile: string;
+  selectedProfile: string;
   changedPaths: string[];
   sources: Array<{
     source: string;
@@ -89,14 +103,14 @@ export type RuntimeStatusReport = {
   ok: boolean;
   sourceRoot: string;
   paths: RuntimePaths;
-  installedProfiles: string[];
-  policyProfile: string;
+  selectedProfile?: string;
   desiredPaths: string[];
   observed: Record<string, "missing" | "file" | "directory" | "symlink">;
   cache: "present" | "missing";
   remoteRefFreshness: "unknown_until_sync";
   findings: string[];
   warnings: string[];
+  transactions: TransactionInspection[];
 };
 
 type CandidateEntry = {
@@ -107,8 +121,8 @@ type CandidateEntry = {
 };
 
 type RuntimeSelection = {
+  selectedProfile: string;
   installedProfiles: string[];
-  policyProfile: string;
 };
 
 const REQUIRED_MODE_NAMES = [
@@ -123,16 +137,17 @@ export function runtimePaths(runtimeRoot?: string): RuntimePaths {
   return {
     runtimeRoot: root,
     cacheRoot: join(root, "cache"),
+    transactionsRoot: join(root, "transactions"),
+    backupsRoot: join(root, "backups"),
+    lockPath: join(root, "mutation.lock"),
+    selectedProfilePath: selectedProfilePath(root),
   };
 }
 
 export function syncRuntime(options: RuntimeSyncOptions): RuntimeSyncResult {
-  const sourceRoot = resolve(options.sourceRoot);
-  const paths = runtimePaths(options.runtimeRoot);
-  validateConfig(options.config, sourceRoot);
-  assertVerifiedLiveSource(sourceRoot, paths.runtimeRoot);
+  const { paths, previousSelection, selection, sourceRoot } =
+    runtimeSyncPreflight(options);
   mkdirSync(paths.runtimeRoot, { recursive: true });
-  const selection = runtimeSelection(options.config);
   const stagingRoot = mkdtempSync(join(paths.runtimeRoot, ".candidate-"));
   const snapshots = new SourceSnapshotManager({
     cacheRoot: paths.cacheRoot,
@@ -147,15 +162,57 @@ export function syncRuntime(options: RuntimeSyncOptions): RuntimeSyncResult {
       snapshots,
       surface: options.surface,
     });
-    const changedPaths = [
-      ...removeLegacyRuntimeState(paths),
-      ...applyRuntimeCandidate({
-        config: options.config,
-        sourceRoot,
-        desired: built.entries,
-        surface: options.surface,
-      }),
-    ].sort((left, right) => left.localeCompare(right));
+    const operations = runtimeTransactionOperations({
+      config: options.config,
+      sourceRoot,
+      desired: built.entries,
+      previousSelection,
+      selection,
+      surface: options.surface,
+      runtimeRoot: paths.runtimeRoot,
+    });
+    const candidateSelectionPath = options.surface
+      ? undefined
+      : join(stagingRoot, "selected-profile.json");
+    if (candidateSelectionPath) {
+      writeFileSync(
+        candidateSelectionPath,
+        selectedProfilePayload(selection.selectedProfile),
+        { encoding: "utf-8", mode: 0o600 },
+      );
+    }
+    const exactTargetPaths = [
+      ...operations.map((operation) => operation.path),
+      ...(options.surface ? [] : [paths.selectedProfilePath]),
+    ];
+    applyTransaction({
+      domain: `runtime:${paths.runtimeRoot}`,
+      root: paths.runtimeRoot,
+      lockPath: paths.lockPath,
+      transactionsRoot: paths.transactionsRoot,
+      backupsRoot: paths.backupsRoot,
+      operations,
+      exactTargetPaths,
+      manifestPath: options.surface ? undefined : paths.selectedProfilePath,
+      candidateManifestPath: candidateSelectionPath,
+      metadata: {
+        previousProfile: previousSelection?.selectedProfile ?? null,
+        selectedProfile: selection.selectedProfile,
+        surface: options.surface ?? null,
+      },
+      validateApplied: () => {
+        const report = inspectRuntimeState(options, true);
+        if (!report.ok) {
+          throw new Error(
+            `runtime_post_sync_validation_failed:\n${report.findings.map((finding) => `- ${finding}`).join("\n")}`,
+          );
+        }
+      },
+      fault: options.transactionFault,
+    });
+    const changedPaths = operations
+      .map((operation) => operation.path)
+      .sort((left, right) => left.localeCompare(right));
     const report = inspectRuntime(options);
     if (!report.ok) {
       throw new Error(
@@ -164,8 +221,7 @@ export function syncRuntime(options: RuntimeSyncOptions): RuntimeSyncResult {
     }
     return {
       status: "synchronized",
-      installedProfiles: selection.installedProfiles,
-      policyProfile: selection.policyProfile,
+      selectedProfile: selection.selectedProfile,
       changedPaths,
       sources: built.sources,
     };
@@ -175,22 +231,78 @@ export function syncRuntime(options: RuntimeSyncOptions): RuntimeSyncResult {
   }
 }
 
+export function preflightRuntimeSync(options: RuntimeSyncOptions): void {
+  runtimeSyncPreflight(options);
+}
+
+function runtimeSyncPreflight(options: RuntimeSyncOptions): {
+  sourceRoot: string;
+  paths: RuntimePaths;
+  previousSelection?: RuntimeSelection;
+  selection: RuntimeSelection;
+} {
+  const sourceRoot = resolve(options.sourceRoot);
+  const paths = runtimePaths(options.runtimeRoot);
+  if (options.surface && options.profile) {
+    throw new Error(
+      "profile_selection_scoped: use top-level ax sync --profile <name>",
+    );
+  }
+  validateConfig(options.config, sourceRoot);
+  assertVerifiedLiveSource(sourceRoot, paths.runtimeRoot);
+  const previousSelection = persistedRuntimeSelection(options.config, paths);
+  const selection = resolveRuntimeSelection({
+    config: options.config,
+    persisted: previousSelection,
+    requestedProfile: options.profile,
+  });
+  return { paths, previousSelection, selection, sourceRoot };
+}
+
 export function inspectRuntime(input: {
   sourceRoot: string;
   config: AxRuntimeConfig;
   runtimeRoot?: string;
   surface?: RuntimeSurface;
 }): RuntimeStatusReport {
+  return inspectRuntimeState(input, false);
+}
+
+function inspectRuntimeState(
+  input: {
+    sourceRoot: string;
+    config: AxRuntimeConfig;
+    runtimeRoot?: string;
+    surface?: RuntimeSurface;
+  },
+  ignoreTransactions: boolean,
+): RuntimeStatusReport {
   const sourceRoot = resolve(input.sourceRoot);
   const paths = runtimePaths(input.runtimeRoot);
   const findings: string[] = [];
   const warnings: string[] = [];
+  let transactions: TransactionInspection[] = [];
   let selection: RuntimeSelection | undefined;
   try {
     validateConfig(input.config, sourceRoot);
-    selection = runtimeSelection(input.config);
+    selection = persistedRuntimeSelection(input.config, paths);
+    if (!selection) {
+      findings.push(profileInitializationFinding(input.config));
+    }
   } catch (error) {
     findings.push(error instanceof Error ? error.message : String(error));
+  }
+  if (!ignoreTransactions) {
+    try {
+      transactions = inspectTransactions(paths.transactionsRoot);
+      for (const transaction of transactions) {
+        findings.push(
+          `incomplete_transaction: ${transaction.transactionId} (${transaction.phase})`,
+        );
+      }
+    } catch (error) {
+      findings.push(error instanceof Error ? error.message : String(error));
+    }
   }
   const profiles = selection?.installedProfiles ?? [];
   const desired = selection
@@ -268,14 +380,14 @@ export function inspectRuntime(input: {
     ok: findings.length === 0,
     sourceRoot,
     paths,
-    installedProfiles: profiles,
-    policyProfile: selection?.policyProfile ?? "",
+    selectedProfile: selection?.selectedProfile,
     desiredPaths,
     observed,
     cache: existsSync(paths.cacheRoot) ? "present" : "missing",
     remoteRefFreshness: "unknown_until_sync",
     findings,
     warnings,
+    transactions,
   };
 }
 
@@ -572,72 +684,116 @@ function buildRuntimeCandidate(input: {
   return { entries, sources: deduplicateSources(sources) };
 }
 
-function applyRuntimeCandidate(input: {
+function runtimeTransactionOperations(input: {
   config: AxRuntimeConfig;
   sourceRoot: string;
   desired: Map<string, CandidateEntry>;
+  previousSelection?: RuntimeSelection;
+  selection: RuntimeSelection;
   surface?: RuntimeSurface;
-}): string[] {
-  const changedPaths: string[] = [];
-  for (const [path, candidate] of [...input.desired.entries()].sort(
-    ([left], [right]) => left.localeCompare(right),
-  )) {
-    replaceRuntimePath(candidate.candidatePath, path);
-    changedPaths.push(path);
+  runtimeRoot: string;
+}): TransactionOperationInput[] {
+  const operations = [...input.desired.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([path, candidate]) => ({
+      path,
+      asset: candidate.asset,
+      candidatePath: candidate.candidatePath,
+    })) satisfies TransactionOperationInput[];
+  const desiredPaths = configuredDesiredPaths(
+    input.config,
+    input.selection.installedProfiles,
+    input.sourceRoot,
+  );
+  const removalPaths = new Set<string>();
+  if (input.previousSelection) {
+    for (const path of configuredDesiredPaths(
+      input.config,
+      input.previousSelection.installedProfiles,
+      input.sourceRoot,
+    )) {
+      if (
+        !desiredPaths.has(path) &&
+        (!input.surface ||
+          pathBelongsToSurface(
+            input.config,
+            path,
+            input.surface,
+            input.sourceRoot,
+          ))
+      ) {
+        removalPaths.add(path);
+      }
+    }
   }
   if (!input.surface || input.surface === "skills") {
     for (const path of retiredLifecyclePaths(input.config, input.sourceRoot)) {
-      if (!existsOrSymlink(path)) {
-        continue;
-      }
-      rmSync(path, { force: true, recursive: true });
-      changedPaths.push(path);
+      removalPaths.add(path);
     }
   }
-  return [...new Set(changedPaths)].sort((left, right) =>
-    left.localeCompare(right),
-  );
-}
-
-function removeLegacyRuntimeState(paths: RuntimePaths): string[] {
-  const removed: string[] = [];
-  for (const path of [
-    join(paths.runtimeRoot, "managed-runtime.json"),
-    join(paths.runtimeRoot, "transactions"),
-    join(paths.runtimeRoot, "backups"),
-    join(paths.runtimeRoot, "mutation.lock"),
-  ]) {
-    if (!existsOrSymlink(path)) {
+  if (!input.surface) {
+    removalPaths.add(join(input.runtimeRoot, "managed-runtime.json"));
+  }
+  const desiredOperationPaths = new Set(operations.map(({ path }) => path));
+  for (const path of [...removalPaths].sort()) {
+    if (desiredOperationPaths.has(path) || !existsOrSymlink(path)) {
       continue;
     }
-    rmSync(path, { force: true, recursive: true });
-    removed.push(path);
+    operations.push({
+      path,
+      asset: `runtime removal ${path}`,
+      delete: true,
+    });
   }
-  return removed;
+  return operations;
 }
 
-function replaceRuntimePath(candidatePath: string, targetPath: string): void {
-  const target = resolve(targetPath);
-  mkdirSync(dirname(target), { recursive: true });
-  const temporary = join(
-    dirname(target),
-    `.${basename(target)}.ax-sync-${process.pid}-${Math.random().toString(16).slice(2)}`,
-  );
-  try {
-    rmSync(temporary, { force: true, recursive: true });
-    copyPath(candidatePath, temporary);
-    rmSync(target, { force: true, recursive: true });
-    renameSync(temporary, target);
-  } finally {
-    rmSync(temporary, { force: true, recursive: true });
+function persistedRuntimeSelection(
+  config: AxRuntimeConfig,
+  paths: RuntimePaths,
+): RuntimeSelection | undefined {
+  const state = readSelectedProfile(paths.runtimeRoot);
+  if (!state) {
+    return undefined;
   }
+  return selectionForProfile(config, state.selectedProfile);
 }
 
-function runtimeSelection(config: AxRuntimeConfig): RuntimeSelection {
+function resolveRuntimeSelection(input: {
+  config: AxRuntimeConfig;
+  persisted?: RuntimeSelection;
+  requestedProfile?: string;
+}): RuntimeSelection {
+  if (input.requestedProfile) {
+    return selectionForProfile(input.config, input.requestedProfile);
+  }
+  if (input.persisted) {
+    return input.persisted;
+  }
+  throw new Error(profileInitializationFinding(input.config));
+}
+
+function selectionForProfile(
+  config: AxRuntimeConfig,
+  selectedProfile: string,
+): RuntimeSelection {
+  if (!config.profiles[selectedProfile]) {
+    throw new Error(
+      `selected_profile_unknown: '${selectedProfile}'. Available profiles: ${availableProfiles(config).join(", ")}`,
+    );
+  }
   return {
-    installedProfiles: [...config.runtime.installedProfiles],
-    policyProfile: config.runtime.policyProfile,
+    selectedProfile,
+    installedProfiles: [selectedProfile],
   };
+}
+
+function availableProfiles(config: AxRuntimeConfig): string[] {
+  return Object.keys(config.profiles).sort();
+}
+
+function profileInitializationFinding(config: AxRuntimeConfig): string {
+  return `runtime_profile_uninitialized: run ax sync --profile <name>. Available profiles: ${availableProfiles(config).join(", ")}`;
 }
 
 function pathKind(path: string): "missing" | "file" | "directory" | "symlink" {
@@ -954,28 +1110,6 @@ function validateConfig(config: AxRuntimeConfig, sourceRoot: string): void {
   }
   if (!config.profiles || Object.keys(config.profiles).length === 0) {
     throw new Error("invalid_config: profiles are required");
-  }
-  if (
-    !Array.isArray(config.runtime.installedProfiles) ||
-    config.runtime.installedProfiles.length === 0
-  ) {
-    throw new Error("invalid_config: runtime.installedProfiles is required");
-  }
-  const installedProfiles = [
-    ...new Set(config.runtime.installedProfiles),
-  ].sort();
-  if (installedProfiles.length !== config.runtime.installedProfiles.length) {
-    throw new Error("invalid_config: runtime.installedProfiles has duplicates");
-  }
-  for (const profile of installedProfiles) {
-    if (!config.profiles[profile]) {
-      throw new Error(`unknown_profile: ${profile}`);
-    }
-  }
-  if (!installedProfiles.includes(config.runtime.policyProfile)) {
-    throw new Error(
-      `invalid_config: runtime.policyProfile '${config.runtime.policyProfile}' must be installed`,
-    );
   }
   for (const name of config.runtime.retiredSkills ?? []) {
     validateSkillName(name, "retired_skill_name_invalid");

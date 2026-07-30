@@ -185,11 +185,13 @@ or cleanup authority.
 
 ## AX runtime
 
-- Tracked `ax.config.json` is authoritative runtime state. It declares
-  `runtime.installedProfiles`, `runtime.policyProfile`, exact managed targets,
-  and `runtime.retiredSkills`.
-- Use `pnpm ax sync` to replace declared runtime targets from source and remove
-  explicitly retired skills and converge exact managed tool-config leaves.
+- Tracked `ax.config.json` is authoritative for available profiles, exact managed targets,
+  and `runtime.retiredSkills`. Each machine persists one selected profile under
+  its AX runtime root; that profile controls installed assets and policy.
+- Initialize or switch with `pnpm ax sync --profile <name>`. Later plain
+  `pnpm ax sync` runs reuse that local selection while replacing declared
+  runtime targets from source, removing explicitly retired skills, and
+  converging exact managed tool-config leaves.
   Scoped `skills sync`, `instructions sync`, `hooks sync`, and `configs sync`
   use the same config without initialization state.
 - AX leaves unrelated paths and unowned tool-config values outside its exact
