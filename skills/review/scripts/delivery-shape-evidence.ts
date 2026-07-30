@@ -1,3 +1,7 @@
+import { resolveGitEffectiveDiff } from "./effective-diff.ts";
+
+export { resolveGitEffectiveDiff } from "./effective-diff.ts";
+
 export type DeliveryShapeAssessmentStatus =
   | "passed"
   | "split_required"
@@ -10,22 +14,52 @@ export const deliveryReviewBudget = {
   maximumChangedLines: 1_000,
 } as const;
 
+export type DeliveryClassification = "standard" | "removal-only";
+
+export type RemovalOnlyEvidence = {
+  removedBehavior: string;
+  files: readonly EffectiveDiffFile[];
+  replacementBehaviorAdded: false;
+  dependencyAdded: false;
+  removedDependencies?: readonly string[];
+  migrationRequired: false;
+  unrelatedRefactoringIncluded: false;
+  semanticReview?: {
+    reviewType: "diff-review";
+    executionId: string;
+    targetBaseSha: string;
+    head: string;
+  };
+};
+
+export type EffectiveDiffFile = {
+  path: string;
+  additions: number;
+  deletions: number;
+  binary?: true;
+  status: "added" | "modified" | "deleted";
+  necessaryFallout?: string;
+};
+
+export type EffectiveDiffResolver = (
+  targetBaseSha: string,
+  sourceHead: string,
+) => readonly EffectiveDiffFile[];
+
 export type DeliveryBudgetForecast = {
   unitId: string;
   fileCount: number;
   additions: number;
   deletions: number;
+  classification?: DeliveryClassification;
+  removalOnlyEvidence?: RemovalOnlyEvidence;
   overBudgetRationale?: string;
 };
 
 export type DeliveryBudgetException = {
   artifact: string;
-  sourceHead: string;
-  targetBaseSha: string;
-  fileCount: number;
-  additions: number;
-  deletions: number;
-  rationale: string;
+  acceptedOutcome: string;
+  unsafeToSplitRationale: string;
   reviewConsequences: string;
   approvalEvidence: string;
   explicitUserApproval: true;
@@ -38,6 +72,10 @@ export type EffectiveDiffBudget = {
   fileCount: number;
   additions: number;
   deletions: number;
+  classification?: DeliveryClassification;
+  removalOnlyEvidence?: RemovalOnlyEvidence;
+  acceptedOutcome?: string;
+  unsafeToSplitRationale?: string;
   overBudgetRationale?: string;
   exception?: DeliveryBudgetException;
 };
@@ -287,6 +325,10 @@ export function validateDeliveryBudgetForecast(
   requireCount(forecast.fileCount, "delivery_budget_file_count_invalid");
   requireCount(forecast.additions, "delivery_budget_additions_invalid");
   requireCount(forecast.deletions, "delivery_budget_deletions_invalid");
+  if (forecast.classification === "removal-only") {
+    validateRemovalOnlyEvidence(forecast.removalOnlyEvidence, forecast);
+    return;
+  }
   const changedLines = forecast.additions + forecast.deletions;
   if (
     forecast.fileCount > deliveryReviewBudget.maximumFiles ||
@@ -306,6 +348,18 @@ export function validateDeliveryBudgetForecast(
 export function validateEffectiveDiffDeliveryBudget(
   budget: EffectiveDiffBudget,
 ): void {
+  validateEffectiveDiffDeliveryBudgetAgainst(
+    budget,
+    budget.classification === "removal-only"
+      ? resolveGitEffectiveDiff(budget.targetBaseSha, budget.sourceHead)
+      : [],
+  );
+}
+
+export function validateEffectiveDiffDeliveryBudgetAgainst(
+  budget: EffectiveDiffBudget,
+  observedFiles: readonly EffectiveDiffFile[],
+): void {
   requireNonEmpty(budget.artifact, "delivery_budget_artifact_missing");
   requireNonEmpty(budget.sourceHead, "delivery_budget_source_head_missing");
   requireNonEmpty(
@@ -315,7 +369,18 @@ export function validateEffectiveDiffDeliveryBudget(
   requireCount(budget.fileCount, "delivery_budget_file_count_invalid");
   requireCount(budget.additions, "delivery_budget_additions_invalid");
   requireCount(budget.deletions, "delivery_budget_deletions_invalid");
+  if (budget.classification === "removal-only") {
+    validateRemovalOnlyEvidence(
+      budget.removalOnlyEvidence,
+      budget,
+      observedFiles,
+    );
+    return;
+  }
   const changedLines = budget.additions + budget.deletions;
+  if (budget.fileCount > 50) {
+    throw new Error("delivery_budget_absolute_file_ceiling_exceeded");
+  }
   const exceedsMaximum =
     budget.fileCount > deliveryReviewBudget.maximumFiles ||
     changedLines > deliveryReviewBudget.maximumChangedLines;
@@ -328,17 +393,94 @@ export function validateEffectiveDiffDeliveryBudget(
   if (
     !exception?.explicitUserApproval ||
     exception.artifact !== budget.artifact ||
-    exception.sourceHead !== budget.sourceHead ||
-    exception.targetBaseSha !== budget.targetBaseSha ||
-    exception.fileCount !== budget.fileCount ||
-    exception.additions !== budget.additions ||
-    exception.deletions !== budget.deletions ||
-    !exception.rationale.trim() ||
+    exception.acceptedOutcome !== budget.acceptedOutcome ||
+    exception.unsafeToSplitRationale !== budget.unsafeToSplitRationale ||
+    !exception.acceptedOutcome.trim() ||
+    !exception.unsafeToSplitRationale.trim() ||
     !exception.reviewConsequences.trim() ||
     !exception.approvalEvidence.trim()
   ) {
     throw new Error("delivery_budget_exception_missing_or_stale");
   }
+}
+
+function validateRemovalOnlyEvidence(
+  evidence: RemovalOnlyEvidence | undefined,
+  budget: { fileCount: number; additions: number; deletions: number },
+  observedFiles?: readonly EffectiveDiffFile[],
+): void {
+  if (
+    !evidence?.removedBehavior.trim() ||
+    evidence.replacementBehaviorAdded !== false ||
+    evidence.dependencyAdded !== false ||
+    evidence.migrationRequired !== false ||
+    evidence.unrelatedRefactoringIncluded !== false ||
+    !Array.isArray(evidence.files)
+  ) {
+    throw new Error("delivery_budget_removal_only_evidence_invalid");
+  }
+  const paths = new Set<string>();
+  let additions = 0;
+  let deletions = 0;
+  for (const file of evidence.files) {
+    requireCount(file.additions, "delivery_budget_removal_only_file_invalid");
+    requireCount(file.deletions, "delivery_budget_removal_only_file_invalid");
+    if (
+      !file.path.trim() ||
+      paths.has(file.path) ||
+      !["added", "modified", "deleted"].includes(file.status) ||
+      file.status === "added" ||
+      (file.binary === true &&
+        (file.additions !== 0 || file.deletions !== 0)) ||
+      (file.binary === true &&
+        file.status !== "deleted" &&
+        !file.necessaryFallout?.trim()) ||
+      (file.additions > 0 && !file.necessaryFallout?.trim())
+    ) {
+      throw new Error("delivery_budget_removal_only_file_invalid");
+    }
+    paths.add(file.path);
+    additions += file.additions;
+    deletions += file.deletions;
+  }
+  if (
+    evidence.files.length !== budget.fileCount ||
+    additions !== budget.additions ||
+    deletions !== budget.deletions
+  ) {
+    throw new Error("delivery_budget_removal_only_diff_mismatch");
+  }
+  if (observedFiles && !sameEffectiveDiff(evidence.files, observedFiles)) {
+    throw new Error("delivery_budget_removal_only_git_diff_mismatch");
+  }
+  if (
+    observedFiles &&
+    (evidence.semanticReview?.reviewType !== "diff-review" ||
+      !evidence.semanticReview.executionId.trim() ||
+      !evidence.semanticReview.targetBaseSha.trim() ||
+      !evidence.semanticReview.head.trim())
+  ) {
+    throw new Error("delivery_budget_removal_only_semantic_review_missing");
+  }
+}
+
+function sameEffectiveDiff(
+  declared: readonly EffectiveDiffFile[],
+  observed: readonly EffectiveDiffFile[],
+): boolean {
+  const normalize = (files: readonly EffectiveDiffFile[]) =>
+    [...files]
+      .map(({ path, additions, deletions, binary, status }) => ({
+        path,
+        additions,
+        deletions,
+        binary: binary === true,
+        status,
+      }))
+      .sort((left, right) => left.path.localeCompare(right.path));
+  return (
+    JSON.stringify(normalize(declared)) === JSON.stringify(normalize(observed))
+  );
 }
 
 function requireNonEmpty(value: string, error: string): void {

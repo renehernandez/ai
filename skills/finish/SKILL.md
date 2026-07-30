@@ -54,13 +54,22 @@ local Review against that same exact hosted head so both can proceed
 concurrently. The hook evidence is the full local-suite proof for the commit;
 local Review and review subagents do not rerun that suite.
 
+For Fullscript GitLab policy that selects Nitro, apply the installed Fullscript
+Nitro rule as the canonical owner for request timing, command selection,
+duplicate suppression, and latest-head closure. Finish executes that policy;
+it does not redefine it here.
+
 Before publication and every hosted-review request, measure the complete
-effective diff. Final implementations target at most 10 changed files and 500
-additions plus deletions and cap at 15 files or 1,000 changed lines. An
-above-cap diff returns to Plan unless the user approved an exception bound to
-the exact artifact, source HEAD, target-base SHA, counts, rationale, review
-consequences, and task-local approval evidence. Any artifact, HEAD, or
-target-base change invalidates it. The complete disposable POC is exempt.
+effective diff. Non-removal final implementations target at most 10 changed
+files and 500 additions plus deletions and cap at 15 files or 1,000 changed
+lines without an approved semantic exception. The exception binds to the named
+artifact, accepted outcome, and unsafe-to-split rationale and survives
+contract-preserving identity, count, and repair changes. Renew it only for a
+material outcome, ownership, behavior, deployment, review-boundary, or
+practical split change. A non-removal final MR may never exceed 50 files. A
+removal-only MR has no numeric file or line cap when it adds no replacement
+behavior, dependency, migration, or unrelated refactoring. The complete
+disposable POC is exempt.
 
 Technical readiness consumes a current Review
 `technical_readiness_checkpoint` bound to the hosted artifact, target base, and
@@ -71,22 +80,31 @@ evidence may preserve discovery when Review confirms unchanged base-sensitive
 context, required coverage, and affected verification. Material changes require
 one new bounded discovery pass.
 
+For Fullscript GitLab/Nitro, a passing deterministic raw receipt is necessary
+but insufficient. Finish must read the complete Nitro response and every
+unresolved Nitro-authored discussion, record an exact-head
+`hostedFeedbackSemanticReview` with its evidence and any actionable feedback,
+and block readiness unless that semantic review passes with no actionable
+feedback.
+
 Reuse an open artifact for the branch instead of creating a duplicate. Preserve
 provider templates and user-owned body sections. Descriptions contain
 team-relevant scope, decisions, dependency links, verification that helps assess
 the changed behavior, and actionable gaps. Omit local reviewer identities,
 fingerprints, ledgers, gate mechanics, and routine green checks.
 
-Before every PR/MR creation or description update, invoke
-`change-request-create` as the host-neutral description-policy owner. It reads
-the current template/body, protects human-owned sections and manual content,
-filters routine workflow narration, and requires hosted readback after mutation.
-After that policy pass, use `github-pr-create` or `glab-mr-create` only for the
-selected provider's mechanics. A direct provider CLI/API body update never
-bypasses this specialist pass.
+Before every PR/MR creation or description update, including a
+provider-explicit request, invoke `change-request-create` as the only selectable
+description and publication owner. It reads the current template/body,
+protects human-owned sections, filters routine workflow narration, executes its
+internal GitHub or GitLab mechanics, and requires hosted readback. A direct
+provider CLI/API body update never bypasses this owner.
 
 For OpenSpec POC publication, create one draft PR/MR titled `POC: ...` against
 the normal target and state that it is review-only and must close unmerged.
+Technical readiness and personal acceptance leave it open. Close it only after
+Plan reconciles durable learnings against the accepted head and the user
+explicitly requests closure or states readiness to proceed to stack breakdown.
 Consume the completed-POC Review checkpoint; the narrower
 first-objective-proof checkpoint cannot authorize publication. CI, hosted
 review, and operational proof cannot substitute for local Review. For atomic-
@@ -110,8 +128,8 @@ against live state and the coordinator's current task-local designation;
 invalidate the packet when any changes.
 
 The lane may inspect Git/provider state, push only the handed-off exact ref,
-reuse or create the draft artifact through `change-request-create` and the
-selected adapter, verify live state, request hosted review, and monitor current
+reuse or create the draft artifact through `change-request-create`, verify live
+state, request hosted review, and monitor current
 gates. It may not edit files, change commits, switch the coordinator's worktree,
 rebase, restack, resolve implementation findings, mark ready, merge, deploy, or
 clean up. Its mutation ceiling overrides any broader task-level terminal
@@ -138,12 +156,15 @@ implementation findings that require no user decision or authority expansion to
 the current Execute lane owner as one automatic repair batch. An actionable
 Nitro finding remains actionable when labeled nonblocking. Diagnose each
 pipeline failure and route its in-scope repair to the current Execute owner
-without another user prompt. After repairs, request refreshed hosted review for
-the new head, then Review runs bounded closure only for affected types and
-verification. It starts new discovery only for a material contract or
-review-risk change. Every changed source head or resolved target-base SHA
-refreshes local readiness, CI, and hosted gates, including the delivery budget
-and any exact-diff exception.
+without another user prompt. After every repair push, request refreshed hosted
+review for the new source head as defined by the canonical Nitro rule, then Review runs bounded
+closure only for affected types and verification. Continue the request,
+monitor, repair, push, and re-request loop until the latest head has no
+actionable feedback or a material decision needs human follow-up. A
+human-blocked MR does not stop unrelated authorized work. New discovery starts
+only for a material contract or review-risk change. Target-only movement on an
+unpromoted descendant does not request Nitro or restack it; its gates remain
+provisional.
 
 Do not stop at publication, a pending pipeline, a green parent pipeline, a
 review request, or reassuring summary language. Continue monitoring the newest
@@ -175,9 +196,9 @@ Merge only under explicit merge language, the narrowly bound contextual
 approvals. Merge dependency chains bottom-to-top. Mark only the current bottom
 MR ready immediately before its merge and wait for any configured review
 triggered by that transition. After a squash merge, verify the remote merged
-commit, retarget and restack the next draft child without replaying predecessor
-commits, and refresh changed effective-diff gates before marking that child
-ready.
+commit, retarget and restack only the immediate draft child without replaying
+predecessor commits, and refresh that child's gates before marking it ready.
+Leave deeper descendants untouched until their predecessor merges.
 
 Restack pushes use an exact expected remote-head lease. If it is rejected, stop
 and inspect external commits and ownership; never retry by simply accepting the

@@ -228,13 +228,23 @@ Missing, stale, incomplete, unassigned, `split_required`, or `merge_required`
 evidence blocks final Execute handoff. Record material topology change
 independently of unit IDs; any material change requires user acceptance.
 
-Every atomic implementation MR and final OpenSpec unit carries a delivery
-budget assessment. Plan targets at most 10 changed files and 500 additions plus
-deletions. A unit above either target needs an unsafe-to-split rationale. More
-than 15 files or 1,000 changed lines blocks a forecast. A measured effective
-diff can exceed the cap only with explicit user approval bound to its artifact,
-source HEAD, target-base SHA, counts, rationale, review consequences, and
-task-local approval evidence. The complete disposable POC is exempt.
+Every final implementation carries a delivery-budget classification and
+assessment. A non-removal unit targets at most 10 changed files and 500
+additions plus deletions. Above either target it needs an unsafe-to-split
+rationale; above 15 files or 1,000 changed lines a forecast blocks. A measured
+diff may exceed the cap only with explicit user approval bound to the named
+artifact, accepted outcome, and unsafe-to-split rationale. Contract-preserving
+changes preserve that authority; material outcome, ownership, behavior,
+deployment, review-boundary, or practical split changes require renewal. A
+non-removal final MR may never exceed 50 files.
+
+A removal-only MR has no numeric file or line cap when it adds no replacement
+behavior, new file, new dependency, migration, or unrelated refactoring.
+Necessary retirement fallout in existing paths, including dependency removal,
+remains eligible. Review
+binds the declared paths and counts to the authoritative target-base-to-source-
+head Git diff and binds the classification to its passed exact-head
+`diff-review`. The complete disposable POC is exempt.
 
 At the existing planning Review barrier, write the task-local checkpoint and
 expected lifecycle context as one JSON input, then run
@@ -312,6 +322,9 @@ current for the exact hosted target:
   its remediation outcome, invalidated surfaces, and affected verification;
 - patch-equivalence and base-sensitive verification evidence when discovery is
   reused after a rebase;
+- for `fullscript-gitlab-nitro`, Finish's exact-head semantic review evidence
+  proving the complete response and unresolved discussions were read and no
+  actionable feedback remains;
 - resolved provider route; and
 - no blockers.
 

@@ -4,6 +4,8 @@
     "retiredSkills": [
       "agent-workspace",
       "codex-review-feedback",
+      "github-pr-create",
+      "glab-mr-create",
       "merge-followthrough",
       "plan-coordinate",
       "plan-delivery",
@@ -75,6 +77,7 @@
           "targetPath": "AGENTS.md"
         },
         "rules/agent-surface-routing.md",
+        "rules/agent-development-workflow-charter.md",
         "rules/command-and-tools.md",
         "rules/communication.md",
         "rules/confidence.md",
@@ -94,6 +97,7 @@
           "targetPath": "AGENTS.md"
         },
         "rules/agent-surface-routing.md",
+        "rules/agent-development-workflow-charter.md",
         "rules/ci-infra-and-cloudflare.md",
         "rules/command-and-tools.md",
         "rules/communication.md",
@@ -130,9 +134,7 @@
             "explore",
             "finish",
             "github-adapter-review",
-            "github-pr-create",
             "gitlab-adapter-review",
-            "glab-mr-create",
             "glab-stacked-diffs",
             "handoff-brief",
             "linear-breakdown",

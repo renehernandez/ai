@@ -10,6 +10,8 @@
     "biome:lint-format:staged": "biome check --staged --no-errors-on-unmatched",
     "biome:lint-format": "biome check .",
     "biome:lint-format:write": "biome check --write .",
+    "charter:validate": "tsx scripts/charter-validate.ts",
+    "charter:validate-range": "tsx scripts/charter-range-validate.ts",
     "skills:validate": "tsx scripts/skill-validate.ts",
     "test": "node --import tsx --test tests/unit/*.test.ts tests/integration/*.test.ts",
     "test:unit": "node --import tsx --test tests/unit/*.test.ts",

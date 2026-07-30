@@ -23,9 +23,9 @@ test("mode skills coordinate parallel draft stacks through hosted readiness", ()
   assert.match(execute, /one singly owned branch\/worktree per\s+unit/);
   assert.match(
     execute,
-    /Eligible owners may implement and fix\s+feedback concurrently/,
+    /Eligible owners\s+may implement and fix feedback concurrently/,
   );
-  assert.match(execute, /Restack propagation stays ordered/);
+  assert.match(execute, /restack only its immediate child/);
   assert.match(execute, /including the delivery budget/);
   assert.match(review, /complete available feedback surface/);
   assert.match(
@@ -41,10 +41,7 @@ test("mode skills coordinate parallel draft stacks through hosted readiness", ()
   assert.match(finish, /green parent pipeline/);
   assert.match(finish, /repeat without another user prompt/);
   assert.match(finish, /Before publication and every hosted-review request/);
-  assert.match(
-    finish,
-    /Any artifact, HEAD, or\s+target-base change invalidates/,
-  );
+  assert.match(finish, /changed\s+target identity requires a fresh checkpoint/);
   assert.match(
     finish,
     /Report `draft_stack_ready` while every MR\s+remains draft/,

@@ -6,27 +6,28 @@ description: Use when creating or updating any GitHub pull request or GitLab mer
 # Change Request Create
 
 Create or update a hosted change request while keeping route selection
-host-neutral and descriptions reviewer-facing. This skill owns routing and body
-policy; provider adapters own provider-specific mutation mechanics.
+host-neutral and descriptions reviewer-facing. This skill is the only
+selectable creation owner; its internal references define provider-specific
+mutation mechanics.
 
 ## Mode Boundary
 
 This is a bounded Finish specialist. It does not independently grant provider
 mutation, merge, deployment, or cleanup authority. Finish supplies hook-clean
 commit evidence and authority; this skill produces the policy-compliant body
-and delegates authorized mechanics to one provider adapter.
+and executes the selected internal provider mechanics.
 
 ## When To Use
 
 Use this skill whenever the user asks to create, open, update, or prepare a PR,
 pull request, MR, merge request, change request, review artifact, or draft
-review. Explicit GitHub, GitLab, `gh`, or `glab` wording selects the adapter; it
-does not bypass this description-policy owner.
+review. Explicit GitHub, GitLab, `gh`, or `glab` wording selects internal
+provider mechanics; it does not bypass this description-policy owner.
 
-| Provider | Adapter |
+| Provider | Internal mechanics |
 | --- | --- |
-| GitHub pull request | `github-pr-create` |
-| GitLab merge request | `glab-mr-create` |
+| GitHub pull request | [GitHub provider mechanics](references/github-provider.md) |
+| GitLab merge request | [GitLab provider mechanics](references/gitlab-provider.md) |
 
 ## Route Selection
 
@@ -39,8 +40,9 @@ Select exactly one hosted artifact provider in this order:
 5. Ask a blocking routing question or report blocked.
 
 Do not guess from the first remote by position when multiple hosts remain
-plausible. Delegate provider mechanics to `github-pr-create` or
-`glab-mr-create` after Finish has resolved the route and authority.
+plausible. After Finish resolves the route and authority, read and execute the
+matching internal provider reference. Provider-explicit wording never bypasses
+this owner.
 
 ## Draft Publication Gate
 
@@ -154,11 +156,12 @@ link also does not replace the required relationship statement. Linear team
 and target-branch automation decides the resulting status; do not promise that
 the status is literally named `Done`.
 
-Hand the provider adapter the approved title and body plus the task-local
+Carry the approved title and body into the internal provider mechanics together
+with the task-local
 relationship expectation for each relevant issue, or an explicit no-issue
 result. This handoff is private workflow evidence, not a persisted schema. The
-adapter validates that the body matches the expectation; it never selects or
-changes the relationship itself.
+provider mechanics validate that the body matches the expectation; they never
+select or change the relationship.
 
 ## Template And Update Safety
 
@@ -177,15 +180,16 @@ For GitHub, inspect the usual template locations:
 - `.github/PULL_REQUEST_TEMPLATE.md`
 - `.github/PULL_REQUEST_TEMPLATE/*.md`
 
-For GitLab, use provider/project templates when surfaced by the adapter and
+For GitLab, use provider/project templates when surfaced by the internal
+provider mechanics and
 repo-local `.gitlab/merge_request_templates` conventions when present.
 
 If multiple templates match and no user choice or repo convention identifies
 one, ask which template to use.
 
 When updating an existing PR or MR, fetch the current title and body through the
-provider adapter. Preserve reviewer notes, links, resolved checklist state, and
-manual sections. Replace only sections clearly bounded by managed HTML comments
+selected internal provider mechanics. Preserve reviewer notes, links, resolved
+checklist state, and manual sections. Replace only sections clearly bounded by managed HTML comments
 such as:
 
 ```markdown
@@ -205,7 +209,10 @@ readback does not pass the description-policy gate.
 For OpenSpec POCs, keep the normal reviewer-facing structure. Prefix the title
 with `POC:` and state that the artifact is review-only and must close unmerged,
 but do not add local Review results, pipeline IDs, automated-review status, or
-other lifecycle-ledger content merely because the artifact is disposable.
+other lifecycle-ledger content merely because the artifact is disposable. That
+description does not authorize closure: keep the POC open until the user
+explicitly requests closure or says the work is ready to proceed to stack
+breakdown.
 
 ## Workflow
 
@@ -218,10 +225,10 @@ other lifecycle-ledger content merely because the artifact is disposable.
    context.
 5. Build or update the description using the description policy and template
    preservation rules above.
-6. Delegate the approved title and body unchanged for provider-specific
-   mutation:
-   - GitHub: use `github-pr-create`.
-   - GitLab: use `glab-mr-create`.
+6. Read and execute the matching internal provider reference with the approved
+   title and body unchanged:
+   - GitHub: [GitHub provider mechanics](references/github-provider.md).
+   - GitLab: [GitLab provider mechanics](references/gitlab-provider.md).
 7. Return the artifact URL, source and target branches, draft/readiness state,
    routed provider, targeted evidence included, and any reviewer-facing hosted
    gaps.
@@ -235,8 +242,8 @@ flags.
 | Mistake | Fix |
 | --- | --- |
 | Choosing the first remote in a mixed-host repo | Apply route precedence and ask when ambiguous |
-| Treating explicit `gh`, `glab`, GitHub, or GitLab wording as a policy bypass | Apply this skill, then delegate mechanics to the selected adapter |
-| Duplicating provider CLI mechanics here | Delegate mutation to `github-pr-create` or `glab-mr-create` |
+| Treating explicit `gh`, `glab`, GitHub, or GitLab wording as a policy bypass | Apply this skill, then execute its selected internal mechanics |
+| Duplicating provider CLI mechanics in the main workflow | Keep mechanics in the provider references owned by this skill |
 | Replacing a whole existing description | Preserve manual content and update only managed sections |
 | Updating a PR/MR body directly through `gh`, `glab`, or an API call | Apply this description policy first, then use the provider command only for mutation |
 | Listing routine format/lint/typecheck commands | Mention only targeted evidence or gaps that change reviewer confidence |
@@ -256,8 +263,8 @@ flags.
 - Mixed GitHub/GitLab remotes with no explicit host: pass only if routing uses
   review policy or asks instead of choosing the first remote.
 - Explicit GitHub, GitLab, `gh`, or `glab` creation request: pass only if this
-  skill still owns the title and body and the provider adapter consumes them
-  unchanged.
+  skill still owns the title, body, and provider mutation while its internal
+  provider mechanics consume the approved values unchanged.
 - Existing PR/MR URL: pass only if that provider controls the update route.
 - Existing open artifact for the branch: pass only if no duplicate is created.
 - Existing body with manual reviewer notes and managed HTML comments: pass only

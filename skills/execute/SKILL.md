@@ -75,6 +75,10 @@ another material architecture decision.
   implementation in one change set for that single final MR and has no POC.
 - A POC implements the complete reviewed OpenSpec in its disposable worktree,
   including applicable production concerns, without checking source tasks.
+- A technically ready or personally accepted POC remains open. Capture durable
+  implementation and feedback learnings for Plan's consolidated reconciliation;
+  closure requires an explicit user request or contextual authority that the
+  work is ready to proceed to stack breakdown.
 - Final OpenSpec work implements exactly one top-level delivery unit per MR.
   Nested tasks become cohesive commits and are checked only when final
   implementation independently satisfies them.
@@ -113,12 +117,13 @@ accepted interface is fixed in the stack seed, and implementation-dependent
 units only after required predecessor output exists.
 
 The root branch targets the normal target; every descendant targets its
-immediate predecessor branch and restacks onto the predecessor's current
-published head before first publication. Eligible owners may implement and fix
-feedback concurrently. Restack propagation stays ordered and coalesces obsolete
-upstream heads. After a predecessor squash-merges, retarget the immediate child
-to the normal target and restack it without replaying predecessor commits, then
-refresh every changed effective-diff gate, including the delivery budget.
+immediate predecessor branch. Create the initial real-diff draft MRs one after
+another in total Git order and never create empty placeholders. Eligible owners
+may implement and fix feedback concurrently. Once the stack exists, an open
+predecessor push does not restack any descendant. After a predecessor
+squash-merges, retarget and restack only its immediate child without replaying
+predecessor commits; deeper descendants remain untouched. Refresh the promoted
+child's gates, including the delivery budget.
 
 ## Commit And Review Loop
 
@@ -134,14 +139,20 @@ After the narrow proof passes, stage only intended files and use native hook-
 enabled Git commit behavior. Never use `--no-verify`. Fix a hook failure before
 starting the next boundary.
 
-Before the hook-clean publication commit, measure the complete effective diff
-against its resolved target-base SHA. Final implementation targets at most 10
-changed files and 500 additions plus deletions. Above either target, retain the
-accepted unsafe-to-split rationale. More than 15 files or 1,000 changed lines
-returns to Plan unless the user approved an exception for this exact source
-artifact, HEAD, target-base SHA, counts, rationale, review consequences, and
-task-local approval evidence. Any later artifact, HEAD, or target-base change
-invalidates that exception. The complete disposable POC is exempt.
+Before the hook-clean publication commit, measure the complete effective diff.
+A non-removal final implementation targets at most 10 changed files and 500
+additions plus deletions. Above either target, retain the accepted
+unsafe-to-split rationale. More than 15 files or 1,000 changed lines returns to
+Plan unless the user approved a semantic exception for the named artifact,
+accepted outcome, and unsafe-to-split rationale. Contract-preserving rebases,
+base movement, and Review, Nitro, CI, validation, or path repairs preserve that
+authority. Renew it for a material outcome, ownership, behavior, deployment,
+review-boundary, or practical split change. A non-removal final MR may never
+exceed 50 files.
+
+A removal-only MR has no numeric file or line cap when it adds no replacement
+behavior, dependency, migration, or unrelated refactoring. The complete
+disposable POC is exempt.
 
 ## Publication-Ready Dispatch
 

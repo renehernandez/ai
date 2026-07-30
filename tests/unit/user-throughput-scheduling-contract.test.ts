@@ -88,7 +88,7 @@ test("existing lifecycle owners apply the scheduling contract without a new hier
   );
 });
 
-test("progressive MR visibility overlaps propagation and stable gates", () => {
+test("MR visibility preserves concurrent work without speculative restacks", () => {
   const gitRules = read("rules/git-and-review.md");
   const stackSkill = read("skills/glab-stacked-diffs/SKILL.md");
   const stackWorkflow = read(
@@ -97,9 +97,10 @@ test("progressive MR visibility overlaps propagation and stable gates", () => {
 
   assert.match(gitRules, /Logical dependencies control semantic eligibility/i);
   assert.match(gitRules, /Implement semantically eligible units concurrently/i);
-  assert.match(stackSkill, /Progressive publication/i);
-  assert.match(stackSkill, /Atomic propagation, concurrent gates/i);
-  assert.match(stackWorkflow, /Do not wait for hosted review/i);
+  assert.match(stackSkill, /Sequential initial publication/i);
+  assert.match(stackSkill, /Promotion-only restacking/i);
+  assert.match(stackWorkflow, /Do not accept an automatic descendant rewrite/i);
+  assert.match(stackWorkflow, /Review gates can execute concurrently/i);
 });
 
 test("small coherent work avoids parallelization overhead", () => {

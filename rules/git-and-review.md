@@ -13,8 +13,9 @@ publication, provider policy, and explicit terminal authority.
 - Resolve provider behavior from direct user instruction, project policy, one
   workflow-policy profile, then remote inference. Ambiguous routing blocks
   provider writes without invalidating completed local work.
-- For host-neutral PR/MR creation or description updates, Finish uses
-  `change-request-create` before the selected provider adapter.
+- For every PR/MR creation or description update, including provider-explicit
+  requests, Finish uses `change-request-create`. Provider mechanics are
+  internal references of that single selectable owner.
 
 ## Native commits and branch safety
 
@@ -157,19 +158,28 @@ Use one note for all reviewers in that request. Do not edit an old note, reply
 inside a discussion, modify the MR description, or change the reviewer field as
 a substitute.
 
-When active Fullscript project policy selects Nitro, Finish posts
-`/request_review @nitro` after initial publication and every effective-diff
-change: either the source HEAD or resolved target-base SHA. Latest-effective-diff
-Nitro feedback must complete without unresolved actionable findings. Feedback
-tied to an earlier source HEAD or target-base SHA is stale.
+When active Fullscript project policy selects Nitro, apply
+[the Fullscript Nitro rule](fullscript/nitro-review.md) as the canonical owner
+for request timing, command selection, duplicate suppression, latest-head
+feedback closure, and human escalation.
 
 Before publishing or requesting hosted review for a final implementation,
-measure its complete effective diff. Target at most 10 changed files and 500
-additions plus deletions. More than 15 files or 1,000 changed lines returns to
-Plan unless the user approved an exception bound to the exact artifact, source
-HEAD, target-base SHA, counts, rationale, consequences, and task-local approval
-evidence. Any artifact, HEAD, or target-base change invalidates it. The complete
-disposable POC is exempt.
+measure its complete effective diff. A non-removal MR targets at most 10 changed
+files and 500 additions plus deletions. More than 15 files or 1,000 changed
+lines returns to Plan unless the user approved a semantic exception bound to
+the named artifact, accepted outcome, and unsafe-to-split rationale. Report
+current identities and counts, but preserve the exception across
+contract-preserving changes. Renew it only for a material outcome, ownership,
+behavior, deployment, review-boundary, or split-rationale change. A
+non-removal final MR with more than 50 changed files is prohibited.
+
+A removal-only MR has no numeric file or line cap when it adds no replacement
+behavior, new file, new dependency, migration, or unrelated refactoring.
+Necessary retirement fallout in existing paths, including dependency removal,
+remains eligible. Bind its
+declared paths and counts to the authoritative target-base-to-source-head Git
+diff and bind the semantic classification to the passed exact-head
+`diff-review`. The complete disposable POC is also exempt.
 
 GitHub PR review does not request, poll, normalize, or gate on Codex-authored
 review feedback. `codex-review-feedback` remains retired.
@@ -196,14 +206,13 @@ review feedback. `codex-review-feedback` remains retired.
 - Top-level delivery-unit order defines one total Git predecessor chain.
 - Logical dependencies control semantic eligibility; the total chain controls
   branch ancestry and merge order.
-- Seed every branch/worktree before implementation. The root MR targets the
-  normal target branch; each descendant MR targets its immediate predecessor
-  source branch and restacks onto the predecessor's current published head
-  before first publication.
+- Seed every branch/worktree before implementation. Create the real-diff MRs
+  one after another in total Git order: the root targets the normal branch and
+  each descendant targets its immediate predecessor. Do not create empty
+  placeholders.
 - Implement semantically eligible units concurrently in singly owned
-  worktrees. Keep publication and restack propagation ordered, and coalesce
-  superseded upstream heads into one restack onto the newest reviewed
-  predecessor.
+  worktrees. After initial publication, do not restack descendants when an open
+  predecessor changes; their gates remain provisional.
 - A descendant Finish lane may start as soon as its immutable packet is known,
   while provider mutation waits for the target branch to exist remotely and
   match the packet's expected target-base identity. CI and hosted review for
@@ -211,9 +220,10 @@ review feedback. `codex-review-feedback` remains retired.
 - Set formal GitLab blocking dependencies when the provider supports them.
 - Merge explicitly authorized final units from the bottom of the chain to the
   top. Use each live source HEAD as the merge guard.
-- After a predecessor squash-merges, refresh the child, verify its target
-  changed to the default branch, and restack it with the verified merged commit
-  and old predecessor head so predecessor commits are not replayed.
+- After a predecessor squash-merges, refresh only its immediate child, verify
+  its target changed to the default branch, and restack it with the verified
+  merged commit and old predecessor head so predecessor commits are not
+  replayed. Deeper descendants remain untouched until their predecessor merges.
 - Restack pushes use an exact expected remote-head lease. On lease rejection,
   inspect external commits and re-establish ownership before integrating them;
   never retry by blindly accepting the new remote SHA.

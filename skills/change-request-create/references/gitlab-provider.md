@@ -1,19 +1,13 @@
----
-name: glab-mr-create
-description: Use when creating GitLab merge requests for Fullscript Lab GitLab repos, opening MRs, preparing GitLab branches for review, or converting completed work into a draft GitLab MR.
-allowed-tools: Bash(glab mr:*), Bash(git:*)
----
-
-# GitLab MR Create
+# GitLab Provider Mechanics
 
 Create GitLab merge requests with `glab` after verifying branch, remote, and duplicate-MR state. Prefer draft MRs unless the user explicitly asks for a ready MR.
 
 ## Mode Boundary
 
-This is a bounded Finish provider adapter. It performs mechanics only after
-Finish supplies mutation authority, a native hook-clean commit, and a body
-approved by `change-request-create`. Explicitly naming this adapter does not
-bypass `change-request-create` or grant publication or merge authority.
+These are internal GitLab mechanics owned by `change-request-create`. They run
+only after Finish supplies mutation authority, a native hook-clean commit, and
+an approved title and body. This reference is not a selectable skill and does
+not independently grant publication or merge authority.
 
 This is the default MR creation workflow for repos hosted in the Fullscript Lab GitLab instance. Apply repo-local templates, labels, review-request routing, and merge policies when present.
 
@@ -24,13 +18,10 @@ For general GitLab CLI commands, use `glab-cli`.
 - Feature work or a bug fix is ready for GitLab review.
 - The user explicitly asks to create, open, draft, or prepare a GitLab MR.
 - Finish resolves GitLab as the provider and needs the MR creation or update step.
-- `change-request-create` selected GitLab as the provider adapter.
 - The repo is hosted in the Fullscript Lab GitLab instance.
 
-Do not use for GitHub pull requests; use the GitHub PR creation skill instead.
-Always use `change-request-create` before this adapter, including when the user
-explicitly names GitLab, `glab`, or this skill. This adapter consumes the body;
-it does not approve it.
+Do not use these mechanics for GitHub pull requests. Explicit GitLab or `glab`
+wording still enters through `change-request-create`.
 
 ## Workflow
 
@@ -77,7 +68,7 @@ it does not approve it.
 7. Consume the exact title and body approved by `change-request-create` plus
    its task-local Linear relationship expectations or explicit no-issue
    result. Do not rebuild, fill, template-expand, classify issues, or otherwise
-   change either value in this adapter. For every expected Linear relationship,
+   change either value in these provider mechanics. For every expected Linear relationship,
    require the matching exact plain statement in `## Tracking`:
    - closing: `Closes PAD-123`;
    - contributing: `Related to PAD-123`.
@@ -148,7 +139,7 @@ it does not approve it.
 | Requesting GitLab reviewers during MR creation | Create or update the MR first, then post a new top-level MR note such as `/request_review @alice @bob` |
 | Naming upstream resources without links | Include actual URLs for reviewer-needed references |
 | Handling a neutral PR/MR request here | Use `change-request-create` before provider mutation |
-| Selecting `Closes` or `Related to` in this adapter | Consume and validate the relationship selected by `change-request-create` |
+| Selecting `Closes` or `Related to` in provider mechanics | Consume and validate the relationship selected by `change-request-create` |
 | Treating a Linear link or issue key as completion intent | Require the task-local expectation and exact plain Tracking statement |
 | Publishing when Linear completion intent is ambiguous | Return to `change-request-create` for clarification before mutation |
 
@@ -160,10 +151,10 @@ it does not approve it.
 - GitLab review request is required: pass only if the agent avoids `--reviewer`
   and requests all reviewers through a new top-level MR note such as
   `/request_review @alice @bob` after creation.
-- User asks for a host-neutral change request: pass only if the agent routes through `change-request-create` instead of this provider adapter directly.
+- User asks for a host-neutral change request: pass only if the agent routes through `change-request-create` instead of starting at provider mechanics.
 - User explicitly asks for a GitLab MR or `glab mr create`: pass only if
-  `change-request-create` owns the exact final title and body and this adapter
-  consumes them unchanged.
+  `change-request-create` owns the exact final title and body and its provider
+  mechanics consume them unchanged.
 - Process-heavy change with local plans, pressure tests, internal review gates,
   or private plan support artifacts: pass only if the MR body includes
   self-contained reviewer evidence, omits references to excluded local
@@ -172,16 +163,16 @@ it does not approve it.
   unless the MR changes that surface or exposes a gap, and links directly to
   reviewer-needed upstream resources.
 - Approved GitLab body and handoff classify PAD-123 as closing: pass only if
-  the adapter requires exact plain `Closes PAD-123` in `## Tracking` before
+  the provider mechanics require exact plain `Closes PAD-123` in `## Tracking` before
   mutation and confirms the same statement during hosted-body readback.
 - Approved GitLab body and handoff classify PAD-123 as contributing: pass only
-  if the adapter requires exact plain `Related to PAD-123` in `## Tracking`
+  if the provider mechanics require exact plain `Related to PAD-123` in `## Tracking`
   before mutation and confirms the same statement during hosted-body readback.
 - Approved body contains `Closes [PAD-123](https://linear.app/example)` or only
-  a Linear URL: pass only if the adapter rejects it and returns to
+  a Linear URL: pass only if the provider mechanics reject it and return to
   `change-request-create` without mutating the provider.
 - Handoff explicitly records no relevant Linear issue: pass only if the
-  adapter adds no Linear relationship statement or Tracking section while
+  provider mechanics add no Linear relationship statement or Tracking section while
   preserving existing template-owned or manual Tracking content.
 
 ## Test Evidence
@@ -189,7 +180,9 @@ it does not approve it.
 - RED scenario: thread `019eb763-9db7-73c2-bf96-d1cdbd88cbaf` showed an MR body leaking local verification/internal reviewer gates and naming upstream resources without links after the user excluded the plan artifact from the MR.
 - RED scenario: thread `019edf9e-5cb2-74c3-a1ae-e606ca8e7613` showed stacked MR descriptions using the right headers while still filling Verification with routine command output, clean Nitro review state, passing pipeline state, and operational-verification state.
 - GREEN: skill requires reviewer-facing MR bodies that keep necessary evidence self-contained, omit excluded/local process artifacts and routine gate state, and use actual links for reviewer-needed upstream resources.
-- REFACTOR: repo-local `skills/glab-mr-create` is the canonical MR creation workflow for Fullscript Lab repos; shared GitLab helpers remain available through `glab-cli`.
+- REFACTOR: the repo-local GitLab provider reference is the canonical MR
+  mutation workflow for Fullscript Lab repos; shared GitLab helpers remain
+  available through `glab-cli`.
 - RED: Linear relationship baselines supplied a Markdown-linked closing
   statement, non-magic explanatory prose for partial delivery, or an ambiguous
   bare link that the prior adapter would publish unchanged.

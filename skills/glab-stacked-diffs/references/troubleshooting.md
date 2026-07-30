@@ -19,28 +19,24 @@ keeps the requested MR's incremental boundary and descendant ownership visible.
 **Symptom:** `glab stack amend` stops while rebasing a descendant.
 
 1. Inspect the current rebase and branch.
-2. Resolve the earliest conflicted descendant.
-3. Stage only the resolved files.
-4. Continue the rebase.
-5. Inspect every later descendant's incremental diff.
-6. Publish the repaired chain with one atomic push containing every captured
-   exact-SHA lease only after each incremental diff is verified.
+2. Abort the descendant rebase.
+3. Verify every descendant ref still matches its captured preflight tip.
+4. Inspect the amended source branch independently.
+5. If the selected entry was already published, publish only that source
+   branch with its exact-SHA lease and leave descendants untouched.
 
 ```bash
 git status
 ```
 
 ```bash
-git add <resolved-files>
-```
-
-```bash
-git rebase --continue
+git rebase --abort
 ```
 
 If the conflict reveals a changed contract or ambiguous ownership, stop and
-return to Plan. Aborting a rebase is recoverable; destructive reset is not the
-default recovery.
+return to Plan. During initial unpublished construction, a deliberate full
+local restack may instead resolve and continue the rebase before any MR exists.
+Destructive reset is not the default recovery.
 
 ## Wrong Diff Amended
 
@@ -51,7 +47,9 @@ default recovery.
 3. Return the wrong diff to its known pre-amend state through a recoverable
    operation.
 4. Navigate to and verify the correct diff.
-5. Restage the intended patch and use `glab stack amend`.
+5. Restage the intended patch and use a native hook-enabled amendment for a
+   published non-tip MR, or `glab stack amend` only for an unpublished entry or
+   the stack tip.
 6. Compare both incremental diffs before publication.
 
 **After publication:**
@@ -59,8 +57,8 @@ default recovery.
 1. Capture the live heads for the wrong MR and every descendant.
 2. Remove the misplaced change from its owning incremental diff with a normal
    staged amendment.
-3. Publish and verify that correction progressively.
-4. Add the change to the correct MR, amend, and publish its affected chain.
+3. Publish and verify only that MR source branch.
+4. Add the change to the correct MR, amend, and publish only that source branch.
 
 Do not move the patch between several local branches and defer one large
 publication wave; that recreates the opaque boundary problem.
@@ -100,7 +98,8 @@ Resolve the current MR and record descendant remote heads. Preserve each
 valuable tip with an explicit recovery branch. Then decide:
 
 - The patch belongs in the current MR: return it recoverably to the index or
-  work tree and run `glab stack amend`.
+  work tree and use a native hook-enabled amendment when it is a published
+  non-tip MR; use `glab stack amend` only before publication or at the tip.
 - The patch is a new reviewable unit after the current MR, the current entry is
   the last stack entry, and the new unit belongs at the tip: return it
   recoverably and run `glab stack save`.
@@ -115,39 +114,38 @@ the ordinary commit or rebuild the full stack merely to satisfy the deadline.
 
 ## Lease Rejection or External Remote-Head Change
 
-**Symptom:** an atomic exact-leased chain push is rejected, or a remote source
+**Symptom:** an exact-leased MR source push is rejected, or the remote source
 SHA no longer matches the preflight value.
 
 Stop. Fetch the branch, inspect the external commits and hosted artifact, and
 re-establish sole-writer ownership. Do not retry by accepting the new remote SHA
 blindly. Integrating another writer's work may change substantive ownership and
-can require Plan. An exact lease rejection leaves the whole atomic transaction
-unchanged. If the server rejects atomic capability, report that blocker and do
-not fall back to sequential publication.
+can require Plan. An exact lease rejection leaves the remote source unchanged.
 
 ## No-Op or Incomplete Propagation
 
-**Symptom:** an amendment should have changed the current MR or descendants,
-but an expected remote head remains unchanged after the atomic push.
+**Symptom:** an amendment should have changed the current MR, but its expected
+remote head remains unchanged after the leased push.
 
 1. Compare the local managed branches with the captured remote heads.
 2. Verify the intended branch was actually amended.
-3. Inspect whether descendants were rebased locally.
-4. Confirm every pushed source ref names its intended local managed branch.
+3. Confirm the pushed source ref names its intended local managed branch.
+4. Verify descendant source heads were not changed.
 5. Diagnose before another publication attempt.
 
 An exit code of zero is insufficient. Publication succeeds only when the live
-MR heads and target chain reflect the expected substantive and propagation
-updates.
+MR source head reflects the expected substantive update and descendants remain
+untouched.
 
 ## Closed, Merged, or Missing MR
 
 `glab stack sync` may create a non-draft MR for a branch without one and may
 remove entries whose MRs are merged. Therefore:
 
-- block new-stack publication under `glab` 1.108 until tested draft creation
-  can attach to stack metadata;
-- use one atomic multi-ref push with exact leases for a fully published stack;
+- create each coherent real-diff draft sequentially through
+  `change-request-create`;
+- publish only the substantive MR source branch while its predecessor remains
+  open;
 - stop if an expected MR is closed, merged, or missing;
 - after an authorized predecessor merge, follow the predecessor-merge workflow
   rather than ordinary feedback amendment; and
@@ -160,8 +158,10 @@ preserve lost work. Inspect every stack entry because an automatic rebase may
 have moved the patch to a different commit identity.
 
 Do not cherry-pick directly into a managed stack entry. Recover the patch into
-the index or work tree and apply `glab stack amend` after identifying its
-current incremental owner. Use `glab stack save` only when the current entry is
+the index or work tree after identifying its current incremental owner. Use a
+native hook-enabled amendment for a published non-tip MR so descendant refs
+stay untouched; use `glab stack amend` only before publication or at the stack
+tip. Use `glab stack save` only when the current entry is
 last and the patch belongs in a new tip diff; otherwise preserve it and return
 to Plan.
 

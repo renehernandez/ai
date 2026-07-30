@@ -4,6 +4,10 @@ This file is the repo-local entrypoint for agents working in the `ai` repo.
 Detailed policy lives under [rules/](rules/). Portable user-level instructions
 live in [instructions/AGENTS.md](instructions/AGENTS.md).
 
+The [agent development workflow charter](rules/agent-development-workflow-charter.md)
+governs every kind of work. Specialized rules and skills implement its
+mechanics without weakening or duplicating its principles.
+
 ## Scope and precedence
 
 - Follow system, developer, and direct user instructions first, then this file
@@ -122,7 +126,8 @@ or cleanup authority.
   specialists operate inside them: Explore uses `brainstorming` and
   `start-project`; Plan uses `openspec-tasks`; Review uses the GitHub/GitLab
   host adapters and `nitro-review-feedback` when policy selects Nitro; Finish
-  uses `change-request-create` plus the selected creation adapter.
+  uses `change-request-create` as the only selectable creation and description
+  owner; provider mechanics are its internal references.
 - `codex-review-feedback` remains retired. GitHub PR review does not request,
   poll, normalize, or gate on Codex-authored review feedback.
 
@@ -142,7 +147,8 @@ or cleanup authority.
   canonical-spec/archive head, and Finish treats it as a readiness input rather
   than cleanup. Incomplete or unverified work remains active.
 - Review evidence stays task-local. After a hook-clean commit, publish the
-  draft and request Nitro before local Review runs on that same head.
+  draft, explicitly request Nitro for that source head, and start local Review
+  on the same head.
   `code-simplifier` is a core reviewer for planning artifacts, POC first
   objective proof, completed POCs, and final implementations; it always keeps
   its own recorded outcome even when review execution is integrated or falls
@@ -163,10 +169,10 @@ or cleanup authority.
   publish directly to it without explicit user authorization.
 - The `github` remote is a mirror. When a remote has several push URLs, publish
   only to the selected GitLab URL or a provider-specific remote.
-- Finish inspects CI or no-pipeline state and posts a new top-level note
-  containing only `/request_review @nitro`. It reads the complete Nitro response
-  and unresolved Nitro-authored discussions; reassuring summary language does
-  not override carried-forward actionable feedback.
+- Finish inspects CI or no-pipeline state and applies
+  [the Fullscript Nitro rule](rules/fullscript/nitro-review.md) as the canonical
+  owner for source-head request timing, size routing, feedback closure, and
+  human escalation.
 - Every final MR is created and kept draft through implementation, CI, review,
   and technical readiness. Finish stays active after publication, follows the
   complete pipeline graph and hosted feedback, and reactivates the current
@@ -177,8 +183,9 @@ or cleanup authority.
   cleanup remain explicit.
 - For multiple final delivery units, preserve the total predecessor order,
   implement semantically eligible units concurrently in singly owned
-  worktrees, retarget and restack after predecessor squash merges, and refresh
-  every changed effective-diff gate.
+  worktrees, create every real-diff MR one after another, and never restack
+  descendants while a predecessor remains open. After a predecessor merges,
+  retarget and restack only its immediate child and refresh that child's gates.
 - Technical readiness leaves every MR draft. Explicit merge authority starts a
   bottom-to-top sequence that marks only the current MR ready immediately before
   its merge and waits for any review triggered by that transition.

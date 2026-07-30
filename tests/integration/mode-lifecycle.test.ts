@@ -248,12 +248,12 @@ test("Plan keeps atomic delivery in one change set and rehearses OpenSpec", () =
     skill,
     /earliest real entrypoint\s+with visible success or failure evidence/,
   );
-  assert.match(skill, /at most 10\s+changed files and 500 changed lines/);
   assert.match(
     skill,
-    /forecast above 15 files or 1,000 changed lines\s+blocks handoff/,
+    /non-removal atomic implementation MR.*at\s+most 10 changed files and 500 changed lines/is,
   );
-  assert.match(skill, /complete disposable POC MR is exempt/);
+  assert.match(skill, /above 15 files or 1,000 changed lines blocks\s+handoff/);
+  assert.match(skill, /complete\s+disposable POC MR is exempt/);
   assert.match(skill, /step-by-step instructions/);
   assert.match(skill, /exhaustive test or edge-case\s+matrices/);
   assert.match(
@@ -455,7 +455,8 @@ test("modes route to bounded specialists without restoring Codex PR feedback", (
   assert.match(review, /`nitro-review-feedback`/);
   assert.match(review, /`codex-review-feedback` remains retired/);
   assert.match(finish, /invoke\s+`change-request-create`/);
-  assert.match(finish, /`github-pr-create` or `glab-mr-create`/);
+  assert.match(finish, /only selectable\s+description and publication owner/);
+  assert.match(finish, /internal GitHub or GitLab mechanics/);
 });
 
 test("Review rejects stale readiness checkpoints and hosted feedback", () => {
