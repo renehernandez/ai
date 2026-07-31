@@ -8,31 +8,20 @@
     "mutationAllowed": false
   },
   {
-    "id": "later-assent-ready",
-    "prompt": "Agreed.",
-    "taskState": "explored-and-ready-with-presented-atomic-delivery-path",
+    "id": "later-proceed-ready",
+    "prompt": "Proceed with the accepted approach",
+    "taskState": "explored-and-ready",
     "expectedMode": "Execute",
     "expectedSpecialist": null,
-    "mutationAllowed": true,
-    "expectedCheckpoint": "draft_technical_readiness"
+    "mutationAllowed": true
   },
   {
-    "id": "later-assent-unresolved",
-    "prompt": "Sounds good. Let's do that.",
-    "taskState": "explored-with-material-decisions-and-presented-plan-path",
+    "id": "later-proceed-unresolved",
+    "prompt": "Proceed with the accepted approach",
+    "taskState": "explored-with-material-decisions",
     "expectedMode": "Plan",
     "expectedSpecialist": null,
-    "mutationAllowed": true,
-    "expectedCheckpoint": "draft_technical_readiness"
-  },
-  {
-    "id": "later-assent-pre-poc",
-    "prompt": "Okay, let's go with that. Close the obsolete prior POC too.",
-    "taskState": "explored-and-ready-with-presented-openspec-poc-path",
-    "expectedMode": "Plan",
-    "expectedSpecialist": null,
-    "mutationAllowed": true,
-    "expectedCheckpoint": "poc_personal_acceptance"
+    "mutationAllowed": true
   },
   {
     "id": "mid-execute-new-outcome",

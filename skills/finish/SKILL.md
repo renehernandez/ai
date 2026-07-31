@@ -13,14 +13,19 @@ Finish owns provider writes within granted scope. Entering Finish, asking to
 cleanup authority. For non-trivial entry, announce `Finish`, current provider or
 terminal authority, and the goal once.
 
-Authority resolves as follows:
+Authority resolves from the accepted task context, not a closed word list:
 
-| User wording | Maximum default authority |
+| Accepted intent | Maximum authority |
 | --- | --- |
-| `implement`, `deliver`, context-free `proceed`, `publish`, `open/update the PR/MR`, `finish` | Publish and follow hosted feedback; no merge |
+| Presented work path whose checkpoint is draft technical readiness; or an explicit publish, open/update, or finish request | Publish and follow hosted feedback; no merge |
 | `merge`, `ship`, `proceed to merge`, `merge when green`, `add to merge queue` | Merge or queue after current gates |
 | `deploy` | Deployment after required delivery state |
 | `clean up` | Only the named branch/worktree cleanup |
+
+Clear contextual assent inherits only the explicitly presented work path and
+stopping boundary. It does not require another authorization phrase when that
+path hands a hook-clean head from Execute into ordinary draft publication and
+hosted follow-through.
 
 An immediate `proceed` grants merge authority when the immediately preceding
 agent turn presents one merge action over one exact artifact scope as the sole

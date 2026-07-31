@@ -89,7 +89,7 @@ use it for the compact route or when the user asks for a quick or narrow answer:
 - [Evidence-backed recommendation that focuses discussion without fixing scope]
 
 **Next step**
-[Ask only the most consequential unresolved material question, or state that the
+[Ask only the highest-leverage unresolved material question, or state that the
 direction appears ready for an explicit transition.]
 ```
 
@@ -257,9 +257,12 @@ ls -d .agents/plans docs/specs specs/ plans/ design/ 2>/dev/null
 find . -name "*.md" -path "*/docs/*" -mtime -30 2>/dev/null | head -10
 ```
 
-Ask before writing the artifact. Brainstorming agreement is design confirmation,
+Ask before writing when the conversation has not presented and accepted a
+mutation path and stopping boundary. Agreement that only confirms a design is
 not permission to edit files. Plan owns creation of an atomic plan or OpenSpec
-artifact; Brainstorming only recommends that capture route.
+artifact and, when clear contextual assent accepts a presented path, does so
+without another transition prompt. Brainstorming only recommends the capture
+route.
 
 ## Challenge Rules
 

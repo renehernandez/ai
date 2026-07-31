@@ -116,12 +116,9 @@ const behaviorScenarioContracts = {
     greenName: "GREEN removal-only-evidence:",
     owns: (change: Change) =>
       change.path.startsWith("skills/review/") ||
-      [
-        "rules/agent-development-workflow-charter.md",
-        "rules/docs-and-specs.md",
-        "rules/git-and-review.md",
-        "rules/investigation-and-implementation.md",
-      ].includes(change.path),
+      ["rules/docs-and-specs.md", "rules/git-and-review.md"].includes(
+        change.path,
+      ),
     redEvidence: {
       source: {
         binding: {

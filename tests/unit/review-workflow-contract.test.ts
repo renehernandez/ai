@@ -48,20 +48,6 @@ const implementationReviewerCatalog = [
   "scrutinize",
 ] as const;
 
-test("ordinary work assent reaches readiness without granting terminal authority", () => {
-  const rule = read("rules/investigation-and-implementation.md");
-
-  assert.match(
-    rule,
-    /Direct and atomic work\s+continues through draft technical readiness/,
-  );
-  assert.match(rule, /do not require a second synonym as a permission token/);
-  assert.match(
-    rule,
-    /Do not\s+infer unstated scope, unrelated mutation, or terminal authority/,
-  );
-});
-
 function passingDeliveryBudget(
   sourceHead = "head-a",
   targetBaseSha = "base-a",

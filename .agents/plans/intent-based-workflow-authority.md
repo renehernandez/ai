@@ -28,19 +28,21 @@ as `proceed`.
 ## Scope
 
 Refine the existing authority principle, central investigation and
-implementation mechanics, portable and repository entrypoints, and the Plan and
-Execute handoff language. Strengthen the existing lifecycle-authority and mode
-fixtures with semantic-assent, pre-POC continuation, narrow-scope, and terminal
-controls.
+implementation mechanics, portable and repository entrypoints, and the Plan,
+Execute, and Finish handoff language. Strengthen the existing lifecycle-authority
+contract tests and clean-context probes with semantic-assent, pre-POC
+continuation, narrow-scope, and terminal controls.
 
 The cohesive change touches 15 files because the canonical owner, installed and
-repo-local entrypoints, two consuming skills, atomic plan, validator routing,
+repo-local entrypoints, four consuming skills, atomic plan, validator routing,
 and the existing contract-specific tests must move together. The validator
 adjustment classifies atomic plans as governed artifacts rather than reusable
-runtime behavior and binds Brainstorming to the existing lifecycle-authority
-contract. Splitting these changes would leave an entrypoint contradicting its
-owner, make the required plan fail the behavior-surface gate, or ship changed
-shared behavior without its required RED/GREEN evidence.
+runtime behavior, binds Brainstorming to the existing lifecycle-authority
+contract, narrows provider-bypass detection to actual command words, and avoids
+binding general authority changes to the unrelated removal-only review contract.
+Splitting these changes would leave an entrypoint or lifecycle consumer
+contradicting its owner, make the required plan fail the behavior-surface gate,
+or ship changed shared behavior without its required RED/GREEN evidence.
 
 Replace obsolete word-trigger and mode-scoped continuation language rather than
 adding a POC exception, new lifecycle mode, approval registry, phrase parser, or
@@ -82,9 +84,10 @@ path without a prescribed verb.
   `proceed` after the user said `agreed`.
 - GREEN pressure scenarios cover equivalent assent language, the complete
   pre-POC transition, and a control that stops before terminal actions.
-- Focused lifecycle-authority and mode-lifecycle tests prove the route and its
-  limiting controls.
-- `writing-skills` validates the changed Plan and Execute behavior; charter
+- Focused lifecycle-authority, entrypoint, and skill tests prove the route and
+  its limiting controls.
+- `writing-skills` validates the changed Brainstorming, Plan, Execute, and Finish
+  behavior; charter
   validation verifies canonical ownership, obsolete guidance removal, and
   executable RED/GREEN coverage.
 - The native pre-commit hook owns the complete repository suite.

@@ -206,9 +206,10 @@ Finish may reactivate the current lane owner for CI or hosted-review findings
 after publication without another user prompt. If that owner is unavailable,
 perform the standard exclusive ownership handoff before a replacement edits.
 
-Execute-only or local-only wording stops before Finish. `implement`, `deliver`,
-or `proceed` authorizes the normal hook-clean draft-publication sequence before
-local Review, but never authorizes merge.
+Execute-only or local-only wording stops before Finish. When the accepted task
+path reaches draft technical readiness, Execute hands the hook-clean commit to
+Finish for draft publication and hosted follow-through without requiring
+another transition phrase. That continuation never authorizes merge.
 
 ## Common Mistakes
 

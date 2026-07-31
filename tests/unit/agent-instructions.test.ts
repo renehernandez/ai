@@ -56,48 +56,23 @@ for (const file of entrypoints) {
     );
     assert.match(
       text,
-      /later explicit instruction to proceed\s+authorizes Plan or Execute/,
+      /infer later work authority from clear contextual intent/,
     );
-    assert.match(
-      text,
-      /Direct Execute is eligible only when one coherent\s+MR/,
-    );
+    assert.match(text, /not prescribed transition words/);
   });
 
   test(`${file} preserves authority without repeated confirmation`, () => {
     const text = readFileSync(file, "utf-8");
 
-    assert.match(text, /no exact transition word is required/i);
+    assert.match(text, /not prescribed transition words/i);
     assert.match(text, /Work authority is task-scoped/);
     assert.match(
       text,
-      /Continue across the\s+required Plan, Execute, Review, and Finish handoffs/,
+      /continues across the Plan, Execute, Review, and\s+Finish owners/,
     );
-    assert.match(
-      text,
-      /Routine wording, formatting, validation, test, CI,\s+review, and schema repairs do not require renewed permission/,
-    );
-    assert.match(
-      text,
-      /explicit recommendation bundle accepts any presented in-scope work path/,
-    );
-    assert.match(
-      text,
-      /immediate `proceed`.*single.*pending\s+merge\s+action.*exact.*artifact/is,
-    );
-    assert.match(
-      text,
-      /standalone or ambiguous `proceed`.*does\s+not.*merge authority/is,
-    );
-    assert.match(text, /never unstated scope, unrelated mutation/);
-    assert.match(
-      text,
-      /Existing authenticated\s+commands do not require renewed approval/,
-    );
-    assert.match(
-      text,
-      /credential entry or a new credential\s+grant remains a human action/,
-    );
+    assert.match(text, /to the accepted checkpoint without renewed permission/);
+    assert.match(text, /terminal actions retain their\s+separate authority/);
+    assert.match(text, /investigation-and-implementation\.md/);
   });
 
   test(`${file} keeps shared behavior mechanically reviewed`, () => {

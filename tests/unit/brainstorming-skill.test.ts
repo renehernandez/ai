@@ -69,6 +69,14 @@ test("brainstorming accepts explicit bundles without expanding authority", () =>
     /Treating an opening "fix" or "implement" request as mutation authority/,
   );
   assert.match(skill, /later contextual intent may authorize/);
+  assert.match(
+    skill,
+    /Plan owns creation of an atomic plan or OpenSpec\s+artifact.*without another transition prompt/s,
+  );
+  assert.match(
+    skill,
+    /Agreement that only confirms a design is\s+not permission to edit files/,
+  );
   assert.match(skill, /After convergence is invited, use a hard stop/);
 });
 

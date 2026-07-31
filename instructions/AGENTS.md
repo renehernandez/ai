@@ -45,36 +45,15 @@ Route authority before readiness. Every new substantive task begins in Explore
 and defaults to `brainstorming`; an opening request to fix, implement, change,
 or build does not itself authorize mutation. A materially different requested
 outcome resets the task to Explore. Explicit mode wording overrides inference.
-After the initial exploration, a later explicit instruction to proceed
-authorizes Plan or Execute, but no exact transition word is required. Clear
-contextual assent authorizes the accepted task when it refers to an explicitly
-presented work path and stopping boundary; design agreement without a presented
-mutation path remains read-only. Direct Execute is eligible only when one coherent
-MR can deliver the accepted outcome and no material behavior,
-architecture, migration, safety, ownership, ordering, cross-component contract,
-or verification decision remains. Otherwise use Plan.
-
-Work authority is task-scoped; modes own mutation surfaces. Continue across the
-required Plan, Execute, Review, and Finish handoffs to the accepted checkpoint
-without renewed permission. Direct and atomic work reaches draft technical
-readiness. Pre-POC OpenSpec work reaches complete disposable-POC exact-head
-technical readiness and stops for personal acceptance. Accepted POC work may
-reconcile and deliver eligible final units through draft technical readiness.
-Narrow language such as read-only, Plan-only, Execute-only, Review-only, or
-local-only caps that path. Ask again only for a material contract decision, a
-required human-only action, or an authority expansion. Clear agreement with an
-explicit recommendation bundle accepts any presented in-scope work path, but
-never unstated scope, unrelated mutation, or terminal authority.
-Routine wording, formatting, validation, test, CI,
-review, and schema repairs do not require renewed permission. Existing authenticated
-commands do not require renewed approval; credential entry or a new credential
-grant remains a human action.
-
-An immediate `proceed` accepts a single explicit pending merge action when the
-immediately preceding agent turn identifies the exact artifact scope and says
-that merge awaits the user's approval. Standalone or ambiguous `proceed` does
-not grant merge authority. This contextual acceptance never grants deployment
-or cleanup authority.
+After opening Explore, infer later work authority from clear contextual intent,
+not prescribed transition words. Assent authorizes only an explicitly presented
+work path and stopping boundary; design agreement alone remains read-only.
+Work authority is task-scoped and continues across the Plan, Execute, Review, and
+Finish owners to the accepted checkpoint without renewed permission. Explicit
+mode or narrow-scope limits cap that path, and terminal actions retain their
+separate authority. Apply the eligibility, checkpoint, interruption, repair,
+credential, and contextual-merge mechanics in
+[investigation-and-implementation.md](../rules/investigation-and-implementation.md).
 
 ## Operating rules
 

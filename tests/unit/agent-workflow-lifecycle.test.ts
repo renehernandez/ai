@@ -10,6 +10,8 @@ const root = process.cwd();
 test("RED authority: accepted work paths do not require magic transition words or stop at mode handoffs", () => {
   const implementation = read("rules/investigation-and-implementation.md");
   const brainstorming = read("skills/brainstorming/SKILL.md");
+  const execute = read("skills/execute/SKILL.md");
+  const finish = read("skills/finish/SKILL.md");
 
   assert.doesNotMatch(
     implementation,
@@ -23,6 +25,14 @@ test("RED authority: accepted work paths do not require magic transition words o
     brainstorming,
     /Agreement may recommend Plan; it does not authorize a write by itself/,
   );
+  assert.doesNotMatch(
+    execute,
+    /`implement`, `deliver`,\s+or `proceed` authorizes the normal hook-clean draft-publication sequence/,
+  );
+  assert.doesNotMatch(
+    finish,
+    /\| `implement`, `deliver`, context-free `proceed`/,
+  );
 });
 
 test("GREEN authority: semantic intent authorizes the presented task path to its human checkpoint", () => {
@@ -30,6 +40,8 @@ test("GREEN authority: semantic intent authorizes the presented task path to its
   const implementation = read("rules/investigation-and-implementation.md");
   const brainstorming = read("skills/brainstorming/SKILL.md");
   const plan = read("skills/plan/SKILL.md");
+  const execute = read("skills/execute/SKILL.md");
+  const finish = read("skills/finish/SKILL.md");
 
   assert.match(charter, /clear conversational intent/);
   assert.match(charter, /mode\s+handoff is not another permission boundary/);
@@ -41,10 +53,23 @@ test("GREEN authority: semantic intent authorizes the presented task path to its
     /pre-POC OpenSpec path[\s\S]*personal acceptance/,
   );
   assert.match(brainstorming, /Do not ask for a second synonym/);
+  assert.match(
+    brainstorming,
+    /Plan owns creation of an atomic plan or OpenSpec\s+artifact.*without another transition prompt/s,
+  );
   assert.match(plan, /ownership boundary is not a permission boundary/);
   assert.match(
     plan,
     /perform that handoff without requesting another transition phrase/,
+  );
+  assert.match(
+    execute,
+    /Finish for draft publication and hosted follow-through without requiring\s+another transition phrase/,
+  );
+  assert.match(finish, /accepted task context, not a closed word list/);
+  assert.match(
+    finish,
+    /does not require another authorization phrase.*ordinary draft publication/s,
   );
 });
 

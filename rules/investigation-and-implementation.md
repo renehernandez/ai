@@ -42,8 +42,9 @@ ownership, and the mandatory OpenSpec rehearsal boundary.
   or mutate external state until the user requests implementation.
 - When the symptom may come from local runtime, hooks, plugins, or automation,
   inspect the relevant local state before assuming the repository is at fault.
-- Once a task has work authority, continue across its required owning modes to
-  the accepted stopping boundary without asking for renewed permission.
+- Once a task has work authority, continue within that granted scope without
+  asking for renewed permission, including across required owning-mode handoffs
+  to the accepted stopping boundary.
   Interrupt only when the next action exceeds that boundary, requires a
   human-only action, or changes a material behavior, architecture, migration,
   safety, ownership, ordering, cross-component, verification, delivery, or

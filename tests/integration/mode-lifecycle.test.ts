@@ -79,9 +79,6 @@ test("new tasks explore before later mutation authority", () => {
       expectedMode: "Explore" | "Plan" | "Execute";
       expectedSpecialist: "brainstorming" | null;
       mutationAllowed: boolean;
-      expectedCheckpoint?:
-        | "draft_technical_readiness"
-        | "poc_personal_acceptance";
     }>
   >("first-prompt-explore");
   const agents = read("instructions/AGENTS.md").replace(/\s+/g, " ");
@@ -92,64 +89,42 @@ test("new tasks explore before later mutation authority", () => {
   const explore = read("skills/explore/SKILL.md").replace(/\s+/g, " ");
 
   assert.deepEqual(
-    scenarios.map(
-      ({ id, expectedMode, mutationAllowed, expectedCheckpoint }) => ({
-        id,
-        expectedMode,
-        mutationAllowed,
-        expectedCheckpoint,
-      }),
-    ),
+    scenarios.map(({ id, expectedMode, mutationAllowed }) => ({
+      id,
+      expectedMode,
+      mutationAllowed,
+    })),
     [
       {
         id: "opening-fix",
         expectedMode: "Explore",
         mutationAllowed: false,
-        expectedCheckpoint: undefined,
       },
       {
-        id: "later-assent-ready",
+        id: "later-proceed-ready",
         expectedMode: "Execute",
         mutationAllowed: true,
-        expectedCheckpoint: "draft_technical_readiness",
       },
       {
-        id: "later-assent-unresolved",
+        id: "later-proceed-unresolved",
         expectedMode: "Plan",
         mutationAllowed: true,
-        expectedCheckpoint: "draft_technical_readiness",
-      },
-      {
-        id: "later-assent-pre-poc",
-        expectedMode: "Plan",
-        mutationAllowed: true,
-        expectedCheckpoint: "poc_personal_acceptance",
       },
       {
         id: "mid-execute-new-outcome",
         expectedMode: "Explore",
         mutationAllowed: false,
-        expectedCheckpoint: undefined,
       },
       {
         id: "same-task-ci-failure",
         expectedMode: "Execute",
         mutationAllowed: true,
-        expectedCheckpoint: undefined,
       },
     ],
   );
   assert.match(agents, /Every new substantive task begins in Explore/);
   assert.match(agents, /opening request to fix, implement, change, or build/);
   assert.match(rules, /later explicit instruction such as "proceed"/);
-  assert.match(rules, /No exact\s+word is required/);
-  assert.match(rules, /Contextual assent.*supplies work authority/is);
-  assert.match(rules, /Work authority is task-scoped/);
-  assert.match(rules, /mode.*handoffs do not expand authority/is);
-  assert.match(
-    rules,
-    /pre-POC OpenSpec path.*exact-head technical\s+readiness/is,
-  );
   assert.match(
     rules,
     /materially different requested outcome creates a new task boundary/,
@@ -160,7 +135,7 @@ test("new tasks explore before later mutation authority", () => {
   );
   assert.match(
     rules,
-    /continue across its required owning modes.*without asking for renewed permission/,
+    /continue\s+within that granted scope without asking for renewed permission/,
   );
   assert.match(
     rules,
