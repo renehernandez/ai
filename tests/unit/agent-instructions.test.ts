@@ -67,12 +67,20 @@ for (const file of entrypoints) {
   test(`${file} preserves authority without repeated confirmation`, () => {
     const text = readFileSync(file, "utf-8");
 
-    assert.match(text, /continue automatically within that scope/);
+    assert.match(text, /no exact transition word is required/i);
+    assert.match(text, /Work authority is task-scoped/);
+    assert.match(
+      text,
+      /Continue across the\s+required Plan, Execute, Review, and Finish handoffs/,
+    );
     assert.match(
       text,
       /Routine wording, formatting, validation, test, CI,\s+review, and schema repairs do not require renewed permission/,
     );
-    assert.match(text, /explicit recommendation bundle accepts that bundle/);
+    assert.match(
+      text,
+      /explicit recommendation bundle accepts any presented in-scope work path/,
+    );
     assert.match(
       text,
       /immediate `proceed`.*single.*pending\s+merge\s+action.*exact.*artifact/is,
@@ -81,7 +89,7 @@ for (const file of entrypoints) {
       text,
       /standalone or ambiguous `proceed`.*does\s+not.*merge authority/is,
     );
-    assert.match(text, /never unstated\s+scope or unrelated mutation/);
+    assert.match(text, /never unstated scope, unrelated mutation/);
     assert.match(
       text,
       /Existing authenticated\s+commands do not require renewed approval/,

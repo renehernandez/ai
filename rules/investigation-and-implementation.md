@@ -16,9 +16,21 @@ ownership, and the mandatory OpenSpec rehearsal boundary.
   context, maps the problem and recommendation, and may report that the task is
   ready for Execute, but it remains read-only.
 - After the initial exploration, a later explicit instruction such as
-  "proceed", "implement the accepted approach", or "make the changes" supplies
-  mutation authority for that accepted task. Semantic readiness then selects
-  Plan or Execute.
+  "proceed", "implement the accepted approach", or "make the changes" is one
+  example of clear contextual intent to carry out the accepted task. No exact
+  word is required. Contextual assent such as agreement or equivalent language
+  also supplies work authority when it clearly accepts an explicitly presented
+  mutation path and stopping boundary. Agreement that only settles a design
+  decision, without accepting a presented work path, remains read-only.
+- Work authority is task-scoped, while modes own mutation surfaces. Semantic
+  readiness selects Plan or Execute, and required Plan, Execute, Review, and
+  Finish handoffs do not expand authority by themselves. Direct and atomic work
+  continues through draft technical readiness. A pre-POC OpenSpec path
+  continues through the complete disposable POC and exact-head technical
+  readiness, then stops for personal acceptance. After exact-head POC
+  acceptance authorizes stack breakdown, reconciliation and eligible final
+  units continue through draft technical readiness. Explicit narrow wording
+  such as Plan-only, Execute-only, Review-only, or local-only caps the path.
 - A materially different requested outcome creates a new task boundary and
   resets to Explore, including during Plan, Execute, or Finish. Answers to
   active exploration questions, refinements within the accepted outcome,
@@ -30,20 +42,21 @@ ownership, and the mandatory OpenSpec rehearsal boundary.
   or mutate external state until the user requests implementation.
 - When the symptom may come from local runtime, hooks, plugins, or automation,
   inspect the relevant local state before assuming the repository is at fault.
-- Agreement on a design confirms the decision; it does not authorize artifact
-  or implementation writes.
-- Once Plan, Execute, Review, or Finish has the required authority, continue
-  within that granted scope without asking for renewed permission. Interrupt
-  only when the next action expands authority, requires a human-only action, or
-  changes a material behavior, architecture, migration, safety, ownership,
-  ordering, cross-component, verification, delivery, or rollout decision.
+- Once a task has work authority, continue across its required owning modes to
+  the accepted stopping boundary without asking for renewed permission.
+  Interrupt only when the next action exceeds that boundary, requires a
+  human-only action, or changes a material behavior, architecture, migration,
+  safety, ownership, ordering, cross-component, verification, delivery, or
+  rollout decision.
   Contract-preserving wording, formatting, validation, test, CI, review, and
   schema repairs return automatically to the current mode owner. Existing
   authenticated commands do not require renewed approval; credential entry or
   a new credential grant remains a human action.
 - When a user response clearly accepts an explicit recommendation bundle, treat
-  every recommendation in that bundle as accepted. Do not infer unstated scope,
-  repository mutation, provider mutation, or terminal authority from that
+  every recommendation in that bundle as accepted. When that bundle presents a
+  mutation path and stopping boundary, clear contextual assent authorizes that
+  bounded path; do not require a second synonym as a permission token. Do not
+  infer unstated scope, unrelated mutation, or terminal authority from that
   agreement. The narrow exception is an immediate `proceed` after the agent
   presents one exact artifact scope and one merge action as the sole pending
   action awaiting approval; it grants only that merge authority. Standalone or

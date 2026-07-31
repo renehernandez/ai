@@ -12,6 +12,13 @@ Plan may write one planning artifact in one owned branch/worktree. It may not
 write implementation code or publish a planning PR/MR. For non-trivial entry,
 announce `Plan`, planning-artifact authority, and the goal once.
 
+Plan's ownership boundary is not a permission boundary. When task-scoped work
+authority includes implementation, a reviewed Plan hands off automatically to
+Execute. Atomic work continues through draft technical readiness. A reviewed
+pre-POC OpenSpec continues through its complete disposable POC and exact-head
+technical readiness, then stops for personal acceptance. Explicit Plan-only or
+other narrow wording still stops at the named boundary.
+
 Remain conversational until scope, design, delivery shape, risks, acceptance,
 verification, and policy choices are coherent. If any material behavior,
 architecture, migration, safety, ownership, ordering, cross-component, or
@@ -175,6 +182,8 @@ Review's artifact-fingerprint-bound planning checkpoint. A missing result,
 stale fingerprint, blocker, durable artifact finding, or unresolved repair
 prevents handoff. Evidenced nonblocking `defer` findings classified as
 task-local implementation considerations accompany the handoff to Execute.
+When the checkpoint passes and the accepted task path includes implementation,
+perform that handoff without requesting another transition phrase.
 
 Plan repairs only findings that change the durable planning contract. Pass
 implementation considerations to Execute task-locally instead of expanding the

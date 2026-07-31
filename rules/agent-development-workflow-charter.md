@@ -6,10 +6,14 @@ verification, and operational mechanics.
 
 ## Principles
 
-- Preserve user authority. Explore is read-only; Plan writes accepted planning
-  artifacts; Execute owns repository implementation; Review is read-only; and
-  Finish owns provider mutation. Merge, deployment, cleanup, and POC disposal
-  require their explicit authority.
+- Preserve user authority. Infer authority from clear conversational intent,
+  not prescribed transition words. Explore is read-only; Plan writes accepted
+  planning artifacts; Execute owns repository implementation; Review is
+  read-only; and Finish owns provider mutation. A clearly accepted work path
+  may traverse those owners to its next mandatory human checkpoint; a mode
+  handoff is not another permission boundary. Explicit limits cap that path.
+  Merge, deployment, cleanup, and POC disposal require their explicit
+  authority.
 - Prefer one canonical owner. Extend the existing owner of a policy, workflow,
   interface, or invariant instead of adding a parallel path or repeating its
   mechanics in entrypoints.

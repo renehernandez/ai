@@ -15,6 +15,7 @@ import {
   validateCharterFixture,
   validateCharterRepository,
 } from "../../scripts/charter-validate.ts";
+import { isPotentialBehaviorSurface } from "../../scripts/charter-validator-contracts.ts";
 import { read } from "../../scripts/charter-validator-reader.ts";
 
 const root = process.cwd();
@@ -141,6 +142,14 @@ test("GREEN progressive-disclosure: ordinary product scripts remain outside the 
   } finally {
     rmSync(fixtureRoot, { recursive: true, force: true });
   }
+});
+
+test("atomic plans remain governed artifacts rather than reusable behavior surfaces", () => {
+  assert.equal(
+    isPotentialBehaviorSurface(".agents/plans/intent-based-authority.md"),
+    false,
+  );
+  assert.equal(isPotentialBehaviorSurface(".agents/commands/review.md"), true);
 });
 
 test("future validators and agent prompts require explicit owners", () => {

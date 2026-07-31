@@ -7,6 +7,47 @@ import { read } from "../../scripts/charter-validator-reader.ts";
 
 const root = process.cwd();
 
+test("RED authority: accepted work paths do not require magic transition words or stop at mode handoffs", () => {
+  const implementation = read("rules/investigation-and-implementation.md");
+  const brainstorming = read("skills/brainstorming/SKILL.md");
+
+  assert.doesNotMatch(
+    implementation,
+    /Agreement on a design confirms the decision; it does not authorize artifact or implementation writes/,
+  );
+  assert.doesNotMatch(
+    implementation,
+    /continue\s+within that granted scope without asking for renewed permission/,
+  );
+  assert.doesNotMatch(
+    brainstorming,
+    /Agreement may recommend Plan; it does not authorize a write by itself/,
+  );
+});
+
+test("GREEN authority: semantic intent authorizes the presented task path to its human checkpoint", () => {
+  const charter = read("rules/agent-development-workflow-charter.md");
+  const implementation = read("rules/investigation-and-implementation.md");
+  const brainstorming = read("skills/brainstorming/SKILL.md");
+  const plan = read("skills/plan/SKILL.md");
+
+  assert.match(charter, /clear conversational intent/);
+  assert.match(charter, /mode\s+handoff is not another permission boundary/);
+  assert.match(implementation, /No exact\s+word is required/);
+  assert.match(implementation, /mutation path and stopping boundary/);
+  assert.match(implementation, /Work authority is task-scoped/);
+  assert.match(
+    implementation,
+    /pre-POC OpenSpec path[\s\S]*personal acceptance/,
+  );
+  assert.match(brainstorming, /Do not ask for a second synonym/);
+  assert.match(plan, /ownership boundary is not a permission boundary/);
+  assert.match(
+    plan,
+    /perform that handoff without requesting another transition phrase/,
+  );
+});
+
 test("RED authority: technical readiness cannot replace explicit POC disposal authority", () => {
   const finish = read("skills/finish/SKILL.md");
   const implementation = read("rules/investigation-and-implementation.md");

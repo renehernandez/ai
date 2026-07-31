@@ -18,14 +18,17 @@ test("brainstorming opens the problem space with working hypotheses", () => {
   assert.match(skill, /domain-terms pass only when terminology is fuzzy/);
   assert.match(skill, /objective, problem framing, material domain terms/);
   assert.match(skill, /approach, working hypotheses/);
-  assert.match(skill, /omit the question, recommend readiness/);
+  assert.match(skill, /present the recommended work path/);
 });
 
 test("brainstorming keeps mixed implementation prompts read-only", () => {
-  assert.match(skill, /The read-only boundary applies to the whole turn/);
   assert.match(
     skill,
-    /queue the requested mutation for a later Plan or Execute turn after the brainstorming outcome is accepted/,
+    /The read-only boundary applies to the whole brainstorming turn/,
+  );
+  assert.match(
+    skill,
+    /complete the opening exploration before any later authorized Plan or Execute turn/,
   );
   assert.match(
     skill,
@@ -37,7 +40,7 @@ test("brainstorming separates opening exploration from convergence", () => {
   assert.match(skill, /Converge only when invited later/);
   assert.match(
     skill,
-    /After the opening pass, a later request to narrow, choose v1, plan, implement, or prepare delivery activates convergence/,
+    /After the opening pass, later intent to narrow, choose v1, plan, implement, prepare delivery, or accept an explicitly presented work path activates convergence/,
   );
   assert.match(
     skill,
@@ -54,21 +57,18 @@ test("brainstorming separates opening exploration from convergence", () => {
 });
 
 test("brainstorming accepts explicit bundles without expanding authority", () => {
+  assert.match(skill, /It accepts the referenced recommendation bundle/);
+  assert.match(skill, /never supplies unstated scope/);
   assert.match(
     skill,
-    /accepting the explicit recommendation or recommendation bundle/,
-  );
-  assert.match(skill, /without treating unstated scope/);
-  assert.match(
-    skill,
-    /Do not ask again about accepted items or low-risk defaults/,
+    /Do not ask for a second synonym after the intent is clear/,
   );
   assert.match(skill, /State low-risk defaults together/);
   assert.match(
     skill,
     /Treating an opening "fix" or "implement" request as mutation authority/,
   );
-  assert.match(skill, /wait for a later explicit transition/);
+  assert.match(skill, /later contextual intent may authorize/);
   assert.match(skill, /After convergence is invited, use a hard stop/);
 });
 

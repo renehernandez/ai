@@ -207,7 +207,7 @@ const behaviorScenarioContracts = {
     greenName: "GREEN authority:",
     owns: (change: Change) =>
       ["AGENTS.md", "instructions/AGENTS.md"].includes(change.path) ||
-      /^(?:skills\/(?:execute|finish|plan)\/|rules\/docs-and-specs\.md$|rules\/investigation-and-implementation\.md$)/.test(
+      /^(?:skills\/(?:brainstorming|execute|finish|plan)\/|rules\/docs-and-specs\.md$|rules\/investigation-and-implementation\.md$)/.test(
         change.path,
       ),
     redEvidence: {
@@ -316,7 +316,8 @@ export function isPotentialBehaviorSurface(path: string): boolean {
     path === "ax.config.json" ||
     path === "lefthook.yml" ||
     path === "package.json" ||
-    /^(?:instructions|rules|skills|\.agents|hooks|automations)\//.test(path) ||
+    /^(?:instructions|rules|skills|hooks|automations)\//.test(path) ||
+    (path.startsWith(".agents/") && !path.startsWith(".agents/plans/")) ||
     path.startsWith("scripts/charter-") ||
     path === "scripts/skill-validate.ts" ||
     /^scripts\/.*(?:(?:agent|skill).*(?:validate|validator)|(?:validate|validator).*(?:agent|skill)).*\.ts$/.test(

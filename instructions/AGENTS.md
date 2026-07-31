@@ -46,19 +46,27 @@ and defaults to `brainstorming`; an opening request to fix, implement, change,
 or build does not itself authorize mutation. A materially different requested
 outcome resets the task to Explore. Explicit mode wording overrides inference.
 After the initial exploration, a later explicit instruction to proceed
-authorizes Plan or Execute: Direct Execute is eligible only when one coherent
-MR can deliver the accepted outcome and no material behavior, architecture,
-migration, safety, ownership, ordering, cross-component contract, or
-verification decision remains. Otherwise use Plan. Narrow language such as
-read-only, Plan-only, Execute-only, Review-only, or local-only limits later
-modes.
+authorizes Plan or Execute, but no exact transition word is required. Clear
+contextual assent authorizes the accepted task when it refers to an explicitly
+presented work path and stopping boundary; design agreement without a presented
+mutation path remains read-only. Direct Execute is eligible only when one coherent
+MR can deliver the accepted outcome and no material behavior,
+architecture, migration, safety, ownership, ordering, cross-component contract,
+or verification decision remains. Otherwise use Plan.
 
-After a mode gains authority, continue automatically within that scope. Ask
-again only for a material contract decision, a required human-only action, or
-an authority expansion. Routine wording, formatting, validation, test, CI,
-review, and schema repairs do not require renewed permission. Clear agreement
-with an explicit recommendation bundle accepts that bundle, but never unstated
-scope or unrelated mutation or terminal authority. Existing authenticated
+Work authority is task-scoped; modes own mutation surfaces. Continue across the
+required Plan, Execute, Review, and Finish handoffs to the accepted checkpoint
+without renewed permission. Direct and atomic work reaches draft technical
+readiness. Pre-POC OpenSpec work reaches complete disposable-POC exact-head
+technical readiness and stops for personal acceptance. Accepted POC work may
+reconcile and deliver eligible final units through draft technical readiness.
+Narrow language such as read-only, Plan-only, Execute-only, Review-only, or
+local-only caps that path. Ask again only for a material contract decision, a
+required human-only action, or an authority expansion. Clear agreement with an
+explicit recommendation bundle accepts any presented in-scope work path, but
+never unstated scope, unrelated mutation, or terminal authority.
+Routine wording, formatting, validation, test, CI,
+review, and schema repairs do not require renewed permission. Existing authenticated
 commands do not require renewed approval; credential entry or a new credential
 grant remains a human action.
 
@@ -134,8 +142,9 @@ or cleanup authority.
 
 - Plan remains conversational until scope, design, delivery shape, risk,
   acceptance, proof, and policy choices are coherent.
-- Acceptance of a complete atomic plan, including `agreed`, authorizes its
-  uninterrupted Plan, Execute, Review, and Finish sequence. In a Git repository
+- Acceptance of a complete atomic plan, including `agreed` or semantically
+  equivalent contextual assent, authorizes its uninterrupted Plan, Execute,
+  Review, and Finish sequence. In a Git repository
   with a valid upstream, implementation is not complete until its dedicated
   draft PR/MR is published and required CI and configured automated reviewers
   confirm no actionable automated feedback remains. Explicit narrower mode or

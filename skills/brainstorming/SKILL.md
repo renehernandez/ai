@@ -13,12 +13,13 @@ posture is: understand the problem space first, narrow only when invited.
 
 This is a bounded Explore specialist. It is read-only and does not create or
 edit plans, OpenSpec changes, tracker state, branches, commits, PRs, or MRs.
-Agreement may recommend Plan; it does not authorize a write by itself.
-The read-only boundary applies to the whole turn. If a prompt mixes
-brainstorming with planning or implementation, complete the opening exploration,
-converge only when the user explicitly invites it, then queue the requested
-mutation for a later Plan or Execute turn after the brainstorming outcome is
-accepted.
+The read-only boundary applies to the whole brainstorming turn. Agreement that
+only settles a design decision does not authorize a write. When the agent has
+explicitly presented a mutation path and stopping boundary, clear contextual
+assent may authorize that bounded path for the next owning mode; no prescribed
+transition word is required. If an opening prompt mixes brainstorming with
+planning or implementation, complete the opening exploration before any later
+authorized Plan or Execute turn.
 
 ## Default Flow
 
@@ -48,18 +49,22 @@ accepted.
    operations, cost, or another user-visible contract. State low-risk defaults
    and evidence-backed recommendations without asking the user to approve each
    one. When inspected evidence makes the direction unambiguous, omit the
-   question, recommend readiness, and wait for a later explicit transition.
-5. **Converge only when invited later.** After the opening pass, a later request
-   to narrow, choose v1, plan, implement, or prepare delivery activates
-   convergence. Then summarize the objective, selected feature, shipped
-   context, implementation slices, recommended first slice, deferred work,
-   domain terms, and artifact routing.
+   question, present the recommended work path and its stopping boundary, and
+   let later semantic intent determine whether that path is authorized.
+5. **Converge only when invited later.** After the opening pass, later intent to
+   narrow, choose v1, plan, implement, prepare delivery, or accept an explicitly
+   presented work path activates convergence. Infer that intent from context;
+   examples such as `agreed`, `go ahead`, or `let's do that` are illustrative,
+   not a command vocabulary. Then summarize the objective, selected feature,
+   shipped context, implementation slices, recommended first slice, deferred
+   work, domain terms, and artifact routing.
 
-Treat agreement such as "agreed", "sounds good", or "yes" as accepting the
-explicit recommendation or recommendation bundle that the response clearly
-refers to. Do not ask again about accepted items or low-risk defaults. Move to
-the next unresolved material discussion item without treating unstated scope,
-artifact writes, implementation, or terminal actions as accepted.
+Treat agreement such as "agreed", "sounds good", or "yes" according to what it
+clearly accepts in context. It accepts the referenced recommendation bundle;
+when that bundle explicitly presents a mutation path and stopping boundary, it
+also authorizes that bounded path. It never supplies unstated scope, unrelated
+mutation, or terminal authority. Do not ask for a second synonym after the
+intent is clear.
 
 ## Orientation Map
 
@@ -84,7 +89,7 @@ use it for the compact route or when the user asks for a quick or narrow answer:
 - [Evidence-backed recommendation that focuses discussion without fixing scope]
 
 **Next step**
-[Ask only the highest-leverage unresolved material question, or state that the
+[Ask only the most consequential unresolved material question, or state that the
 direction appears ready for an explicit transition.]
 ```
 
@@ -276,8 +281,8 @@ Check that:
   explicit,
 - domain terms were included only when material,
 - the discussion queue stayed at 1-3 items unless the user asked for more,
-- clear agreement accepted the explicit recommendation or bundle it referred
-  to without expanding into unstated scope or authority,
+- clear agreement accepted the explicit recommendation, work path, or bundle it
+  referred to without expanding into unstated scope or authority,
 - no v1, implementation slice, proof location, or artifact route was selected
   without a convergence invitation, and
 - an unnecessary question was omitted when the inspected direction was
@@ -311,7 +316,7 @@ After convergence is invited, also check that:
 | Inspecting independent evidence lanes one at a time | Start them together when bounded delegation will finish faster; keep only small coherent scans inline |
 | Calling several independent sources one coherent scan | Keep the lanes distinct and use only the minimal shared evidence contract needed for reconciliation |
 | Claiming there is no precedent without evidence | Name the inspected paths or searches before accepting a new mechanism |
-| Treating an opening "fix" or "implement" request as mutation authority | Complete the read-only opening pass and wait for a later explicit transition |
+| Treating an opening "fix" or "implement" request as mutation authority | Complete the read-only opening pass; only later contextual intent may authorize a presented work path |
 | Choosing v1 or a first slice during the opening pass | Keep delivery guidance dormant until the user invites convergence |
 | Promoting future requirements into v1 | Keep them as future shape unless they address a concrete first-slice risk |
 | Recommending a platform while implementing a thin slice | Recommend the thin-slice approach and name the platform as future extraction |
