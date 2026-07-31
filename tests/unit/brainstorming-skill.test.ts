@@ -19,6 +19,10 @@ test("brainstorming opens the problem space with working hypotheses", () => {
   assert.match(skill, /objective, problem framing, material domain terms/);
   assert.match(skill, /approach, working hypotheses/);
   assert.match(skill, /present the recommended work path/);
+  assert.match(
+    skill,
+    /name the recommended work path and its next mandatory human\s+checkpoint/,
+  );
 });
 
 test("brainstorming keeps mixed implementation prompts read-only", () => {

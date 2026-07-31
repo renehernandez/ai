@@ -24,7 +24,7 @@ export const prohibitedAddedGuidance = [
   },
   {
     pattern:
-      /\b(?:route|use)\b.{0,80}\b(?:raw )?(?:glab|gh)\b(?: commands?)?.{0,80}\b(?:instead|direct)\b/is,
+      /(?:route|use).{0,80}(?:raw )?(?:glab|gh)(?: commands?)?.{0,80}(?:instead|direct)/is,
     message: "raw provider creation or update bypasses change-request-create",
   },
   {

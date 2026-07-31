@@ -38,11 +38,11 @@ repo-local entrypoints, four consuming skills, atomic plan, validator routing,
 and the existing contract-specific tests must move together. The validator
 adjustment classifies atomic plans as governed artifacts rather than reusable
 runtime behavior, binds Brainstorming to the existing lifecycle-authority
-contract, narrows provider-bypass detection to actual command words, and avoids
-binding general authority changes to the unrelated removal-only review contract.
-Splitting these changes would leave an entrypoint or lifecycle consumer
-contradicting its owner, make the required plan fail the behavior-surface gate,
-or ship changed shared behavior without its required RED/GREEN evidence.
+contract, and preserves the removal-only evidence contract on the canonical
+rules that still own that policy. Splitting these changes would leave an
+entrypoint or lifecycle consumer contradicting its owner, make the required plan
+fail the behavior-surface gate, or ship changed shared behavior without its
+required RED/GREEN evidence.
 
 Replace obsolete word-trigger and mode-scoped continuation language rather than
 adding a POC exception, new lifecycle mode, approval registry, phrase parser, or

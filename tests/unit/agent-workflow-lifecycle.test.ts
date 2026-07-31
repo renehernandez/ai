@@ -55,6 +55,10 @@ test("GREEN authority: semantic intent authorizes the presented task path to its
   assert.match(brainstorming, /Do not ask for a second synonym/);
   assert.match(
     brainstorming,
+    /name the recommended work path and its next mandatory human\s+checkpoint/,
+  );
+  assert.match(
+    brainstorming,
     /Plan owns creation of an atomic plan or OpenSpec\s+artifact.*without another transition prompt/s,
   );
   assert.match(plan, /ownership boundary is not a permission boundary/);

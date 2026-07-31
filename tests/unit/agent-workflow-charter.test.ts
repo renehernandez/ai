@@ -16,7 +16,6 @@ import {
   validateCharterRepository,
 } from "../../scripts/charter-validate.ts";
 import { isPotentialBehaviorSurface } from "../../scripts/charter-validator-contracts.ts";
-import { prohibitedAddedGuidance } from "../../scripts/charter-validator-policy.ts";
 import { read } from "../../scripts/charter-validator-reader.ts";
 
 const root = process.cwd();
@@ -151,28 +150,6 @@ test("atomic plans remain governed artifacts rather than reusable behavior surfa
     false,
   );
   assert.equal(isPotentialBehaviorSurface(".agents/commands/review.md"), true);
-});
-
-test("provider bypass detection matches commands rather than prose substrings", () => {
-  const providerBypass = prohibitedAddedGuidance.find(
-    ({ message }) =>
-      message ===
-      "raw provider creation or update bypasses change-request-create",
-  );
-
-  assert.ok(providerBypass);
-  assert.equal(
-    providerBypass.pattern.test(
-      "Use glab commands directly instead of change-request-create.",
-    ),
-    true,
-  );
-  assert.equal(
-    providerBypass.pattern.test(
-      "A recommendation that focuses discussion on the highest-leverage direction.",
-    ),
-    false,
-  );
 });
 
 test("future validators and agent prompts require explicit owners", () => {

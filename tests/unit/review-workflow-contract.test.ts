@@ -48,6 +48,18 @@ const implementationReviewerCatalog = [
   "scrutinize",
 ] as const;
 
+test("removal-only delivery policy remains bound to exact-head review evidence", () => {
+  for (const path of [
+    "rules/agent-development-workflow-charter.md",
+    "rules/investigation-and-implementation.md",
+  ]) {
+    const policy = read(path);
+    assert.match(policy, /removal-only MR/);
+    assert.match(policy, /target-base-to-\s*source-head Git\s+diff/);
+    assert.match(policy, /exact-head\s+`diff-review`/);
+  }
+});
+
 function passingDeliveryBudget(
   sourceHead = "head-a",
   targetBaseSha = "base-a",

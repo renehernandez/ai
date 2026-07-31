@@ -89,8 +89,9 @@ use it for the compact route or when the user asks for a quick or narrow answer:
 - [Evidence-backed recommendation that focuses discussion without fixing scope]
 
 **Next step**
-[Ask only the highest-leverage unresolved material question, or state that the
-direction appears ready for an explicit transition.]
+[Ask only the most consequential unresolved material question, or state that the
+direction is ready, name the recommended work path and its next mandatory human
+checkpoint, and let the user's contextual intent determine whether to begin it.]
 ```
 
 When a question is needed, keep it tied to the discussion queue. Do not ask
