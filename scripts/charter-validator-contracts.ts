@@ -18,7 +18,7 @@ const lifecycleReaderBinding = {
   module: "../../scripts/charter-validator-reader.ts",
   name: "read",
 } as const;
-const changeRequestReaderBinding = {
+const minimalReaderBinding = {
   allowedModules: [
     "node:assert/strict",
     "node:test",
@@ -45,7 +45,6 @@ const charterReaderBinding = {
   module: "../../scripts/charter-validator-reader.ts",
   name: "read",
 } as const;
-
 const canonicalRuleOwners = new Set([
   "rules/agent-development-workflow-charter.md",
   "rules/agent-surface-routing.md",
@@ -143,6 +142,29 @@ const behaviorScenarioContracts = {
         callee: /^validateTechnicalReadinessCheckpoint$/,
       },
       assertion: { callee: /^assert\.doesNotThrow$/ },
+    },
+  },
+  "simplification-review": {
+    principles: ["canonical-ownership", "semantic-delivery"],
+    path: "tests/unit/code-simplifier-skill.test.ts",
+    redName: "RED simplification-review:",
+    greenName: "GREEN simplification-review:",
+    owns: (change: Change) => change.path === "skills/code-simplifier/SKILL.md",
+    redEvidence: {
+      source: {
+        binding: minimalReaderBinding,
+        callee: /^read$/,
+        text: /\(["']skills\/code-simplifier\/SKILL\.md["']\)/,
+      },
+      assertion: { callee: /^assert\.doesNotMatch$/ },
+    },
+    greenEvidence: {
+      source: {
+        binding: minimalReaderBinding,
+        callee: /^read$/,
+        text: /\(["']skills\/code-simplifier\/SKILL\.md["']\)/,
+      },
+      assertion: { callee: /^assert\.match$/ },
     },
   },
   "nitro-raw-evidence": {
@@ -274,7 +296,7 @@ const behaviorScenarioContracts = {
     },
     greenEvidence: {
       source: {
-        binding: changeRequestReaderBinding,
+        binding: minimalReaderBinding,
         callee: /^read$/,
         text: /\(["']skills\/change-request-create\//,
       },

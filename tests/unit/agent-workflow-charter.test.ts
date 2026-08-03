@@ -89,6 +89,11 @@ test("GREEN canonical-ownership: the charter validation gate runs from the nativ
   assert.match(validator, /canonical owner/i);
   assert.match(contracts, /principles:/);
   assert.match(contracts, /contract-specific pressure scenario/i);
+  assert.match(contracts, /const minimalReaderBinding =/);
+  assert.doesNotMatch(
+    contracts,
+    /const (?:changeRequest|simplification)ReaderBinding =/,
+  );
 });
 
 test("RED charter-gate: contract-free staged behavior changes fail closed", () => {
@@ -110,6 +115,23 @@ test("RED charter-gate: contract-free staged behavior changes fail closed", () =
 
 test("GREEN charter-gate: repository validation executes exact staged and source-propagated behavior contracts", () => {
   assert.deepEqual(validateCharterRepository(root), []);
+});
+
+test("charter gate routes code-simplifier changes to their own executable contract", () => {
+  const skill = read("skills/code-simplifier/SKILL.md");
+  const scenario = read("tests/unit/code-simplifier-skill.test.ts");
+
+  assert.deepEqual(
+    validateCharterFixture(
+      root,
+      {
+        "skills/code-simplifier/SKILL.md": skill,
+        "tests/unit/code-simplifier-skill.test.ts": scenario,
+      },
+      true,
+    ),
+    [],
+  );
 });
 
 test("GREEN progressive-disclosure: ordinary product scripts remain outside the agent-behavior gate", () => {
