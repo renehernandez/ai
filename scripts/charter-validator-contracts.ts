@@ -29,6 +29,18 @@ const minimalReaderBinding = {
   module: "../../scripts/charter-validator-reader.ts",
   name: "read",
 } as const;
+const communicationReaderBinding = {
+  allowedModules: [
+    "node:assert/strict",
+    "node:fs",
+    "node:test",
+    "../../scripts/charter-validator-reader.ts",
+  ],
+  forbidDynamicModuleAccess: true,
+  kind: "import",
+  module: "../../scripts/charter-validator-reader.ts",
+  name: "read",
+} as const;
 const charterReaderBinding = {
   allowedModules: [
     "node:assert/strict",
@@ -163,6 +175,32 @@ const behaviorScenarioContracts = {
         binding: minimalReaderBinding,
         callee: /^read$/,
         text: /\(["']skills\/code-simplifier\/SKILL\.md["']\)/,
+      },
+      assertion: { callee: /^assert\.match$/ },
+    },
+  },
+  "complete-explanations": {
+    principles: ["progressive-disclosure", "semantic-delivery"],
+    path: "tests/unit/communication-rules.test.ts",
+    redName: "RED complete-explanations:",
+    greenName: "GREEN complete-explanations:",
+    owns: (change: Change) =>
+      change.path === ".agents/plans/complete-first-pass-explanations.md" ||
+      change.path === "rules/communication.md" ||
+      change.path === "rules/confidence.md",
+    redEvidence: {
+      source: {
+        binding: communicationReaderBinding,
+        callee: /^read$/,
+        text: /\(["']rules\/confidence\.md["']\)/,
+      },
+      assertion: { callee: /^assert\.doesNotMatch$/ },
+    },
+    greenEvidence: {
+      source: {
+        binding: communicationReaderBinding,
+        callee: /^read$/,
+        text: /\(["']rules\/communication\.md["']\)/,
       },
       assertion: { callee: /^assert\.match$/ },
     },
@@ -362,6 +400,9 @@ export function canonicalOwnerFor(path: string): string | undefined {
   }
   if (canonicalRuleOwners.has(path)) {
     return path;
+  }
+  if (path === ".agents/plans/complete-first-pass-explanations.md") {
+    return "rules/communication.md";
   }
   if (path.startsWith("rules/")) {
     return undefined;

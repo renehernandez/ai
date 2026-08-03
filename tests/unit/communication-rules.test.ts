@@ -1,8 +1,8 @@
+// charter-contracts: complete-explanations
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import test from "node:test";
-
-const read = (path: string) => readFileSync(path, "utf8");
+import { read } from "../../scripts/charter-validator-reader.ts";
 
 test("runtime profiles install one shared communication rule", () => {
   assert.equal(existsSync("rules/communication.md"), true);
@@ -20,7 +20,7 @@ test("runtime profiles install one shared communication rule", () => {
   }
 });
 
-test("shared instructions define concise conversation without weakening confidence", () => {
+test("RED complete-explanations: claim-level confidence repetition is removed", () => {
   const communication = read("rules/communication.md");
   const confidence = read("rules/confidence.md");
 
@@ -35,11 +35,86 @@ test("shared instructions define concise conversation without weakening confiden
   assert.match(communication, /filler.*formulaic contrast/i);
   assert.match(communication, /required evidence/i);
   assert.match(communication, /confidence/i);
-  assert.match(confidence, /Show confidence on every actionable statement/);
+  assert.match(
+    confidence,
+    /one annotation.*coherent conclusion or recommendation block/is,
+  );
+  assert.match(
+    confidence,
+    /separate annotations.*materially different.*(?:evidence|uncertainty)/is,
+  );
+  assert.match(confidence, /each candidate root cause.*own conclusion block/is);
+  assert.match(confidence, /do not repeat.*after each sentence/i);
+  assert.doesNotMatch(
+    confidence,
+    /Show confidence on every actionable statement/,
+  );
 
   for (const entrypoint of ["AGENTS.md", "instructions/AGENTS.md"]) {
     assert.match(read(entrypoint), /rules\/communication\.md/);
   }
+});
+
+test("GREEN complete-explanations: first-pass answers supply the causal chain", () => {
+  const communication = read("rules/communication.md");
+
+  assert.match(communication, /answer the exact question/i);
+  assert.match(
+    communication,
+    /state the (?:causal or structural )?mechanism.*makes.*true/is,
+  );
+  assert.match(communication, /example or contrast.*when.*helps/is);
+  assert.match(
+    communication,
+    /relevant (?:boundary|limitation).*practical consequence/is,
+  );
+  assert.match(
+    communication,
+    /prefer two or three.*sentences.*missing explanatory link/is,
+  );
+  assert.match(
+    communication,
+    /semantic responsibilities.*not.*fixed.*(?:template|headings)/is,
+  );
+});
+
+test("clarification repairs the mental model without forcing ceremony", () => {
+  const communication = read("rules/communication.md");
+
+  assert.match(communication, /why\?.*how\?.*what do you mean\?.*incomplete/is);
+  assert.match(
+    communication,
+    /one (?:more concrete|lower)\s+abstraction level.*instead of paraphrasing/is,
+  );
+  assert.match(
+    communication,
+    /do not introduce.*abstraction.*current question/is,
+  );
+  assert.match(communication, /define.*unfamiliar term.*first use/is);
+  assert.match(
+    communication,
+    /name both entities.*concrete relationship.*material/is,
+  );
+  assert.match(
+    communication,
+    /do not rely on.*(?:vague pronoun|spatial metaphor).*beneath\s+it/is,
+  );
+  assert.match(
+    communication,
+    /acknowledgments.*status-only updates.*self-explanatory/is,
+  );
+  assert.match(
+    communication,
+    /machine-readable contracts.*exact provider templates/is,
+  );
+  assert.match(
+    communication,
+    /boundary is relevant only if.*omission.*misstate.*direct answer/is,
+  );
+  assert.match(
+    communication,
+    /do not add adjacent caveats.*unsolicited (?:architecture|design) advice/is,
+  );
 });
 
 test("durable prose uses reader need instead of fixed document ceremony", () => {
@@ -72,7 +147,7 @@ test("shared communication preserves focus and cross-turn continuity", () => {
   assert.match(communication, /ask one material question at a time/i);
   assert.match(communication, /state the low-risk default/i);
   assert.match(communication, /show concrete progress/i);
-  assert.match(communication, /full explanation.*user requests/is);
+  assert.match(communication, /full\s+explanation.*user requests/is);
   assert.match(communication, /safety.*authority.*evidence.*required format/is);
 });
 
