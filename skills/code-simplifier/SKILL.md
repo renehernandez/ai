@@ -62,17 +62,42 @@ Look for:
 
 - nested branches or ternaries that a linear flow can replace;
 - duplicate branches, setup, or policy decisions;
+- overlapping types, constants, helpers, or state that represent one concept;
+- values passed or stored separately when canonical inputs can derive them;
 - thin wrappers and abstractions that name no durable concept;
 - casts, optionality, or fallback paths hiding a simpler invariant;
 - mixed-purpose functions that obscure ownership;
 - scattered special cases that an existing policy or model already owns;
+- compatibility paths for signatures, aliases, or data shapes that existed only
+  earlier on the current unshipped branch;
 - comments or intermediate layers made unnecessary by clearer names; and
 - complexity moved between files without reducing concepts.
+
+Use one term per concept and one concept per term. Prefer the repository's
+canonical vocabulary, and remove words whose context is already supplied by the
+module or owning type when the result stays unambiguous. A shorter word is not
+simpler when it loses domain precision.
+
+Names, comments, and abstractions must make sense to a reader without the branch
+or conversation history. Delete branch-history narration only when the code and
+accepted contract preserve the relevant constraint. `deslop` owns verbosity and
+local-style drift; `code-quality-review` owns structural ownership and
+architecture. Report wording here only when it duplicates or conceals a concept
+or invariant.
+
+A compatibility path is removable only after proving that it is absent from the
+target base, accepted contract, current callers, and external consumers. Earlier
+unmerged branch revisions do not create a compatibility contract by themselves.
 
 A valid implementation finding must identify a behavior-preserving alternative
 grounded in the diff and surrounding code. Fewer lines alone are not evidence
 of simplification. Keep useful boundaries that isolate real variation, security
 assumptions, migrations, or non-obvious business rules.
+
+For findings that remove derived state, duplicate concepts, or compatibility,
+name the surviving source of truth, the redundant representation or
+compatibility path, the producers and consumers inspected, and why every
+reachable success and failure behavior remains preserved.
 
 ## Output
 
@@ -99,6 +124,8 @@ Plan.
 | Mistake | Required response |
 | --- | --- |
 | Optimizing for line count | Require lower cognitive or structural complexity. |
+| Replacing precise domain terms with shorter words | Keep canonical vocabulary when the shorter term loses meaning. |
+| Treating branch history as a compatibility contract | Prove the path exists in the target base, accepted contract, or an external consumer. |
 | Suggesting a behavior change | Route it as a contract question, not simplification. |
 | Rewriting stable neighboring code | Keep findings scoped to introduced or materially worsened complexity. |
 | Editing after finding an easy cleanup | Return the finding to the single Execute owner. |
@@ -118,3 +145,9 @@ Plan.
 - GREEN POC: the revised contract required simplification before expansion and
   rejected the two other reviewers as substitutes while using available-model
   fallback.
+- RED vocabulary: a fresh reviewer found a term collision but dismissed a
+  context-heavy name as subjective even though its module already carried the
+  same concept.
+- GREEN vocabulary and state: the reviewer challenges context-redundant names,
+  derived state, branch-history overfitting, and unshipped compatibility while
+  keeping style, architecture, and domain-precision boundaries explicit.

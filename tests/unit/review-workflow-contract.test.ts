@@ -2142,6 +2142,16 @@ test("delivery-shape review bounds groundwork and checks topology", () => {
   assert.match(contract.passedWhen, /every final unit/i);
 });
 
+test("code-simplifier catalog asks for derivation, vocabulary, and unshipped compatibility evidence", () => {
+  const contract = reviewerCatalog["code-simplifier"];
+  const questions = contract.evidenceQuestions.join(" ");
+
+  assert.match(questions, /canonical inputs/i);
+  assert.match(questions, /concept vocabulary/i);
+  assert.match(questions, /unshipped branch/i);
+  assert.match(questions, /external consumer/i);
+});
+
 test("required reviewer skills are findings-only", () => {
   for (const path of [
     "skills/code-simplifier/SKILL.md",
