@@ -1,6 +1,7 @@
 # Confidence Framework
 
-Use inline confidence scores on actionable statements.
+Use inline confidence scores on actionable conclusions and recommendation
+blocks.
 
 ## Required Format
 
@@ -13,11 +14,23 @@ Use inline confidence scores on actionable statements.
   - `speculative` for 0.00-0.24
 - Optionally append a short reason: `[confidence: 0.82 - high | reason: direct test output confirmed it]`.
 
+## Annotation Granularity
+
+- Put one annotation on a coherent conclusion or recommendation block when its
+  claims share the same evidence basis and uncertainty.
+- Use separate annotations when claims have materially different evidence or
+  uncertainty.
+- Do not repeat the same confidence annotation after each sentence in one
+  reasoning chain.
+
 ## When to Show Confidence
 
-- Show confidence on every actionable statement, diagnosis, recommendation, assertion, and decision.
-- Show confidence as each hypothesis, diagnosis, and recommendation is formed, not only in the final conclusion.
-- During multi-step investigation, give each candidate root cause and each proposed fix its own score.
+- Show confidence on every actionable conclusion, diagnosis, recommendation,
+  assertion block, and decision.
+- Show confidence as each distinct hypothesis, diagnosis, or recommendation
+  conclusion is formed, not only in the final conclusion.
+- During multi-step investigation, treat each candidate root cause and each
+  proposed fix as its own conclusion block.
 - Do not show confidence on acknowledgments, conversational text, questions back to the user, or repeated user instructions.
 
 ## Calibration
@@ -35,5 +48,6 @@ Use inline confidence scores on actionable statements.
 ## Safety Gate
 
 - When confidence is below 0.40 on a critical or destructive action, pause and ask the user before proceeding.
-- Self-check before finalizing: if you wrote three or more actionable statements without a confidence score, revise them.
+- Self-check before finalizing: if you wrote three or more actionable conclusion
+  blocks without confidence scores, revise them.
 - Full framework details may also live in memory as `agent-confidence-framework.md`.
