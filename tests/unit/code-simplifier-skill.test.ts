@@ -6,13 +6,16 @@ import { read } from "../../scripts/charter-validator-reader.ts";
 
 const skill = read("skills/code-simplifier/SKILL.md").replace(/\s+/g, " ");
 
-test("RED simplification-review: shorter words and branch history cannot override evidence", () => {
+test("RED simplification-review: strengthens the prior naming and migration boundaries", () => {
   const contract = read("skills/code-simplifier/SKILL.md");
 
-  assert.doesNotMatch(contract, /shorter words are always simpler/i);
   assert.doesNotMatch(
     contract,
-    /earlier unmerged branch revisions create a compatibility contract/i,
+    /made unnecessary by clearer names(?:(?!shorter\s+word\s+is\s+not\s+simpler)[\s\S])*keep useful boundaries/i,
+  );
+  assert.doesNotMatch(
+    contract,
+    /## Implementation Lens(?:(?!existed\s+only\s+earlier\s+on\s+the\s+current\s+unshipped\s+branch)[\s\S])*keep useful boundaries/i,
   );
 });
 
