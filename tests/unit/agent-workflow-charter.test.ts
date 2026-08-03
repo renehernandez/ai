@@ -89,6 +89,11 @@ test("GREEN canonical-ownership: the charter validation gate runs from the nativ
   assert.match(validator, /canonical owner/i);
   assert.match(contracts, /principles:/);
   assert.match(contracts, /contract-specific pressure scenario/i);
+  assert.match(contracts, /const minimalReaderBinding =/);
+  assert.doesNotMatch(
+    contracts,
+    /const (?:changeRequest|simplification)ReaderBinding =/,
+  );
 });
 
 test("RED charter-gate: contract-free staged behavior changes fail closed", () => {

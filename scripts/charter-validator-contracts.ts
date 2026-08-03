@@ -18,7 +18,7 @@ const lifecycleReaderBinding = {
   module: "../../scripts/charter-validator-reader.ts",
   name: "read",
 } as const;
-const changeRequestReaderBinding = {
+const minimalReaderBinding = {
   allowedModules: [
     "node:assert/strict",
     "node:test",
@@ -45,18 +45,6 @@ const charterReaderBinding = {
   module: "../../scripts/charter-validator-reader.ts",
   name: "read",
 } as const;
-const simplificationReaderBinding = {
-  allowedModules: [
-    "node:assert/strict",
-    "node:test",
-    "../../scripts/charter-validator-reader.ts",
-  ],
-  forbidDynamicModuleAccess: true,
-  kind: "import",
-  module: "../../scripts/charter-validator-reader.ts",
-  name: "read",
-} as const;
-
 const canonicalRuleOwners = new Set([
   "rules/agent-development-workflow-charter.md",
   "rules/agent-surface-routing.md",
@@ -164,7 +152,7 @@ const behaviorScenarioContracts = {
     owns: (change: Change) => change.path === "skills/code-simplifier/SKILL.md",
     redEvidence: {
       source: {
-        binding: simplificationReaderBinding,
+        binding: minimalReaderBinding,
         callee: /^read$/,
         text: /\(["']skills\/code-simplifier\/SKILL\.md["']\)/,
       },
@@ -172,7 +160,7 @@ const behaviorScenarioContracts = {
     },
     greenEvidence: {
       source: {
-        binding: simplificationReaderBinding,
+        binding: minimalReaderBinding,
         callee: /^read$/,
         text: /\(["']skills\/code-simplifier\/SKILL\.md["']\)/,
       },
@@ -308,7 +296,7 @@ const behaviorScenarioContracts = {
     },
     greenEvidence: {
       source: {
-        binding: changeRequestReaderBinding,
+        binding: minimalReaderBinding,
         callee: /^read$/,
         text: /\(["']skills\/change-request-create\//,
       },
