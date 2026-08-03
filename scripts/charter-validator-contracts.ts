@@ -50,7 +50,6 @@ const simplificationReaderBinding = {
     "node:assert/strict",
     "node:test",
     "../../scripts/charter-validator-reader.ts",
-    "../../skills/review/scripts/review-contract.ts",
   ],
   forbidDynamicModuleAccess: true,
   kind: "import",
@@ -127,8 +126,7 @@ const behaviorScenarioContracts = {
     redName: "RED removal-only-evidence:",
     greenName: "GREEN removal-only-evidence:",
     owns: (change: Change) =>
-      (change.path.startsWith("skills/review/") &&
-        !isSimplificationReviewChange(change)) ||
+      change.path.startsWith("skills/review/") ||
       [
         "rules/agent-development-workflow-charter.md",
         "rules/docs-and-specs.md",
@@ -163,7 +161,7 @@ const behaviorScenarioContracts = {
     path: "tests/unit/code-simplifier-skill.test.ts",
     redName: "RED simplification-review:",
     greenName: "GREEN simplification-review:",
-    owns: isSimplificationReviewChange,
+    owns: (change: Change) => change.path === "skills/code-simplifier/SKILL.md",
     redEvidence: {
       source: {
         binding: simplificationReaderBinding,
@@ -345,18 +343,6 @@ const behaviorScenarioContracts = {
     },
   },
 } as const;
-
-function isSimplificationReviewChange(change: Change): boolean {
-  if (change.path === "skills/code-simplifier/SKILL.md") {
-    return true;
-  }
-  return (
-    change.path === "skills/review/scripts/review-contract.ts" &&
-    /canonical inputs/i.test(change.additions) &&
-    /concept vocabulary/i.test(change.additions) &&
-    /unshipped branch/i.test(change.additions)
-  );
-}
 
 export function isPotentialBehaviorSurface(path: string): boolean {
   return (

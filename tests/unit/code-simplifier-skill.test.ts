@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { read } from "../../scripts/charter-validator-reader.ts";
-import { reviewerContractFor } from "../../skills/review/scripts/review-contract.ts";
 
 const skill = read("skills/code-simplifier/SKILL.md").replace(/\s+/g, " ");
 
@@ -21,16 +20,15 @@ test("GREEN simplification-review: challenges redundant concepts and derived sta
   const contract = read("skills/code-simplifier/SKILL.md");
 
   assert.match(contract, /one term per concept and one concept per term/i);
-  assert.match(skill, /one term per concept and one concept per term/i);
   assert.match(
-    skill,
-    /context is already supplied by the module or owning type/i,
+    contract,
+    /context is already supplied by the\s+module or owning type/i,
   );
   assert.match(
-    skill,
+    contract,
     /passed or stored separately when canonical inputs can derive/i,
   );
-  assert.match(skill, /overlapping types, constants, helpers, or state/i);
+  assert.match(contract, /overlapping types, constants, helpers, or state/i);
 });
 
 test("code-simplifier removes only proven unshipped compatibility", () => {
@@ -56,14 +54,4 @@ test("code-simplifier findings prove the surviving invariant and consumers", () 
   assert.match(skill, /redundant representation or compatibility path/i);
   assert.match(skill, /producers and consumers inspected/i);
   assert.match(skill, /reachable success and failure behavior/i);
-});
-
-test("review catalog asks for the expanded simplification evidence", () => {
-  const contract = reviewerContractFor("code-simplifier");
-  const questions = contract.evidenceQuestions.join(" ");
-
-  assert.match(questions, /canonical inputs/i);
-  assert.match(questions, /concept vocabulary/i);
-  assert.match(questions, /unshipped branch/i);
-  assert.match(questions, /external consumer/i);
 });

@@ -112,17 +112,15 @@ test("GREEN charter-gate: repository validation executes exact staged and source
   assert.deepEqual(validateCharterRepository(root), []);
 });
 
-test("charter gate routes simplification-review changes to their own executable contract", () => {
+test("charter gate routes code-simplifier changes to their own executable contract", () => {
   const skill = read("skills/code-simplifier/SKILL.md");
   const scenario = read("tests/unit/code-simplifier-skill.test.ts");
-  const catalog = read("skills/review/scripts/review-contract.ts");
 
   assert.deepEqual(
     validateCharterFixture(
       root,
       {
         "skills/code-simplifier/SKILL.md": skill,
-        "skills/review/scripts/review-contract.ts": catalog,
         "tests/unit/code-simplifier-skill.test.ts": scenario,
       },
       true,
