@@ -45,6 +45,18 @@ const charterReaderBinding = {
   module: "../../scripts/charter-validator-reader.ts",
   name: "read",
 } as const;
+const simplificationReaderBinding = {
+  allowedModules: [
+    "node:assert/strict",
+    "node:test",
+    "../../scripts/charter-validator-reader.ts",
+    "../../skills/review/scripts/review-contract.ts",
+  ],
+  forbidDynamicModuleAccess: true,
+  kind: "import",
+  module: "../../scripts/charter-validator-reader.ts",
+  name: "read",
+} as const;
 
 const canonicalRuleOwners = new Set([
   "rules/agent-development-workflow-charter.md",
@@ -115,7 +127,8 @@ const behaviorScenarioContracts = {
     redName: "RED removal-only-evidence:",
     greenName: "GREEN removal-only-evidence:",
     owns: (change: Change) =>
-      change.path.startsWith("skills/review/") ||
+      (change.path.startsWith("skills/review/") &&
+        !isSimplificationReviewChange(change)) ||
       [
         "rules/agent-development-workflow-charter.md",
         "rules/docs-and-specs.md",
@@ -143,6 +156,29 @@ const behaviorScenarioContracts = {
         callee: /^validateTechnicalReadinessCheckpoint$/,
       },
       assertion: { callee: /^assert\.doesNotThrow$/ },
+    },
+  },
+  "simplification-review": {
+    principles: ["canonical-ownership", "semantic-delivery"],
+    path: "tests/unit/code-simplifier-skill.test.ts",
+    redName: "RED simplification-review:",
+    greenName: "GREEN simplification-review:",
+    owns: isSimplificationReviewChange,
+    redEvidence: {
+      source: {
+        binding: simplificationReaderBinding,
+        callee: /^read$/,
+        text: /\(["']skills\/code-simplifier\/SKILL\.md["']\)/,
+      },
+      assertion: { callee: /^assert\.doesNotMatch$/ },
+    },
+    greenEvidence: {
+      source: {
+        binding: simplificationReaderBinding,
+        callee: /^read$/,
+        text: /\(["']skills\/code-simplifier\/SKILL\.md["']\)/,
+      },
+      assertion: { callee: /^assert\.match$/ },
     },
   },
   "nitro-raw-evidence": {
@@ -309,6 +345,18 @@ const behaviorScenarioContracts = {
     },
   },
 } as const;
+
+function isSimplificationReviewChange(change: Change): boolean {
+  if (change.path === "skills/code-simplifier/SKILL.md") {
+    return true;
+  }
+  return (
+    change.path === "skills/review/scripts/review-contract.ts" &&
+    /canonical inputs/i.test(change.additions) &&
+    /concept vocabulary/i.test(change.additions) &&
+    /unshipped branch/i.test(change.additions)
+  );
+}
 
 export function isPotentialBehaviorSurface(path: string): boolean {
   return (

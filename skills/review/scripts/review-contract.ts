@@ -133,6 +133,8 @@ export const reviewerCatalog: Readonly<Record<ReviewerId, ReviewerContract>> = {
     evidenceQuestions: [
       "For planning artifacts, can existing owners or a smaller coherent delivery shape achieve the same accepted outcome without duplicated contracts or setup-only machinery?",
       "Can the exact diff express the same behavior with fewer concepts or a clearer project-native flow?",
+      "Can separately passed or stored values derive from canonical inputs, or can overlapping types and terms collapse into one concept vocabulary?",
+      "Does the diff preserve compatibility or narrative only for unshipped branch history, with no accepted contract or external consumer?",
       "Does a proposed simplification preserve every accepted contract boundary and reachable success and failure state?",
     ],
     passedWhen:
