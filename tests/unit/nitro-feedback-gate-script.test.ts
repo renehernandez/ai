@@ -564,6 +564,7 @@ test("GREEN nitro-raw-evidence: derives an exact-head completion receipt", () =>
   assert.match(result.stdout, /"completion_note_id": 14/);
   assert.match(result.stdout, /"completion_received": true/);
   assert.match(result.stdout, /"gate_outcome": "passed"/);
+  assert.doesNotMatch(result.stdout, /hostedFeedbackSemanticReview/);
 });
 
 test("validate-gitlab-evidence rejects a push after the latest request", () => {

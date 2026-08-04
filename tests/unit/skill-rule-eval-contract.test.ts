@@ -146,6 +146,24 @@ test("Finish evaluation permits provider routing while denying terminal actions"
   assert.equal(scenario.allowRepositoryWrite, false);
 });
 
+test("Nitro evaluation preserves read-only collection and feedback routing", () => {
+  const scenario = selectedScenarios("nitro-feedback-routing")[0];
+  assert.deepEqual(scenario.skills, ["nitro-review-feedback"]);
+  assert.ok(scenario.required.includes("exact-head"));
+  assert.ok(scenario.required.includes("structured-disposition"));
+  assert.ok(scenario.forbidden.includes("provider-write"));
+  assert.equal(scenario.allowRepositoryWrite, false);
+});
+
+test("change request evaluation preserves description ownership without writes", () => {
+  const scenario = selectedScenarios("change-request-description-owner")[0];
+  assert.deepEqual(scenario.skills, ["change-request-create"]);
+  assert.ok(scenario.required.includes("reviewer-facing-description"));
+  assert.ok(scenario.required.includes("human-owned-sections"));
+  assert.ok(scenario.forbidden.includes("provider-write"));
+  assert.equal(scenario.allowRepositoryWrite, false);
+});
+
 test("review evaluation binds read-only findings to an exact target", () => {
   const scenario = selectedScenarios("review-exact-target")[0];
   assert.ok(scenario.required.includes("exact-target"));

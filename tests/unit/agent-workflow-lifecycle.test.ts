@@ -405,7 +405,9 @@ test("GREEN semantic-delivery: Nitro requests follow every source-head push thro
   assert.match(nitroPolicy, /expectedNitroRequest/);
   assert.match(feedbackGate, /nitro-request-policy/);
   assert.match(feedbackGate, /requestObservedHeadSha !== gate\.headSha/);
-  assert.match(feedback, /canonical.*Nitro rule|Nitro rule.*canonical/is);
+  assert.match(feedback, /rules\/fullscript\/nitro-review\.md/);
+  assert.match(feedback, /Finish owns provider requests/i);
+  assert.match(feedback, /read-only/i);
   assert.match(finish, /rules\/fullscript\/nitro-review\.md/);
   assert.match(finish, /owns request timing.*latest-head\s+closure/is);
   assert.match(nitroRule, /Target-only movement/i);
