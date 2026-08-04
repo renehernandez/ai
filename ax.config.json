@@ -4,6 +4,7 @@
     "retiredSkills": [
       "agent-workspace",
       "codex-review-feedback",
+      "compound",
       "github-pr-create",
       "glab-mr-create",
       "merge-followthrough",
@@ -136,7 +137,6 @@
             "change-request-create",
             "code-quality-review",
             "code-simplifier",
-            "compound",
             "deslop",
             "diff-review",
             "doc-smith",

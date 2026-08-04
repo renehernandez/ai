@@ -155,7 +155,7 @@ test("RED charter-gate: contract-free staged behavior changes fail closed", () =
   ]);
 });
 
-test("GREEN charter-gate: repository validation executes exact staged and source-propagated behavior contracts", () => {
+test("GREEN charter-gate: repository validation executes exact staged, profile, and source-propagated behavior contracts", () => {
   assert.match(
     read("scripts/charter-validator-contracts.ts"),
     /currentManagedSkillCoverageGaps/,

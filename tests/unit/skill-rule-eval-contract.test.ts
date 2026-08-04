@@ -250,6 +250,20 @@ test("operational evaluation separates runtime, readiness, and brief owners", ()
   assert.equal(scenario.allowRepositoryWrite, false);
 });
 
+test("research evaluation selects one primary lane and keeps Compound retired", () => {
+  const scenario = selectedScenarios("research-lane-routing")[0];
+  assert.deepEqual(scenario.skills, [
+    "research",
+    "research-content",
+    "research-technical",
+  ]);
+  assert.ok(scenario.required.includes("single-primary-lane"));
+  assert.ok(scenario.required.includes("source-boundary"));
+  assert.ok(scenario.required.includes("current-evidence"));
+  assert.ok(scenario.forbidden.includes("downstream-implementation"));
+  assert.deepEqual(plannedSkillRetirements, ["compound"]);
+});
+
 test("review evaluation binds read-only findings to an exact target", () => {
   const scenario = selectedScenarios("review-exact-target")[0];
   assert.ok(scenario.required.includes("exact-target"));

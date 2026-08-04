@@ -22,7 +22,6 @@ const retainedSpecialists = [
   "change-request-create",
   "code-quality-review",
   "code-simplifier",
-  "compound",
   "deslop",
   "diff-review",
   "doc-smith",
@@ -84,10 +83,12 @@ test("runtime profiles install five modes and bounded retained specialists", () 
   );
   assert.equal(config.runtime.hooks.sourceDir, "hooks");
   assert.ok(config.runtime.retiredSkills.includes("agent-workspace"));
+  assert.ok(config.runtime.retiredSkills.includes("compound"));
   assert.equal(
     existsSync(join(root, "skills", "agent-workspace", "SKILL.md")),
     false,
   );
+  assert.equal(configuredNames.includes("compound"), false);
 });
 
 test("review routing is owned by Review and Finish without orphaned policy data", () => {

@@ -28,7 +28,11 @@ lifecycle authority or carry a write request past this turn.
    owns the complete Project Brief and stops before planning or issue breakdown.
 4. Honor an explicitly named, compatible read-only specialist instead of
    replacing it with generic exploration.
-5. Otherwise orient the user with the objective, observed facts, material
+5. For an explicitly requested retrospective, reusable learning, or solution
+   note, inspect completed-work evidence and clarify the non-obvious reader
+   outcome here. Route accepted document authoring to `doc-smith`; do not create
+   an automatic post-task mode or mutate the system merely because work ended.
+6. Otherwise orient the user with the objective, observed facts, material
    options, assumptions, and no more than three decision-relevant questions.
 
 Research, security discovery, and project-health techniques may provide
