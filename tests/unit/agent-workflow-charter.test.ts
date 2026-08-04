@@ -15,6 +15,10 @@ import {
   validateCharterFixture,
   validateCharterRepository,
 } from "../../scripts/charter-validate.ts";
+import {
+  isPotentialBehaviorSurface,
+  validateBehaviorContractCoverage,
+} from "../../scripts/charter-validator-contracts.ts";
 import { read } from "../../scripts/charter-validator-reader.ts";
 
 const root = process.cwd();
@@ -112,6 +116,20 @@ test("RED charter-gate: contract-free staged behavior changes fail closed", () =
   assert.deepEqual(errors, [
     "scripts/charter-validate.ts: contract charter-gate requires staged executable RED and GREEN scenarios in tests/unit/agent-workflow-charter.test.ts",
   ]);
+
+  const authorityErrors = validateCharterFixture(
+    root,
+    {
+      "rules/agent-development-workflow-charter.md":
+        "Authority follows the accepted outcome and action path.\n",
+      "tests/unit/agent-workflow-charter.test.ts": invalidScenario,
+    },
+    true,
+  );
+
+  assert.deepEqual(authorityErrors, [
+    "rules/agent-development-workflow-charter.md: contract charter-gate requires staged executable RED and GREEN scenarios in tests/unit/agent-workflow-charter.test.ts",
+  ]);
 });
 
 test("GREEN charter-gate: repository validation executes exact staged and source-propagated behavior contracts", () => {
@@ -164,6 +182,41 @@ test("GREEN progressive-disclosure: ordinary product scripts remain outside the 
   } finally {
     rmSync(fixtureRoot, { recursive: true, force: true });
   }
+});
+
+test("atomic plans remain governed artifacts rather than reusable behavior surfaces", () => {
+  assert.equal(
+    isPotentialBehaviorSurface(".agents/plans/intent-based-authority.md"),
+    false,
+  );
+  assert.equal(isPotentialBehaviorSurface(".agents/commands/review.md"), true);
+});
+
+test("removal-only policy remains structurally bound to exact-head review evidence", () => {
+  for (const path of [
+    "rules/agent-development-workflow-charter.md",
+    "rules/investigation-and-implementation.md",
+  ]) {
+    const policy = read(path);
+    assert.match(policy, /removal-only MR/);
+    assert.match(policy, /target-base-to-\s*source-head Git\s+diff/);
+    assert.match(policy, /exact-head\s+`diff-review`/);
+  }
+});
+
+test("exact-head-only removal policy changes route to the removal evidence contract", () => {
+  const change = {
+    path: "rules/investigation-and-implementation.md",
+    content: "exact-head `diff-review`",
+    additions: "exact-head `diff-review`",
+  };
+  const errors: string[] = [];
+
+  validateBehaviorContractCoverage([change], [change], errors);
+
+  assert.ok(
+    errors.some((error) => error.includes("contract removal-only-evidence")),
+  );
 });
 
 test("future validators and agent prompts require explicit owners", () => {

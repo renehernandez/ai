@@ -5,6 +5,8 @@ import {
 
 const charterPath = "rules/agent-development-workflow-charter.md";
 const contractHeaderPattern = /^\/\/ charter-contracts: (.+)$/m;
+const removalOnlyPolicyPattern =
+  /(?:\bremoval-only\b|\btarget-base-to-\s*source-head\b|\bexact-head\s+`diff-review`)/i;
 const lifecycleReaderBinding = {
   allowedModules: [
     "node:assert/strict",
@@ -127,12 +129,15 @@ const behaviorScenarioContracts = {
     greenName: "GREEN removal-only-evidence:",
     owns: (change: Change) =>
       change.path.startsWith("skills/review/") ||
-      [
+      (["rules/docs-and-specs.md", "rules/git-and-review.md"].includes(
+        change.path,
+      ) &&
+        removalOnlyPolicyPattern.test(change.additions)) ||
+      ([
         "rules/agent-development-workflow-charter.md",
-        "rules/docs-and-specs.md",
-        "rules/git-and-review.md",
         "rules/investigation-and-implementation.md",
-      ].includes(change.path),
+      ].includes(change.path) &&
+        removalOnlyPolicyPattern.test(change.additions)),
     redEvidence: {
       source: {
         binding: {
@@ -267,7 +272,7 @@ const behaviorScenarioContracts = {
     greenName: "GREEN authority:",
     owns: (change: Change) =>
       ["AGENTS.md", "instructions/AGENTS.md"].includes(change.path) ||
-      /^(?:skills\/(?:execute|finish|plan)\/|rules\/docs-and-specs\.md$|rules\/investigation-and-implementation\.md$)/.test(
+      /^(?:skills\/(?:brainstorming|execute|finish|plan)\/|rules\/docs-and-specs\.md$|rules\/investigation-and-implementation\.md$)/.test(
         change.path,
       ),
     redEvidence: {
@@ -319,7 +324,10 @@ const behaviorScenarioContracts = {
     redName: "RED change-request-owner:",
     greenName: "GREEN change-request-owner:",
     owns: (change: Change) =>
-      change.path === "ax.config.json" ||
+      (change.path === "ax.config.json" &&
+        /(?:change-request-create|github-pr-create|glab-mr-create)/.test(
+          change.additions,
+        )) ||
       change.path.startsWith("skills/change-request-create/") ||
       change.path.startsWith("skills/github-pr-create/") ||
       change.path.startsWith("skills/glab-mr-create/"),
@@ -337,6 +345,56 @@ const behaviorScenarioContracts = {
         binding: minimalReaderBinding,
         callee: /^read$/,
         text: /\(["']skills\/change-request-create\//,
+      },
+      assertion: { callee: /^assert\.match$/ },
+    },
+  },
+  "hook-registration": {
+    principles: ["canonical-ownership", "authority"],
+    path: "tests/unit/hook-registration-contract.test.ts",
+    redName: "RED hook-registration:",
+    greenName: "GREEN hook-registration:",
+    owns: (change: Change) =>
+      [
+        "hooks/README.md",
+        "hooks/block-delete-outside-cwd.ts",
+        "scripts/ax/hook-registration.ts",
+      ].includes(change.path) ||
+      (change.path === "ax.config.json" &&
+        /"registrations"/.test(change.additions)) ||
+      (change.path === "scripts/ax/runtime-sync.ts" &&
+        /hookRegistration|hook-registration/.test(change.additions)),
+    redEvidence: {
+      source: {
+        binding: {
+          allowedModules: [
+            "node:assert/strict",
+            "node:test",
+            "../../scripts/ax/hook-registration.ts",
+          ],
+          forbidDynamicModuleAccess: true,
+          kind: "import",
+          module: "../../scripts/ax/hook-registration.ts",
+          name: "assertRegistrationTargetSafe",
+        },
+        callee: /^assertRegistrationTargetSafe$/,
+      },
+      assertion: { callee: /^assert\.throws$/ },
+    },
+    greenEvidence: {
+      source: {
+        binding: {
+          allowedModules: [
+            "node:assert/strict",
+            "node:test",
+            "../../scripts/ax/hook-registration.ts",
+          ],
+          forbidDynamicModuleAccess: true,
+          kind: "import",
+          module: "../../scripts/ax/hook-registration.ts",
+          name: "renderHookRegistrationDocument",
+        },
+        callee: /^renderHookRegistrationDocument$/,
       },
       assertion: { callee: /^assert\.match$/ },
     },
@@ -376,7 +434,8 @@ export function isPotentialBehaviorSurface(path: string): boolean {
     path === "ax.config.json" ||
     path === "lefthook.yml" ||
     path === "package.json" ||
-    /^(?:instructions|rules|skills|\.agents|hooks|automations)\//.test(path) ||
+    /^(?:instructions|rules|skills|hooks|automations)\//.test(path) ||
+    (path.startsWith(".agents/") && !path.startsWith(".agents/plans/")) ||
     path.startsWith("scripts/charter-") ||
     path === "scripts/skill-validate.ts" ||
     /^scripts\/.*(?:(?:agent|skill).*(?:validate|validator)|(?:validate|validator).*(?:agent|skill)).*\.ts$/.test(

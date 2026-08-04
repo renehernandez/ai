@@ -7,14 +7,143 @@ import { read } from "../../scripts/charter-validator-reader.ts";
 
 const root = process.cwd();
 
+test("RED authority: consumers do not redefine the accepted-proposal contract or magic confirmation words", () => {
+  const implementation = read("rules/investigation-and-implementation.md");
+  const entrypoint = read("AGENTS.md");
+  const portableEntrypoint = read("instructions/AGENTS.md");
+  const brainstorming = read("skills/brainstorming/SKILL.md");
+  const execute = read("skills/execute/SKILL.md");
+  const finish = read("skills/finish/SKILL.md");
+  const finishContract = read("skills/finish/scripts/finish-contract.ts");
+  const gitRule = read("rules/git-and-review.md");
+
+  for (const consumer of [
+    entrypoint,
+    portableEntrypoint,
+    brainstorming,
+    execute,
+    finish,
+    gitRule,
+  ]) {
+    assert.doesNotMatch(
+      consumer,
+      /^## Resolve authority from accepted proposals$/m,
+    );
+    assert.doesNotMatch(consumer, /An accepted proposal is the outcome/);
+  }
+  for (const text of [
+    implementation,
+    entrypoint,
+    portableEntrypoint,
+    execute,
+    finish,
+    gitRule,
+  ]) {
+    assert.doesNotMatch(text, /immediate `proceed`.*merge authority/is);
+    assert.doesNotMatch(text, /standalone or ambiguous `proceed`/i);
+  }
+  assert.doesNotMatch(
+    implementation,
+    /Merge,\s+deployment, and cleanup require explicit language/i,
+  );
+  assert.doesNotMatch(finish, /\| `(?:implement|merge|deploy|clean up)/);
+  assert.doesNotMatch(finishContract, /merge:\s*!mergeDenied\s*&&\s*merge/);
+});
+
+test("GREEN authority: one canonical accepted-proposal owner supplies checkpoints and terminal boundaries", () => {
+  const charter = read("rules/agent-development-workflow-charter.md");
+  const implementation = read("rules/investigation-and-implementation.md");
+  const entrypoint = read("AGENTS.md");
+  const portableEntrypoint = read("instructions/AGENTS.md");
+  const brainstorming = read("skills/brainstorming/SKILL.md");
+  const execute = read("skills/execute/SKILL.md");
+  const finish = read("skills/finish/SKILL.md");
+  const finishContract = read("skills/finish/scripts/finish-contract.ts");
+  const gitRule = read("rules/git-and-review.md");
+
+  assert.match(
+    implementation,
+    /^## Resolve authority from accepted proposals$/m,
+  );
+  assert.match(
+    implementation,
+    /An\s+accepted proposal is the outcome and bounded action path/,
+  );
+  assert.match(
+    implementation,
+    /selected delivery shape\s+supplies its normal checkpoint/,
+  );
+  assert.match(implementation, /Use the narrowest coherent interpretation/);
+  assert.match(implementation, /Reclassify each new user message/);
+  assert.match(
+    implementation,
+    /observation, correction, question, or diagnostic fact.*does not authorize a broader inferred action/is,
+  );
+  assert.match(implementation, /restacking or rebasing several MRs/);
+  assert.match(
+    implementation,
+    /closing, canceling, superseding, or abandoning an existing PR\/MR/,
+  );
+  assert.match(
+    implementation,
+    /Narrow investigation.*contract-preserving fixes remain authorized/is,
+  );
+  assert.match(implementation, /no confirmation word has\s+special authority/);
+  assert.match(charter, /Authority follows the outcome and action path/);
+
+  for (const consumer of [
+    entrypoint,
+    portableEntrypoint,
+    brainstorming,
+    execute,
+    finish,
+  ]) {
+    assert.match(consumer, /investigation-and-implementation\.md/);
+  }
+  assert.match(execute, /handoff is not another permission boundary/);
+  assert.match(finish, /Any unambiguous contextual acceptance/);
+  assert.match(
+    finishContract,
+    /change\.classification === "patch-equivalent"[\s\S]*return authorized;[\s\S]*return \[\];/,
+  );
+  assert.match(
+    finishContract,
+    /const merge =[\s\S]*&&\s*!mergeDenied;[\s\S]*\n\s*merge,/,
+  );
+  assert.match(
+    finish,
+    /Replacement or consolidation authority does not dispose of existing review/,
+  );
+  assert.match(implementation, /one unambiguous.*MR and is\s+consumed/is);
+  assert.match(
+    implementation,
+    /multi-MR sequence\s+requires the user's own aggregate or sequential scope/is,
+  );
+  assert.match(
+    implementation,
+    /material.*change invalidates authority.*effective diff changed/is,
+  );
+  assert.match(gitRule, /one exact action and target/);
+  assert.match(gitRule, /No confirmation word has\s+special authority/);
+  assert.doesNotMatch(gitRule, /immediate `proceed`.*merge/is);
+});
+
 test("RED authority: technical readiness cannot replace explicit POC disposal authority", () => {
   const finish = read("skills/finish/SKILL.md");
   const implementation = read("rules/investigation-and-implementation.md");
 
   for (const text of [finish, implementation]) {
     assert.doesNotMatch(text, /automatically close(?:s|d)? .*POC/i);
-    assert.match(text, /explicitly requests closure|explicit closure/i);
   }
+  assert.match(
+    implementation,
+    /POC disposal require.*exact action and target/is,
+  );
+  assert.match(finish, /exact POC-disposal action and artifact/i);
+  assert.match(
+    finish,
+    /exact closure proposal.*stack-breakdown proposal.*first action is closing that named POC/is,
+  );
 });
 
 test("RED authority: a passing Nitro receipt cannot bypass Finish semantic review", () => {
@@ -117,11 +246,19 @@ test("GREEN authority: POCs capture learnings and remain open until explicit use
   const execute = read("skills/execute/SKILL.md");
   const finish = read("skills/finish/SKILL.md");
 
-  for (const text of [implementation, docs, execute, finish]) {
+  for (const text of [implementation, docs, execute]) {
     assert.match(text, /POC/i);
     assert.match(text, /remain.*open|leave.*open/is);
     assert.match(text, /read(?:y|iness) to proceed\s+to stack breakdown/i);
   }
+  assert.match(
+    finish,
+    /Technical readiness and personal acceptance leave it open/,
+  );
+  assert.match(
+    finish,
+    /stack-breakdown proposal.*first action is closing that named POC/is,
+  );
   assert.match(implementation, /reconcile.*OpenSpec/is);
   assert.match(execute, /capture.*learning/is);
 });

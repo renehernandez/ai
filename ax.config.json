@@ -32,7 +32,19 @@
       "targets": {
         "claude": "~/.claude/hooks",
         "codex": "~/.codex/hooks"
-      }
+      },
+      "registrations": [
+        {
+          "id": "block-delete-outside-cwd",
+          "event": "PreToolUse",
+          "matcher": "^Bash$",
+          "command": "pnpm exec tsx ~/.agents/hooks/block-delete-outside-cwd.ts",
+          "targets": {
+            "claude": "~/.claude/settings.json",
+            "codex": "~/.codex/hooks.json"
+          }
+        }
+      ]
     },
     "configs": {
       "codex": {

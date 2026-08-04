@@ -11,6 +11,7 @@ import {
   type WorktreeIdentity,
 } from "../../skills/execute/scripts/execution-contract.ts";
 import {
+  mergeArtifactScopesAfterEffectiveDiffChange,
   resolveProvider,
   terminalAuthority,
 } from "../../skills/finish/scripts/finish-contract.ts";
@@ -124,7 +125,8 @@ test("new tasks explore before later mutation authority", () => {
   );
   assert.match(agents, /Every new substantive task begins in Explore/);
   assert.match(agents, /opening request to fix, implement, change, or build/);
-  assert.match(rules, /later explicit instruction such as "proceed"/);
+  assert.match(rules, /infer later work authority from the proposal/);
+  assert.match(rules, /not from prescribed confirmation words/);
   assert.match(
     rules,
     /materially different requested outcome creates a new task boundary/,
@@ -135,7 +137,7 @@ test("new tasks explore before later mutation authority", () => {
   );
   assert.match(
     rules,
-    /continue\s+within that granted scope without asking for renewed permission/,
+    /Continue\s+across required Plan, Execute, Review, and Finish handoffs to the accepted\s+checkpoint without renewed permission/,
   );
   assert.match(
     rules,
@@ -143,11 +145,11 @@ test("new tasks explore before later mutation authority", () => {
   );
   assert.match(
     rules,
-    /explicit recommendation bundle.*every recommendation in that bundle as accepted/,
+    /response clearly accepts a recommendation bundle, accept the bundle\s+it refers to/,
   );
   assert.match(
     rules,
-    /Existing\s+authenticated commands do not require renewed approval; credential entry or\s+a new credential grant remains a human action/,
+    /Existing\s+authenticated commands need no renewed approval, while credential entry or\s+a new credential grant remains a human action/,
   );
   assert.match(explore, /invoke `brainstorming` by default/);
 });
@@ -199,7 +201,19 @@ test("REFACTOR route closes atomic-plan and implicit-merge loopholes", () => {
     ({ id }) => id === "explicit-terminal-authority-is-narrow",
   );
   assert.ok(narrow?.request);
-  assert.deepEqual(terminalAuthority(narrow.request), narrow.expected);
+  assert.deepEqual(
+    terminalAuthority(
+      narrow.request,
+      {},
+      {
+        mergeArtifacts: {
+          candidateArtifactScopes: ["MR !219"],
+          currentArtifactScope: "MR !219",
+        },
+      },
+    ),
+    { ...narrow.expected, mergeArtifactScopes: ["MR !219"] },
+  );
 });
 
 test("Plan keeps atomic delivery in one change set and rehearses OpenSpec", () => {
@@ -670,64 +684,114 @@ test("Finish resolves provider precedence and never infers merge from finish", (
     },
   );
   assert.equal(terminalAuthority("please deploy this release").deploy, true);
-  assert.equal(terminalAuthority("merge when green").merge, true);
-  assert.deepEqual(terminalAuthority("proceed to merge"), {
+  const singleMr = {
+    mergeArtifacts: {
+      candidateArtifactScopes: ["MR !219"],
+      currentArtifactScope: "MR !219",
+    },
+  };
+  assert.deepEqual(terminalAuthority("merge when green", {}, singleMr), {
+    publish: false,
+    merge: true,
+    deploy: false,
+    cleanup: false,
+    mergeArtifactScopes: ["MR !219"],
+  });
+  assert.deepEqual(terminalAuthority("proceed to merge", {}, singleMr), {
     publish: true,
     merge: true,
     deploy: false,
     cleanup: false,
+    mergeArtifactScopes: ["MR !219"],
   });
+  assert.equal(terminalAuthority("merge when green").merge, false);
   assert.deepEqual(terminalAuthority("proceed"), {
     publish: true,
     merge: false,
     deploy: false,
     cleanup: false,
   });
-  assert.deepEqual(
-    terminalAuthority(
-      "proceed",
-      {},
-      {
-        pendingMerge: {
-          artifactScope: "MR !219",
-          immediatelyPreceding: true,
-          solePendingAction: true,
-          awaitingApproval: true,
+  for (const assent of ["yes", "agreed", "proceed"]) {
+    assert.deepEqual(
+      terminalAuthority(
+        assent,
+        {},
+        {
+          pendingMerge: {
+            artifactScopes: ["MR !219"],
+            candidateArtifactScopes: ["MR !219"],
+            contextuallyAccepted: true,
+            immediatelyPreceding: true,
+            solePendingAction: true,
+            awaitingApproval: true,
+          },
         },
+      ),
+      {
+        publish: assent === "proceed",
+        merge: true,
+        deploy: false,
+        cleanup: false,
+        mergeArtifactScopes: ["MR !219"],
       },
-    ),
-    {
-      publish: true,
-      merge: true,
-      deploy: false,
-      cleanup: false,
-      mergeArtifactScope: "MR !219",
-    },
-  );
+    );
+  }
   for (const pendingMerge of [
     {
-      artifactScope: "MR !219",
+      artifactScopes: ["MR !219"],
+      candidateArtifactScopes: ["MR !219"],
+      contextuallyAccepted: true,
       immediatelyPreceding: false,
       solePendingAction: true,
       awaitingApproval: true,
     },
     {
-      artifactScope: "MR !219",
+      artifactScopes: ["MR !219"],
+      candidateArtifactScopes: ["MR !219"],
+      contextuallyAccepted: true,
       immediatelyPreceding: true,
       solePendingAction: false,
       awaitingApproval: true,
     },
     {
-      artifactScope: "",
+      artifactScopes: [],
+      candidateArtifactScopes: ["MR !219"],
+      contextuallyAccepted: true,
       immediatelyPreceding: true,
       solePendingAction: true,
       awaitingApproval: true,
     },
     {
-      artifactScope: "MR !219",
+      artifactScopes: ["MR !219"],
+      candidateArtifactScopes: ["MR !219"],
+      contextuallyAccepted: true,
       immediatelyPreceding: true,
       solePendingAction: true,
       awaitingApproval: false,
+    },
+    {
+      artifactScopes: ["MR !219"],
+      candidateArtifactScopes: ["MR !219"],
+      contextuallyAccepted: false,
+      immediatelyPreceding: true,
+      solePendingAction: true,
+      awaitingApproval: true,
+    },
+    {
+      artifactScopes: ["MR !219", "MR !220"],
+      candidateArtifactScopes: ["MR !219", "MR !220"],
+      contextuallyAccepted: true,
+      immediatelyPreceding: true,
+      solePendingAction: true,
+      awaitingApproval: true,
+    },
+    {
+      artifactScopes: ["MR !219"],
+      candidateArtifactScopes: ["MR !220"],
+      contextuallyAccepted: true,
+      immediatelyPreceding: true,
+      solePendingAction: true,
+      awaitingApproval: true,
     },
   ]) {
     assert.equal(
@@ -735,35 +799,22 @@ test("Finish resolves provider precedence and never infers merge from finish", (
       false,
     );
   }
-  assert.equal(
-    terminalAuthority(
-      "yes",
-      {},
-      {
-        pendingMerge: {
-          artifactScope: "MR !219",
-          immediatelyPreceding: true,
-          solePendingAction: true,
-          awaitingApproval: true,
-        },
-      },
-    ).merge,
-    false,
-  );
-  assert.equal(
+  assert.deepEqual(
     terminalAuthority(
       "proceed but do not merge",
       {},
       {
         pendingMerge: {
-          artifactScope: "MR !219",
+          artifactScopes: ["MR !219"],
+          candidateArtifactScopes: ["MR !219"],
+          contextuallyAccepted: true,
           immediatelyPreceding: true,
           solePendingAction: true,
           awaitingApproval: true,
         },
       },
-    ).merge,
-    false,
+    ),
+    { publish: true, merge: false, deploy: false, cleanup: false },
   );
   assert.equal(terminalAuthority("mark the MRs ready").merge, false);
   assert.equal(terminalAuthority("request all reviews").merge, false);
@@ -783,6 +834,80 @@ test("Finish resolves provider precedence and never infers merge from finish", (
   assert.equal(
     terminalAuthority("proceed to merge request review").merge,
     false,
+  );
+  assert.equal(terminalAuthority("finish", { merge: true }).merge, false);
+  assert.deepEqual(
+    terminalAuthority("finish", {
+      merge: true,
+      mergeArtifactScopes: ["MR !219"],
+    }).mergeArtifactScopes,
+    ["MR !219"],
+  );
+  const stackCandidates = ["MR !219", "MR !220"];
+  assert.deepEqual(
+    terminalAuthority(
+      "merge the selected MRs",
+      {},
+      {
+        mergeArtifacts: {
+          candidateArtifactScopes: stackCandidates,
+          selectedArtifactScopes: stackCandidates,
+          userAuthoredAggregateScope: true,
+        },
+      },
+    ).mergeArtifactScopes,
+    stackCandidates,
+  );
+  assert.equal(
+    terminalAuthority(
+      "merge the selected MRs",
+      {},
+      {
+        mergeArtifacts: {
+          candidateArtifactScopes: stackCandidates,
+          selectedArtifactScopes: stackCandidates,
+        },
+      },
+    ).merge,
+    false,
+  );
+  assert.equal(
+    terminalAuthority(
+      "merge MR !999",
+      {},
+      {
+        mergeArtifacts: {
+          candidateArtifactScopes: stackCandidates,
+          selectedArtifactScopes: ["MR !999"],
+        },
+      },
+    ).merge,
+    false,
+  );
+  assert.deepEqual(
+    mergeArtifactScopesAfterEffectiveDiffChange(
+      stackCandidates,
+      stackCandidates,
+      { classification: "patch-equivalent" },
+    ),
+    stackCandidates,
+  );
+  assert.deepEqual(
+    mergeArtifactScopesAfterEffectiveDiffChange(
+      stackCandidates,
+      stackCandidates,
+      { classification: "material" },
+    ),
+    [],
+  );
+  assert.throws(
+    () =>
+      mergeArtifactScopesAfterEffectiveDiffChange(
+        ["MR !999"],
+        stackCandidates,
+        { classification: "patch-equivalent" },
+      ),
+    /merge_authority_scope_unknown/,
   );
   assert.deepEqual(
     terminalAuthority("do not merge, deploy, publish, or clean up", {

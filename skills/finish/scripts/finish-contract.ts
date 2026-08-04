@@ -25,17 +25,81 @@ export type TerminalAuthority = {
   merge: boolean;
   deploy: boolean;
   cleanup: boolean;
-  mergeArtifactScope?: string;
+  mergeArtifactScopes?: readonly string[];
 };
 
 export type TerminalAuthorityContext = {
   pendingMerge?: {
-    artifactScope: string;
+    artifactScopes: readonly string[];
+    candidateArtifactScopes: readonly string[];
+    contextuallyAccepted: boolean;
     immediatelyPreceding: boolean;
     solePendingAction: boolean;
     awaitingApproval: boolean;
   };
+  mergeArtifacts?: {
+    candidateArtifactScopes: readonly string[];
+    currentArtifactScope?: string;
+    selectedArtifactScopes?: readonly string[];
+    userAuthoredAggregateScope?: boolean;
+  };
 };
+
+export type EffectiveDiffChange =
+  | { classification: "patch-equivalent" }
+  | { classification: "material" };
+
+function normalizedScopes(scopes: readonly string[]): string[] {
+  return [...new Set(scopes.map((scope) => scope.trim()).filter(Boolean))];
+}
+
+function resolveExplicitMergeScopes(
+  mergeArtifacts: NonNullable<TerminalAuthorityContext["mergeArtifacts"]>,
+): string[] {
+  const candidates = normalizedScopes(mergeArtifacts.candidateArtifactScopes);
+  if (candidates.length === 0) {
+    return [];
+  }
+
+  const selected = normalizedScopes(
+    mergeArtifacts.selectedArtifactScopes ?? [],
+  );
+  if (selected.some((scope) => !candidates.includes(scope))) {
+    return [];
+  }
+  if (
+    selected.length > 1 &&
+    mergeArtifacts.userAuthoredAggregateScope !== true
+  ) {
+    return [];
+  }
+  if (selected.length > 0) {
+    return selected;
+  }
+
+  const current = mergeArtifacts.currentArtifactScope?.trim();
+  if (current) {
+    return candidates.includes(current) ? [current] : [];
+  }
+  return candidates.length === 1 ? candidates : [];
+}
+
+export function mergeArtifactScopesAfterEffectiveDiffChange(
+  authorizedArtifactScopes: readonly string[],
+  candidateArtifactScopes: readonly string[],
+  change: EffectiveDiffChange,
+): string[] {
+  const authorized = normalizedScopes(authorizedArtifactScopes);
+  const candidates = normalizedScopes(candidateArtifactScopes);
+  if (authorized.some((scope) => !candidates.includes(scope))) {
+    throw new Error("merge_authority_scope_unknown");
+  }
+  if (change.classification === "patch-equivalent") {
+    return authorized;
+  }
+
+  return [];
+}
 
 function explicitlyRequests(
   request: string,
@@ -63,7 +127,7 @@ function explicitlyRequests(
 
 export function terminalAuthority(
   request: string,
-  projectPolicy: Partial<Omit<TerminalAuthority, "mergeArtifactScope">> = {},
+  projectPolicy: Partial<TerminalAuthority> = {},
   context: TerminalAuthorityContext = {},
 ): TerminalAuthority {
   const normalized = request.toLowerCase();
@@ -78,30 +142,50 @@ export function terminalAuthority(
         new RegExp(`\\b(?:${actionPattern})\\b`).test(segment),
       ),
     );
+
   const pendingMerge = context.pendingMerge;
+  const contextualMergeScopes = pendingMerge
+    ? normalizedScopes(pendingMerge.artifactScopes)
+    : [];
+  const contextualMergeCandidates = pendingMerge
+    ? normalizedScopes(pendingMerge.candidateArtifactScopes)
+    : [];
   const contextualMerge =
-    normalized.trim() === "proceed" &&
-    pendingMerge?.immediatelyPreceding === true &&
+    pendingMerge?.contextuallyAccepted === true &&
+    pendingMerge.immediatelyPreceding === true &&
     pendingMerge.solePendingAction === true &&
     pendingMerge.awaitingApproval === true &&
-    pendingMerge.artifactScope.trim().length > 0;
+    contextualMergeScopes.length === 1 &&
+    contextualMergeCandidates.includes(contextualMergeScopes[0] ?? "");
+
+  const explicitMergeRequested =
+    /\bmerge when green\b|\badd to (?:the )?merge queue\b/.test(normalized) ||
+    explicitlyRequests(normalized, "merge") ||
+    explicitlyRequests(normalized, "ship") ||
+    explicitlyRequests(normalized, "proceed to merge");
+  const explicitMergeScopes = context.mergeArtifacts
+    ? resolveExplicitMergeScopes(context.mergeArtifacts)
+    : [];
+  const policyMergeScopes = normalizedScopes(
+    projectPolicy.mergeArtifactScopes ?? [],
+  );
+  const policyMerge =
+    projectPolicy.merge === true && policyMergeScopes.length > 0;
+  const mergeDenied = denies(
+    "merg(?:e|es|ed|ing)",
+    "ship(?:s|ped|ping)?",
+    "(?:add|adds|added|adding)\\s+(?:it\\s+)?to\\s+(?:the\\s+)?merge queue",
+  );
   const merge =
-    (/\bmerge when green\b|\badd to (?:the )?merge queue\b/.test(normalized) ||
-      explicitlyRequests(normalized, "merge") ||
-      explicitlyRequests(normalized, "ship") ||
-      explicitlyRequests(normalized, "proceed to merge") ||
-      contextualMerge) &&
-    !denies("merg(?:e|es|ed|ing)", "ship(?:s|ped|ping)?");
+    (policyMerge ||
+      contextualMerge ||
+      (explicitMergeRequested && explicitMergeScopes.length > 0)) &&
+    !mergeDenied;
 
   const publishDenied = denies(
     "publish(?:es|ed|ing)?",
     "push(?:es|ed|ing)?",
     "(?:open|opens|opened|opening|update|updates|updated|updating)\\s+(?:an?\\s+|the\\s+)?(?:pr|mr|pull request|merge request)",
-  );
-  const mergeDenied = denies(
-    "merg(?:e|es|ed|ing)",
-    "ship(?:s|ped|ping)?",
-    "(?:add|adds|added|adding)\\s+(?:it\\s+)?to\\s+(?:the\\s+)?merge queue",
   );
   const deployDenied = denies("deploy(?:s|ed|ing)?");
   const cleanupDenied = denies(
@@ -110,6 +194,12 @@ export function terminalAuthority(
     "(?:remove|removes|removed|removing|delete|deletes|deleted|deleting)\\s+(?:the\\s+|an?\\s+)?(?:branch|worktree)",
   );
 
+  const mergeArtifactScopes = contextualMerge
+    ? contextualMergeScopes
+    : explicitMergeScopes.length > 0
+      ? explicitMergeScopes
+      : policyMergeScopes;
+
   return {
     publish:
       !publishDenied &&
@@ -117,7 +207,7 @@ export function terminalAuthority(
         /\bimplement\b|\bdeliver\b|\bproceed\b|\bpublish\b|\bfinish\b|\b(?:open|update)\b.*\b(?:pr|mr)\b/.test(
           normalized,
         )),
-    merge: !mergeDenied && (projectPolicy.merge === true || merge),
+    merge,
     deploy:
       !deployDenied &&
       (projectPolicy.deploy === true ||
@@ -127,8 +217,6 @@ export function terminalAuthority(
       (projectPolicy.cleanup === true ||
         explicitlyRequests(normalized, "clean up") ||
         explicitlyRequests(normalized, "cleanup")),
-    ...(contextualMerge && merge
-      ? { mergeArtifactScope: pendingMerge.artifactScope.trim() }
-      : {}),
+    ...(merge && mergeArtifactScopes.length > 0 ? { mergeArtifactScopes } : {}),
   };
 }

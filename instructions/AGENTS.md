@@ -45,28 +45,11 @@ Route authority before readiness. Every new substantive task begins in Explore
 and defaults to `brainstorming`; an opening request to fix, implement, change,
 or build does not itself authorize mutation. A materially different requested
 outcome resets the task to Explore. Explicit mode wording overrides inference.
-After the initial exploration, a later explicit instruction to proceed
-authorizes Plan or Execute: Direct Execute is eligible only when one coherent
-MR can deliver the accepted outcome and no material behavior, architecture,
-migration, safety, ownership, ordering, cross-component contract, or
-verification decision remains. Otherwise use Plan. Narrow language such as
-read-only, Plan-only, Execute-only, Review-only, or local-only limits later
-modes.
-
-After a mode gains authority, continue automatically within that scope. Ask
-again only for a material contract decision, a required human-only action, or
-an authority expansion. Routine wording, formatting, validation, test, CI,
-review, and schema repairs do not require renewed permission. Clear agreement
-with an explicit recommendation bundle accepts that bundle, but never unstated
-scope or unrelated mutation or terminal authority. Existing authenticated
-commands do not require renewed approval; credential entry or a new credential
-grant remains a human action.
-
-An immediate `proceed` accepts a single explicit pending merge action when the
-immediately preceding agent turn identifies the exact artifact scope and says
-that merge awaits the user's approval. Standalone or ambiguous `proceed` does
-not grant merge authority. This contextual acceptance never grants deployment
-or cleanup authority.
+After Explore, resolve authority through the accepted-proposal contract in
+[investigation-and-implementation.md](../rules/investigation-and-implementation.md).
+Infer what the user accepts from context rather than confirmation vocabulary;
+let the selected delivery shape supply its normal checkpoint, respect explicit
+limits, and require separately scoped acceptance for terminal actions.
 
 ## Operating rules
 
@@ -134,8 +117,8 @@ or cleanup authority.
 
 - Plan remains conversational until scope, design, delivery shape, risk,
   acceptance, proof, and policy choices are coherent.
-- Acceptance of a complete atomic plan, including `agreed`, authorizes its
-  uninterrupted Plan, Execute, Review, and Finish sequence. In a Git repository
+- Acceptance of a complete atomic plan authorizes its uninterrupted Plan,
+  Execute, Review, and Finish sequence. In a Git repository
   with a valid upstream, implementation is not complete until its dedicated
   draft PR/MR is published and required CI and configured automated reviewers
   confirm no actionable automated feedback remains. Explicit narrower mode or
@@ -195,10 +178,13 @@ or cleanup authority.
   Finish continues monitoring configured CI and hosted review after publication
   and routes in-scope failures to the current lane owner without another user
   prompt.
+- Single-MR merge authority is consumed after that MR merges. Required child
+  repair may continue, but the child remains draft. Only the user's aggregate
+  or sequential scope authorizes bottom-to-top merging, and a material
+  effective-diff change requires renewed authority for affected MRs.
 - Implementation or delivery wording alone authorizes Finish publication and
-  hosted follow-through, not merge. Merge requires explicit action wording,
-  activated policy, or the narrowly bound contextual `proceed` above.
-  Deployment and cleanup remain explicit.
+  hosted follow-through, not merge. Merge, deployment, and cleanup require a
+  separately scoped accepted proposal or activated policy.
 
 ## Provider policy
 
