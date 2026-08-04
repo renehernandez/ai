@@ -5,67 +5,38 @@ description: Use when a branch, pull request, implementation workflow, or code r
 
 # Docs Alignment Review
 
-## Overview
+Decide whether an exact diff changed a documented reader, operator, reviewer,
+or agent contract. This is a findings-only Review technique: it does not write
+documentation or provider descriptions.
 
-Check whether a diff changes behavior, contracts, workflows, or agent expectations enough that documentation should move with it. A clean verdict must say why no docs update is needed.
+## Review
 
-This is separate from `ai-readiness-upkeep`: docs alignment decides whether the written context is stale or missing, while AI readiness decides whether a newly exposed contract should be enforced mechanically by a script, task command, hook, CI check, release/deploy gate, or other automation lane.
+1. Resolve the exact target base and head. Inspect the behavioral diff and only
+   the nearby documentation surfaces it can affect.
+2. Identify changes to user behavior, workflows, architecture, ownership,
+   commands, CI/deploy operations, configuration, security boundaries, data or
+   API contracts, verification, rollback, or agent expectations.
+3. Check the corresponding surfaces: README/docs, plans/specs, AGENTS/rules,
+   shared skills/automations, and reviewer-facing change description.
+4. Return actionable gaps or a reasoned clean/not-applicable verdict.
 
-## When To Use
+Route prose quality to `doc-smith`. Route a newly exposed contract that should
+be mechanically enforced to `ai-readiness-upkeep`; missing automation is not
+merely a documentation finding. Re-run this review when repairs materially
+change the exact diff.
 
-Use during Execute and Review workflows, PR reviews, background review rubrics, and before Finish opens or updates a PR. Skip for pure formatting changes or mechanical generated-file churn unless the generated change affects documented behavior.
+## Output
 
-## Workflow
-
-1. Establish the diff base with provider tools or `git merge-base`.
-2. Inspect changed files and nearby docs/rules only as needed.
-3. Decide whether the diff changes any documentation trigger:
-   - user-visible behavior, workflows, navigation, UI states, or error states;
-   - architecture, ownership boundaries, source taxonomy, or invariants;
-   - commands, package scripts, CI, deployment, infrastructure, or environment variables;
-   - auth/access boundaries, data contracts, schemas, migrations, APIs, or events;
-   - test strategy, verification layers, or release/rollback expectations;
-   - agent expectations in `AGENTS.md`, `.agents/rules/*`, skills, hooks, automation prompts, or background-review rubrics.
-4. Check relevant documentation surfaces:
-   - user and engineering docs such as `README*`, `docs/*`, `.agents/plans/*`, `docs/specs/*`;
-   - repo-visible agent docs such as `AGENTS.md` and `.agents/rules/*`;
-   - shared agent docs and skills when the change affects reusable agent behavior;
-   - PR title/body when reviewers need plan links, verification, or context.
-5. If docs are stale or missing, report actionable updates. If no update is needed, state the reason.
-
-## Verdict Format
-
-```markdown
+```text
 Docs Alignment Verdict: clean | updates needed | not applicable
-
-Checked:
-- User/engineering docs:
-- Plans/specs:
-- Agent docs:
-- Skills/automations:
-- PR description:
-
+Target: <base>...<head>
+Checked: <relevant surfaces>
 Findings:
-- [severity] surface: issue -> recommended update
-
-Reason if clean:
+- [severity] <surface>: <stale or missing contract> -> <required update>
+Reason if clean/not applicable: <evidence-backed explanation>
 ```
 
-Use `not applicable` only when the diff cannot reasonably affect documented behavior or agent expectations.
-
-## Mistakes
-
-| Mistake | Fix |
-| --- | --- |
-| Treating docs alignment as only README updates | Check plans, agent docs, rules, skills, automation prompts, and PR context |
-| Requiring docs churn for tiny changes | Return `not applicable` with a reason |
-| Saying clean without evidence | Name the surfaces checked and why no update is needed |
-| Letting implementation drift from the plan | Flag the plan or PR description alignment gap |
-| Hiding agent-doc drift | Classify whether the update belongs in repo-local docs or shared agent docs |
-| Treating missing verification as only a docs issue | Route enforceable contract gaps to `ai-readiness-upkeep` |
-
-## Test Evidence
-
-- RED: prior PR workflows could finish code and review without deciding whether plans or agent docs were stale.
-- GREEN: this skill forces an explicit docs alignment verdict with checked surfaces and a reason when clean.
-- REFACTOR: the skill stays focused on alignment decisions and delegates prose quality to `doc-smith`. It also covers the pressure case where an agent fixes review or CI feedback after an earlier docs verdict: the agent must rerun docs alignment on the final diff before completion.
+Use `not applicable` only when the diff cannot reasonably affect documented
+behavior or agent expectations. Do not demand documentation churn for
+formatting or generated-file movement, and do not claim clean without naming
+the surfaces and causal reason.

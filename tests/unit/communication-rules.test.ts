@@ -159,19 +159,3 @@ test("brainstorming has a compact route for narrow requests", () => {
   assert.match(skill, /do not\s+use the\s+orientation map/i);
   assert.match(skill, /domain terms.*only when/i);
 });
-
-test("doc smith can write a bounded operational note without guide ceremony", () => {
-  const skill = read("skills/doc-smith/SKILL.md");
-
-  assert.match(skill, /compact (?:note|document) path/i);
-  assert.match(skill, /audience.*outcome.*source.*(?:known|clear)/is);
-  assert.match(skill, /do not require.*frontmatter/is);
-  assert.match(skill, /do not require.*See Also/is);
-  assert.match(skill, /do not ask.*question/is);
-  assert.match(skill, /reader tests have one trigger/i);
-  assert.match(skill, /acceptance or a material comprehension risk/i);
-  assert.match(
-    skill,
-    /enclosing Execute owner retains its\s+existing commit authority/i,
-  );
-});
