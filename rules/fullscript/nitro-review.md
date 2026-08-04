@@ -22,9 +22,11 @@ or command selection.
   source head and effective diff.
 - Read every Nitro response in full and inspect all unresolved Nitro-authored
   discussions. Do not classify the result from its first sentence or from
-  reassuring phrases such as `no findings` or `no blocking issues`.
-- The latest completion owns the receipt identity, but actionable language in
-  any post-request Nitro completion remains active.
+  reassuring phrases such as `no findings` or `no blocking issues`. This
+  semantic read is the load-bearing classifier for keyword-free defect prose:
+  such feedback blocks readiness even when the deterministic receipt passes.
+- The latest completion owns the receipt identity, but feedback in any
+  post-request Nitro completion that requires an MR change remains active.
 - Derive readiness from raw GitLab MR, note, and discussion payloads. Bind the
   provider diff count, latest request event, exact `nitro` author identity,
   completion chronology, and unresolved discussions to the current source head.
@@ -37,9 +39,15 @@ or command selection.
   not proof of the larger-artifact route.
 - Treat GitLab's capped `changes_count: "1000+"` as definitively above the
   50-file request boundary without presenting it as an exact file count.
-- Actionable language anywhere in the response, including a carried-forward
-  concern that `still applies` or is `worth addressing before merge`, remains
-  active until fixed or explicitly dispositioned.
+- Feedback that requires an MR change anywhere in the response remains active
+  until fixed or explicitly dispositioned. Determine that semantically from
+  the complete response, including a concern Nitro says `still applies` or is
+  `worth addressing before merge`; Nitro prose is not a stable machine-readable
+  API.
+- Advice to get another human reviewer, another pair of eyes, or a careful
+  human read is nonblocking unless GitLab approvals, direct user instruction,
+  or another project policy independently requires it. Nitro advisory prose
+  does not create a new approval requirement.
 - The latest-source-head Nitro feedback must complete without unresolved
   actionable findings, and newer summaries must not silently clear applicable
   older feedback. Feedback for an older source head is stale and cannot satisfy

@@ -50,8 +50,9 @@ Missing `glab` access or authentication returns `unavailable` with evidence.
    generic reviewer-assignment event.
 4. Identify every Nitro-authored response after the request by author, bot
    identity, command response, or org convention visible in the payload. The
-   latest completion owns receipt identity, but actionable language in any
-   completion keeps the gate blocked.
+   latest completion owns receipt identity, but feedback in any completion that
+   requires an MR change keeps the gate blocked. Advice to get human review is
+   nonblocking unless another authority independently requires it.
 5. Classify feedback as pending, no issues, findings, unavailable, or stale.
 6. Normalize actionable findings to the shared contract.
 7. Convert Nitro status into `nitro_feedback_gate` with
@@ -182,16 +183,19 @@ Status mapping:
   unresolved Nitro-authored discussion thread remains. Older resolvable,
   unresolved threads carry forward; non-resolvable historical
   `individual_note` summaries do not independently masquerade as unresolved
-  threads. A short completion passes only when it is composed entirely of
-  complete standalone reassurance or neutral review-completion sentences. A
-  structured Nitro receipt additionally requires exactly one explicitly clean
-  first `Verdict` sentence and no current feedback heading or severity marker.
-  This deterministic receipt gate does not replace Finish's semantic read:
-  Finish must read the complete response and unresolved discussions, and
-  actionable feedback anywhere remains blocking. Technical readiness must carry
-  Finish's exact-head semantic-review evidence; a passing raw receipt alone
-  cannot satisfy readiness. Duplicate or malformed receipt structures after the
-  latest request fail closed.
+  threads. The deterministic receipt does not classify Nitro prose because its
+  wording is not a stable machine-readable API. It reports whether an exact-head
+  completion was received and whether unresolved Nitro discussions remain. The
+  raw `gate_outcome: passed` therefore means the receipt is structurally
+  complete, not that Finish found the response semantically clean. The
+  provider envelope, exact-head chronology, identity, pagination, substantive
+  completion, and unresolved-discussion requirements remain fail-closed.
+  Finish must read every complete response and unresolved discussion. That
+  semantic read is the sole owner for deciding whether Nitro raised feedback
+  requiring an MR change; human-review advice alone is nonblocking. Feedback to
+  address anywhere remains blocking even when the receipt itself was received.
+  Technical readiness must carry Finish's exact-head semantic-review evidence;
+  a passing raw receipt alone cannot satisfy readiness.
 - Missing Nitro feedback: pass only if status is `pending` or `unavailable`, not clean.
 - Stale Nitro feedback: pass only if stale feedback does not satisfy the review gate.
 - Actionable feedback loop: pass only if every repair push receives a new

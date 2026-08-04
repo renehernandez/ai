@@ -122,20 +122,16 @@ owner rather than reconstructed from labels:
   capped `1000+` count stays explicitly inexact but routes above 50 files, and
   only resolvable, unresolved Nitro discussion threads carry forward across
   review cycles because historical `individual_note` summaries cannot be
-  resolved through GitLab; actionable completion summaries recognize singular
-  and plural finding, issue, and concern language through a closed completion
-  grammar: short completions accept only complete standalone reassurance and
-  neutral review-completion sentences, while structured Nitro receipt evidence
-  requires exactly one Verdict plus either an explicitly clean first Verdict
-  sentence or Nitro's exact `No new findings survived verification` receipt
-  heading, with no current feedback heading or severity marker. The
-  deterministic gate does not attempt to prove the semantics of arbitrary rich
-  review prose: Finish still reads the complete response and unresolved
-  discussions, and actionable feedback anywhere remains blocking. Technical
-  readiness requires an exact-head Finish
-  semantic-review record, so a passing deterministic receipt cannot bypass that
-  human-language judgment. Duplicate or malformed receipt structures remain
-  fail-closed; the large-artifact route requires an actual
+  resolved through GitLab. The deterministic gate treats Nitro prose as an
+  unstable interface: it proves that a substantive exact-head completion was
+  received but does not classify the completion as clean, advisory, or
+  actionable. Finish reads every complete response and unresolved discussion
+  and decides semantically whether Nitro raised feedback requiring an MR
+  change; human-review advice alone is nonblocking. Technical readiness
+  requires that exact-head Finish semantic-review record with no actionable
+  feedback, so a structurally complete receipt cannot bypass the human-language
+  judgment. Missing, empty, or symbol-only completions and malformed provider
+  evidence remain fail-closed; the large-artifact route requires an actual
   non-system `@nitro review` note
   with a requesting username rather than a generic reviewer system event; and
 - provider updates require hosted body readback, while published non-tip stack

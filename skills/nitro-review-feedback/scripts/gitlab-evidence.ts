@@ -129,14 +129,14 @@ export function validateGitLabEvidence(input: string): void {
     (note) => !/preparing to review|review is pending/i.test(note.body ?? ""),
   );
   const completion = completions.at(-1);
-  const actionableCompletion = completions.some((note) =>
-    nitroCompletionIsActionable(note.body ?? ""),
-  );
+  if (completion && !/[\p{L}\p{N}]/u.test(completion.body ?? "")) {
+    errors.push("raw GitLab Nitro completion must contain substantive prose");
+  }
   const unresolvedNitroDiscussions = discussions.filter((discussion) =>
     hasUnresolvedNitroFeedback(discussion),
   );
   const outcome = completion
-    ? unresolvedNitroDiscussions.length > 0 || actionableCompletion
+    ? unresolvedNitroDiscussions.length > 0
       ? "blocked"
       : "passed"
     : "pending";
@@ -156,7 +156,7 @@ export function validateGitLabEvidence(input: string): void {
         request_command: expectedRequest,
         request_note_id: requestNote?.id,
         completion_note_id: completion?.id,
-        actionable_completion: Boolean(actionableCompletion),
+        completion_received: Boolean(completion),
         unresolved_nitro_discussions: unresolvedNitroDiscussions.map(
           (discussion) => discussion.id,
         ),
@@ -267,79 +267,4 @@ function noteTime(note: GitLabNote): number {
 function versionTime(version: GitLabVersion): number {
   const value = Date.parse(version.created_at ?? "");
   return Number.isFinite(value) ? value : Number.POSITIVE_INFINITY;
-}
-
-function nitroCompletionIsActionable(body: string): boolean {
-  if (/\[(?:critical|high|medium|low)\]/i.test(body)) {
-    return true;
-  }
-
-  const headings = [...body.matchAll(/^(#{1,6})\s+(.+?)\s*$/gm)].map(
-    (match) => ({
-      index: match.index,
-      length: match[0].length,
-      normalized: match[2].trim().replace(/:$/, "").toLowerCase(),
-    }),
-  );
-  const verdictHeadings = headings.filter(
-    (heading) => heading.normalized === "verdict",
-  );
-  const cleanReceiptHeadings = headings.filter((heading) =>
-    /^no (?:new )?findings? survived (?:verification|this pass)$/.test(
-      heading.normalized,
-    ),
-  );
-  if (
-    headings.some((heading) =>
-      /^(?:concerns?|findings?|issues?|recommendations?|required changes)$/.test(
-        heading.normalized,
-      ),
-    )
-  ) {
-    return true;
-  }
-  if (verdictHeadings.length > 0) {
-    if (verdictHeadings.length !== 1) {
-      return true;
-    }
-    if (cleanReceiptHeadings.length === 1) {
-      return false;
-    }
-
-    const verdictHeading = verdictHeadings[0];
-    const afterHeading = body.slice(
-      verdictHeading.index + verdictHeading.length,
-    );
-    const nextHeading = /^#{1,6}\s+/m.exec(afterHeading);
-    const verdict = afterHeading.slice(
-      0,
-      nextHeading?.index ?? afterHeading.length,
-    );
-    return !/^\s*no (?:new )?findings?\s*[.!](?:\s|$)/i.test(verdict);
-  }
-
-  const reassurance =
-    "(?:" +
-    String.raw`(?:no|without)\s+(?:actionable\s+|blocking\s+)?(?:findings?|issues?|concerns?)(?:\s+(?:(?:were\s+)?found|remain(?:ing)?|need\s+(?:attention|fixing)|require\s+attention|to\s+fix))?` +
-    String.raw`|there\s+(?:are|were)\s+no\s+(?:actionable\s+|blocking\s+)?(?:findings?|issues?|concerns?)` +
-    String.raw`|(?:findings?|issues?|concerns?)\s*:\s*(?:none|resolved|addressed|closed|no\s+(?:findings?|issues?|concerns?))` +
-    String.raw`|zero\s+(?:findings?|issues?|concerns?)` +
-    String.raw`|(?:all\s+)?(?:findings?|issues?|concerns?)\s+(?:are\s+)?(?:resolved|addressed|closed)` +
-    String.raw`|nothing\s+actionable(?:\s+remains)?` +
-    String.raw`|nothing\s+remains\s+to\s+fix` +
-    ")";
-  const neutralCompletion = String.raw`(?:review\s+complete|(?:i\s+)?reviewed\s+the\s+latest\s+(?:merge\s+request\s+)?head)`;
-  const acceptedSentence = new RegExp(
-    String.raw`(^|[\n.!])(\s*(?:[-*]\s*)?(?:\*\*|__)?(?:${reassurance}|${neutralCompletion})(?:\*\*|__)?\s*)(?=$|[\n.!])`,
-    "gim",
-  );
-  let accepted = false;
-  const residual = body.replace(
-    acceptedSentence,
-    (_match, boundary: string) => {
-      accepted = true;
-      return boundary;
-    },
-  );
-  return !accepted || !/^[\s`*_>#\-[\](){}.!:;,/\\]*$/u.test(residual);
 }

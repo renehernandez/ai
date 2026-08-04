@@ -47,26 +47,25 @@ The system SHALL normalize and monitor Nitro feedback only for artifacts whose a
 
 #### Scenario: Nitro response mixes reassurance with an action
 - **WHEN** a Nitro response says there are no findings but also retains a concern, recommendation, or required change
-- **THEN** the actionable language wins
-- **AND** the gate remains blocked
+- **THEN** Finish reads the complete response and decides semantically whether the feedback requires an MR change
+- **AND** feedback requiring an MR change remains blocking regardless of reassuring language
 
-#### Scenario: Nitro completion language fails closed
-- **WHEN** a short Nitro completion is not composed entirely of complete standalone reassurance or neutral review-completion sentences
-- **THEN** qualified, contrasting, malformed, or unknown completion text is actionable
-- **AND** the gate remains blocked
+#### Scenario: Nitro completion receipt avoids prose classification
+- **WHEN** Nitro posts a substantive completion for the exact current source head
+- **THEN** deterministic receipt validation records the completion without classifying its wording as clean, advisory, or actionable
+- **AND** missing, empty, or symbol-only completions remain fail-closed
 
-#### Scenario: A structured Nitro review reports a clean verdict
-- **WHEN** a Nitro completion contains a structured review with an explicit clean `Verdict`
-- **THEN** deterministic receipt classification requires exactly one `Verdict` plus either a clean first `Verdict` sentence or Nitro's exact `No new findings survived verification` receipt heading, and no current feedback heading or severity marker
-- **AND** Finish separately reads the complete response and unresolved discussions
-- **AND** actionable feedback anywhere in the rich narrative remains blocking even when deterministic receipt classification passes
+#### Scenario: Finish classifies the complete Nitro response
+- **WHEN** deterministic receipt validation confirms an exact-head completion
+- **THEN** Finish separately reads the complete response and unresolved discussions
+- **AND** feedback requiring an MR change anywhere in the response remains blocking even when receipt validation passes
+- **AND** human-review advice alone is nonblocking unless another policy independently requires it
 - **AND** technical readiness requires Finish's exact-head semantic-review evidence rather than accepting the deterministic receipt alone
-- **AND** duplicate or malformed receipt structures fail closed
 
 #### Scenario: A later Nitro response reopens a concern
-- **WHEN** an earlier completion is clean and a later post-request Nitro response contains actionable language
+- **WHEN** an earlier completion has no feedback requiring an MR change and a later post-request Nitro response raises such feedback
 - **THEN** the latest completion owns the receipt identity
-- **AND** the gate remains blocked by the actionable response
+- **AND** Finish's semantic review remains blocked by the later response
 
 #### Scenario: GitLab caps the changed-file count
 - **WHEN** raw MR metadata reports `changes_count` as `1000+`

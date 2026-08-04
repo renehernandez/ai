@@ -196,7 +196,8 @@ function rawGitLabEvidence(
     notes.push({
       id: 14,
       body:
-        overrides.completionBody ?? "Reviewed the latest merge request head.",
+        overrides.completionBody ??
+        "Reviewed the latest merge request head. No findings.",
       created_at: "2026-07-30T12:03:00Z",
       system: false,
       author: { username: overrides.completionAuthor ?? "nitro" },
@@ -554,13 +555,14 @@ test("normalize-feedback does not synthesize hosted Nitro evidence", () => {
   assert.match(result.stderr, /completion\.evidence is required/);
 });
 
-test("GREEN nitro-raw-evidence: derives a clean gate from raw provider payloads", () => {
+test("GREEN nitro-raw-evidence: derives an exact-head completion receipt", () => {
   const result = runNitroGate("validate-gitlab-evidence", rawGitLabEvidence());
 
   assert.equal(result.status, 0);
   assert.match(result.stdout, /"head_sha": "abc123"/);
   assert.match(result.stdout, /"request_note_id": 11/);
   assert.match(result.stdout, /"completion_note_id": 14/);
+  assert.match(result.stdout, /"completion_received": true/);
   assert.match(result.stdout, /"gate_outcome": "passed"/);
 });
 
@@ -587,7 +589,7 @@ test("validate-gitlab-evidence binds the request to the current MR head transiti
   );
 });
 
-test("RED nitro-raw-evidence: carries unresolved Nitro discussions forward", () => {
+test("RED nitro-raw-evidence: blocks receipts with unresolved Nitro discussions", () => {
   const result = runNitroGate(
     "validate-gitlab-evidence",
     rawGitLabEvidence({ unresolved: true }),
@@ -595,6 +597,7 @@ test("RED nitro-raw-evidence: carries unresolved Nitro discussions forward", () 
 
   assert.equal(result.status, 0);
   assert.match(result.stdout, /"discussion-1"/);
+  assert.match(result.stdout, /"completion_received": true/);
   assert.match(result.stdout, /"gate_outcome": "blocked"/);
 });
 
@@ -623,7 +626,7 @@ test("validate-gitlab-evidence ignores non-resolvable historical summary discuss
   assert.match(result.stdout, /"gate_outcome": "passed"/);
 });
 
-test("validate-gitlab-evidence blocks actionable completion text without an inline discussion", () => {
+test("validate-gitlab-evidence receives completion text without classifying its wording", () => {
   const result = runNitroGate(
     "validate-gitlab-evidence",
     rawGitLabEvidence({
@@ -633,11 +636,11 @@ test("validate-gitlab-evidence blocks actionable completion text without an inli
   );
 
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /"actionable_completion": true/);
-  assert.match(result.stdout, /"gate_outcome": "blocked"/);
+  assert.match(result.stdout, /"completion_received": true/);
+  assert.match(result.stdout, /"gate_outcome": "passed"/);
 });
 
-test("validate-gitlab-evidence blocks mixed reassuring and actionable completion text", () => {
+test("validate-gitlab-evidence leaves mixed completion prose to semantic review", () => {
   const result = runNitroGate(
     "validate-gitlab-evidence",
     rawGitLabEvidence({
@@ -647,11 +650,47 @@ test("validate-gitlab-evidence blocks mixed reassuring and actionable completion
   );
 
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /"actionable_completion": true/);
-  assert.match(result.stdout, /"gate_outcome": "blocked"/);
+  assert.match(result.stdout, /"completion_received": true/);
+  assert.match(result.stdout, /"gate_outcome": "passed"/);
 });
 
-test("RED nitro-raw-evidence: blocks completion text outside the closed grammar", () => {
+test("RED nitro-raw-evidence: rejects symbol-only completion notes", () => {
+  for (const completionBody of ["", "⚠️", "🛠️", "  #  "]) {
+    const result = runNitroGate(
+      "validate-gitlab-evidence",
+      rawGitLabEvidence({ completionBody }),
+    );
+
+    assert.equal(result.status, 1, completionBody);
+    assert.match(
+      result.stderr,
+      /Nitro completion must contain substantive prose/,
+      completionBody,
+    );
+  }
+});
+
+test("validate-gitlab-evidence accepts substantive prose without pinning provider wording", () => {
+  for (const completionBody of [
+    "Review complete?",
+    "The login handler dereferences user without a null check.",
+    "This endpoint lacks authorization on the delete route.",
+    "You are not validating the webhook signature.",
+    "レビューが完了しました。",
+    "Проверка завершена.",
+  ]) {
+    const result = runNitroGate(
+      "validate-gitlab-evidence",
+      rawGitLabEvidence({ completionBody }),
+    );
+
+    assert.equal(result.status, 0, completionBody);
+    assert.match(result.stdout, /"completion_received": true/, completionBody);
+    assert.match(result.stdout, /"gate_outcome": "passed"/, completionBody);
+  }
+});
+
+test("nitro-raw-evidence: does not classify feedback wording", () => {
   for (const completionBody of [
     "Findings: two issues remain in the query path.",
     "Concerns remain in the provider evidence.",
@@ -659,33 +698,18 @@ test("RED nitro-raw-evidence: blocks completion text outside the closed grammar"
     "All issues are resolved except one remains.",
     "Issues partially resolved.",
     "Concerns addressed where possible.",
-    "Findings: none yet.",
-    "No issues at this time.",
-    "Concerns resolved for now.",
-    "Currently, no issues.",
-    "For now, no issues.",
-    "So far, no issues.",
-    "At this time, no issues.",
     "No issues overall, except one remains.",
     "Findings: none; however, one remains.",
-    "Although one remains, findings: none.",
     "No issues. One item remains to fix.",
-    "Issues resolved. One remains in auth.",
     "No issues. Tests fail.",
     "No concerns. Please update the query.",
     "Tests fail.",
     "Please update the query.",
-    "No issues?",
-    "Findings: none?",
-    "Review complete?",
-    "",
-    "⚠️",
-    "❌",
-    "No issues. ⚠️",
-    "Review complete. ❌",
-    "No issues. 🚨",
-    "No issues!?",
-    "No issues...?",
+    "Nitro found feedback to raise. Please review the inline comments.",
+    "This introduces a false negative in the deletion guard.",
+    "Consider deriving the boundary from the provider timestamp.",
+    "The missing validation allows stale evidence to pass.",
+    "No issues found. The stale-evidence path is now handled incorrectly.",
   ]) {
     const result = runNitroGate(
       "validate-gitlab-evidence",
@@ -693,13 +717,32 @@ test("RED nitro-raw-evidence: blocks completion text outside the closed grammar"
     );
 
     assert.equal(result.status, 0);
-    assert.match(result.stdout, /"actionable_completion": true/);
-    assert.match(result.stdout, /"gate_outcome": "blocked"/);
+    assert.match(result.stdout, /"completion_received": true/, completionBody);
+    assert.match(result.stdout, /"gate_outcome": "passed"/, completionBody);
     assert.doesNotMatch(result.stdout, /hostedFeedbackSemanticReview/);
   }
 });
 
-test("GREEN nitro-raw-evidence: accepts only closed-grammar completion text", () => {
+test("GREEN nitro-raw-evidence: declarative prose is not treated as an imperative", () => {
+  for (const completionBody of [
+    "Test coverage looks complete. No issues found.",
+    "Update notes below. No issues found.",
+    "Change log is accurate. No findings.",
+    "Cover letter attached. No concerns.",
+    "Handle bars work. No issues.",
+  ]) {
+    const result = runNitroGate(
+      "validate-gitlab-evidence",
+      rawGitLabEvidence({ completionBody }),
+    );
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /"completion_received": true/, completionBody);
+    assert.match(result.stdout, /"gate_outcome": "passed"/, completionBody);
+  }
+});
+
+test("GREEN nitro-raw-evidence: accepts completion without feedback to address", () => {
   for (const completionBody of [
     "No actionable findings.",
     "No issues found.",
@@ -723,6 +766,11 @@ test("GREEN nitro-raw-evidence: accepts only closed-grammar completion text", ()
     "Review complete. No issues.",
     "I reviewed the latest head. No issues found.",
     "No issues. Review complete.",
+    "Findings: none yet.",
+    "No issues at this time.",
+    "Concerns resolved for now.",
+    "Currently, no issues.",
+    "No issues. ⚠️",
     [
       "## Review",
       "The prior issue is fixed.",
@@ -746,11 +794,60 @@ test("GREEN nitro-raw-evidence: accepts only closed-grammar completion text", ()
     );
 
     assert.equal(result.status, 0);
+    assert.match(result.stdout, /"gate_outcome": "passed"/, completionBody);
+  }
+});
+
+test("nitro-raw-evidence: repaired-finding recaps remain semantic-review input", () => {
+  for (const completionBody of [
+    "No issues found. The stale-evidence path is now handled incorrectly.",
+    "No findings. The prior issue is fixed, but one concern remains.",
+    "All concerns addressed. The regression is no longer present; however, tests fail.",
+  ]) {
+    const result = runNitroGate(
+      "validate-gitlab-evidence",
+      rawGitLabEvidence({ completionBody }),
+    );
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /"completion_received": true/, completionBody);
+    assert.match(result.stdout, /"gate_outcome": "passed"/, completionBody);
+  }
+});
+
+test("GREEN nitro-raw-evidence: notes 3656597 and 3657002 do not turn human-review advice into a gate", () => {
+  for (const completionBody of [
+    [
+      "No new findings to raise. The three prior inline comments on `verification.ts` are all resolved in the current code: the session poller now enforces newest-first ordering with a bounded post-trigger `hasNextPage` guard (`verification.ts:362-387`), the delegated-mr trigger boundary anchors on the server-side `issue.updatedAt` rather than the local CI clock (`verification.ts:338`), and `failureKind` advances to `provider-unavailable` before preflight (`verification.ts:590`) so transient errors no longer misclassify as `configuration`.",
+      "The destructive cleanup path is well-guarded — recovery's broad `containsIgnoreCase` issue filter is re-tightened by `isOwnedLinearFixtureIssue` (exact title prefix with trailing space + run-marker + repo-label check), and `discoverOwnedMergeRequest` refuses on ambiguous/multiple matches. The success schema resists false positives (non-ephemeral marker-bearing response from the verify app, delegated-mr requires a linked+cleaned MR). Typecheck is clean.",
+      "Since this touches CI credential wiring and a new provider path, worth another set of eyes before the real implementation units land.",
+      "Review skill: `mr-review`",
+    ].join("\n\n"),
+    [
+      "No inline findings — I verified the security-critical pieces empirically rather than by inspection alone.",
+      "I focused on the three risk areas: the `block-delete-outside-cwd.ts` guard, the AX hook-registration/runtime-sync wiring, and the structured merge-authority contract.",
+      "- **Deletion guard**: ran the hook against ~20 adversarial shell strings (parent traversal, `--`, quoted/globbed/dynamic targets, `cd ..` + delete, wrapper binaries, subshells, chained commands, nested backticks). All correctly denied. Two bypasses a subagent flagged turned out to be false — `rm (../outside)` is a bash syntax error, and the nested-backtick case was already denied as dynamic. The only ALLOWs (`xargs rm`, `find -exec rm`) are explicitly documented as out-of-scope in `hooks/README.md`, and the file honestly frames itself as a guardrail, not an OS boundary.",
+      "- **Merge-authority contract** (`finish-contract.ts`): fail-closed throughout — unknown scopes throw, multi-scope selections without user-authored aggregate scope collapse to empty, and material effective-diff changes revoke authority. All 39 referenced tests pass.",
+      "- **Hook registration/runtime-sync**: target paths are pinned to the isolated HOME via `assertRegistrationTargetSafe`, stale owned entries are pruned before writing, and unrelated hooks/settings are preserved.",
+      "Note: `pnpm test` shows 3 failures (`openspec-sync-safety`, `runtime-sync` symlink tests), but they also fail on `main` and are unrelated to this MR — they stem from running the suite as root, not from these changes.",
+      "Given the scope (authority-policy semantics across many docs/skills plus a new security hook), it's worth getting another pair of eyes on it before merge.",
+      "Review skill: `mr-review`",
+    ].join("\n\n"),
+    "No inline findings. This policy deserves a careful human read before merge.",
+    "No issues found. Human review is recommended because the change is security-sensitive.",
+  ]) {
+    const result = runNitroGate(
+      "validate-gitlab-evidence",
+      rawGitLabEvidence({ completionBody }),
+    );
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /"completion_received": true/);
     assert.match(result.stdout, /"gate_outcome": "passed"/);
   }
 });
 
-test("RED nitro-raw-evidence: blocks structured reviews with current findings or contradictory verdicts", () => {
+test("nitro-raw-evidence: structured review prose remains semantic-review input", () => {
   for (const completionBody of [
     [
       "## Review",
@@ -785,8 +882,8 @@ test("RED nitro-raw-evidence: blocks structured reviews with current findings or
     );
 
     assert.equal(result.status, 0);
-    assert.match(result.stdout, /"actionable_completion": true/);
-    assert.match(result.stdout, /"gate_outcome": "blocked"/);
+    assert.match(result.stdout, /"completion_received": true/);
+    assert.match(result.stdout, /"gate_outcome": "passed"/);
   }
 });
 
@@ -804,12 +901,12 @@ test("GREEN nitro-raw-evidence: structured Verdict receipt stays distinct from s
   );
 
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /"actionable_completion": false/);
+  assert.match(result.stdout, /"completion_received": true/);
   assert.match(result.stdout, /"gate_outcome": "passed"/);
   assert.doesNotMatch(result.stdout, /hostedFeedbackSemanticReview/);
 });
 
-test("validate-gitlab-evidence blocks a later actionable Nitro summary", () => {
+test("validate-gitlab-evidence binds receipt identity to the latest Nitro summary", () => {
   const result = runNitroGate(
     "validate-gitlab-evidence",
     rawGitLabEvidence({
@@ -821,7 +918,7 @@ test("validate-gitlab-evidence blocks a later actionable Nitro summary", () => {
 
   assert.equal(result.status, 0);
   assert.match(result.stdout, /"completion_note_id": 16/);
-  assert.match(result.stdout, /"gate_outcome": "blocked"/);
+  assert.match(result.stdout, /"gate_outcome": "passed"/);
 });
 
 test("validate-gitlab-evidence proves the authored comment route for a larger POC", () => {
