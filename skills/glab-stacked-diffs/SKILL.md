@@ -39,8 +39,11 @@ changes have no predecessor relationship.
   or Plan accepts recovery because the managed stack cannot represent the live
   topology.
 - **Hooks stay enabled:** never use a hook-bypass flag.
-- **Draft is durable:** technical readiness does not mark an MR ready. Explicit
-  merge authority controls ready state and bottom-to-top merging.
+- **Draft is durable:** technical readiness does not mark an MR ready. A merge
+  instruction authorizes one unambiguous MR and is consumed by that
+  merge. Bottom-to-top continuation requires a user-authored aggregate stack
+  scope or a user-authored sequential instruction. Generic assent to an
+  agent-proposed sequence never creates that scope.
 
 ## Authority Routing
 
@@ -133,8 +136,10 @@ After an explicitly authorized predecessor merge, follow the canonical Finish
 contract: verify the merged commit, confirm the immediate child retargeted to
 the normal base, and restack without replaying predecessor commits. Capture the
 expected child remote head before its push. A rejected lease stops the sequence
-for ownership inspection. Refresh that child's gates and leave deeper
-descendants untouched.
+for ownership inspection. Refresh that child's gates, leave it draft, and leave
+deeper descendants untouched. Preserve aggregate merge authority only when the
+restack is patch-equivalent; a materially changed effective diff requires
+renewed authority for that MR and every affected descendant.
 
 ## Quick Reference
 
@@ -165,6 +170,8 @@ Run the installed command's `--help` before relying on flags because
 | Re-running after a lease rejection | Inspect the external remote-head change and re-establish ownership. |
 | Updating descriptions directly | Apply `change-request-create`, then provider mechanics and readback. |
 | Marking green MRs ready | Leave them draft until explicit merge authority begins. |
+| Carrying one MR's merge authority to its child | Treat the authority as consumed; request a new instruction for the child. |
+| Continuing a stack sequence after a material effective-diff change | Stop the sequence and request renewed authority for the changed scope. |
 
 ## References
 

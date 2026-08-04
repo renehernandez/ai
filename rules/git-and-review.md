@@ -72,13 +72,16 @@ state through a repository or runtime tool.
 
 Finish performs provider mutations and polling. Implementation or delivery
 language alone authorizes publication and hosted feedback follow-through
-without merge. An immediate `proceed` accepts a single explicit pending merge
-action only when the immediately preceding agent turn identifies the exact
-artifact scope and says that action awaits approval. Standalone or ambiguous
-`proceed` grants no merge authority. Other merge authority requires explicit
-action language or activated project policy. Deployment and cleanup require
-explicit action language or activated project policy. Hosted findings do not
-expand authority.
+without merge. Apply the accepted-proposal contract in
+[`investigation-and-implementation.md`](investigation-and-implementation.md): a
+terminal action requires one exact action and target, and any unambiguous
+contextual acceptance authorizes only that proposal. No confirmation word has
+special authority. Activated project policy may independently authorize only
+the terminal action and artifact scope it enumerates. Generic merge authority
+covers one unambiguous MR and
+is consumed after it merges. A multi-MR sequence requires the user's aggregate
+or sequential scope, which survives only patch-equivalent restacks. Hosted
+findings do not expand authority.
 
 Finish remains active after publication. It monitors the newest effective
 pipeline graph and every configured required reviewer, routes in-scope failures
@@ -218,8 +221,9 @@ review feedback. `codex-review-feedback` remains retired.
   match the packet's expected target-base identity. CI and hosted review for
   already published units continue independently of that ordered mutation.
 - Set formal GitLab blocking dependencies when the provider supports them.
-- Merge explicitly authorized final units from the bottom of the chain to the
-  top. Use each live source HEAD as the merge guard.
+- Merge only the explicitly authorized final unit. When the user authorizes a
+  stack or sequence, merge those named units from the bottom of the chain to
+  the top. Use each live source HEAD as the merge guard.
 - After a predecessor squash-merges, refresh only its immediate child, verify
   its target changed to the default branch, and restack it with the verified
   merged commit and old predecessor head so predecessor commits are not
@@ -231,10 +235,12 @@ review feedback. `codex-review-feedback` remains retired.
   Review, CI, approvals, and configured hosted automated review before merge.
 - Stop before the next merge when default-branch CI for the landed predecessor
   is failed, blocked, or unavailable under project policy.
-- Technical stack readiness leaves every MR draft. Explicit merge authority
-  starts a frozen bottom-to-top sequence: mark only the current MR ready, wait
-  for any required review triggered by that transition, merge it, then restack
-  and revalidate the next draft MR.
+- Technical stack readiness leaves every MR draft. Single-MR authority marks
+  only that MR ready, waits for any review triggered by that transition, and is
+  consumed after merge. Restack and revalidate its immediate child while
+  leaving it draft. User-authored stack or sequential scope may continue only
+  across patch-equivalent restacks; a material effective-diff change stops the
+  sequence before every affected MR and requires renewed authority.
 
 ## Commit and artifact titles
 

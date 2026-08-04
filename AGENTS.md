@@ -47,28 +47,11 @@ Route authority before readiness. Every new substantive task begins in Explore
 and defaults to `brainstorming`; an opening request to fix, implement, change,
 or build does not itself authorize mutation. A materially different requested
 outcome resets the task to Explore. Explicit mode wording overrides inference.
-After the initial exploration, a later explicit instruction to proceed
-authorizes Plan or Execute: Direct Execute is eligible only when one coherent
-MR can deliver the accepted outcome and no material behavior, architecture,
-migration, safety, ownership, ordering, cross-component contract, or
-verification decision remains. Otherwise enter Plan. Limiting language such as
-read-only, Plan-only, Execute-only, Review-only, or local-only stops at that
-boundary.
-
-After a mode gains authority, continue automatically within that scope. Ask
-again only for a material contract decision, a required human-only action, or
-an authority expansion. Routine wording, formatting, validation, test, CI,
-review, and schema repairs do not require renewed permission. Clear agreement
-with an explicit recommendation bundle accepts that bundle, but never unstated
-scope or unrelated mutation or terminal authority. Existing authenticated
-commands do not require renewed approval; credential entry or a new credential
-grant remains a human action.
-
-An immediate `proceed` accepts a single explicit pending merge action when the
-immediately preceding agent turn identifies the exact artifact scope and says
-that merge awaits the user's approval. Standalone or ambiguous `proceed` does
-not grant merge authority. This contextual acceptance never grants deployment
-or cleanup authority.
+After Explore, resolve authority through the accepted-proposal contract in
+[investigation-and-implementation.md](rules/investigation-and-implementation.md).
+Infer what the user accepts from context rather than confirmation vocabulary;
+let the selected delivery shape supply its normal checkpoint, respect explicit
+limits, and require separately scoped acceptance for terminal actions.
 
 ## Quick operating rules
 
@@ -178,17 +161,18 @@ or cleanup authority.
   complete pipeline graph and hosted feedback, and reactivates the current
   Execute owner to fix in-scope failures without requiring another user prompt.
 - Implementation or delivery wording alone authorizes publication and hosted
-  follow-through, not merge. Merge requires explicit action wording, activated
-  policy, or the narrowly bound contextual `proceed` above. Deployment and
-  cleanup remain explicit.
+  follow-through, not merge. Merge, deployment, and cleanup require a
+  separately scoped accepted proposal or activated policy.
 - For multiple final delivery units, preserve the total predecessor order,
   implement semantically eligible units concurrently in singly owned
   worktrees, create every real-diff MR one after another, and never restack
   descendants while a predecessor remains open. After a predecessor merges,
   retarget and restack only its immediate child and refresh that child's gates.
-- Technical readiness leaves every MR draft. Explicit merge authority starts a
-  bottom-to-top sequence that marks only the current MR ready immediately before
-  its merge and waits for any review triggered by that transition.
+- Technical readiness leaves every MR draft. Single-MR authority marks only
+  that MR ready immediately before its merge and is consumed afterward.
+  Required child repair may continue, but the child remains draft. Only the
+  user's aggregate or sequential scope authorizes bottom-to-top merging, and a
+  material effective-diff change requires renewed authority for affected MRs.
 
 ## AX runtime
 

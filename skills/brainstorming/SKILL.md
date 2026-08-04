@@ -11,14 +11,16 @@ posture is: understand the problem space first, narrow only when invited.
 
 ## Mode Boundary
 
-This is a bounded Explore specialist. It is read-only and does not create or
-edit plans, OpenSpec changes, tracker state, branches, commits, PRs, or MRs.
-Agreement may recommend Plan; it does not authorize a write by itself.
-The read-only boundary applies to the whole turn. If a prompt mixes
-brainstorming with planning or implementation, complete the opening exploration,
-converge only when the user explicitly invites it, then queue the requested
-mutation for a later Plan or Execute turn after the brainstorming outcome is
-accepted.
+This is a bounded Explore specialist. It is read-only: it writes no plans,
+OpenSpec changes, branches, or commits and mutates no tracker state, PRs, or
+MRs.
+The read-only boundary applies to the whole brainstorming turn. A later user
+response may authorize the next owning mode under the accepted-proposal
+contract in
+[`investigation-and-implementation.md`](../../rules/investigation-and-implementation.md);
+agreement that only settles design remains read-only. If an opening prompt
+mixes brainstorming with planning or implementation, complete the opening
+exploration before any later authorized Plan or Execute turn.
 
 ## Default Flow
 
@@ -48,18 +50,15 @@ accepted.
    operations, cost, or another user-visible contract. State low-risk defaults
    and evidence-backed recommendations without asking the user to approve each
    one. When inspected evidence makes the direction unambiguous, omit the
-   question, recommend readiness, and wait for a later explicit transition.
-5. **Converge only when invited later.** After the opening pass, a later request
-   to narrow, choose v1, plan, implement, or prepare delivery activates
-   convergence. Then summarize the objective, selected feature, shipped
-   context, implementation slices, recommended first slice, deferred work,
-   domain terms, and artifact routing.
-
-Treat agreement such as "agreed", "sounds good", or "yes" as accepting the
-explicit recommendation or recommendation bundle that the response clearly
-refers to. Do not ask again about accepted items or low-risk defaults. Move to
-the next unresolved material discussion item without treating unstated scope,
-artifact writes, implementation, or terminal actions as accepted.
+   question. State the next action or any nonstandard limit when that context is
+   useful; do not require a formal proposal template or restate standard policy
+   checkpoints.
+5. **Converge only when invited later.** After the opening pass, use the
+   canonical accepted-proposal contract to interpret later intent to narrow,
+   choose v1, plan, implement, prepare delivery, or accept a recommended work
+   path. Then summarize the objective, selected feature, shipped context,
+   implementation slices, recommended first slice, deferred work, domain terms,
+   and artifact routing.
 
 ## Orientation Map
 
@@ -84,8 +83,8 @@ use it for the compact route or when the user asks for a quick or narrow answer:
 - [Evidence-backed recommendation that focuses discussion without fixing scope]
 
 **Next step**
-[Ask only the highest-leverage unresolved material question, or state that the
-direction appears ready for an explicit transition.]
+[Ask only the most consequential unresolved material question, or state that the
+direction is ready and name the next action or nonstandard limit when useful.]
 ```
 
 When a question is needed, keep it tied to the discussion queue. Do not ask
@@ -252,9 +251,10 @@ ls -d .agents/plans docs/specs specs/ plans/ design/ 2>/dev/null
 find . -name "*.md" -path "*/docs/*" -mtime -30 2>/dev/null | head -10
 ```
 
-Ask before writing the artifact. Brainstorming agreement is design confirmation,
-not permission to edit files. Plan owns creation of an atomic plan or OpenSpec
-artifact; Brainstorming only recommends that capture route.
+Brainstorming never writes the artifact. Plan applies the canonical accepted-
+proposal contract on a later turn; design-only acceptance remains read-only,
+while accepted work needs no prescribed transition phrase or restatement of its
+standard checkpoint.
 
 ## Challenge Rules
 
@@ -276,8 +276,8 @@ Check that:
   explicit,
 - domain terms were included only when material,
 - the discussion queue stayed at 1-3 items unless the user asked for more,
-- clear agreement accepted the explicit recommendation or bundle it referred
-  to without expanding into unstated scope or authority,
+- later intent is left to the canonical accepted-proposal contract rather than
+  a skill-local confirmation vocabulary,
 - no v1, implementation slice, proof location, or artifact route was selected
   without a convergence invitation, and
 - an unnecessary question was omitted when the inspected direction was
@@ -311,7 +311,7 @@ After convergence is invited, also check that:
 | Inspecting independent evidence lanes one at a time | Start them together when bounded delegation will finish faster; keep only small coherent scans inline |
 | Calling several independent sources one coherent scan | Keep the lanes distinct and use only the minimal shared evidence contract needed for reconciliation |
 | Claiming there is no precedent without evidence | Name the inspected paths or searches before accepting a new mechanism |
-| Treating an opening "fix" or "implement" request as mutation authority | Complete the read-only opening pass and wait for a later explicit transition |
+| Treating an opening "fix" or "implement" request as mutation authority | Complete the read-only opening pass; let the canonical contract resolve later work authority |
 | Choosing v1 or a first slice during the opening pass | Keep delivery guidance dormant until the user invites convergence |
 | Promoting future requirements into v1 | Keep them as future shape unless they address a concrete first-slice risk |
 | Recommending a platform while implementing a thin slice | Recommend the thin-slice approach and name the platform as future extraction |

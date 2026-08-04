@@ -13,24 +13,30 @@ Finish owns provider writes within granted scope. Entering Finish, asking to
 cleanup authority. For non-trivial entry, announce `Finish`, current provider or
 terminal authority, and the goal once.
 
-Authority resolves as follows:
+Apply the accepted-proposal contract in
+[`investigation-and-implementation.md`](../../rules/investigation-and-implementation.md).
+Finish uses these local ceilings:
 
-| User wording | Maximum default authority |
+| Accepted proposal | Maximum authority |
 | --- | --- |
-| `implement`, `deliver`, context-free `proceed`, `publish`, `open/update the PR/MR`, `finish` | Publish and follow hosted feedback; no merge |
-| `merge`, `ship`, `proceed to merge`, `merge when green`, `add to merge queue` | Merge or queue after current gates |
-| `deploy` | Deployment after required delivery state |
-| `clean up` | Only the named branch/worktree cleanup |
+| Standard delivery or an exact publication request | Publish and follow hosted feedback; no terminal action |
+| One exact merge action and artifact | Merge or queue after current gates |
+| User-authored aggregate or sequential merge scope | Merge only the named sequence while its effective diffs remain patch-equivalent |
+| One exact deployment action and target | Deploy after required delivery state |
+| One exact cleanup action and target | Clean up only that scope |
+| One exact POC-disposal action and artifact | Close only that POC unmerged |
+| One exact PR/MR-disposal action and artifact | Close, cancel, supersede, or abandon only that artifact |
 
-An immediate `proceed` grants merge authority when the immediately preceding
-agent turn presents one merge action over one exact artifact scope as the sole
-pending action awaiting approval. Bind that authority to the proposed artifact
-scope. Standalone or ambiguous `proceed` remains publication-only. Contextual
-assent never grants deployment or cleanup authority.
+Any unambiguous contextual acceptance of an exact terminal proposal grants only
+that action; no confirmation word has special meaning. Generic assent to an
+agent-proposed multi-MR sequence does not create aggregate scope. Ambiguous
+terminal intent grants no terminal authority. Local-only, Execute-only,
+Review-only, or status-only limits stop at that boundary, and hosted feedback
+never expands it.
 
-Other ambiguous terminal language requires confirmation. Local-only,
-Execute-only, Review-only, or status-only wording stops at that boundary.
-Hosted feedback never expands authority.
+Replacement or consolidation authority does not dispose of existing review
+artifacts. Closing, canceling, superseding, or abandoning a PR/MR requires its
+own exact artifact-scoped proposal and acceptance.
 
 ## Human-Readable Provider Messages
 
@@ -104,7 +110,8 @@ For OpenSpec POC publication, create one draft PR/MR titled `POC: ...` against
 the normal target and state that it is review-only and must close unmerged.
 Technical readiness and personal acceptance leave it open. Close it only after
 Plan reconciles durable learnings against the accepted head and the user
-explicitly requests closure or states readiness to proceed to stack breakdown.
+accepts an exact closure proposal or a presented stack-breakdown proposal whose
+first action is closing that named POC.
 Consume the completed-POC Review checkpoint; the narrower
 first-objective-proof checkpoint cannot authorize publication. CI, hosted
 review, and operational proof cannot substitute for local Review. For atomic-
@@ -191,14 +198,18 @@ and review requests are not merge authority.
 
 ## Terminal Actions
 
-Merge only under explicit merge language, the narrowly bound contextual
-`proceed` above, or activated project policy, after current checks and
-approvals. Merge dependency chains bottom-to-top. Mark only the current bottom
-MR ready immediately before its merge and wait for any configured review
-triggered by that transition. After a squash merge, verify the remote merged
+Merge only when the accepted proposal contains one exact merge action and
+artifact, a user-authored aggregate or sequential scope, or activated project
+policy that enumerates its artifact scope, after current checks and approvals.
+Single-MR authority is consumed
+after that merge. Mark only that MR ready and wait for any configured review
+triggered by the transition. After a squash merge, verify the remote merged
 commit, retarget and restack only the immediate draft child without replaying
-predecessor commits, and refresh that child's gates before marking it ready.
-Leave deeper descendants untouched until their predecessor merges.
+predecessor commits, and refresh its gates while leaving it draft. Continue a
+dependency chain bottom-to-top only under aggregate or sequential authority and
+only across patch-equivalent restacks. A material effective-diff change stops
+the sequence before every affected MR and requires renewed authority. Leave
+deeper descendants untouched until their predecessor merges.
 
 Restack pushes use an exact expected remote-head lease. If it is rejected, stop
 and inspect external commits and ownership; never retry by simply accepting the
@@ -213,7 +224,10 @@ before cleanup; never force-delete as ordinary follow-through.
 | Mistake | Required response |
 | --- | --- |
 | Treating `finish` as permission to merge | Publish/follow gates, then report readiness. |
-| Requiring magic merge wording after one exact merge action is already awaiting approval | Treat the user's immediate `proceed` as authority for only that artifact scope. |
+| Requiring magic wording after one exact terminal action is awaiting approval | Apply any unambiguous contextual acceptance only to that action and target. |
+| Treating one MR's authority as authority for its child | Consume it after merge; repair the child and leave it draft. |
+| Treating assent to an agent-proposed sequence as stack authority | Require the user's own aggregate or sequential merge scope. |
+| Carrying sequence authority across a material diff change | Stop before affected MRs and require renewed authority after review. |
 | Marking a technically ready MR ready | Leave it draft until explicit merge authority starts its turn. |
 | Stopping at MR creation or green parent CI | Monitor the full current pipeline/review cycle and route failures. |
 | Trusting `No findings` without reading the note | Read the full response and applicable unresolved discussions. |

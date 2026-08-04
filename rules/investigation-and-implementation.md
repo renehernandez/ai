@@ -15,10 +15,6 @@ ownership, and the mandatory OpenSpec rehearsal boundary.
   worktree do not independently authorize mutation. The first pass inspects
   context, maps the problem and recommendation, and may report that the task is
   ready for Execute, but it remains read-only.
-- After the initial exploration, a later explicit instruction such as
-  "proceed", "implement the accepted approach", or "make the changes" supplies
-  mutation authority for that accepted task. Semantic readiness then selects
-  Plan or Execute.
 - A materially different requested outcome creates a new task boundary and
   resets to Explore, including during Plan, Execute, or Finish. Answers to
   active exploration questions, refinements within the accepted outcome,
@@ -30,30 +26,69 @@ ownership, and the mandatory OpenSpec rehearsal boundary.
   or mutate external state until the user requests implementation.
 - When the symptom may come from local runtime, hooks, plugins, or automation,
   inspect the relevant local state before assuming the repository is at fault.
-- Agreement on a design confirms the decision; it does not authorize artifact
-  or implementation writes.
-- Once Plan, Execute, Review, or Finish has the required authority, continue
-  within that granted scope without asking for renewed permission. Interrupt
-  only when the next action expands authority, requires a human-only action, or
-  changes a material behavior, architecture, migration, safety, ownership,
-  ordering, cross-component, verification, delivery, or rollout decision.
-  Contract-preserving wording, formatting, validation, test, CI, review, and
-  schema repairs return automatically to the current mode owner. Existing
-  authenticated commands do not require renewed approval; credential entry or
-  a new credential grant remains a human action.
-- When a user response clearly accepts an explicit recommendation bundle, treat
-  every recommendation in that bundle as accepted. Do not infer unstated scope,
-  repository mutation, provider mutation, or terminal authority from that
-  agreement. The narrow exception is an immediate `proceed` after the agent
-  presents one exact artifact scope and one merge action as the sole pending
-  action awaiting approval; it grants only that merge authority. Standalone or
-  ambiguous `proceed` grants no merge authority, and contextual assent never
-  grants deployment or cleanup.
 - Every non-trivial design starts with a repository precedent scan. Reuse is
   the default even when the request does not mention an existing approach;
   similarity wording narrows the scan but never triggers it.
 - If the user rejects a name, structure, taxonomy, folder layout, API shape, or
   other design choice, present alternatives and tradeoffs before changing it.
+
+## Resolve authority from accepted proposals
+
+- After the initial Explore pass, infer later work authority from the proposal
+  the user accepts in context, not from prescribed confirmation words. An
+  accepted proposal is the outcome and bounded action path established across
+  the conversation. It need not be a labeled form, repeat policy defaults, or
+  appear in one message.
+- Agreement with a design decision remains read-only when mutation is not part
+  of what the response accepts. When the accepted proposal includes work,
+  semantic readiness selects Plan or Execute and the selected delivery shape
+  supplies its normal checkpoint: direct and atomic work reaches draft
+  technical readiness; pre-POC OpenSpec work reaches complete POC draft
+  technical readiness and personal acceptance; accepted POC work reaches final
+  delivery-unit draft technical readiness. Explicit Plan-only, Execute-only,
+  Review-only, local-only, or equivalent limits cap that route.
+- Use the narrowest coherent interpretation. Continue when every reasonable
+  reading authorizes the same next action, and apply already accepted low-risk
+  defaults. Ask one focused question when plausible readings cross design-only
+  and mutation authority, a material contract boundary, or terminal authority.
+  Do not ask merely because an affirmation is unfamiliar, abbreviated, or
+  misspelled.
+- Reclassify each new user message against the accepted proposal before acting.
+  A later observation, correction, question, or diagnostic fact supplies only
+  that information; it does not authorize a broader inferred action. Pause and
+  present the exact proposed action before restacking or rebasing several MRs,
+  force-pushing, moving work between delivery units, rewriting a plan or spec,
+  closing, canceling, superseding, or abandoning an existing PR/MR, changing
+  required CI or release behavior, mutating shared infrastructure, or assigning
+  reviewers or agents outside the accepted path. Narrow investigation and
+  direct contract-preserving fixes remain authorized.
+- Work authority is task-scoped while modes own mutation surfaces. Continue
+  across required Plan, Execute, Review, and Finish handoffs to the accepted
+  checkpoint without renewed permission. Interrupt only when the next action
+  exceeds that route, requires a human-only action, or changes a material
+  behavior, architecture, migration, safety, ownership, ordering,
+  cross-component, verification, delivery, or rollout decision.
+  Contract-preserving wording, formatting, validation, test, CI, review, and
+  schema repairs return automatically to the current owner.
+- When a response clearly accepts a recommendation bundle, accept the bundle
+  it refers to without inventing unstated scope or unrelated mutation. Merge,
+  deployment, cleanup, destructive actions, and POC disposal require a
+  separately presented exact action and target. Any unambiguous contextual
+  acceptance authorizes only that terminal proposal; no confirmation word has
+  special authority. Existing authenticated commands need no renewed approval,
+  while credential entry or a new credential grant remains a human action.
+- Treat closure, cancellation, supersession, or abandonment of any existing
+  PR/MR as exact-scoped artifact disposal. Acceptance of replacement work does
+  not authorize disposing of the artifacts it may replace.
+- Generic merge authority covers one unambiguous current or named MR and is
+  consumed when that MR merges. If several MRs are plausible and none is
+  selected, ask before any ready-state or merge mutation. A multi-MR sequence
+  requires the user's own aggregate or sequential scope; generic assent to an
+  agent-proposed sequence does not create that scope. Preserve sequence
+  authority only across patch-equivalent restacks. A material behavior, scope,
+  contract, safety, or review-risk change invalidates authority for each MR
+  whose effective diff changed. Required descendant repair may continue after
+  an authorized predecessor merge, but it does not authorize the next merge.
 
 ## Schedule for user throughput
 
@@ -376,7 +411,8 @@ exact-target checkpoint.
 
 Finish follows hosted gates after draft publication. Implementation and
 delivery requests permit publication but do not permit merge. Merge,
-deployment, and cleanup require explicit language or activated project policy.
+deployment, and cleanup remain separately scoped terminal actions under the
+accepted-proposal contract above or activated project policy.
 
 ## Repository artifacts
 

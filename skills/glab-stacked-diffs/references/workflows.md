@@ -205,8 +205,16 @@ This workflow requires explicit merge authority for the predecessor.
 If the lease is rejected, stop and inspect external commits. Do not accept the
 new remote SHA and retry blindly.
 
-All technically ready MRs remain draft. Explicit merge authority marks only
-the current bottom MR ready immediately before its merge.
+All technically ready MRs remain draft. Single-MR merge authority marks only
+the current bottom MR ready immediately before its merge and is consumed after
+that merge. Complete the required child repair, but leave the child draft and
+stop before another merge. Continue bottom-to-top only under a user-authored
+aggregate stack scope or user-authored sequential instruction. Generic assent
+such as `yes`, `agreed`, or `proceed` to an agent-proposed sequence is
+insufficient. Preserve valid sequence authority across a
+patch-equivalent restack only. A material effective-diff change stops the
+sequence before the affected MR and leaves it and changed descendants draft
+until the user renews merge authority after review.
 
 ## Maintain Navigation and Descriptions
 

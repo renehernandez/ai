@@ -18,18 +18,23 @@ test("brainstorming opens the problem space with working hypotheses", () => {
   assert.match(skill, /domain-terms pass only when terminology is fuzzy/);
   assert.match(skill, /objective, problem framing, material domain terms/);
   assert.match(skill, /approach, working hypotheses/);
-  assert.match(skill, /omit the question, recommend readiness/);
+  assert.match(skill, /omit the question/);
 });
 
 test("brainstorming keeps mixed implementation prompts read-only", () => {
-  assert.match(skill, /The read-only boundary applies to the whole turn/);
   assert.match(
     skill,
-    /queue the requested mutation for a later Plan or Execute turn after the brainstorming outcome is accepted/,
+    /The read-only boundary applies to the whole brainstorming turn/,
   );
+  assert.match(skill, /accepted-proposal contract/);
   assert.match(
     skill,
-    /Plan owns creation of an atomic plan or OpenSpec artifact/,
+    /complete the opening exploration before any later authorized Plan or Execute turn/,
+  );
+  assert.match(skill, /Brainstorming never writes the artifact/);
+  assert.match(
+    skill,
+    /Plan applies the canonical accepted-\s*proposal contract/,
   );
 });
 
@@ -37,7 +42,7 @@ test("brainstorming separates opening exploration from convergence", () => {
   assert.match(skill, /Converge only when invited later/);
   assert.match(
     skill,
-    /After the opening pass, a later request to narrow, choose v1, plan, implement, or prepare delivery activates convergence/,
+    /After the opening pass, use the canonical accepted-proposal contract to interpret later intent/,
   );
   assert.match(
     skill,
@@ -53,22 +58,23 @@ test("brainstorming separates opening exploration from convergence", () => {
   );
 });
 
-test("brainstorming accepts explicit bundles without expanding authority", () => {
+test("brainstorming delegates later authority to the canonical contract", () => {
   assert.match(
     skill,
-    /accepting the explicit recommendation or recommendation bundle/,
+    /later intent is left to the canonical accepted-proposal contract/,
   );
-  assert.match(skill, /without treating unstated scope/);
-  assert.match(
-    skill,
-    /Do not ask again about accepted items or low-risk defaults/,
-  );
+  assert.match(skill, /do not require a formal proposal template/);
+  assert.match(skill, /do not.*restate standard policy\s+checkpoints/);
   assert.match(skill, /State low-risk defaults together/);
   assert.match(
     skill,
     /Treating an opening "fix" or "implement" request as mutation authority/,
   );
-  assert.match(skill, /wait for a later explicit transition/);
+  assert.match(
+    skill,
+    /let the canonical contract resolve later work authority/,
+  );
+  assert.match(skill, /Brainstorming never writes the artifact/);
   assert.match(skill, /After convergence is invited, use a hard stop/);
 });
 

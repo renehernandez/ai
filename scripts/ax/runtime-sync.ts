@@ -21,6 +21,14 @@ import {
   resolve,
 } from "node:path";
 import {
+  assertRegistrationTargetSafe,
+  type HookRegistrationDeclaration,
+  inspectHookRegistration,
+  registrationFindings,
+  renderHookRegistrationDocument,
+  writeHookRegistrationCandidate,
+} from "./hook-registration.ts";
+import {
   readSelectedProfile,
   selectedProfilePath,
   selectedProfilePayload,
@@ -54,6 +62,7 @@ export type AxRuntimeConfig = {
       sourceDir?: string;
       canonicalDir?: string;
       targets?: Record<string, string>;
+      registrations?: HookRegistrationDeclaration[];
     };
     configs?: Record<
       string,
@@ -358,6 +367,25 @@ function inspectRuntimeState(
         findings.push(
           `runtime_link_target_invalid: ${path} points to ${observedTarget}, expected ${resolve(target)}`,
         );
+      }
+    }
+  }
+  if (
+    selection &&
+    input.config.runtime.hooks &&
+    (!input.surface || input.surface === "hooks")
+  ) {
+    for (const declaration of input.config.runtime.hooks.registrations ?? []) {
+      for (const target of ["claude", "codex"] as const) {
+        const status = inspectHookRegistration({
+          path: expandPath(declaration.targets[target], sourceRoot),
+          target,
+          declaration,
+        });
+        findings.push(...registrationFindings(status));
+        if (status.trust === "unverified_app_owned") {
+          warnings.push(`codex_hook_trust_unverified: ${declaration.id}`);
+        }
       }
     }
   }
@@ -678,6 +706,58 @@ function buildRuntimeCandidate(input: {
         target: canonicalHooks,
         surface: "hooks",
         asset: `hook-link/${targetName}`,
+      });
+    }
+    const registrations = hooks.registrations ?? [];
+    for (const targetName of ["claude", "codex"] as const) {
+      if (registrations.length === 0) continue;
+      const targetPath = expandPath(
+        registrations[0].targets[targetName],
+        input.sourceRoot,
+      );
+      assertRegistrationTargetSafe({
+        path: targetPath,
+        target: targetName,
+        home: effectiveHome(),
+      });
+      const candidatePath = join(
+        input.stagingRoot,
+        "hook-registrations",
+        `${candidateSequence.toString().padStart(5, "0")}-${targetName}.json`,
+      );
+      mkdirSync(dirname(candidatePath), { recursive: true });
+      let sourcePath = targetPath;
+      for (const declaration of registrations) {
+        const declarationTarget = expandPath(
+          declaration.targets[targetName],
+          input.sourceRoot,
+        );
+        assertRegistrationTargetSafe({
+          path: declarationTarget,
+          target: targetName,
+          home: effectiveHome(),
+        });
+        if (declarationTarget !== targetPath) {
+          throw new Error(
+            `hook_registration_target_conflict: ${targetName} registrations must share ${targetPath}`,
+          );
+        }
+        writeHookRegistrationCandidate(
+          candidatePath,
+          renderHookRegistrationDocument({
+            path: sourcePath,
+            declaration,
+          }),
+        );
+        sourcePath = candidatePath;
+      }
+      registerCopiedCandidate(entries, {
+        stagingRoot: input.stagingRoot,
+        candidateIndex: candidateSequence++,
+        path: targetPath,
+        sourcePath: candidatePath,
+        surface: "hooks",
+        asset: `hook-registration/${targetName}`,
       });
     }
   }
@@ -1012,6 +1092,11 @@ function configuredDesiredPaths(
     for (const target of Object.values(config.runtime.hooks.targets ?? {})) {
       paths.add(expandPath(target, sourceRoot));
     }
+    for (const declaration of config.runtime.hooks.registrations ?? []) {
+      for (const target of Object.values(declaration.targets)) {
+        paths.add(expandPath(target, sourceRoot));
+      }
+    }
   }
   return paths;
 }
@@ -1050,11 +1135,18 @@ function pathBelongsToSurface(
   const absolute = resolve(path);
   const skillRoots = runtimeSkillRoots(config, sourceRoot);
   const hookRoots = runtimeHookRoots(config, sourceRoot);
+  const hookRegistrationPaths = runtimeHookRegistrationPaths(
+    config,
+    sourceRoot,
+  );
   if (surface === "skills") {
     return skillRoots.some((root) => isDirectChild(absolute, root));
   }
   if (surface === "hooks") {
-    return hookRoots.some((root) => absolute === root);
+    return (
+      hookRoots.some((root) => absolute === root) ||
+      hookRegistrationPaths.includes(absolute)
+    );
   }
   if (
     skillRoots.some((root) => pathWithin(absolute, root)) ||
@@ -1196,6 +1288,26 @@ function validateConfig(config: AxRuntimeConfig, sourceRoot: string): void {
       true,
     );
   }
+  for (const declaration of config.runtime.hooks?.registrations ?? []) {
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(declaration.id)) {
+      throw new Error(`hook_registration_id_invalid: ${declaration.id}`);
+    }
+    if (declaration.event !== "PreToolUse") {
+      throw new Error(`hook_registration_event_invalid: ${declaration.id}`);
+    }
+    if (!declaration.matcher || !declaration.command) {
+      throw new Error(
+        `hook_registration_declaration_invalid: ${declaration.id}`,
+      );
+    }
+    for (const targetName of ["claude", "codex"] as const) {
+      assertRegistrationTargetSafe({
+        path: expandPath(declaration.targets[targetName], sourceRoot),
+        target: targetName,
+        home: effectiveHome(),
+      });
+    }
+  }
 }
 
 function validateRuntimeAssetRoots(
@@ -1255,6 +1367,17 @@ function runtimeHookRoots(
     config.runtime.hooks.canonicalDir ?? "~/.agents/hooks",
     ...Object.values(config.runtime.hooks.targets ?? {}),
   ].map((root) => expandPath(root, sourceRoot));
+}
+
+function runtimeHookRegistrationPaths(
+  config: AxRuntimeConfig,
+  sourceRoot: string,
+): string[] {
+  return (config.runtime.hooks?.registrations ?? []).flatMap((declaration) =>
+    Object.values(declaration.targets).map((path) =>
+      expandPath(path, sourceRoot),
+    ),
+  );
 }
 
 function validateIndependentRuntimeRoots(

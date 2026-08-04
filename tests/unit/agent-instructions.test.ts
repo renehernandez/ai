@@ -38,7 +38,10 @@ for (const file of entrypoints) {
     }
     assert.match(text, /explicit mode name.*override/i);
     assert.match(text, /one (?:write )?owner.*worktree|one writer.*worktree/i);
-    assert.match(text, /merge, deployment, and cleanup.*explicit/i);
+    assert.match(
+      text,
+      /merge, deployment, and cleanup.*(?:explicit|separately scoped)/i,
+    );
   });
 
   test(`${file} gates new substantive tasks through Explore before readiness`, () => {
@@ -54,42 +57,20 @@ for (const file of entrypoints) {
       text,
       /materially different requested\s+outcome resets the task to Explore/,
     );
-    assert.match(
-      text,
-      /later explicit instruction to proceed\s+authorizes Plan or Execute/,
-    );
-    assert.match(
-      text,
-      /Direct Execute is eligible only when one coherent\s+MR/,
-    );
+    assert.match(text, /accepted-proposal contract/);
+    assert.match(text, /investigation-and-implementation\.md/);
   });
 
   test(`${file} preserves authority without repeated confirmation`, () => {
     const text = readFileSync(file, "utf-8");
 
-    assert.match(text, /continue automatically within that scope/);
-    assert.match(
-      text,
-      /Routine wording, formatting, validation, test, CI,\s+review, and schema repairs do not require renewed permission/,
-    );
-    assert.match(text, /explicit recommendation bundle accepts that bundle/);
-    assert.match(
-      text,
-      /immediate `proceed`.*single.*pending\s+merge\s+action.*exact.*artifact/is,
-    );
-    assert.match(
-      text,
-      /standalone or ambiguous `proceed`.*does\s+not.*merge authority/is,
-    );
-    assert.match(text, /never unstated\s+scope or unrelated mutation/);
-    assert.match(
-      text,
-      /Existing authenticated\s+commands do not require renewed approval/,
-    );
-    assert.match(
-      text,
-      /credential entry or a new credential\s+grant remains a human action/,
-    );
+    assert.match(text, /Infer what the user accepts from context/);
+    assert.match(text, /selected delivery shape supply its normal checkpoint/);
+    assert.match(text, /separately scoped acceptance for terminal actions/);
+    assert.match(text, /Single-MR (?:merge )?authority.*consumed/is);
+    assert.match(text, /user's aggregate\s+or sequential scope/);
+    assert.doesNotMatch(text, /immediate `proceed`.*merge authority/is);
+    assert.doesNotMatch(text, /standalone or ambiguous `proceed`/i);
   });
 
   test(`${file} keeps shared behavior mechanically reviewed`, () => {
@@ -256,7 +237,8 @@ test("implementation rules route semantically and enforce the full OpenSpec POC"
     /Opening imperatives such as "fix", "implement", "change", or "build"/,
   );
   assert.match(text, /do not independently authorize mutation/);
-  assert.match(text, /later explicit instruction such as\s+"proceed"/);
+  assert.match(text, /infer later work authority from the proposal/);
+  assert.match(text, /not from prescribed confirmation words/);
   assert.match(
     text,
     /materially different requested outcome creates a new task boundary/,
@@ -359,11 +341,13 @@ test("Git rules separate Review from Finish and use native hook-enabled commits"
   assert.match(text, /HEAD or the resolved target-base SHA.*fresh exact-/is);
   assert.match(text, /patch-\s*equivalent rebase.*reuse discovery/is);
   assert.match(text, /merge.*explicit/i);
-  assert.match(
-    text,
-    /immediate `proceed`.*single.*pending\s+merge\s+action.*exact.*artifact/is,
-  );
-  assert.match(text, /deployment and cleanup.*explicit action language/is);
+  assert.match(text, /accepted-proposal contract/);
+  assert.match(text, /terminal action requires one exact action and target/);
+  assert.match(text, /one unambiguous MR.*consumed/is);
+  assert.match(text, /multi-MR sequence requires the user's aggregate/is);
+  assert.match(text, /material effective-diff change.*renewed authority/is);
+  assert.match(text, /No confirmation word has\s+special authority/);
+  assert.doesNotMatch(text, /immediate `proceed`.*merge/is);
   assert.match(
     text,
     /atomic\s+plan and its implementation form one change set in one final MR/is,
@@ -529,7 +513,10 @@ test("delivery guidance keeps final MRs draft and follows hosted gates", () => {
 test("accepted atomic plans continue through automated draft delivery", () => {
   const portableAgents = readFileSync("instructions/AGENTS.md", "utf-8");
 
-  assert.match(portableAgents, /complete atomic plan.*`agreed`/is);
+  assert.match(
+    portableAgents,
+    /Acceptance of a complete atomic plan authorizes its uninterrupted Plan,\s+Execute, Review, and Finish sequence/,
+  );
   assert.match(portableAgents, /dedicated\s+draft PR\/MR/);
   assert.match(portableAgents, /no actionable automated feedback remains/);
   assert.match(portableAgents, /does not authorize merge/);

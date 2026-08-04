@@ -158,7 +158,15 @@ test("stack mechanics stay inside lifecycle and provider authority", () => {
   assert.match(skill, /bounded specialist inside the active lifecycle mode/);
   assert.match(skill, /`stack sync`.*\| Finish \|/);
   assert.match(skill, /technical readiness does not mark an MR ready/);
-  assert.match(skill, /Explicit\n {2}merge authority/);
+  assert.match(skill, /one unambiguous MR and is consumed/);
+  assert.match(skill, /user-authored aggregate stack/);
+  assert.match(
+    skill,
+    /Generic assent to an\n {2}agent-proposed sequence never/,
+  );
+  assert.match(skill, /materially changed effective diff requires/);
+  assert.match(skill, /leave it draft/);
+  assert.match(workflows, /`yes`, `agreed`, or `proceed`/);
   assert.match(workflows, /Invoke `change-request-create`/);
   assert.match(workflows, /internal GitLab mechanics/);
 });

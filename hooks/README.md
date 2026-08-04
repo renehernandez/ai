@@ -36,8 +36,11 @@ pnpm ax hooks validate
 ```
 
 Status and validate perform no network access and no mutation. They verify hook
-path presence and configured link targets. They do not compare file contents or
-establish remote-ref freshness; sync restores source content.
+path presence, configured link targets, and every AX-owned Codex and Claude
+registration. Missing, duplicate, or stale owned registrations fail validation.
+Codex trust remains reported as unverified because only the app owns and can
+confirm its exact-definition trust hash. Status and validate do not compare hook
+file contents or establish remote-ref freshness; sync restores source content.
 
 Before merge, run hook synchronization with isolated HOME, cache, targets, and
 harness config. Do not refresh the live
@@ -97,12 +100,43 @@ Malformed, missing, or unsupported hook payloads write a diagnostic to stderr
 and do not block an unrelated command. A matched direct binary path returns a
 deny decision with the path, command excerpt, reason, and replacement guidance.
 
+## `block-delete-outside-cwd.ts`
+
+This `PreToolUse` guard allows supported shell deletion commands only when each
+target can be proven to stay inside the hook payload's `cwd`. It covers:
+
+- `rm`, `rmdir`, and `unlink`;
+- `find` with `-delete`;
+- `git clean`, including `git -C`;
+- visible commands in lists, pipelines, subshells, and literal `sh -c` strings;
+- standard `command`, `env`, and `sudo` wrappers.
+
+The guard denies parent traversal, external absolute paths, dynamic variables,
+command substitution, globbing, ambiguous directory changes, and traversal
+through an in-root symlink to an external directory. Deleting the in-root
+symlink itself remains allowed.
+
+Inspect its metadata or help from the synchronized runtime:
+
+```bash
+pnpm exec tsx ~/.agents/hooks/block-delete-outside-cwd.ts --agent-discovery
+pnpm exec tsx ~/.agents/hooks/block-delete-outside-cwd.ts --help
+```
+
+The hook protects supported intercepted shell calls. It does not cover
+`apply_patch`, MCP deletion tools, application APIs, or child processes whose
+deletion operation is not statically visible. Treat it as a guardrail, not an
+operating-system security boundary.
+
 ## Codex and Claude registration
 
-Hook sync manages startup registration in the configured Codex and Claude
-settings targets. Do not hand-edit managed registration or managed hook links.
-Codex trust hashes remain app-owned; report an untrusted status and let the app
-record trust.
+`runtime.hooks.registrations` declares AX-owned registrations and their exact
+Codex and Claude settings targets. Hook sync removes stale entries owned by the
+same hook identity, adds the desired entry once, and preserves unrelated hooks
+and settings. Do not hand-edit managed registration or managed hook links.
+
+Codex trust hashes remain app-owned. After a merged-main live sync, review and
+trust a newly registered hook in Codex instead of editing `config.toml`.
 
 ## Focused verification
 
@@ -110,6 +144,9 @@ Run the hook integration suite after changing source or registration behavior:
 
 ```bash
 pnpm exec tsx --test tests/integration/startup-git-sync.test.ts
+pnpm exec tsx --test tests/integration/block-delete-outside-cwd.test.ts
+pnpm exec tsx --test tests/integration/hook-registration-runtime.test.ts
+pnpm exec tsx --test tests/unit/hook-registration.test.ts
 ```
 
 Then run hook validation against isolated runtime roots before publication.
