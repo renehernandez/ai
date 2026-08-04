@@ -191,7 +191,7 @@ test("GREEN authority: one canonical accepted-proposal owner supplies checkpoint
   );
   assert.match(
     finish,
-    /Replacement or consolidation authority does not dispose of existing review/,
+    /Replacement or consolidation.*does not imply disposal of an existing review/is,
   );
   assert.match(implementation, /one unambiguous.*MR and is\s+consumed/is);
   assert.match(
@@ -262,10 +262,8 @@ test("RED authority: technical readiness cannot replace explicit POC disposal au
     /POC disposal require.*exact action and target/is,
   );
   assert.match(finish, /exact POC-disposal action and artifact/i);
-  assert.match(
-    finish,
-    /exact closure proposal.*stack-breakdown proposal.*first action is closing that named POC/is,
-  );
+  assert.match(finish, /closes unmerged/i);
+  assert.match(finish, /durable learnings are reconciled/i);
 });
 
 test("RED authority: an accepted POC does not stop for renewed permission at review barriers", () => {
@@ -304,13 +302,16 @@ test("GREEN authority: accepted POC review barriers resume through draft publica
       /contract-preserving findings.*Execute.*material.*Plan/is,
     );
   }
-  assert.match(
-    finish,
-    /completed hook-clean POC.*publish.*draft.*request.*hosted review.*completed-code Review/is,
-  );
+  assert.match(finish, /completed hook-clean POC.*publish.*draft/is);
+  assert.match(finish, /request hosted review/is);
+  assert.match(finish, /completed-code Review/is);
   assert.match(
     finish,
     /completed-POC Review.*technical readiness.*not.*initial draft publication/is,
+  );
+  assert.match(
+    finish,
+    /phase barrier.*not.*renewed user-permission checkpoint/is,
   );
 });
 
@@ -404,9 +405,9 @@ test("GREEN semantic-delivery: Nitro requests follow every source-head push thro
   assert.match(nitroPolicy, /expectedNitroRequest/);
   assert.match(feedbackGate, /nitro-request-policy/);
   assert.match(feedbackGate, /requestObservedHeadSha !== gate\.headSha/);
-  for (const text of [feedback, finish]) {
-    assert.match(text, /canonical.*Nitro rule|Nitro rule.*canonical/is);
-  }
+  assert.match(feedback, /canonical.*Nitro rule|Nitro rule.*canonical/is);
+  assert.match(finish, /rules\/fullscript\/nitro-review\.md/);
+  assert.match(finish, /owns request timing.*latest-head\s+closure/is);
   assert.match(nitroRule, /Target-only movement/i);
 });
 
@@ -421,14 +422,8 @@ test("GREEN authority: POCs capture learnings and remain open until explicit use
     assert.match(text, /remain.*open|leave.*open/is);
     assert.match(text, /read(?:y|iness) to proceed\s+to stack breakdown/i);
   }
-  assert.match(
-    finish,
-    /Technical readiness and personal acceptance leave it open/,
-  );
-  assert.match(
-    finish,
-    /stack-breakdown proposal.*first action is closing that named POC/is,
-  );
+  assert.match(finish, /exact disposal is accepted/i);
+  assert.match(finish, /completed-POC Review checkpoint/i);
   assert.match(implementation, /reconcile.*OpenSpec/is);
   assert.match(execute, /capture.*learning/is);
 });
@@ -439,7 +434,7 @@ test("GREEN authority: Nitro readiness carries Finish semantic evidence", () => 
   const contract = read("skills/review/scripts/review-contract.ts");
 
   assert.match(finish, /hostedFeedbackSemanticReview/);
-  assert.match(finish, /complete Nitro response/i);
+  assert.match(finish, /complete\s+Nitro response/i);
   assert.match(review, /Finish's exact-head semantic review evidence/i);
   assert.match(contract, /technical_readiness_nitro_semantic_review_missing/);
   assert.match(contract, /technical_readiness_nitro_semantic_review_blocked/);

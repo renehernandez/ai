@@ -410,9 +410,11 @@ test("modes route to bounded specialists without restoring Codex PR feedback", (
   assert.match(review, /`gitlab-adapter-review`/);
   assert.match(review, /`nitro-review-feedback`/);
   assert.match(review, /Codex-authored PR feedback remains retired/);
-  assert.match(finish, /invoke\s+`change-request-create`/);
-  assert.match(finish, /only selectable\s+description and publication owner/);
-  assert.match(finish, /internal GitHub or GitLab mechanics/);
+  assert.match(
+    finish,
+    /invoke\s+`change-request-create`.*only selectable description and\s+publication owner/is,
+  );
+  assert.match(finish, /delegates provider\s+mechanics to its references/);
 });
 
 test("Review rejects stale readiness checkpoints and hosted feedback", () => {
@@ -898,10 +900,8 @@ test("completed OpenSpec archival is owned by the final lifecycle head", () => {
     review,
     /canonical specs, removal from active discovery, and the dated archive on the same exact HEAD/,
   );
-  assert.match(
-    finish,
-    /Missing or inconsistent archive state returns to the same Execute owner; Finish does not create it/,
-  );
+  assert.match(finish, /Missing state returns to Execute/);
+  assert.match(finish, /Finish does not create it as cleanup/);
   assert.match(
     agents,
     /Finish requires it for readiness rather than performing archival as cleanup/,

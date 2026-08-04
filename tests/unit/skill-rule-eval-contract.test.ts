@@ -134,6 +134,18 @@ test("GREEN execute evaluation preserves the accepted POC review boundary", () =
   );
 });
 
+test("Finish evaluation permits provider routing while denying terminal actions", () => {
+  const scenario = selectedScenarios("finish-terminal-denial")[0];
+  assert.deepEqual(scenario.skills, ["finish"]);
+  assert.ok(scenario.required.includes("provider-routing"));
+  assert.ok(scenario.required.includes("terminal-denial"));
+  assert.ok(scenario.forbidden.includes("provider-write"));
+  assert.ok(scenario.forbidden.includes("merge"));
+  assert.ok(scenario.forbidden.includes("deploy"));
+  assert.ok(scenario.forbidden.includes("cleanup"));
+  assert.equal(scenario.allowRepositoryWrite, false);
+});
+
 test("review evaluation binds read-only findings to an exact target", () => {
   const scenario = selectedScenarios("review-exact-target")[0];
   assert.ok(scenario.required.includes("exact-target"));

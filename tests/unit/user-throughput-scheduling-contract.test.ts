@@ -81,7 +81,10 @@ test("existing lifecycle owners apply the scheduling contract without a new hier
   assert.match(execute, /Start independent units immediately/i);
   assert.match(review, /Start independent ready types together/i);
   assert.match(review, /backfill\s+capacity/i);
-  assert.match(finish, /both can proceed concurrently/i);
+  assert.match(
+    finish,
+    /local Review inspect the same\s+hosted head concurrently/i,
+  );
   assert.doesNotMatch(
     [instructions, plan, execute, review, finish].join(" "),
     /Squad Lead|Project Lead|persistent scheduler/i,
