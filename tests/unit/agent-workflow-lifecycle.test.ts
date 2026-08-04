@@ -377,7 +377,9 @@ test("GREEN semantic-delivery: stack publication stays sequential and restacks o
 
   assert.match(implementation, /one after another|sequential/i);
   assert.match(git, /one after another|sequential/i);
-  assert.match(stacked, /Sequential initial publication/i);
+  assert.match(stacked, /real-diff draft MRs sequentially/i);
+  assert.match(stacked, /Do not restack\s+descendants/i);
+  assert.match(stacked, /exact expected remote-head lease/i);
   assert.match(workflows, /Publish real diffs sequentially/i);
   for (const text of [implementation, git, stacked, workflows]) {
     assert.match(text, /immediate\s+child/i);

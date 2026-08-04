@@ -164,6 +164,20 @@ test("change request evaluation preserves description ownership without writes",
   assert.equal(scenario.allowRepositoryWrite, false);
 });
 
+test("provider-adapter evaluation preserves exact-head routing and stack ancestry", () => {
+  const scenario = selectedScenarios("provider-adapter-routing")[0];
+  assert.deepEqual(scenario.skills, [
+    "github-adapter-review",
+    "gitlab-adapter-review",
+    "glab-stacked-diffs",
+  ]);
+  assert.ok(scenario.required.includes("exact-head"));
+  assert.ok(scenario.required.includes("stack-ancestry"));
+  assert.ok(scenario.forbidden.includes("provider-write"));
+  assert.ok(scenario.forbidden.includes("repository-write"));
+  assert.equal(scenario.allowRepositoryWrite, false);
+});
+
 test("review evaluation binds read-only findings to an exact target", () => {
   const scenario = selectedScenarios("review-exact-target")[0];
   assert.ok(scenario.required.includes("exact-target"));

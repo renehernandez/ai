@@ -118,7 +118,7 @@ test("restored specialists declare one five-mode owner without expanding authori
     const skill = readFileSync(join(root, "skills", name, "SKILL.md"), "utf8");
     assert.match(
       skill,
-      new RegExp(`bounded ${owner} (?:specialist|provider adapter)`),
+      new RegExp(`bounded ${owner} (?:specialist|provider adapter|adapter)`),
       name,
     );
   }

@@ -100,8 +100,9 @@ test("MR visibility preserves concurrent work without speculative restacks", () 
 
   assert.match(gitRules, /Logical dependencies control semantic eligibility/i);
   assert.match(gitRules, /Implement semantically eligible units concurrently/i);
-  assert.match(stackSkill, /Sequential initial publication/i);
-  assert.match(stackSkill, /Promotion-only restacking/i);
+  assert.match(stackSkill, /real-diff draft MRs sequentially/i);
+  assert.match(stackSkill, /restack only its immediate child/i);
+  assert.match(stackSkill, /leave deeper descendants untouched/i);
   assert.match(stackWorkflow, /Do not accept an automatic descendant rewrite/i);
   assert.match(stackWorkflow, /Review gates can execute concurrently/i);
 });
