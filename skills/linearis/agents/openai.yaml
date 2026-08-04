@@ -1,4 +1,4 @@
 interface:
   display_name: "Linearis"
-  short_description: "Operate Linear through its JSON CLI"
-  default_prompt: "Use $linearis to perform this Linear provider operation through the linearis CLI within the active semantic and lifecycle authority."
+  short_description: "Use the fallback Linear JSON CLI safely"
+  default_prompt: "Use $linearis as the fallback CLI adapter for this Linear provider operation within the active semantic and lifecycle authority."

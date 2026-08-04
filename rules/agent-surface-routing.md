@@ -47,10 +47,10 @@ host adapters and Nitro feedback normalization; Finish owns later explicitly
 approved `linear-project-overview` updates, change-request description policy,
 and provider creation mechanics.
 
-`linearis` is the bounded Linear provider adapter on local surfaces. It supplies
-CLI mechanics to the active semantic owner and never grants provider mutation
-authority. Unsupported CLI coverage does not authorize an MCP, app, or plugin
-fallback.
+Linear provider selection follows [command-and-tools.md](command-and-tools.md).
+On local surfaces, `linearis` supplies fallback CLI mechanics to the active
+semantic owner. The selected provider route never grants mutation authority;
+the active semantic and lifecycle owners remain unchanged.
 
 - Explore and Review may run on any surface that can read the required target.
 - Plan and Execute require a repository-visible artifact plus a dedicated

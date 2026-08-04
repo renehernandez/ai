@@ -9,7 +9,7 @@ These rules apply to command execution, network access, and tool installation ac
 - When fetching web pages for content, include `-H "Accept: text/markdown"` to request Markdown. Many sites, including Cloudflare and GitHub, return cleaner Markdown than HTML.
 - If the response content type is not `text/markdown`, fall back to HTML parsing.
 - Example: `curl -s -H "Accept: text/markdown" "https://example.com"`
-- Do not use `curl` for authenticated GitHub API work. Use `gh api` instead.
+- Authenticated GitHub API work belongs to `gh api`, not `curl`.
 - Do not use `curl` for Cloudflare API operations. Use `wrangler` subcommands instead.
 
 ## Shell Command Discipline
@@ -45,13 +45,19 @@ These rules apply to command execution, network access, and tool installation ac
 - In Codex, apply shell instructions to the available shell command tool.
 - If a rule names a tool that is unavailable in the current harness, use the closest safe equivalent and report the fallback when it affects verification or behavior.
 
-## Provider CLIs
+## Provider Tools
 
 - Use the authenticated organization-aware CLI selected for the provider.
-- Use `linearis` for supported Linear provider reads and writes. Read its live
-  `usage` output before an unfamiliar operation.
-- Do not use Linear MCP, app, or plugin tools as a fallback. Report an
-  unsupported Linearis operation as a capability blocker.
+- For Linear, use a connected Linear MCP or app integration first when its tool
+  is available and authenticated.
+- Fall back to `linearis` when the Linear integration is unavailable,
+  unauthenticated, or lacks the required operation. Do not require integration
+  reauthentication when `linearis` can safely complete the operation. Read the
+  CLI's live `usage` output before an unfamiliar fallback operation.
+- After an ambiguous integration mutation failure, re-read the target before
+  selecting a fallback so one intended write cannot be applied twice. Report a
+  capability blocker only when neither adapter can safely complete the
+  operation.
 - Credential entry through `linearis auth login` remains a human action.
 
 ## AX runtime convergence

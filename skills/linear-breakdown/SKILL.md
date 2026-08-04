@@ -1,7 +1,7 @@
 ---
 name: linear-breakdown
 description: Use when collaboratively turning plans, OpenSpec changes, specs, design docs, or implementation proposals into Linear issues, milestones, projects, or delivery slices.
-allowed-tools: Read, Glob, Grep, AskUserQuestion, Bash(linearis:*), Bash(jq:*)
+allowed-tools: Read, Glob, Grep, AskUserQuestion, Bash(linearis:*), Bash(jq:*), mcp__linear__*, mcp__codex_apps__linear_*
 ---
 
 # Linear Breakdown
@@ -31,10 +31,11 @@ If pressured to skip review, the correct action is to present the concise previe
 
 Read-only discovery is allowed before approval: inspect existing Linear projects, milestones, issues, labels, and duplicates when tools are available. Discovery never permits writes. If matching issues already exist, preview the update/reuse plan and ask before editing them.
 
-Use `linearis` for provider mechanics. Read the relevant live domain usage
-before acting, preserve immutable IDs, and exhaust every required cursor during
-read-only discovery and deduplication. Never use a Linear MCP, app, or plugin
-fallback.
+Use an available authenticated Linear MCP or app integration first. Fall back
+to `linearis` when that integration is unavailable, unauthenticated, or lacks
+the required operation. On the CLI fallback path, read the relevant live domain
+usage before acting, preserve immutable IDs, and exhaust every required cursor
+during read-only discovery and deduplication.
 
 ## Workflow
 
@@ -80,13 +81,14 @@ linear_breakdown_preview:
   creation_mode: draft_only | create_after_approval | create_immediately
 ```
 
-6. Create or update Linear only after approval and only through a supported
-   `linearis` operation. Re-read each target immediately before the write,
-   apply only approved fields, then require exact readback. A required rich
-   issue description blocks the write until Linearis supports file-backed
-   input. Only description-free writes with bounded non-Markdown fields can
-   proceed in this delivery. Summarize issue keys, milestone link, ordering,
-   and deferred work only after verified writes.
+6. Create or update Linear only after approval. Re-read each target immediately
+   before the write, apply only approved fields, then require exact readback
+   through the adapter that performed the write. Use the preferred integration
+   for a required rich issue description. If routing falls back to `linearis`,
+   only description-free writes with bounded non-Markdown fields can proceed.
+   Report a capability blocker when neither adapter can safely complete the
+   approved operation. Summarize issue keys, milestone link, ordering, and
+   deferred work only after verified writes.
 
 ## Approval Modes
 
@@ -273,7 +275,8 @@ Start with the real outcome ticket, then place only the minimum foundation insid
 | Letting disabled flags, rules, or env hide the path | State whether disabled/skipped/absent means incomplete or blocked |
 | Leaving cross-system identifiers implicit | Name the canonical identifier representation in the ticket |
 | Sending an issue description as an inline shell argument | Return the `linearis` file-backed-input capability blocker |
-| Falling back to Linear MCP, app, or plugin tools | Report the unsupported CLI operation without a provider write |
+| Prompting for integration login when Linearis can safely complete the operation | Use the authenticated `linearis` fallback |
+| Retrying an ambiguous integration mutation through Linearis | Re-read the target before selecting the fallback so the write cannot be duplicated |
 | Treating breakdown approval as approval for a later comment | Show the exact destination and rendered draft, then obtain the message-specific confirmation required by `rules/git-and-review.md`. |
 
 ## Test Evidence

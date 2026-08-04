@@ -1,6 +1,6 @@
 ---
 name: linearis
-description: Use when reading or mutating Linear issues, projects, milestones, initiatives, documents, labels, teams, users, cycles, or discussions through the linearis CLI.
+description: Use when a connected Linear integration is unavailable, unauthenticated, or lacks a required operation and Linear data must be read or mutated through the authenticated linearis CLI.
 allowed-tools: Bash(linearis:*), Bash(jq:*)
 ---
 
@@ -8,10 +8,12 @@ allowed-tools: Bash(linearis:*), Bash(jq:*)
 
 ## Boundary
 
-Use `linearis` as the provider adapter for Linear. It owns CLI discovery,
-authentication failures, identifiers, JSON envelopes, pagination, and verified
-provider operations. It does not grant Linear mutation authority or replace
-`linear-project-overview`, `linear-breakdown`, or another semantic owner.
+Use `linearis` as the fallback adapter for Linear when the connected Linear
+integration is unavailable, unauthenticated, or lacks the required operation.
+It owns CLI discovery, authentication failures, identifiers, JSON envelopes,
+pagination, and verified fallback operations. It does not grant Linear
+mutation authority or replace `linear-project-overview`, `linear-breakdown`, or
+another semantic owner.
 
 Explore and Review stay read-only. Only Finish performs a Linear provider write
 after the owning semantic workflow's preview and approval contract is
@@ -54,8 +56,8 @@ CLI cannot express.
 - For threaded feedback, paginate root discussions and the replies for every
   relevant root thread. Use domain-owned discussion commands; the top-level
   `comments` facade is deprecated.
-- Treat unsupported CLI coverage as a capability blocker. Do not fall back to
-  Linear MCP, app, or plugin tools.
+- Treat unsupported CLI coverage as a capability blocker after the preferred
+  Linear integration is unavailable or cannot perform the operation.
 
 ## Mutations
 
@@ -77,15 +79,17 @@ The current CLI accepts project `content`, issue `description`, and discussion
 interpolation, command substitution, temporary wrapper scripts, or handcrafted
 escaping.
 
-Until the relevant command exposes file-backed input, return this capability
-blocker:
+When the preferred Linear integration is unavailable or cannot perform the
+approved rich Markdown mutation, and the CLI fallback lacks file-backed input,
+return this capability blocker:
 
 > Linearis has no file-backed input for the approved rich Markdown, and inline
 > arguments are unsafe. No Linear write was attempted.
 
-Do not use a Linear MCP, app, or plugin fallback. An approved mutation may
-continue only when every changed value is a resolved identifier, enum, number,
-date, boolean, or similarly bounded non-Markdown scalar.
+An approved CLI fallback mutation may continue only when every changed value is
+a resolved identifier, enum, number, date, boolean, or similarly bounded
+non-Markdown scalar. Use the preferred integration instead when it is available
+and supports the approved rich Markdown mutation.
 
 ## Common Mistakes
 
@@ -97,15 +101,20 @@ date, boolean, or similarly bounded non-Markdown scalar.
 | Filtering away pagination evidence | Preserve `nodes` and `pageInfo`, or use raw JSON. |
 | Assuming `Done` is universal | Resolve the target team's completed status. |
 | Passing Markdown inline because quoting looks safe | Return the file-backed-input capability blocker. |
-| Falling back to an installed Linear plugin | Report unsupported CLI coverage without a provider fallback. |
+| Prompting for integration login when the CLI can complete the operation | Continue through the authenticated CLI fallback. |
+| Treating an ambiguous integration mutation failure as proof that no write occurred | Re-read the target before selecting the CLI fallback. |
 
 ## Test Evidence
 
 - RED: the repository had no internal CLI adapter, semantic skills named no
   `linearis` route, pagination evidence could be incomplete, and rich Markdown
   writes had no safe capability blocker.
-- GREEN: focused executable scenarios require CLI-only routing, lifecycle
-  authority, cursor exhaustion, immutable identity, exact readback, project
-  field mapping, and refusal of unsafe Markdown or plugin fallback.
-- REFACTOR: the adapter remains provider-specific and leaves project overview
-  and issue-breakdown semantics with their existing owners.
+- RED fallback: the CLI-only policy blocked an approved rich Markdown write
+  despite an authenticated integration and did not model integration
+  authentication or capability failures as fallback conditions.
+- GREEN: focused executable scenarios require integration-first routing with a
+  Linearis fallback while preserving lifecycle authority, cursor exhaustion,
+  immutable identity, exact readback, project field mapping, and refusal of
+  unsafe CLI Markdown.
+- REFACTOR: Linearis remains a provider-specific fallback and leaves project
+  overview and issue-breakdown semantics with their existing owners.

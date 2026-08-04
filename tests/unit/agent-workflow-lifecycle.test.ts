@@ -7,6 +7,62 @@ import { read } from "../../scripts/charter-validator-reader.ts";
 
 const root = process.cwd();
 
+test("RED authority: Linear provider routing does not force the CLI or block an available integration", () => {
+  const commands = read("rules/command-and-tools.md");
+  const linearis = read("skills/linearis/SKILL.md");
+  const overview = read("skills/linear-project-overview/SKILL.md");
+  const breakdown = read("skills/linear-breakdown/SKILL.md");
+  const surfaceRouting = read("rules/agent-surface-routing.md");
+  const gitRule = read("rules/git-and-review.md");
+
+  for (const providerSurface of [
+    commands,
+    linearis,
+    overview,
+    breakdown,
+    surfaceRouting,
+    gitRule,
+  ]) {
+    assert.doesNotMatch(providerSurface, /CLI-only routing/i);
+    assert.doesNotMatch(
+      providerSurface,
+      /Do not use (?:a )?Linear MCP, app, or plugin fallback/i,
+    );
+  }
+});
+
+test("GREEN authority: Linear uses the connected integration before the Linearis fallback", () => {
+  const commands = read("rules/command-and-tools.md");
+  const linearis = read("skills/linearis/SKILL.md");
+  const overview = read("skills/linear-project-overview/SKILL.md");
+  const breakdown = read("skills/linear-breakdown/SKILL.md");
+  const surfaceRouting = read("rules/agent-surface-routing.md");
+  const gitRule = read("rules/git-and-review.md");
+  const linearisMetadata = read("skills/linearis/agents/openai.yaml");
+
+  assert.match(commands, /Linear MCP or app integration first/i);
+  assert.match(commands, /Fall back to `linearis`/i);
+  assert.match(commands, /Do not require integration\s+reauthentication/i);
+  assert.match(linearis, /fallback adapter for Linear/i);
+  assert.match(
+    linearis,
+    /^description: .*unavailable, unauthenticated, or lacks a required operation.*authenticated linearis CLI\.$/m,
+  );
+  for (const semanticOwner of [overview, breakdown]) {
+    assert.match(semanticOwner, /Linear MCP or app integration first/i);
+    assert.match(semanticOwner, /Fall back\s+to `linearis`/i);
+    assert.match(semanticOwner, /^allowed-tools: .*mcp__linear__\*/m);
+    assert.match(
+      semanticOwner,
+      /^allowed-tools: .*mcp__codex_apps__linear_\*/m,
+    );
+  }
+  assert.match(surfaceRouting, /selection follows.*command-and-tools\.md/is);
+  assert.match(surfaceRouting, /`linearis` supplies fallback CLI mechanics/i);
+  assert.match(gitRule, /through the selected Linear provider route/i);
+  assert.match(linearisMetadata, /fallback CLI adapter/i);
+});
+
 test("RED authority: consumers do not redefine the accepted-proposal contract or magic confirmation words", () => {
   const implementation = read("rules/investigation-and-implementation.md");
   const entrypoint = read("AGENTS.md");

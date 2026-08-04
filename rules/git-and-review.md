@@ -255,10 +255,10 @@ review feedback. `codex-review-feedback` remains retired.
 
 - Before repository implementation begins for a Linear-tracked issue, route one
   pre-implementation ownership step through Finish. Finish re-reads the issue
-  and, when present, its project through `linearis`, then resolves the
-  authenticated Linear user. An issue without a project skips only the
-  project-lead branch. This invokes Finish as the sole provider-write owner,
-  not as a transition into terminal Finish work.
+  and, when present, its project through the selected Linear provider route,
+  then resolves the authenticated Linear user. An issue without a project
+  skips only the project-lead branch. This invokes Finish as the sole
+  provider-write owner, not as a transition into terminal Finish work.
 - If the issue is unassigned, assign it to the authenticated Linear user. If it
   is already assigned to the authenticated Linear user, continue. If it is
   assigned to another user, stop before repository or provider mutation and ask
