@@ -66,7 +66,7 @@ test("linear-project-overview preserves lifecycle and mutation authority", () =>
   assert.match(skill, /never creates a Linear project/);
   assert.match(
     skill,
-    /update only the mapped `description` and `content` fields/,
+    /update only the mapped `description` and `content` fields/i,
   );
   assert.match(
     routing,
@@ -103,7 +103,11 @@ test("linear-project-overview revalidates feedback and drift before apply", () =
   assert.match(skill, /mismatch as failed verification/);
   assert.match(skill, /return the project link/);
   assert.match(skill, /file-backed-input capability blocker/);
-  assert.match(skill, /Do not attempt the write/);
+  assert.match(skill, /preferred integration.*approved rich Markdown/i);
+  assert.match(
+    skill,
+    /fall back to `linearis`.*file-backed-input capability blocker/i,
+  );
 });
 
 test("linear-project-overview routes adjacent work to canonical owners", () => {

@@ -1,7 +1,7 @@
 ---
 name: linear-project-overview
 description: Use when drafting, reviewing, or updating a Linear project's summary or description, especially when the overview is unstable, overloaded with delivery detail, duplicates milestones or updates, or needs approval-safe provider mutation.
-allowed-tools: Read, Glob, Grep, AskUserQuestion, Bash(linearis:*), Bash(jq:*)
+allowed-tools: Read, Glob, Grep, AskUserQuestion, Bash(linearis:*), Bash(jq:*), mcp__linear__*, mcp__codex_apps__linear_*
 ---
 
 # Linear Project Overview
@@ -12,9 +12,9 @@ This is a bounded specialist, not a lifecycle owner. Explore owns drafting and
 review, which are read-only. Finish owns a later explicitly approved update.
 Never treat the initial request as permission to mutate Linear.
 
-Use `linearis` for every supported provider read or write and follow the
-`linearis` skill for CLI mechanics. Never use a Linear MCP, app, or plugin
-fallback.
+Use an available authenticated Linear MCP or app integration first. Fall back
+to `linearis` when that integration is unavailable, unauthenticated, or lacks
+the required operation, and follow the `linearis` skill for CLI mechanics.
 
 ## Provider Field Mapping
 
@@ -85,9 +85,10 @@ it from the delivery inventory.
 
 1. Identify the exact existing project, or establish that the request concerns
    a proposed project.
-2. Use `linearis projects usage` and the relevant domain usage, then read the
-   project, project documents, milestones, and issues without mutation. Read
-   accepted source artifacts when available.
+2. Through the selected Linear adapter, read the project, project documents,
+   milestones, and issues without mutation. On the CLI fallback path, first use
+   `linearis projects usage` and the relevant domain usage. Read accepted
+   source artifacts when available.
 3. Traverse every project discussion page through `pageInfo.endCursor`, then
    traverse every relevant root thread's replies before selecting unresolved
    feedback.
@@ -113,21 +114,21 @@ Proceed only after a later explicit instruction approves the exact preview.
 1. Re-fetch the exact project by immutable ID, traverse every project
    discussion page and every relevant root thread's replies, and only then
    select the relevant unresolved feedback.
-2. Compare the current Linearis `description` and `content` fields exactly with
+2. Compare the current Linear `description` and `content` fields exactly with
    the observed workflow summary and description in the approved snapshot. Any
    mismatch stops the update and returns a refreshed preview for approval.
 3. Compare each relevant unresolved feedback item's identifier, resolution
    state, body, update timestamp, and anchored quoted text exactly with the
    approved snapshot. New or changed material feedback stops the update and
    refreshes the preview; minor wording drift is reported without blocking.
-4. Because the approved workflow description requires a project `content`
-   write, return the `linearis` file-backed-input capability blocker. Do not
-   attempt the write or fall back to a Linear MCP, app, or plugin.
-5. After Linearis gains safe file-backed input in a separately accepted change,
-   update only the mapped `description` and `content` fields, read both fields
-   back, require exact equality with the approved values, and return the project
-   link. Report a mismatch as failed verification without another provider
-   write.
+4. Update only the mapped `description` and `content` fields through the
+   preferred integration when it supports the approved rich Markdown. If that
+   integration is unavailable, unauthenticated, or lacks the operation, fall
+   back to `linearis`; return its file-backed-input capability blocker before a
+   rich Markdown write.
+5. Read both fields back through the adapter that performed the write, require
+   exact equality with the approved values, and return the project link. Report
+   a mismatch as failed verification without another provider write.
 
 Materially contradictory unresolved feedback blocks finalization. Minor wording
 feedback is reported but does not block. Never change teams, initiatives, lead,
@@ -153,6 +154,6 @@ documents, or native resources.
 | Promoting possible future work into scope | Omit it or use a conditional non-goal when ambiguity is plausible |
 | Applying after the project changed | Refresh the preview and request approval again |
 | Confusing workflow terms with CLI fields | Map summary to `description` and Markdown description to `content` |
-| Sending approved Markdown as an inline argument | Return the file-backed-input capability blocker |
-| Falling back to a provider plugin | Report the CLI capability blocker and make no write |
+| Sending approved Markdown as a CLI inline argument | Use the preferred integration or return the CLI file-backed-input capability blocker |
+| Prompting for integration login while Linearis is authenticated and capable | Fall back to `linearis` without weakening preview or readback requirements |
 | Updating related project fields for consistency | Change only the approved mapped fields |

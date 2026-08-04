@@ -272,7 +272,7 @@ const behaviorScenarioContracts = {
     greenName: "GREEN authority:",
     owns: (change: Change) =>
       ["AGENTS.md", "instructions/AGENTS.md"].includes(change.path) ||
-      /^(?:skills\/(?:brainstorming|execute|finish|plan)\/|rules\/docs-and-specs\.md$|rules\/investigation-and-implementation\.md$)/.test(
+      /^(?:skills\/(?:brainstorming|execute|finish|linear-breakdown|linear-project-overview|linearis|plan)\/|rules\/(?:agent-surface-routing|command-and-tools|docs-and-specs|git-and-review|investigation-and-implementation)\.md$)/.test(
         change.path,
       ),
     redEvidence: {
