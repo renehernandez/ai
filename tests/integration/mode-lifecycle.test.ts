@@ -378,9 +378,9 @@ test("Review exposes distinct planning, POC, and final reviewer catalogs", () =>
   }
 
   const reviewSkill = read("skills/review/SKILL.md");
-  assert.match(reviewSkill, /Planning Artifact Boundary/);
+  assert.match(reviewSkill, /Planning and POC Boundaries/);
   assert.match(reviewSkill, /task-local implementation consideration/);
-  assert.match(reviewSkill, /does not require a prose recipe/);
+  assert.match(reviewSkill, /Files, symbols, commands/);
 });
 
 test("every Review catalog entry resolves to a complete reviewer contract", () => {
@@ -406,10 +406,10 @@ test("modes route to bounded specialists without restoring Codex PR feedback", (
   assert.match(explore, /`brainstorming`/);
   assert.match(explore, /`start-project`/);
   assert.match(plan, /invoke `openspec-tasks`/);
-  assert.match(review, /Use `github-adapter-review`/);
+  assert.match(review, /`github-adapter-review`/);
   assert.match(review, /`gitlab-adapter-review`/);
   assert.match(review, /`nitro-review-feedback`/);
-  assert.match(review, /`codex-review-feedback` remains retired/);
+  assert.match(review, /Codex-authored PR feedback remains retired/);
   assert.match(finish, /invoke\s+`change-request-create`/);
   assert.match(finish, /only selectable\s+description and publication owner/);
   assert.match(finish, /internal GitHub or GitLab mechanics/);
@@ -896,7 +896,7 @@ test("completed OpenSpec archival is owned by the final lifecycle head", () => {
   assert.match(execute, /explicit-only `openspec-archive-change` adapter/);
   assert.match(
     review,
-    /canonical spec synchronization, absence of the completed change from the active namespace, and its dated archived record on one exact HEAD/,
+    /canonical specs, removal from active discovery, and the dated archive on the same exact HEAD/,
   );
   assert.match(
     finish,

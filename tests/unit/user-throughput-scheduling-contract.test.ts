@@ -79,8 +79,8 @@ test("existing lifecycle owners apply the scheduling contract without a new hier
     /classify each as independent, contract-dependent, or implementation-dependent/i,
   );
   assert.match(execute, /Start independent units immediately/i);
-  assert.match(review, /start all independent review types together/i);
-  assert.match(review, /Backfill freed slots/i);
+  assert.match(review, /Start independent ready types together/i);
+  assert.match(review, /backfill\s+capacity/i);
   assert.match(finish, /both can proceed concurrently/i);
   assert.doesNotMatch(
     [instructions, plan, execute, review, finish].join(" "),
@@ -113,6 +113,6 @@ test("small coherent work avoids parallelization overhead", () => {
   );
   assert.match(
     review,
-    /Prefer one inline pass.*small enough to inspect coherently/i,
+    /small coherent target may\s+use one integrated inline pass/i,
   );
 });
