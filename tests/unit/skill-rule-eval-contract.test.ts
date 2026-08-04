@@ -20,6 +20,7 @@ import {
   behaviorScenarios,
   currentManagedSkillCoverageGaps,
   plannedSkillRetirements,
+  retiredSkillsWithLiveScenarios,
   selectedScenarios,
   simulatedCoverageGap,
   uncoveredManagedSkills,
@@ -70,6 +71,7 @@ test("GREEN skill-rule-evals: managed skills retain behavior coverage or explici
     /domain-owned discussion commands[\s\S]*every reply page/i,
   );
   assert.deepEqual(currentManagedSkillCoverageGaps(managedSkills), []);
+  assert.deepEqual(retiredSkillsWithLiveScenarios(), []);
 });
 
 test("scenario selection is explicit and covers preserved behavior", () => {
@@ -82,6 +84,7 @@ test("scenario selection is explicit and covers preserved behavior", () => {
     "review-exact-target",
     "finish-terminal-denial",
     "brainstorming-orientation",
+    "brainstorming-compact-route",
     "brainstorming-convergence",
     "start-project-intake",
     "start-project-mixed-request",
@@ -96,11 +99,15 @@ test("scenario selection is explicit and covers preserved behavior", () => {
 
 test("brainstorming evaluation separates divergence from convergence", () => {
   const divergent = selectedScenarios("brainstorming-orientation")[0];
+  const compact = selectedScenarios("brainstorming-compact-route")[0];
   const convergent = selectedScenarios("brainstorming-convergence")[0];
   assert.ok(divergent.required.includes("orientation-map"));
+  assert.ok(compact.required.includes("compact-response"));
+  assert.ok(compact.forbidden.includes("orientation-map"));
   assert.ok(convergent.required.includes("selected-feature"));
   assert.ok(convergent.required.includes("deferred-scope"));
   assert.equal(divergent.allowRepositoryWrite, false);
+  assert.equal(compact.allowRepositoryWrite, false);
   assert.equal(convergent.allowRepositoryWrite, false);
 });
 
