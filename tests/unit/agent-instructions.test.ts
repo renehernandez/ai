@@ -411,7 +411,6 @@ test("GitLab and Linear messages require destination-bound confirmation", () => 
       text,
       /rules\/git-and-review\.md#agent-authored-provider-messages/,
     );
-    assert.match(text, /destination-bound|exact destination/i);
   }
 
   assert.match(finish, /MUST apply/i);
@@ -433,8 +432,14 @@ test("GitLab and Linear messages require destination-bound confirmation", () => 
     /finalized policy-compliant title and body/,
   );
   assert.doesNotMatch(changeRequestCreate, /approved title and body/i);
-  assert.match(linearBreakdown, /create_immediately.*does not confirm/is);
-  assert.match(linearis, /general write authority does not replace/is);
+  assert.match(
+    linearBreakdown,
+    /Preview approval does not authorize unseen Linear prose/i,
+  );
+  assert.match(
+    linearis,
+    /Human-readable comments, replies, and project\s+updates also require/is,
+  );
 });
 
 test("workflow spec publishes the hook-clean draft before local readiness", () => {

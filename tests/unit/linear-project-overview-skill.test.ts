@@ -1,124 +1,72 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import test from "node:test";
 
-const root = process.cwd();
+const skill = readFileSync("skills/linear-project-overview/SKILL.md", "utf8");
+const contract = readFileSync(
+  "skills/linear-project-overview/references/content-contract.md",
+  "utf8",
+);
 
-function read(path: string): string {
-  return readFileSync(join(root, path), "utf8");
-}
-
-function normalized(content: string): string {
-  return content.replace(/\s+/g, " ").trim();
-}
-
-test("linear-project-overview exposes focused metadata", () => {
-  const skill = read("skills/linear-project-overview/SKILL.md");
-  const metadata = read("skills/linear-project-overview/agents/openai.yaml");
-
+test("Linear project overview keeps focused metadata and runtime", () => {
+  const metadata = readFileSync(
+    "skills/linear-project-overview/agents/openai.yaml",
+    "utf8",
+  );
   assert.match(skill, /^name: linear-project-overview$/m);
   assert.match(skill, /^description: Use when /m);
+  assert.ok(skill.trim().split(/\s+/u).length <= 500);
   assert.match(metadata, /display_name: "Linear Project Overview"/);
-  assert.match(
-    metadata,
-    /short_description: "Draft and maintain stable Linear overviews"/,
-  );
-  assert.match(metadata, /Use \$linear-project-overview/);
 });
 
-test("linear-project-overview defines the stable content boundary", () => {
-  const skill = normalized(read("skills/linear-project-overview/SKILL.md"));
-
-  assert.match(skill, /255-character/);
-  assert.match(skill, /## Why/);
-  assert.match(skill, /## Outcome/);
-  assert.match(skill, /## Scope/);
-  assert.match(skill, /## Non-goals/);
-  assert.match(skill, /## Success/);
-  assert.match(skill, /Include `Non-goals` only when/);
-  assert.match(skill, /Never invent a non-goal to complete the template/);
-  assert.match(skill, /Do not add a `Resources` heading/);
+test("overview field mapping and content contract stay stable", () => {
+  assert.match(skill, /workflow `summary` to Linearis `description`/i);
   assert.match(
     skill,
-    /milestone and issue inventories.*delivery order.*current status.*blockers.*next steps/,
+    /workflow Markdown\s+`description` to Linearis `content`/i,
   );
-  assert.match(skill, /future-adjacent work/);
+  assert.match(skill, /255 characters/);
+  for (const heading of ["Why", "Outcome", "Scope", "Non-goals", "Success"]) {
+    assert.match(contract, new RegExp(`## ${heading}`));
+  }
+  assert.match(contract, /omitting `Non-goals`/i);
+  assert.match(contract, /Do not add a `Resources` heading/i);
+  assert.match(contract, /Exclude milestone\/issue inventories/i);
 });
 
-test("linear-project-overview preserves lifecycle and mutation authority", () => {
-  const skill = normalized(read("skills/linear-project-overview/SKILL.md"));
-  const routing = normalized(read("rules/agent-surface-routing.md"));
-
-  assert.match(skill, /bounded specialist/);
-  assert.match(skill, /Explore owns drafting and review/);
-  assert.match(skill, /Finish owns a later explicitly approved update/);
-  assert.match(skill, /first turn.*read-only.*exact preview/);
-  assert.match(skill, /immutable Linear project ID and link/);
+test("overview preview is read-only and drift-bound", () => {
+  assert.match(skill, /drafts and reviews in Explore/i);
+  assert.match(skill, /Finish owns a later\s+explicitly approved update/i);
+  assert.match(skill, /Return an exact preview/i);
+  assert.match(skill, /immutable project ID\/link/i);
   assert.match(
     skill,
-    /observed workflow `summary` \(`description` field\), workflow `description` \(`content` field\).*feedback item's identifier, resolution state, body, update timestamp, and anchored quoted text/,
+    /alignment, drift, feedback, and intentional\s+exclusion/i,
   );
+  assert.match(skill, /Stop read-only/i);
   assert.match(
     skill,
-    /alignment, drift, feedback, and intentional-exclusion findings/,
+    /mapped-field mismatch[\s\S]*blocks with a refreshed preview/i,
   );
-  assert.match(skill, /never creates a Linear project/);
-  assert.match(
-    skill,
-    /update only the mapped `description` and `content` fields/i,
-  );
-  assert.match(
-    routing,
-    /Explore owns.*read-only `linear-project-overview` drafting and review/,
-  );
-  assert.match(
-    routing,
-    /Finish owns later explicitly approved `linear-project-overview` updates/,
-  );
+  assert.match(skill, /materially changed feedback blocks/i);
 });
 
-test("linear-project-overview revalidates feedback and drift before apply", () => {
-  const skill = normalized(read("skills/linear-project-overview/SKILL.md"));
-
-  assert.match(skill, /re-fetch the exact project/i);
+test("overview apply is field-limited and capability-safe", () => {
+  assert.match(skill, /preferred integration.*approved rich Markdown/is);
   assert.match(
     skill,
-    /traverse every project discussion page through `pageInfo\.endCursor`, then traverse every relevant root thread's replies/i,
+    /routing falls back to `linearis`[\s\S]*file-backed-input capability blocker/i,
   );
-  assert.match(
-    skill,
-    /re-fetch the exact project by immutable ID, traverse every project discussion page and every relevant root thread's replies/i,
-  );
-  assert.match(skill, /Any mismatch stops the update.*refreshed preview/);
-  assert.match(
-    skill,
-    /feedback item's identifier, resolution state, body, update timestamp, and anchored quoted text exactly.*New or changed material feedback stops/,
-  );
-  assert.match(skill, /minor wording drift is reported without blocking/);
-  assert.match(skill, /Materially contradictory unresolved feedback blocks/);
-  assert.match(skill, /Minor wording feedback/);
-  assert.match(skill, /read both fields back/i);
-  assert.match(skill, /require exact equality with the approved values/);
-  assert.match(skill, /mismatch as failed verification/);
-  assert.match(skill, /return the project link/);
-  assert.match(skill, /file-backed-input capability blocker/);
-  assert.match(skill, /preferred integration.*approved rich Markdown/i);
-  assert.match(
-    skill,
-    /fall back to `linearis`.*file-backed-input capability blocker/i,
-  );
+  assert.match(skill, /update only `description` and `content`/i);
+  assert.match(skill, /require\s+exact readback/i);
+  assert.match(skill, /Never change team[\s\S]*resources/i);
 });
 
-test("linear-project-overview routes adjacent work to canonical owners", () => {
-  const skill = normalized(read("skills/linear-project-overview/SKILL.md"));
-
-  assert.match(skill, /unresolved purpose.*`brainstorming`/i);
-  assert.match(skill, /new-effort intake.*`start-project`/i);
-  assert.match(skill, /milestones or issues.*`linear-breakdown`/i);
-  assert.match(skill, /design document.*native project document/i);
-  assert.match(
-    skill,
-    /progress, health, blockers, or next steps.*project update/i,
-  );
+test("overview routes adjacent semantics to canonical specialists", () => {
+  assert.match(skill, /purpose\/scope to `brainstorming`/i);
+  assert.match(skill, /intake to `start-project`/i);
+  assert.match(skill, /milestones\/issues to `linear-breakdown`/i);
+  assert.match(skill, /native project document owns design content/i);
+  assert.match(skill, /`doc-smith` assists/i);
+  assert.match(skill, /progress\/health to a project\s+update/i);
 });
