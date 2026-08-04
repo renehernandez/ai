@@ -4,57 +4,42 @@ import test from "node:test";
 
 import { read } from "../../scripts/charter-validator-reader.ts";
 
-const skill = read("skills/code-simplifier/SKILL.md").replace(/\s+/g, " ");
-
-test("RED simplification-review: strengthens the prior naming and migration boundaries", () => {
+test("RED simplification-review: runtime excludes historical enforcement sections", () => {
   const contract = read("skills/code-simplifier/SKILL.md");
-
   assert.doesNotMatch(
     contract,
-    /made unnecessary by clearer names(?:(?!shorter\s+word\s+is\s+not\s+simpler)[\s\S])*keep useful boundaries/i,
-  );
-  assert.doesNotMatch(
-    contract,
-    /## Implementation Lens(?:(?!existed\s+only\s+earlier\s+on\s+the\s+current\s+unshipped\s+branch)[\s\S])*keep useful boundaries/i,
+    /^## (?:Common Mistakes|Validation Scenarios|Test Evidence)$/m,
   );
 });
 
-test("GREEN simplification-review: challenges redundant concepts and derived state", () => {
+test("GREEN simplification-review: preserves a structural independent output", () => {
   const contract = read("skills/code-simplifier/SKILL.md");
-
-  assert.match(contract, /one term per concept and one concept per term/i);
-  assert.match(
-    contract,
-    /context is already supplied by the\s+module or owning type/i,
-  );
-  assert.match(
-    contract,
-    /passed or stored separately when canonical inputs can derive/i,
-  );
-  assert.match(contract, /overlapping types, constants, helpers, or state/i);
+  assert.match(contract, /^## Output$/m);
+  assert.doesNotMatch(contract, /allowed-tools:[^\n]*(?:Edit|Write)/);
 });
 
-test("code-simplifier removes only proven unshipped compatibility", () => {
-  assert.match(skill, /existed only earlier on the current unshipped branch/i);
-  assert.match(skill, /target base/i);
-  assert.match(skill, /external consumers/i);
-  assert.match(skill, /accepted contract/i);
-});
-
-test("code-simplifier rejects branch-history overfitting without policing style", () => {
-  assert.match(skill, /reader without the branch or conversation history/i);
-  assert.match(skill, /repository's canonical vocabulary/i);
-  assert.match(
-    skill,
-    /shorter word is not simpler when it loses domain precision/i,
+test("code simplifier keeps separate planning, implementation, and output structures", () => {
+  const contract = read("skills/code-simplifier/SKILL.md");
+  const headings = [...contract.matchAll(/^## (.+)$/gm)].map(
+    (match) => match[1],
   );
-  assert.match(skill, /deslop.*verbosity.*local-style/i);
-  assert.match(skill, /code-quality-review.*ownership.*architecture/i);
-});
-
-test("code-simplifier findings prove the surviving invariant and consumers", () => {
-  assert.match(skill, /surviving source of truth/i);
-  assert.match(skill, /redundant representation or compatibility path/i);
-  assert.match(skill, /producers and consumers inspected/i);
-  assert.match(skill, /reachable success and failure behavior/i);
+  assert.deepEqual(headings, [
+    "Bind the Target",
+    "Planning Lens",
+    "Implementation Lens",
+    "Output",
+  ]);
+  const output = /## Output\n\n```text\n([\s\S]*?)```/.exec(contract)?.[1];
+  assert.ok(output);
+  for (const field of [
+    "Simplification result: passed | finding | blocked",
+    "Target:",
+    "Finding:",
+    "Location:",
+    "Surviving source of truth:",
+    "Behavior-preserving recommendation:",
+    "Residual risk:",
+  ]) {
+    assert.ok(output.includes(field), field);
+  }
 });

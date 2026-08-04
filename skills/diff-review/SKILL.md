@@ -5,84 +5,43 @@ description: Use when reviewing a verified implementation diff for correctness, 
 
 # Diff Review
 
-## Overview
+Run a findings-only correctness review of issues introduced or materially
+worsened by one exact diff. Never edit, even when fixes are also requested.
 
-Run a findings-only review of issues introduced or materially worsened by a
-verified diff. Never edit files, including when the user also requests fixes.
-Lead with actionable findings, not summaries.
+## Review
 
-## When To Use
+1. Load repository review policy and bind the live base/head or verified local
+   diff. Hosted adapters supply host metadata, exact SHAs, checks, feedback,
+   and the verified diff. If host evidence is unavailable, state the verified
+   local boundary.
+2. Read changed code plus unchanged callers, tests, configuration, and data
+   paths needed to verify behavior.
+3. Evaluate, in order: security/data/auth; correctness and regression;
+   performance/scalability; usability/accessibility; maintainability and
+   testability; verification gaps; documentation/plan/description drift.
+4. Route enforceable verification gaps to `ai-readiness-upkeep` and behavioral
+   documentation drift to `docs-alignment-review` when available. Include their
+   blocking findings in the batch; do not duplicate their mechanics.
+5. Ignore formatting owned by automation. Return findings and residual risk to
+   Execute.
 
-Use for local implementation diffs and for the reviewed diff supplied by GitHub/GitLab adapter skills. Skip when the task is only artifact-host inspection, feedback collection, code-quality review, or implementation without review.
+## Output
 
-## Quick Reference
-
-| Review context | First move |
-| --- | --- |
-| GitHub PR | Use `review` to gather exact artifact-host context, then apply this rubric |
-| GitLab MR | Use `review` to gather exact artifact-host context, then apply this rubric |
-| Local changes | Inspect status, diff, and relevant repo rules |
-| Hosted/cloud review | Use the adapter output and verified diff |
-| Reviewer feedback follow-through | Use the feedback-specific skill first, then check claims against the verified diff |
-| Docs-impacting PR | Use `docs-alignment-review` before final verdict |
-
-## Workflow
-
-1. Load project review rules: `AGENTS.md`, relevant `.agents/rules/*.md`, and repo-specific review rubrics.
-2. Establish the diff base with provider tools or `git merge-base`. For hosted GitHub/GitLab review, let `review` provide PR/MR metadata, base/head SHAs, comments, checks, and the verified diff.
-3. If provider tools are unavailable, establish the best local base from remotes/refs, state what could not be verified, and scope findings to the verified diff only.
-4. Read changed files plus enough surrounding code to avoid false positives.
-5. Run an AI readiness upkeep pass when the diff changes verification scripts, task commands, hooks, CI/release/deploy config, generated artifacts, schemas or API contracts, infrastructure config, agent instructions, rules, skills, prompts, review rubrics, or review feedback that future agents should repeat or avoid. Use `ai-readiness-upkeep` when available; otherwise report missing cheap enforceable verification as a review finding.
-6. Run a docs alignment pass for behavior, architecture, workflow, test, CI, deployment, auth/access, data contract, or agent-expectation changes. Use `docs-alignment-review` when available; otherwise perform the same check directly and include missing docs or agent-doc updates as review findings.
-7. Prioritize findings:
-   - security, data leaks, auth/access, secrets;
-   - correctness and behavioral regressions;
-   - performance and scalability regressions;
-   - usability/accessibility regressions;
-   - maintainability, ownership, testability, and quality gaps;
-   - missing enforceable verification for newly exposed contracts;
-   - docs, plan, PR-description, and agent-doc drift that would mislead future implementers or reviewers.
-8. Ignore formatting nits when automated tooling owns them.
-9. Report blockers and residual risk to the Execute owner. Do not edit files.
-
-## Findings Format
-
-```markdown
-**[SEVERITY] Title**
-Location: path:line
+```text
+Diff review result: passed | finding | blocked
+Target: <base...head and diff source>
+Finding: [severity] <title> [confidence]
+Location: <path:line>
 Issue:
 Evidence:
 Recommendation:
+Verification gaps:
+Docs alignment: clean | updates needed | not applicable
+Residual risk:
 ```
 
-Use severity names from the repo when available. If no issues are found, say so and name remaining test/deploy risk.
-
-## Adapter Contract
-
-Artifact-host adapters gather live host context and then use this review rubric. They should return: artifact host, artifact id/URL, base/head refs and SHAs, diff source, check state, unresolved feedback, findings, docs alignment verdict, and verification gaps.
-
-## Mistakes
-
-| Mistake | Fix |
-| --- | --- |
-| Summarizing before findings | Findings first |
-| Reviewing stale branch state | Verify live PR/base/checks |
-| Trusting another agent's claim | Re-check code/evidence |
-| Mixing test layers | Name unit/component/integration/E2E/deploy verification |
-| Ignoring docs or agent-doc drift | Check docs alignment and report stale, missing, or unnecessary docs changes |
-| Accepting prose-only rules for enforceable contracts | Use `ai-readiness-upkeep` and require an implementer action for cheap verification |
-| Filing style nits owned by tools | Skip them |
-| Applying a fix because the user requested review and fixes together | Return findings first; the single Execute owner applies the accepted batch. |
-
-## Validation Scenarios
-
-- Stale PR after base changed: pass only if base/check state is verified.
-- Agent feedback cites nonexistent code: pass only if claim is checked.
-- Behavior change without docs review: pass only if docs alignment is clean, not applicable, or findings are reported.
-- Clean review: pass only if residual risk is still named.
-
-## Test Evidence
-
-- RED: baseline reviewed local refs but provider-unavailable behavior was ad hoc.
-- GREEN: skill run scoped findings to verified local refs and named residual provider risk.
-- REFACTOR: workflow now requires provider fallback and verification gaps.
+A clean result still names the tested and untested behavior. Inspect every path
+cited by a reviewer before accepting the claim. Provider freshness requires
+host evidence; when it is unavailable, report only the verified local boundary.
+Name unit, integration, E2E, and deployment evidence as separate verification
+layers.

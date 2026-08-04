@@ -6,61 +6,36 @@ allowed-tools: Read, Glob, Grep, Bash(git:*)
 
 # Deslop
 
-Run a findings-only review of AI-shaped clutter and local-convention drift. Do
-not edit files. Keep the lens narrower than architectural refactoring or generic
-code quality.
+Run a findings-only review for clutter introduced or materially worsened by an
+exact diff. Never edit. Local repository convention—not generic clean-code
+taste—is the evidence boundary.
 
-## Scope
+## Lens
 
-Inspect the exact branch delta first, then nearby code that establishes the
-local convention:
+Inspect neighboring code, then flag:
 
-```bash
-git merge-base HEAD main
-git diff --stat <base>..HEAD
-git diff <base>..HEAD
-```
+- comments narrating ordinary code where local code relies on names/structure;
+- defensive checks on internal paths whose invariant current callers prove;
+- broad error wrappers that conflict with established failure semantics;
+- `any`, double casts, or non-null assertions where local narrowing exists;
+- one-caller generic helpers that name no repository concept;
+- generated-looking nesting or verbosity with a direct local pattern; and
+- unrelated formatting or churn outside the accepted outcome.
 
-Flag only artifacts introduced or materially worsened by the diff.
+Keep comments and guards that preserve business rules, security assumptions,
+migration constraints, public behavior, or non-obvious trade-offs. Leave
+architecture/ownership to `code-quality-review` and concept reduction to
+`code-simplifier`.
 
-## Review Lens
-
-Look for:
-
-| Artifact | Evidence required |
-| --- | --- |
-| Obvious comments explaining ordinary code | Neighboring code relies on names and structure instead. |
-| Defensive checks on trusted internal paths | The same invariant is consistently trusted by existing callers. |
-| Broad `try`/`catch` wrappers | Local failure semantics are narrower and already established. |
-| `any`, double casts, or non-null assertions | A real type or existing narrowing pattern is available. |
-| One-caller generic abstractions | The abstraction adds indirection without matching an existing concept. |
-| Generated-looking nesting or verbosity | A local pattern expresses the same behavior more directly. |
-| Unrelated formatting churn | The changed hunk is not required for the accepted outcome. |
-
-Do not flag comments that preserve business rules, security assumptions,
-migration constraints, public API behavior, or non-obvious trade-offs. Do not
-replace a working local convention with generic clean-code taste.
-
-## Output
-
-Return `passed`, `finding`, or `blocked` with source evidence. For each finding:
-
-```markdown
-**[SEVERITY] Slop artifact** [confidence: 0.86 - high]
-Location: `path:line`
-Issue:
+```text
+Deslop result: passed | finding | blocked
+Target: <base...head>
+Finding: [severity] <artifact> [confidence]
+Location: <path:line>
 Local-convention evidence:
 Behavior-preserving recommendation:
+Residual convention risk:
 ```
 
-If clean, name the inspected diff and residual convention risk. Send findings
-to the Execute owner; never stage, commit, or apply cleanup.
-
-## Common Mistakes
-
-| Mistake | Required response |
-| --- | --- |
-| Treating all verbosity as slop | Require neighboring project evidence. |
-| Removing meaningful defensive behavior | Report only when the trusted invariant is proven. |
-| Expanding into architecture review | Leave ownership and structural design to `code-quality-review`. |
-| Fixing an obvious artifact directly | Return the finding to the single Execute owner. |
+Return findings to Execute. A clean result names the neighboring convention
+inspected.
