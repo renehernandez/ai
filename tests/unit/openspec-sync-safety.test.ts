@@ -44,6 +44,24 @@ const skillNames = [
   "openspec-propose",
 ];
 const commandNames = ["apply.md", "archive.md", "explore.md", "propose.md"];
+const lifecycleOverlays = {
+  "openspec-apply-change": [
+    "Execute",
+    "after the OpenSpec proposal and POC checkpoint are accepted",
+  ],
+  "openspec-archive-change": [
+    "Execute",
+    "Incomplete artifacts or tasks hard-block archival",
+  ],
+  "openspec-explore": [
+    "Explore",
+    "It is read-only and must not create or update OpenSpec artifacts",
+  ],
+  "openspec-propose": [
+    "Plan",
+    "It may create the selected OpenSpec planning artifacts",
+  ],
+} as const;
 
 const defaultConfig: OpenSpecConfig = {
   tools: ["codex", "claude"],
@@ -61,13 +79,18 @@ const defaultConfig: OpenSpecConfig = {
 };
 
 function withRepository(callback: (root: string) => void): void {
-  const root = mkdtempSync(join(tmpdir(), "openspec-sync-safety-"));
+  const root = createRepository();
   try {
-    git(root, ["init"]);
     callback(root);
   } finally {
     rmSync(root, { force: true, recursive: true });
   }
+}
+
+function createRepository(): string {
+  const root = mkdtempSync(join(tmpdir(), "openspec-sync-safety-"));
+  git(root, ["init"]);
+  return root;
 }
 
 function git(root: string, args: string[]): void {
@@ -96,7 +119,7 @@ function writeConfiguredInventory(root: string): void {
     writeFileSync(
       join(skillRoot, "SKILL.md"),
       managedContent(
-        `---\nname: ${name}\ndescription: Explicit-only developer command. Invoke only when the user explicitly names this OpenSpec adapter or its /opsx command.\n---\n# ${name}\n\n## Explicit Invocation Boundary\n\nDo not infer this adapter from ordinary language. Route ordinary work through the owning lifecycle mode.\n\n<!-- ax-openspec-skill: ${name}; explicit-only -->\n`,
+        `---\nname: ${name}\ndescription: Explicit-only developer command. Invoke only when the user explicitly names this OpenSpec adapter or its /opsx command.\n---\n# ${name}\n\n## Explicit Invocation Boundary\n\nDo not infer this adapter from ordinary language. Route ordinary work through the owning lifecycle mode.\n\n<!-- ax-openspec-skill: ${name}; explicit-only -->\n\n${lifecycleOverlay(name)}\n`,
       ),
       "utf-8",
     );
@@ -113,7 +136,7 @@ function writeConfiguredInventory(root: string): void {
     writeFileSync(
       join(canonicalCommands, name),
       managedContent(
-        `# ${name}\n\n<!-- ax-openspec-command: ${name}; explicit-only -->\n<!-- Invoke only as /opsx:${command}; do not infer from ordinary language. -->\n`,
+        `# ${name}\n\n<!-- ax-openspec-command: ${name}; explicit-only -->\n<!-- Invoke only as /opsx:${command}; do not infer from ordinary language. -->\n\n${lifecycleOverlay(name)}\n`,
       ),
       "utf-8",
     );
@@ -121,6 +144,29 @@ function writeConfiguredInventory(root: string): void {
   const commandLink = join(root, ".claude", "commands", "opsx");
   mkdirSync(dirname(commandLink), { recursive: true });
   symlinkSync(relative(dirname(commandLink), canonicalCommands), commandLink);
+}
+
+function lifecycleOverlay(assetName: string): string {
+  const skillName = assetName.endsWith(".md")
+    ? `openspec-${assetName.replace(/\.md$/, "")}${assetName === "apply.md" || assetName === "archive.md" ? "-change" : ""}`
+    : assetName;
+  const [mode, requiredText] =
+    lifecycleOverlays[skillName as keyof typeof lifecycleOverlays];
+  const completeText = {
+    "openspec-apply-change": `${requiredText}. Preserve one repository writer, implement final units independently from POC commits, and return provider or terminal actions to Finish.`,
+    "openspec-archive-change": `${requiredText}. Synchronize delta specs into canonical specs before moving the verified change to the dated archive; Finish does not perform archival as cleanup.`,
+    "openspec-explore": `${requiredText}, repository files, trackers, or providers. Return evidence and route any durable artifact to Plan.`,
+    "openspec-propose": `${requiredText}, but it does not implement, publish, merge, deploy, or clean up.`,
+  }[skillName];
+  const prefix =
+    skillName === "openspec-explore"
+      ? "This adapter runs only inside Explore."
+      : skillName === "openspec-propose"
+        ? "This adapter runs only inside Plan."
+        : skillName === "openspec-archive-change"
+          ? "This adapter runs only in the last final Execute unit."
+          : "This adapter runs only inside Execute";
+  return `## AX Lifecycle Overlay\n\n${prefix} ${completeText}\n\n<!-- ax-openspec-lifecycle: ${mode} -->`;
 }
 
 function managedContent(content: string): string {
@@ -373,7 +419,8 @@ rules:
 });
 
 test("detects altered generated bodies and contradictory trigger metadata", () => {
-  withRepository((root) => {
+  const root = createRepository();
+  try {
     writeConfiguredInventory(root);
     const exploreSkillPath = join(
       root,
@@ -424,7 +471,95 @@ test("detects altered generated bodies and contradictory trigger metadata", () =
       report.findings.join("\n"),
       /openspec_adapter_contradictory_trigger:.*openspec-apply-change/,
     );
-  });
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test("generated lifecycle overlays converge twice and hard-block archive bypasses", () => {
+  const root = createRepository();
+  try {
+    writeConfiguredInventory(root);
+    git(root, ["add", "."]);
+    git(root, [
+      "-c",
+      "user.name=AX Test",
+      "-c",
+      "user.email=ax@example.test",
+      "commit",
+      "-m",
+      "fixture",
+    ]);
+    const bin = join(root, "bin");
+    mkdirSync(bin);
+    const fakeOpenSpec = join(bin, "openspec");
+    writeFileSync(
+      fakeOpenSpec,
+      `#!/bin/sh
+if [ "$1" = "--version" ]; then echo "openspec-test 1.0"; exit 0; fi
+for root in .agents/skills/openspec-archive-change .agents/skills/openspec-explore; do mkdir -p "$root"; done
+cat > .agents/skills/openspec-archive-change/SKILL.md <<'EOF'
+---
+name: openspec-archive-change
+description: upstream archive
+---
+Proceed if user confirms
+Archive without syncing
+Don't block archive on warnings - just inform and confirm
+EOF
+cat > .agents/skills/openspec-explore/SKILL.md <<'EOF'
+---
+name: openspec-explore
+description: upstream explore
+---
+You MAY create OpenSpec artifacts because that's capturing thinking, not implementing.
+EOF
+exit 0
+`,
+      "utf-8",
+    );
+    chmodSync(fakeOpenSpec, 0o755);
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${bin}:/usr/bin:/bin`;
+    try {
+      const first = syncOpenSpec({ targetRoot: root, config: defaultConfig });
+      assert.equal(first.status, "synchronized");
+      for (const [name, [mode, requiredText]] of Object.entries(
+        lifecycleOverlays,
+      )) {
+        const content = readFileSync(
+          join(root, ".agents", "skills", name, "SKILL.md"),
+          "utf-8",
+        );
+        assert.match(content, new RegExp(`ax-openspec-lifecycle: ${mode}`));
+        assert.ok(content.includes(requiredText));
+      }
+      const archive = readFileSync(
+        join(root, ".agents", "skills", "openspec-archive-change", "SKILL.md"),
+        "utf-8",
+      );
+      assert.doesNotMatch(
+        archive,
+        /confirm user wants to proceed|Proceed if user confirms|Archive without syncing|Don't block archive on warnings|Sync skipped|without an override/,
+      );
+      assert.match(archive, /\n {3}- STOP; incomplete work blocks archival\n/);
+      assert.doesNotMatch(
+        archive,
+        /\n- STOP; incomplete work blocks archival\n/,
+      );
+      const second = syncOpenSpec({ targetRoot: root, config: defaultConfig });
+      assert.equal(second.status, "current");
+      assert.deepEqual(second.changedPaths, []);
+      assert.equal(
+        validateOpenSpec({ targetRoot: root, config: defaultConfig }).state,
+        "configured",
+      );
+    } finally {
+      process.env.PATH = previousPath;
+    }
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
 });
 
 test("rejects unsupported AX tools, delivery, and workflows", () => {

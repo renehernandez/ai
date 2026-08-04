@@ -222,6 +222,11 @@ test("atomic plans remain governed artifacts rather than reusable behavior surfa
     false,
   );
   assert.equal(isPotentialBehaviorSurface(".agents/commands/review.md"), true);
+  assert.equal(
+    isPotentialBehaviorSurface(".agents/skills/openspec-explore/SKILL.md"),
+    true,
+  );
+  assert.equal(isPotentialBehaviorSurface("scripts/ax/openspec-sync.ts"), true);
 });
 
 test("removal-only policy remains structurally bound to exact-head review evidence", () => {

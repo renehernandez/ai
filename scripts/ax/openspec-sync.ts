@@ -174,6 +174,26 @@ const EXPLICIT_ONLY_DESCRIPTION =
   "Explicit-only developer command. Invoke only when the user explicitly names this OpenSpec adapter or its /opsx command.";
 const EXPLICIT_ONLY_BOUNDARY =
   "Do not infer this adapter from ordinary language. Route ordinary work through the owning lifecycle mode.";
+const LIFECYCLE_OVERLAYS = {
+  explore:
+    "This adapter runs only inside Explore. It is read-only and must not create or update OpenSpec artifacts, repository files, trackers, or providers. Return evidence and route any durable artifact to Plan.",
+  propose:
+    "This adapter runs only inside Plan. It may create the selected OpenSpec planning artifacts, but it does not implement, publish, merge, deploy, or clean up.",
+  apply:
+    "This adapter runs only inside Execute after the OpenSpec proposal and POC checkpoint are accepted. Preserve one repository writer, implement final units independently from POC commits, and return provider or terminal actions to Finish.",
+  archive:
+    "This adapter runs only in the last final Execute unit. Incomplete artifacts or tasks hard-block archival. Synchronize delta specs into canonical specs before moving the verified change to the dated archive; Finish does not perform archival as cleanup.",
+} as const;
+const LIFECYCLE_ASSETS: Record<string, keyof typeof LIFECYCLE_OVERLAYS> = {
+  "apply.md": "apply",
+  "archive.md": "archive",
+  "explore.md": "explore",
+  "openspec-apply-change": "apply",
+  "openspec-archive-change": "archive",
+  "openspec-explore": "explore",
+  "openspec-propose": "propose",
+  "propose.md": "propose",
+};
 const CONTENT_HASH_MARKER = "ax-openspec-content-sha256";
 
 type ParsedProjectConfig = {
@@ -752,6 +772,7 @@ function normalizeExplicitOnlyAdapter(
   if (!content.includes(identity)) {
     content = `${content.trimEnd()}\n\n${identity}\n`;
   }
+  content = normalizeLifecycleOverlay(content, skillName);
   writeFileSync(skillPath, withContentHashMarker(content), "utf-8");
 }
 
@@ -766,7 +787,167 @@ function normalizeExplicitOnlyCommand(path: string, commandName: string): void {
   if (!content.includes(boundary)) {
     content = `${content.trimEnd()}\n${boundary}\n`;
   }
+  content = normalizeLifecycleOverlay(content, commandName);
   writeFileSync(path, withContentHashMarker(content), "utf-8");
+}
+
+export function normalizeLifecycleOverlay(
+  content: string,
+  assetName: string,
+): string {
+  const lifecycle = lifecycleForAsset(assetName);
+  if (!lifecycle) return content;
+  const hasOwnedOverlay = content.includes(
+    "<!-- ax-openspec-lifecycle: Execute -->",
+  );
+
+  let normalized = content.replace(
+    /\n## AX Lifecycle Overlay\n[\s\S]*?<!-- ax-openspec-lifecycle: (?:Explore|Plan|Execute) -->\n?/g,
+    "\n",
+  );
+  if (lifecycle === "explore") {
+    normalized = normalized.replace(
+      /You MAY create OpenSpec artifacts[^\n]*(?:\n[^\n]*)?that's capturing thinking, not implementing\./g,
+      "OpenSpec artifacts require Plan authority; remain read-only in this adapter.",
+    );
+  }
+  if (lifecycle === "archive") {
+    normalized = applyArchiveTransforms(
+      normalized,
+      assetName,
+      !hasOwnedOverlay,
+    );
+  }
+
+  const mode = lifecycle === "propose" ? "Plan" : "Execute";
+  const markerMode = lifecycle === "explore" ? "Explore" : mode;
+  return `${normalized.trimEnd()}\n\n## AX Lifecycle Overlay\n\n${LIFECYCLE_OVERLAYS[lifecycle]}\n\n<!-- ax-openspec-lifecycle: ${markerMode} -->\n`;
+}
+
+const archiveTransforms = [
+  {
+    name: "incomplete-work override",
+    pattern:
+      /^.*(?:Proceed if user confirms|confirm user wants to proceed|confirmation to continue).*$/gim,
+    replacement: "   - STOP; incomplete work blocks archival",
+    requiredOnFreshUpstream: true,
+  },
+  {
+    name: "spec-sync bypass",
+    pattern:
+      /"?Archive without syncing"?|Proceed to archive regardless of choice\.|Sync skipped/gi,
+    replacement: '"Cancel"',
+    requiredOnFreshUpstream: true,
+  },
+  {
+    name: "warning-only completion",
+    pattern:
+      /^.*(?:Don't block archive on warnings|Output On Success With Warnings).*$/gim,
+    replacement: "- Incomplete artifacts or tasks block archival",
+    requiredOnFreshUpstream: true,
+  },
+  {
+    name: "stop indentation",
+    pattern: /^- STOP; incomplete work blocks archival$/gim,
+    replacement: "   - STOP; incomplete work blocks archival",
+    requiredOnFreshUpstream: false,
+  },
+  {
+    name: "sync-stop wording",
+    pattern: /- STOP unless required delta specs are synchronized\./gi,
+    replacement: "Do not archive unless required delta specs are synchronized.",
+    requiredOnFreshUpstream: false,
+  },
+  {
+    name: "no-delta formatting",
+    pattern: / \(or "No delta specs" \)/g,
+    replacement: ' or "No delta specs"',
+    requiredOnFreshUpstream: false,
+  },
+  {
+    name: "warning summary",
+    pattern: /- Note about any warnings \(incomplete artifacts\/tasks\)/gi,
+    replacement: "- Confirmation that all artifacts and tasks are complete",
+    requiredOnFreshUpstream: false,
+  },
+  {
+    name: "incomplete-work override suffix",
+    pattern:
+      /^\s*-?\s*Incomplete artifacts or tasks block archival without an override\s*$/gim,
+    replacement: "- Incomplete artifacts or tasks block archival",
+    requiredOnFreshUpstream: false,
+  },
+] as const;
+
+function applyArchiveTransforms(
+  content: string,
+  assetName: string,
+  requireFreshAnchors: boolean,
+): string {
+  let transformed = content;
+  for (const transform of archiveTransforms) {
+    const expectedCount = [...transformed.matchAll(transform.pattern)].length;
+    if (
+      requireFreshAnchors &&
+      transform.requiredOnFreshUpstream &&
+      expectedCount === 0
+    ) {
+      throw new Error(
+        `openspec_overlay_drift: ${assetName} required transform ${transform.name} applied 0 times`,
+      );
+    }
+    transformed = transformed.replace(transform.pattern, transform.replacement);
+    const remainingCount = [...transformed.matchAll(transform.pattern)].length;
+    if (remainingCount !== 0) {
+      throw new Error(
+        `openspec_overlay_drift: ${assetName} required transform ${transform.name} left ${remainingCount} of ${expectedCount} matches`,
+      );
+    }
+  }
+  return transformed;
+}
+
+export function archiveTransformViolations(content: string): string[] {
+  return archiveTransforms
+    .filter(({ pattern }) => [...content.matchAll(pattern)].length > 0)
+    .map(({ name }) => name);
+}
+
+function lifecycleForAsset(
+  assetName: string,
+): keyof typeof LIFECYCLE_OVERLAYS | undefined {
+  return LIFECYCLE_ASSETS[assetName];
+}
+
+export function lifecycleOverlayValid(
+  content: string,
+  assetName: string,
+): boolean {
+  const lifecycle = lifecycleForAsset(assetName);
+  if (!lifecycle) return true;
+  const markerMode =
+    lifecycle === "explore"
+      ? "Explore"
+      : lifecycle === "propose"
+        ? "Plan"
+        : "Execute";
+  if (
+    !content.includes(LIFECYCLE_OVERLAYS[lifecycle]) ||
+    !content.includes(`<!-- ax-openspec-lifecycle: ${markerMode} -->`)
+  ) {
+    return false;
+  }
+  if (
+    lifecycle === "explore" &&
+    /MAY create OpenSpec artifacts|capturing thinking, not implementing/i.test(
+      content,
+    )
+  ) {
+    return false;
+  }
+  return (
+    lifecycle !== "archive" || archiveTransformViolations(content).length === 0
+  );
 }
 
 function planOpenSpecOperations(input: {
@@ -1107,6 +1288,9 @@ function validateGeneratedAssets(
     ) {
       findings.push(`openspec_adapter_not_explicit_only: ${canonical}`);
     }
+    if (!lifecycleOverlayValid(content, name)) {
+      findings.push(`openspec_adapter_lifecycle_overlay_invalid: ${canonical}`);
+    }
     validateManagedContentHash(content, join(canonical, "SKILL.md"), findings);
     if (hasContradictoryTrigger(content)) {
       findings.push(
@@ -1164,6 +1348,11 @@ function validateGeneratedAssets(
         )
       ) {
         findings.push(`openspec_command_stale: ${commandPath}`);
+      }
+      if (!lifecycleOverlayValid(content, commandName)) {
+        findings.push(
+          `openspec_command_lifecycle_overlay_invalid: ${commandPath}`,
+        );
       }
       validateManagedContentHash(content, commandPath, findings);
     }

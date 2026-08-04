@@ -157,4 +157,10 @@ This skill supports the "actions on a change" model:
 <!-- ax-openspec-command: apply.md; explicit-only -->
 <!-- Invoke only as /opsx:apply; do not infer from ordinary language. -->
 
-<!-- ax-openspec-content-sha256: sha256:2279ce18da463c625e2c9618d5e02d310ceb38836ee0094ba46dba44bc7ddd61 -->
+## AX Lifecycle Overlay
+
+This adapter runs only inside Execute after the OpenSpec proposal and POC checkpoint are accepted. Preserve one repository writer, implement final units independently from POC commits, and return provider or terminal actions to Finish.
+
+<!-- ax-openspec-lifecycle: Execute -->
+
+<!-- ax-openspec-content-sha256: sha256:e343a3f2e984cd20dedcb2d54656562fcb24a2adf3feff06c7651671575cdcb6 -->

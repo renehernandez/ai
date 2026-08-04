@@ -85,6 +85,39 @@ export type Change = {
 };
 
 const behaviorScenarioContracts = {
+  "openspec-lifecycle-overlay": {
+    principles: ["authority", "canonical-ownership"],
+    path: "tests/unit/openspec-lifecycle-overlay-contract.test.ts",
+    redName: "RED openspec-lifecycle-overlay:",
+    greenName: "GREEN openspec-lifecycle-overlay:",
+    owns: (change: Change) =>
+      change.path === "scripts/ax/openspec-sync.ts" ||
+      /^\.agents\/(?:commands\/opsx\/(?:apply|archive|explore|propose)\.md|skills\/openspec-(?:apply-change|archive-change|explore|propose)\/SKILL\.md)$/.test(
+        change.path,
+      ),
+    redEvidence: {
+      source: {
+        binding: {
+          kind: "import",
+          module: "../../scripts/ax/openspec-sync.ts",
+          name: "normalizeLifecycleOverlay",
+        },
+        callee: /^normalizeLifecycleOverlay$/,
+      },
+      assertion: { callee: /^assert\.doesNotMatch$/ },
+    },
+    greenEvidence: {
+      source: {
+        binding: {
+          kind: "import",
+          module: "../../scripts/ax/openspec-sync.ts",
+          name: "lifecycleOverlayValid",
+        },
+        callee: /^lifecycleOverlayValid$/,
+      },
+      assertion: { callee: /^assert\.equal$/ },
+    },
+  },
   "skill-rule-evals": {
     principles: ["authority", "canonical-ownership", "semantic-delivery"],
     path: "tests/unit/skill-rule-eval-contract.test.ts",

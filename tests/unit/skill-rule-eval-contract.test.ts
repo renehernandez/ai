@@ -1,7 +1,13 @@
 // charter-contracts: skill-rule-evals
 
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -398,6 +404,10 @@ test("sandbox environment exposes only safe and runner-owned variables", async (
     ]);
     assert.equal(claude.ANTHROPIC_API_KEY, "allowed-for-claude");
     assert.equal(claude.GITLAB_TOKEN, undefined);
+    assert.equal(
+      existsSync(join(sandbox.repository, ".agents", "plans")),
+      true,
+    );
   } finally {
     rmSync(sandbox.root, { recursive: true, force: true });
   }

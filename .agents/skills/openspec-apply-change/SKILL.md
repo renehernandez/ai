@@ -164,4 +164,10 @@ Do not infer this adapter from ordinary language. Route ordinary work through th
 
 <!-- ax-openspec-skill: openspec-apply-change; explicit-only -->
 
-<!-- ax-openspec-content-sha256: sha256:aacd471adfcea609f85696fabfc788ac989117381cabc3de4f5662ab84357f4e -->
+## AX Lifecycle Overlay
+
+This adapter runs only inside Execute after the OpenSpec proposal and POC checkpoint are accepted. Preserve one repository writer, implement final units independently from POC commits, and return provider or terminal actions to Finish.
+
+<!-- ax-openspec-lifecycle: Execute -->
+
+<!-- ax-openspec-content-sha256: sha256:63bdaa3f69cd1ece95848458db9bfad6871e5d490cd46df079ddfc11307ed276 -->

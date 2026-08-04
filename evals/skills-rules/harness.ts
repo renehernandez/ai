@@ -153,6 +153,7 @@ export async function createEvalSandbox(
 
   writeFileSync(join(repository, "README.md"), "# Authentication fixture\n");
   mkdirSync(join(repository, "src"));
+  mkdirSync(join(repository, ".agents", "plans"), { recursive: true });
   writeFileSync(
     join(repository, "src/auth.ts"),
     "export function canRead(userId: string, recordOwnerId: string) { return Boolean(userId && recordOwnerId); }\n",

@@ -33,8 +33,8 @@ Archive a completed change in the experimental workflow.
 
    **If any artifacts are not `done`:**
    - Display warning listing incomplete artifacts
-   - Prompt user for confirmation to continue
-   - Proceed if user confirms
+   - Report the blocking items
+   - STOP; incomplete work blocks archival
 
 3. **Check task completion status**
 
@@ -44,8 +44,8 @@ Archive a completed change in the experimental workflow.
 
    **If incomplete tasks found:**
    - Display warning showing count of incomplete tasks
-   - Prompt user for confirmation to continue
-   - Proceed if user confirms
+   - Report the blocking items
+   - STOP; incomplete work blocks archival
 
    **If no tasks file exists:** Proceed without task-related warning.
 
@@ -59,10 +59,10 @@ Archive a completed change in the experimental workflow.
    - Show a combined summary before prompting
 
    **Prompt options:**
-   - If changes needed: "Sync now (recommended)", "Archive without syncing"
+   - If changes needed: "Sync now (recommended)", "Cancel"
    - If already synced: "Archive now", "Sync anyway", "Cancel"
 
-   If user chooses sync, use Task tool (subagent_type: "general-purpose", prompt: "Use Skill tool to invoke openspec-sync-specs for change '<name>'. Delta spec analysis: <include the analyzed delta spec summary>"). Proceed to archive regardless of choice.
+   If user chooses sync, use Task tool (subagent_type: "general-purpose", prompt: "Use Skill tool to invoke openspec-sync-specs for change '<name>'. Delta spec analysis: <include the analyzed delta spec summary>"). Do not archive unless required delta specs are synchronized.
 
 5. **Perform the archive**
 
@@ -87,8 +87,8 @@ Archive a completed change in the experimental workflow.
    - Change name
    - Schema that was used
    - Archive location
-   - Spec sync status (synced / sync skipped / no delta specs)
-   - Note about any warnings (incomplete artifacts/tasks)
+   - Spec sync status (synced / no delta specs)
+   - Confirmation that all artifacts and tasks are complete
 
 **Output On Success**
 
@@ -116,23 +116,9 @@ All artifacts complete. All tasks complete.
 All artifacts complete. All tasks complete.
 ```
 
-**Output On Success With Warnings**
+**Incomplete Work Outcome**
 
-```
-## Archive Complete (with warnings)
-
-**Change:** <change-name>
-**Schema:** <schema-name>
-**Archived to:** the archive path derived from `planningHome.changesDir`/YYYY-MM-DD-<name>/
-**Specs:** Sync skipped (user chose to skip)
-
-**Warnings:**
-- Archived with 2 incomplete artifacts
-- Archived with 3 incomplete tasks
-- Delta spec sync was skipped (user chose to skip)
-
-Review the archive if this was not intentional.
-```
+Do not archive; report the blocking items.
 
 **Output On Error (Archive Exists)**
 
@@ -153,7 +139,7 @@ Target archive directory already exists.
 **Guardrails**
 - Always prompt for change selection if not provided
 - Use artifact graph (openspec status --json) for completion checking
-- Don't block archive on warnings - just inform and confirm
+- Incomplete artifacts or tasks block archival
 - Preserve .openspec.yaml when moving to archive (it moves with the directory)
 - Show clear summary of what happened
 - If sync is requested, use the Skill tool to invoke `openspec-sync-specs` (agent-driven)
@@ -162,4 +148,10 @@ Target archive directory already exists.
 <!-- ax-openspec-command: archive.md; explicit-only -->
 <!-- Invoke only as /opsx:archive; do not infer from ordinary language. -->
 
-<!-- ax-openspec-content-sha256: sha256:6ff70323960e41a230a8affa3272a925894b90ad9881f088c2905e9658486f6a -->
+## AX Lifecycle Overlay
+
+This adapter runs only in the last final Execute unit. Incomplete artifacts or tasks hard-block archival. Synchronize delta specs into canonical specs before moving the verified change to the dated archive; Finish does not perform archival as cleanup.
+
+<!-- ax-openspec-lifecycle: Execute -->
+
+<!-- ax-openspec-content-sha256: sha256:f22dfeb9c3288654451ae8c94b2aca74fdd932f54b6a80c5848e0f28f51f80c8 -->

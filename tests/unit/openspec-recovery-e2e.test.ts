@@ -16,6 +16,7 @@ import test from "node:test";
 
 import {
   inspectOpenSpec,
+  normalizeLifecycleOverlay,
   type OpenSpecConfig,
   openspecPaths,
   syncOpenSpec,
@@ -180,7 +181,10 @@ function writeConfiguredInventory(root: string): void {
     writeFileSync(
       join(skillRoot, "SKILL.md"),
       managedContent(
-        `---\nname: ${skillName}\ndescription: ${explicitOnlyDescription}\n---\n# ${skillName}\n\n## Explicit Invocation Boundary\n\n${explicitOnlyBoundary}\n\n<!-- ax-openspec-skill: ${skillName}; explicit-only -->\n`,
+        normalizeLifecycleOverlay(
+          `---\nname: ${skillName}\ndescription: ${explicitOnlyDescription}\n---\n# ${skillName}\n\n## Explicit Invocation Boundary\n\n${explicitOnlyBoundary}\n\n<!-- ax-openspec-skill: ${skillName}; explicit-only -->\n${archiveUpstreamFixture(skillName)}`,
+          skillName,
+        ),
       ),
       "utf-8",
     );
@@ -192,7 +196,10 @@ function writeConfiguredInventory(root: string): void {
     writeFileSync(
       join(canonicalCommands, commandName),
       managedContent(
-        `# ${commandName}\n\n<!-- ax-openspec-command: ${commandName}; explicit-only -->\n<!-- Invoke only as /opsx:${commandName.replace(/\.md$/, "")}; do not infer from ordinary language. -->\n`,
+        normalizeLifecycleOverlay(
+          `# ${commandName}\n\n<!-- ax-openspec-command: ${commandName}; explicit-only -->\n<!-- Invoke only as /opsx:${commandName.replace(/\.md$/, "")}; do not infer from ordinary language. -->\n${archiveUpstreamFixture(commandName)}`,
+          commandName,
+        ),
       ),
       "utf-8",
     );
@@ -201,6 +208,11 @@ function writeConfiguredInventory(root: string): void {
   const commandLink = join(root, ".claude", "commands", "opsx");
   mkdirSync(dirname(commandLink), { recursive: true });
   symlinkSync(relative(dirname(commandLink), canonicalCommands), commandLink);
+}
+
+function archiveUpstreamFixture(assetName: string): string {
+  if (!/archive/.test(assetName)) return "";
+  return "Proceed if user confirms\nArchive without syncing\nDon't block archive on warnings\n";
 }
 
 function managedContent(content: string): string {
