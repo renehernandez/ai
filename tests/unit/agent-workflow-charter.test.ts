@@ -92,6 +92,10 @@ test("GREEN canonical-ownership: the charter validation gate runs from the nativ
     packageJson.scripts["skills:corpus-report"],
     "tsx scripts/skill-corpus-report.ts",
   );
+  assert.equal(
+    packageJson.scripts["eval:skills-rules"],
+    "vitest --config vitest.evals.config.ts run",
+  );
   assert.match(hook, /charter-validate:\s*\n\s+run: pnpm charter:validate/);
   assert.match(validator, /agent-behavior surface/i);
   assert.match(validator, /canonical owner/i);
