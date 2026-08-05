@@ -62,6 +62,13 @@ ownership, and the mandatory OpenSpec rehearsal boundary.
   required CI or release behavior, mutating shared infrastructure, or assigning
   reviewers or agents outside the accepted path. Narrow investigation and
   direct contract-preserving fixes remain authorized.
+- Planning, documenting, recommending, or accepting a plan that contains a live
+  mutation does not authorize executing it. First-person user ownership such as
+  `I will` or `I'll` perform the mutation reserves that action to the user and
+  excludes the agent. Agent execution requires a separately presented exact
+  live mutation, its target environment or workspace, and the agent as
+  executor. A user-owned action remains outside the agent path unless an exact
+  assignment names the agent as executor, whether in the same message or later.
 - Work authority is task-scoped while modes own mutation surfaces. Continue
   across required Plan, Execute, Review, and Finish handoffs to the accepted
   checkpoint without renewed permission. Interrupt only when the next action

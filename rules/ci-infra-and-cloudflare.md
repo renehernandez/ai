@@ -88,9 +88,14 @@ These rules cover test coverage, GitLab CI, Docker image policy, Cloudflare, Ter
 
 ## Terraform
 
-- Always ask for explicit user confirmation before running `terraform apply`.
-- Running `terraform plan` is allowed without confirmation.
-- Never use `-auto-approve` without explicit user permission.
+- `terraform apply`, `terraform destroy`, `terraform import`, mutating
+  `terraform state` operations, and Terraform tests that create real resources
+  are live infrastructure mutations. Apply the executor-bound live-mutation
+  contract in `investigation-and-implementation.md`; inclusion in a plan or MR
+  never grants execution authority.
+- `terraform fmt`, `terraform validate`, and `terraform plan` do not authorize
+  a live mutation and may run as non-live-mutation proof. Never use
+  `-auto-approve` unless the exact apply authorization explicitly includes it.
 
 ## AI Sandbox Mode
 
