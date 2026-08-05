@@ -12,6 +12,7 @@
     "biome:lint-format:write": "biome check --write .",
     "charter:validate": "tsx scripts/charter-validate.ts",
     "charter:validate-range": "tsx scripts/charter-range-validate.ts",
+    "eval:skills-rules": "vitest --config vitest.evals.config.ts run",
     "skills:corpus-report": "tsx scripts/skill-corpus-report.ts",
     "skills:validate": "tsx scripts/skill-validate.ts",
     "test": "node --import tsx --test tests/unit/*.test.ts tests/integration/*.test.ts",
@@ -21,7 +22,9 @@
   "devDependencies": {
     "@biomejs/biome": "2.4.16",
     "tsx": "^4.20.6",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10",
+    "vitest-evals": "0.15.0"
   },
   "packageManager": "pnpm@11.5.3",
   "dependencies": {

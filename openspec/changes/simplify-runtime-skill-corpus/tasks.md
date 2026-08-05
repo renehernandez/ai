@@ -7,9 +7,9 @@
 
 ## 2. Eval Runtime Dependencies
 
-- [ ] 2.1 Add Vitest 4 and `vitest-evals` without changing the native deterministic test owner.
-- [ ] 2.2 Add the explicit skills-and-rules eval configuration and command surface.
-- [ ] 2.3 Prove missing runner or model setup fails clearly instead of silently skipping a lane.
+- [x] 2.1 Add Vitest 4 and `vitest-evals` without changing the native deterministic test owner.
+- [x] 2.2 Add the explicit skills-and-rules eval configuration and command surface.
+- [x] 2.3 Prove missing runner or model setup fails clearly instead of silently skipping a lane.
   - Justification: this groundwork establishes the declared runtime consumed directly by unit 3 and remains independently usable.
 
 ## 3. Isolated Agent Behavior Harness

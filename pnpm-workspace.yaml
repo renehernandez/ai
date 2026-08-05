@@ -1,3 +1,8 @@
 allowBuilds:
   esbuild: true
 minimumReleaseAge: 10080
+# Vite 8's WASI binding currently permits 1.2.0, whose @emnapi 2 peer range
+# conflicts with the binding's installed @emnapi 1 dependencies. Remove this
+# after upstream ranges converge and `pnpm peers check` stays clean without it.
+overrides:
+  "@napi-rs/wasm-runtime": 1.1.6
