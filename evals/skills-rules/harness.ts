@@ -58,6 +58,14 @@ export type AgentEvalOutput = {
   providerCalls: string[];
   providerMutationCalls: string[];
 };
+export const claudeAllowedTools = [
+  "Read",
+  "Glob",
+  "Grep",
+  "Edit",
+  "Write",
+] as const;
+
 export type SecurityFinding = {
   asset: string;
   actor: string;
@@ -345,8 +353,8 @@ async function runAgent(
       "--no-session-persistence",
       "--permission-mode",
       "acceptEdits",
-      "--tools=Read,Glob,Grep,Edit,Write",
-      "--allowedTools=Read,Glob,Grep,Edit,Write",
+      `--tools=${claudeAllowedTools.join(",")}`,
+      `--allowedTools=${claudeAllowedTools.join(",")}`,
       "--json-schema",
       readFileSync(join(sourceRoot, "evals/skills-rules/schema.json"), "utf8"),
       prompt,

@@ -85,6 +85,37 @@ export type Change = {
 };
 
 const behaviorScenarioContracts = {
+  "skill-rule-evals": {
+    principles: ["authority", "canonical-ownership", "semantic-delivery"],
+    path: "tests/unit/skill-rule-eval-contract.test.ts",
+    redName: "RED skill-rule-evals:",
+    greenName: "GREEN skill-rule-evals:",
+    owns: (change: Change) =>
+      change.path.startsWith("skills/") ||
+      (change.path.startsWith("rules/") && change.path.endsWith(".md")),
+    redEvidence: {
+      source: {
+        binding: {
+          kind: "import",
+          module: "../../evals/skills-rules/scenarios.ts",
+          name: "simulatedCoverageGap",
+        },
+        callee: /^simulatedCoverageGap$/,
+      },
+      assertion: { callee: /^assert\.deepEqual$/, directSourceValue: true },
+    },
+    greenEvidence: {
+      source: {
+        binding: {
+          kind: "import",
+          module: "../../evals/skills-rules/scenarios.ts",
+          name: "currentManagedSkillCoverageGaps",
+        },
+        callee: /^currentManagedSkillCoverageGaps$/,
+      },
+      assertion: { callee: /^assert\.deepEqual$/, directSourceValue: true },
+    },
+  },
   "charter-gate": {
     principles: ["canonical-ownership", "progressive-disclosure"],
     path: "tests/unit/agent-workflow-charter.test.ts",
