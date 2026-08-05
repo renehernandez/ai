@@ -52,6 +52,7 @@ const charterReaderBinding = {
     "node:path",
     "node:test",
     "../../scripts/charter-validate.ts",
+    "../../scripts/charter-validator-contracts.ts",
     "../../scripts/charter-validator-reader.ts",
   ],
   forbidDynamicModuleAccess: true,
