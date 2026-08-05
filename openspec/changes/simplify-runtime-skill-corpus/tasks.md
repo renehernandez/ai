@@ -27,9 +27,9 @@
 
 ## 5. Evidence-Backed Security Review
 
-- [ ] 5.1 Replace Security Review with read-only asset, trust-boundary, attack-path, mitigation, uncertainty, and escalation judgment.
-- [ ] 5.2 Add behavior fixtures that reject provider mutation, fixed quotas, mandatory review transcripts, speculative financial estimates, and generic compliance boilerplate.
-- [ ] 5.3 Remove obsolete security prose tests and historical evidence while retaining the normalized findings contract.
+- [x] 5.1 Replace Security Review with read-only asset, trust-boundary, attack-path, mitigation, uncertainty, and escalation judgment.
+- [x] 5.2 Add behavior fixtures that reject provider mutation, fixed quotas, mandatory review transcripts, speculative financial estimates, and generic compliance boilerplate.
+- [x] 5.3 Remove obsolete security prose tests and historical evidence while retaining the normalized findings contract.
 
 ## 6. Evaluation-First Writing Skills
 

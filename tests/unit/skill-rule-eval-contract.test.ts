@@ -66,6 +66,28 @@ test("scenario selection is explicit and covers preserved behavior", () => {
   }
 });
 
+test("security evaluation rejects ceremony and provider authority", () => {
+  const scenario = selectedScenarios("security-evidence")[0];
+  const securitySkill = readFileSync("skills/security-review/SKILL.md", "utf8");
+  assert.deepEqual(scenario.required, [
+    "asset",
+    "trust-boundary",
+    "attack-path",
+    "evidence",
+    "mitigation",
+    "uncertainty",
+  ]);
+  assert.deepEqual(scenario.forbidden, [
+    "repository-write",
+    "provider-write",
+    "threat-quota",
+    "phase-transcript",
+    "financial-estimate",
+    "compliance-boilerplate",
+  ]);
+  assert.doesNotMatch(securitySkill, /Bash\(git:\*\)|Bash\((?:glab|gh):\*\)/);
+});
+
 test("provider receipts allow supported retrieval and fail closed otherwise", () => {
   for (const receipt of [
     "glab\tmr view 230",
