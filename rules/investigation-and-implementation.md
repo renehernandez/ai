@@ -294,11 +294,15 @@ The POC:
    contextual authority that the work is ready to proceed to stack breakdown.
 
 At the POC's first stack objective proof, in unit 1, 2, or 3 after at most two
-reviewed groundwork units, Execute pauses before broadening. Review runs the
-exact-diff checkpoint with a separate findings-only `code-simplifier` reviewer-run
+reviewed groundwork units, Execute reaches a phase barrier before broadening.
+The first-objective phase barrier is not a user approval checkpoint. Review runs
+the exact-diff checkpoint with a separate findings-only `code-simplifier` reviewer-run
 identity and independent findings-only `code-quality-review` and `scrutinize`
 reviewer runs plus targeted verification of the real entrypoint and visible
-outcome. Any later architecture-affecting change invalidates that checkpoint.
+outcome. A passing checkpoint resumes the accepted POC in Execute
+without renewed permission. Contract-preserving findings return automatically
+to Execute; findings that change a material contract return to Plan and the
+user. Any later architecture-affecting change invalidates that checkpoint.
 Keep its evidence task-local. The completed stable POC publishes a hook-clean
 draft, requests hosted review, then receives every completed-code review type
 against that exact hosted head.

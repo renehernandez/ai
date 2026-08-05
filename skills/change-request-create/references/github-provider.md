@@ -6,7 +6,7 @@ Create GitHub pull requests with `gh` after verifying branch, remote, and duplic
 
 These are internal GitHub mechanics owned by `change-request-create`. They run
 only after Finish supplies mutation authority, a native hook-clean commit, and
-an approved title and body. This reference is not a selectable skill and does
+a finalized policy-compliant title and body. This reference is not a selectable skill and does
 not independently grant publication or merge authority.
 
 ## When to Use
@@ -65,7 +65,8 @@ wording still enters through `change-request-create`.
    git diff <base>...HEAD --stat
    ```
 
-7. Consume the exact title and body approved by `change-request-create`.
+7. Consume the exact finalized policy-compliant title and body from
+   `change-request-create`.
    Do not rebuild, fill, template-expand, or otherwise change either value in
    these provider mechanics. If either value is absent or needs revision, return to
    `change-request-create` before provider mutation.
@@ -80,10 +81,10 @@ wording still enters through `change-request-create`.
      --draft
    ```
    Add `--reviewer`, `--assignee @me`, or `--label` when requested or required
-   by project convention. Do not add `--template` or `--fill` after description
-   approval.
+   by project convention. Do not add `--template` or `--fill` after title and
+   body finalization.
 
-   For an existing PR, update only the centrally approved title and body:
+   For an existing PR, update only the finalized policy-compliant title and body:
    ```bash
    gh pr edit "<number-or-url>" \
      --title "<type>: <description>" \
@@ -135,7 +136,7 @@ wording still enters through `change-request-create`.
 
 - GitHub branch with an existing open PR: pass only if the agent checks `gh pr list --head` before creating a duplicate.
 - Existing GitHub PR update: pass only if the current body is fetched, the
-  centrally approved update uses `gh pr edit`, and hosted title/body state is
+  finalized policy-compliant update uses `gh pr edit`, and hosted title/body state is
   read back afterward.
 - GitHub side-project branch with no upstream: pass only if the agent pushes or verifies the intended fork/head before `gh pr create`.
 - User asks for a ready PR: pass only if the agent does not force `--draft` and reports the readiness choice.

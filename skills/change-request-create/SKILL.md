@@ -54,6 +54,13 @@ technical-readiness checkpoint follow draft publication and the hosted review
 request; they do not gate creation of the draft. Keep workflow evidence private
 unless the selected project policy already requires reviewer-facing evidence.
 
+PR/MR titles and descriptions are hosted artifact metadata and do not require
+the destination-bound confirmation used for covered GitLab and Linear
+conversational messages. Once Finish supplies publication authority and this
+skill resolves the route, template, relationship semantics, and hook-clean
+head, create or update the draft without previewing the title or body for a new
+permission prompt.
+
 ## Description Policy
 
 Write the hosted description for reviewers, not for the author workflow. It
@@ -156,8 +163,8 @@ link also does not replace the required relationship statement. Linear team
 and target-branch automation decides the resulting status; do not promise that
 the status is literally named `Done`.
 
-Carry the approved title and body into the internal provider mechanics together
-with the task-local
+Carry the finalized policy-compliant title and body into the internal provider
+mechanics together with the task-local
 relationship expectation for each relevant issue, or an explicit no-issue
 result. This handoff is private workflow evidence, not a persisted schema. The
 provider mechanics validate that the body matches the expectation; they never
@@ -225,8 +232,8 @@ breakdown.
    context.
 5. Build or update the description using the description policy and template
    preservation rules above.
-6. Read and execute the matching internal provider reference with the approved
-   title and body unchanged:
+6. Read and execute the matching internal provider reference with the finalized
+   policy-compliant title and body unchanged:
    - GitHub: [GitHub provider mechanics](references/github-provider.md).
    - GitLab: [GitLab provider mechanics](references/gitlab-provider.md).
 7. Return the artifact URL, source and target branches, draft/readiness state,
@@ -264,9 +271,12 @@ flags.
   review policy or asks instead of choosing the first remote.
 - Explicit GitHub, GitLab, `gh`, or `glab` creation request: pass only if this
   skill still owns the title, body, and provider mutation while its internal
-  provider mechanics consume the approved values unchanged.
+  provider mechanics consume the finalized policy-compliant values unchanged.
 - Existing PR/MR URL: pass only if that provider controls the update route.
 - Existing open artifact for the branch: pass only if no duplicate is created.
+- Accepted publication with a hook-clean head, unambiguous route, and
+  template-safe title/body: pass only if the draft is created or updated without
+  a destination-bound confirmation prompt.
 - Existing body with manual reviewer notes and managed HTML comments: pass only
   if manual content is preserved and managed content is updated.
 - Existing PR/MR body update after a reviewer reports description-policy drift:
@@ -294,11 +304,11 @@ flags.
   summaries, hashes, thread references, note IDs, discussion IDs, or stable
   correlation IDs are retained.
 - GitLab MR context identifies one Linear issue that the MR independently
-  satisfies: pass only if the approved body contains `## Tracking` with the
+  satisfies: pass only if the finalized policy-compliant body contains `## Tracking` with the
   exact plain statement `Closes PAD-123` and the handoff records a closing
   relationship.
 - GitLab MR context identifies a Linear issue that needs a later stack unit:
-  pass only if the approved body contains `## Tracking` with the exact plain
+  pass only if the finalized policy-compliant body contains `## Tracking` with the exact plain
   statement `Related to PAD-123` and the handoff records a contributing
   relationship.
 - GitLab MR context contains a Linear URL but does not establish whether the MR
@@ -327,3 +337,8 @@ flags.
   section to be absent while update safety required it to be preserved.
 - GREEN: explicit no-issue handling now forbids invented Linear statements and
   sections while preserving existing template-owned or manual Tracking content.
+- RED: task `019fcd53-a12d-7171-94c0-a8979b46e333` treated a finalized POC MR
+  title and description as another destination-bound message awaiting approval.
+- GREEN: a template-safe change-request description proceeds under existing
+  Finish publication authority without weakening the separate confirmation
+  checkpoint for conversational provider messages.

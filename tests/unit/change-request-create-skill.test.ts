@@ -42,8 +42,24 @@ test("GREEN change-request-owner: change-request-create owns every provider rout
   assert.match(github, /not a selectable skill/);
   assert.match(gitlab, /not a selectable skill/);
   assert.match(skill, /only\s+selectable creation owner/);
-  assert.match(github, /Consume the exact title and body approved/);
-  assert.match(gitlab, /Consume the exact title and body approved/);
+  assert.match(
+    skill,
+    /PR\/MR titles and descriptions.*do not require.*destination-bound confirmation/is,
+  );
+  assert.match(
+    skill,
+    /create or update the draft without previewing the title or body for a new\s+permission prompt/is,
+  );
+  assert.match(skill, /finalized policy-compliant title and body/);
+  for (const text of [skill, github, gitlab]) {
+    assert.match(text, /finalized policy-compliant title and body/);
+    assert.doesNotMatch(
+      text,
+      /approved (?:title|body)|title and body approved/i,
+    );
+  }
+  assert.doesNotMatch(github, /\bapproved\b/i);
+  assert.doesNotMatch(gitlab, /\bapproved\b/i);
   assert.doesNotMatch(github, /Fallback body|--fill --draft/);
   assert.doesNotMatch(gitlab, /Fallback body|use it only/);
 });
@@ -185,8 +201,8 @@ test("change-request-create keeps targeted evidence out of automatic verificatio
   assert.match(skill, /`shellcheck`/);
   assert.match(skill, /automatic local gate or CI job/);
   assert.match(skill, /explicit gap/);
-  assert.match(gitlab, /Consume the exact title and body approved/);
-  assert.match(github, /Consume the exact title and body approved/);
+  assert.match(gitlab, /finalized policy-compliant title and body/);
+  assert.match(github, /finalized policy-compliant title and body/);
 });
 
 test("change-request-create encodes thread 019edf9e verification-drift regression", () => {
