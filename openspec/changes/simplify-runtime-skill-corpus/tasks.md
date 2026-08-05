@@ -21,9 +21,9 @@
 
 ## 4. Deterministic Eval Contracts
 
-- [ ] 4.1 Add deterministic contracts for scenario coverage, normalized result shape, environment allowlists, tool capability fidelity, and provider receipt classification.
-- [ ] 4.2 Route staged skill and rule changes through the charter's executable behavior contract.
-- [ ] 4.3 Keep live model evals outside pre-commit while requiring current Codex and Claude lane evidence at final readiness.
+- [x] 4.1 Add deterministic contracts for scenario coverage, normalized result shape, environment allowlists, tool capability fidelity, and provider receipt classification.
+- [x] 4.2 Route staged skill and rule changes through the charter's executable behavior contract.
+- [x] 4.3 Keep live model evals outside pre-commit while requiring current Codex and Claude lane evidence at final readiness.
 
 ## 5. Evidence-Backed Security Review
 

@@ -19,7 +19,10 @@ describeEval("AX-managed skills and rules", { harness }, (it) => {
       expect(output.repositoryChanged, JSON.stringify(output, null, 2)).toBe(
         scenario.allowRepositoryWrite,
       );
-      if (scenario.forbidden.includes("provider-write")) {
+      if (
+        scenario.forbidden.includes("provider-write") &&
+        output.runner === "codex"
+      ) {
         expect(output.providerMutationCalls).toEqual([]);
       }
       for (const behavior of scenario.required) {

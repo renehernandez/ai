@@ -5,6 +5,7 @@ import {
   copyFileSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -118,6 +119,10 @@ test("GREEN canonical-ownership: the charter validation gate runs from the nativ
 });
 
 test("RED charter-gate: contract-free staged behavior changes fail closed", () => {
+  assert.match(
+    read("scripts/charter-validator-contracts.ts"),
+    /simulatedCoverageGap/,
+  );
   const invalidScenario =
     '// charter-contracts: charter-gate\nimport assert from "node:assert/strict";\ntest("RED charter-gate: no-op", () => {\nassert.ok(true);\n});\ntest("GREEN charter-gate: no-op", () => {\nassert.ok(true);\n});\n';
   assert.deepEqual(
@@ -145,17 +150,26 @@ test("RED charter-gate: contract-free staged behavior changes fail closed", () =
   );
 
   assert.deepEqual(authorityErrors, [
+    "rules/agent-development-workflow-charter.md: contract skill-rule-evals requires staged executable RED and GREEN scenarios in tests/unit/skill-rule-eval-contract.test.ts",
     "rules/agent-development-workflow-charter.md: contract charter-gate requires staged executable RED and GREEN scenarios in tests/unit/agent-workflow-charter.test.ts",
   ]);
 });
 
 test("GREEN charter-gate: repository validation executes exact staged and source-propagated behavior contracts", () => {
+  assert.match(
+    read("scripts/charter-validator-contracts.ts"),
+    /currentManagedSkillCoverageGaps/,
+  );
   assert.deepEqual(validateCharterRepository(root), []);
 });
 
-test("charter gate routes code-simplifier changes to their own executable contract", () => {
+test("charter gate routes skill changes to global and specialist contracts", () => {
   const skill = read("skills/code-simplifier/SKILL.md");
   const scenario = read("tests/unit/code-simplifier-skill.test.ts");
+  const evalScenario = readFileSync(
+    "tests/unit/skill-rule-eval-contract.test.ts",
+    "utf8",
+  );
 
   assert.deepEqual(
     validateCharterFixture(
@@ -163,6 +177,7 @@ test("charter gate routes code-simplifier changes to their own executable contra
       {
         "skills/code-simplifier/SKILL.md": skill,
         "tests/unit/code-simplifier-skill.test.ts": scenario,
+        "tests/unit/skill-rule-eval-contract.test.ts": evalScenario,
       },
       true,
     ),
