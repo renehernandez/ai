@@ -110,7 +110,7 @@ test("GREEN canonical-ownership: the charter validation gate runs from the nativ
   );
   assert.match(
     contracts,
-    /agent-surface-routing\|command-and-tools\|docs-and-specs\|git-and-review/,
+    /agent-surface-routing\|ci-infra-and-cloudflare\|command-and-tools\|docs-and-specs\|git-and-review/,
   );
   assert.doesNotMatch(
     contracts,

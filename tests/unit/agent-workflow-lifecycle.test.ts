@@ -184,6 +184,49 @@ test("GREEN authority: one canonical accepted-proposal owner supplies checkpoint
   assert.doesNotMatch(gitRule, /immediate `proceed`.*merge/is);
 });
 
+test("GREEN authority: live mutation execution is executor-bound instead of inferred from planning", () => {
+  const implementation = read("rules/investigation-and-implementation.md");
+  const infrastructure = read("rules/ci-infra-and-cloudflare.md");
+
+  assert.match(
+    implementation,
+    /Planning, documenting, recommending, or accepting a plan that contains a live\s+mutation does not authorize executing it/is,
+  );
+  assert.match(
+    implementation,
+    /first-person user ownership.*reserves that action to the user and\s+excludes the agent/is,
+  );
+  assert.match(
+    implementation,
+    /exact\s+live mutation, its target environment or workspace, and the agent as\s+executor/is,
+  );
+  assert.match(
+    implementation,
+    /exact\s+assignment names the agent as executor, whether in the same message or later/is,
+  );
+
+  assert.match(
+    infrastructure,
+    /`terraform apply`.*`terraform destroy`.*`terraform import`.*mutating\s+`terraform state` operations.*Terraform tests that create real resources\s+are live infrastructure mutations/is,
+  );
+  assert.match(
+    infrastructure,
+    /Apply the executor-bound live-mutation\s+contract in `investigation-and-implementation\.md`/is,
+  );
+  assert.doesNotMatch(
+    infrastructure,
+    /Before running one of those commands.*separately presented exact/is,
+  );
+  assert.match(
+    infrastructure,
+    /`terraform fmt`, `terraform validate`, and `terraform plan` do not authorize\s+a live mutation/is,
+  );
+  assert.doesNotMatch(
+    infrastructure,
+    /explicit user confirmation before running `terraform apply`/i,
+  );
+});
+
 test("RED authority: technical readiness cannot replace explicit POC disposal authority", () => {
   const finish = read("skills/finish/SKILL.md");
   const implementation = read("rules/investigation-and-implementation.md");
