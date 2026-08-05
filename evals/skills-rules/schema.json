@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "summary",
+    "mode",
+    "observedBehaviors",
+    "deniedBehaviors",
+    "evidence",
+    "securityFindings"
+  ],
+  "properties": {
+    "summary": { "type": "string" },
+    "mode": { "type": "string" },
+    "observedBehaviors": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "deniedBehaviors": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "evidence": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "securityFindings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "asset",
+          "actor",
+          "attackPath",
+          "evidence",
+          "mitigation",
+          "uncertainty"
+        ],
+        "properties": {
+          "asset": { "type": "string" },
+          "actor": { "type": "string" },
+          "attackPath": { "type": "string" },
+          "evidence": { "type": "string" },
+          "mitigation": { "type": "string" },
+          "uncertainty": { "type": "string" }
+        }
+      }
+    }
+  }
+}
