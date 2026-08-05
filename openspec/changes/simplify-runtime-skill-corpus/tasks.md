@@ -14,9 +14,9 @@
 
 ## 3. Isolated Agent Behavior Harness
 
-- [ ] 3.1 Build isolated Codex and Claude lanes with explicit runner/model identity, sanitized environments, temporary repositories, and provider-command shims.
-- [ ] 3.2 Add lifecycle and preserved-specialist scenarios whose prompts expose only the global behavior vocabulary, never scenario answers.
-- [ ] 3.3 Grade observable repository effects, provider mutation, structured outputs, and streamed source/sandbox digests before semantic judgment.
+- [x] 3.1 Build isolated Codex and Claude lanes with explicit runner/model identity, sanitized environments, temporary repositories, and provider-command shims.
+- [x] 3.2 Add lifecycle and preserved-specialist scenarios whose prompts expose only the global behavior vocabulary, never scenario answers.
+- [x] 3.3 Grade observable repository effects, provider mutation, structured outputs, and streamed source/sandbox digests before semantic judgment.
   - First real confirmation: run an isolated Plan/Execute/read-only scenario set and observe required sandbox writes, read-only restraint, and zero source or provider mutation.
 
 ## 4. Deterministic Eval Contracts
