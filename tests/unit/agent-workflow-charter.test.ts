@@ -88,6 +88,10 @@ test("GREEN canonical-ownership: the charter validation gate runs from the nativ
     packageJson.scripts["charter:validate"],
     "tsx scripts/charter-validate.ts",
   );
+  assert.equal(
+    packageJson.scripts["skills:corpus-report"],
+    "tsx scripts/skill-corpus-report.ts",
+  );
   assert.match(hook, /charter-validate:\s*\n\s+run: pnpm charter:validate/);
   assert.match(validator, /agent-behavior surface/i);
   assert.match(validator, /canonical owner/i);
@@ -112,18 +116,19 @@ test("GREEN canonical-ownership: the charter validation gate runs from the nativ
 test("RED charter-gate: contract-free staged behavior changes fail closed", () => {
   const invalidScenario =
     '// charter-contracts: charter-gate\nimport assert from "node:assert/strict";\ntest("RED charter-gate: no-op", () => {\nassert.ok(true);\n});\ntest("GREEN charter-gate: no-op", () => {\nassert.ok(true);\n});\n';
-  const errors = validateCharterFixture(
-    root,
-    {
-      "scripts/charter-validate.ts": "canonical owner charter validation\n",
-      "tests/unit/agent-workflow-charter.test.ts": invalidScenario,
-    },
-    true,
+  assert.deepEqual(
+    validateCharterFixture(
+      root,
+      {
+        "scripts/charter-validate.ts": "canonical owner charter validation\n",
+        "tests/unit/agent-workflow-charter.test.ts": invalidScenario,
+      },
+      true,
+    ),
+    [
+      "scripts/charter-validate.ts: contract charter-gate requires staged executable RED and GREEN scenarios in tests/unit/agent-workflow-charter.test.ts",
+    ],
   );
-
-  assert.deepEqual(errors, [
-    "scripts/charter-validate.ts: contract charter-gate requires staged executable RED and GREEN scenarios in tests/unit/agent-workflow-charter.test.ts",
-  ]);
 
   const authorityErrors = validateCharterFixture(
     root,
