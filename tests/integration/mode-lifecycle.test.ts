@@ -336,7 +336,7 @@ test("Execute enforces one writer and preserves total Git order", () => {
   );
 });
 
-test("Execute blocks POC expansion until the exact architecture checkpoint passes", () => {
+test("Execute gates POC expansion without turning the architecture checkpoint into renewed permission", () => {
   const scenarios =
     fixture<
       Array<{
@@ -366,7 +366,14 @@ test("Execute blocks POC expansion until the exact architecture checkpoint passe
     /Direct Execute without a planning artifact performs the same read-only\s+precedent scan/,
   );
   assert.match(execute, /feature-specific branch inside shared infrastructure/);
-  assert.match(execute, /pause when the first stack objective proof exists/);
+  assert.match(
+    execute,
+    /enter a phase barrier when the first stack objective\s+proof exists/,
+  );
+  assert.match(
+    execute,
+    /passing checkpoint resumes the accepted POC in Execute\s+without renewed permission/,
+  );
   assert.match(
     execute,
     /unit\s+1, 2, or 3 after at most two reviewed groundwork units/,

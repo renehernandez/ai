@@ -359,6 +359,10 @@ test("Git rules separate Review from Finish and use native hook-enabled commits"
 test("GitLab and Linear messages require destination-bound confirmation", () => {
   const gitRules = readFileSync("rules/git-and-review.md", "utf-8");
   const finish = readFileSync("skills/finish/SKILL.md", "utf-8");
+  const changeRequestCreate = readFileSync(
+    "skills/change-request-create/SKILL.md",
+    "utf-8",
+  );
   const linearBreakdown = readFileSync(
     "skills/linear-breakdown/SKILL.md",
     "utf-8",
@@ -397,7 +401,14 @@ test("GitLab and Linear messages require destination-bound confirmation", () => 
   assert.match(gitRules, /distinct\s+service identity/i);
   assert.match(gitRules, /GitHub comment.*Co-Authored by: <harness>/is);
   assert.match(gitRules, /replace `<harness>`.*active agent harness/is);
-  assert.match(gitRules, /commits.*PR\/MR descriptions.*issue\s+bodies/is);
+  assert.match(
+    gitRules,
+    /commits.*PR\/MR titles or descriptions.*issue\s+bodies/is,
+  );
+  assert.match(
+    gitRules,
+    /checkpoint does not apply.*PR\/MR titles or descriptions.*issue\s+bodies/is,
+  );
 
   for (const text of [finish, linearBreakdown, linearis, securityReview]) {
     assert.match(
@@ -409,6 +420,23 @@ test("GitLab and Linear messages require destination-bound confirmation", () => 
 
   assert.match(finish, /MUST apply/i);
   assert.match(finish, /authority never\s+bypasses/is);
+  assert.match(
+    finish,
+    /comments.*discussion replies.*notes.*issue comments.*project updates/is,
+  );
+  assert.match(
+    finish,
+    /checkpoint does not apply.*PR\/MR (?:titles or )?descriptions.*issue\s+bodies/is,
+  );
+  assert.match(
+    changeRequestCreate,
+    /PR\/MR titles and descriptions.*do not require.*destination-bound confirmation/is,
+  );
+  assert.match(
+    changeRequestCreate,
+    /finalized policy-compliant title and body/,
+  );
+  assert.doesNotMatch(changeRequestCreate, /approved title and body/i);
   assert.match(linearBreakdown, /create_immediately.*does not confirm/is);
   assert.match(linearis, /general write authority does not replace/is);
   assert.match(securityReview, /Invoking this skill does not confirm/i);

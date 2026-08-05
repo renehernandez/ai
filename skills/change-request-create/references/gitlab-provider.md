@@ -6,7 +6,7 @@ Create GitLab merge requests with `glab` after verifying branch, remote, and dup
 
 These are internal GitLab mechanics owned by `change-request-create`. They run
 only after Finish supplies mutation authority, a native hook-clean commit, and
-an approved title and body. This reference is not a selectable skill and does
+a finalized policy-compliant title and body. This reference is not a selectable skill and does
 not independently grant publication or merge authority.
 
 This is the default MR creation workflow for repos hosted in the Fullscript Lab GitLab instance. Apply repo-local templates, labels, review-request routing, and merge policies when present.
@@ -65,7 +65,8 @@ wording still enters through `change-request-create`.
    git diff <target>...HEAD --stat
    ```
 
-7. Consume the exact title and body approved by `change-request-create` plus
+7. Consume the exact finalized policy-compliant title and body from
+   `change-request-create` plus
    its task-local Linear relationship expectations or explicit no-issue
    result. Do not rebuild, fill, template-expand, classify issues, or otherwise
    change either value in these provider mechanics. For every expected Linear relationship,
@@ -119,7 +120,7 @@ wording still enters through `change-request-create`.
 ## GitLab Gotchas
 
 - `glab mr list` does not support `--state`, `--status`, or `--open`; use `--draft`, `--closed`, `--merged`, or `--all`.
-- Do not use `glab mr create --fill`; it replaces the centrally approved title
+- Do not use `glab mr create --fill`; it replaces the finalized policy-compliant title
   and body.
 - Passing long descriptions through shell flags can be brittle. Use a temp file plus command substitution only when the harness allows it safely, or use the simplest supported `glab` path for the current shell.
 - Host-qualified commands are safer in Fullscript repos when multiple GitLab hosts are configured.
@@ -162,13 +163,13 @@ wording still enters through `change-request-create`.
   passing pipeline, and operational-verification gate state from Verification
   unless the MR changes that surface or exposes a gap, and links directly to
   reviewer-needed upstream resources.
-- Approved GitLab body and handoff classify PAD-123 as closing: pass only if
+- Finalized GitLab body and handoff classify PAD-123 as closing: pass only if
   the provider mechanics require exact plain `Closes PAD-123` in `## Tracking` before
   mutation and confirms the same statement during hosted-body readback.
-- Approved GitLab body and handoff classify PAD-123 as contributing: pass only
+- Finalized GitLab body and handoff classify PAD-123 as contributing: pass only
   if the provider mechanics require exact plain `Related to PAD-123` in `## Tracking`
   before mutation and confirms the same statement during hosted-body readback.
-- Approved body contains `Closes [PAD-123](https://linear.app/example)` or only
+- Finalized body contains `Closes [PAD-123](https://linear.app/example)` or only
   a Linear URL: pass only if the provider mechanics reject it and return to
   `change-request-create` without mutating the provider.
 - Handoff explicitly records no relevant Linear issue: pass only if the

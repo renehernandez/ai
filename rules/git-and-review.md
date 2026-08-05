@@ -136,9 +136,9 @@ changes, obtain a new confirmation for the new destination-bound draft before
 submission.
 
 This checkpoint does not apply to command-only review notes such as
-`/request_review @nitro` or service-generated output posted through a distinct
-service identity. Do not add the notice to commits, PR/MR descriptions, issue
-bodies, or historical messages.
+`/request_review @nitro`, service-generated output posted through a distinct
+service identity, commits, PR/MR titles or descriptions, issue bodies, or
+historical messages. Do not add the notice to those exempt surfaces.
 
 For a human-readable provider comment outside this GitLab and Linear
 checkpoint, such as a GitHub comment, retain `Co-Authored by: <harness>`. Do

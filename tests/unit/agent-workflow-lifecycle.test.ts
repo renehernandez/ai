@@ -202,6 +202,52 @@ test("RED authority: technical readiness cannot replace explicit POC disposal au
   );
 });
 
+test("RED authority: an accepted POC does not stop for renewed permission at review barriers", () => {
+  const implementation = read("rules/investigation-and-implementation.md");
+  const execute = read("skills/execute/SKILL.md");
+  const finish = read("skills/finish/SKILL.md");
+
+  for (const text of [implementation, execute]) {
+    assert.doesNotMatch(
+      text,
+      /first-objective[^\n]*checkpoint[^\n]*(?:await|requires?) user (?:acceptance|approval)/i,
+    );
+  }
+  assert.doesNotMatch(
+    finish,
+    /completed-POC Review checkpoint.*before.*publication/is,
+  );
+});
+
+test("GREEN authority: accepted POC review barriers resume through draft publication", () => {
+  const implementation = read("rules/investigation-and-implementation.md");
+  const execute = read("skills/execute/SKILL.md");
+  const finish = read("skills/finish/SKILL.md");
+
+  for (const text of [implementation, execute]) {
+    assert.match(
+      text,
+      /first-objective.*phase barrier.*not a user approval checkpoint/is,
+    );
+    assert.match(
+      text,
+      /passing checkpoint.*resume.*accepted POC.*without renewed permission/is,
+    );
+    assert.match(
+      text,
+      /contract-preserving findings.*Execute.*material.*Plan/is,
+    );
+  }
+  assert.match(
+    finish,
+    /completed hook-clean POC.*publish.*draft.*request.*hosted review.*completed-code Review/is,
+  );
+  assert.match(
+    finish,
+    /completed-POC Review.*technical readiness.*not.*initial draft publication/is,
+  );
+});
+
 test("RED authority: a passing Nitro receipt cannot bypass Finish semantic review", () => {
   const finish = read("skills/finish/SKILL.md");
 

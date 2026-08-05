@@ -40,12 +40,14 @@ own exact artifact-scoped proposal and acceptance.
 
 ## Human-Readable Provider Messages
 
-Before Finish submits any human-readable GitLab or Linear message through the
-user's identity, it MUST apply the destination-bound confirmation contract in
+Before Finish submits GitLab or Linear comments, discussion replies, notes,
+issue comments, or project updates through the user's identity, it MUST apply
+the destination-bound confirmation contract in
 `rules/git-and-review.md#agent-authored-provider-messages`. General
 implementation, delivery, Finish, or prior provider-write authority never
-bypasses that checkpoint. Keep command-only review requests on their exact
-command path.
+bypasses that checkpoint. The checkpoint does not apply to command-only review
+requests, service-generated output posted through a distinct service identity,
+commits, PR/MR titles or descriptions, issue bodies, or historical messages.
 
 ## Provider And Publication
 
@@ -106,19 +108,22 @@ protects human-owned sections, filters routine workflow narration, executes its
 internal GitHub or GitLab mechanics, and requires hosted readback. A direct
 provider CLI/API body update never bypasses this owner.
 
-For OpenSpec POC publication, create one draft PR/MR titled `POC: ...` against
-the normal target and state that it is review-only and must close unmerged.
+For OpenSpec POC publication, a completed hook-clean POC publishes one draft
+PR/MR titled `POC: ...` against the normal target and states that it is
+review-only and must close unmerged. Request configured hosted review, then run
+completed-code Review against that exact hosted head. Completed-POC Review gates
+technical readiness, not initial draft publication; the narrower first-objective
+checkpoint neither substitutes for completed-code Review nor creates another
+user permission boundary. CI, hosted review, and operational proof cannot
+substitute for local Review.
 Technical readiness and personal acceptance leave it open. Close it only after
-Plan reconciles durable learnings against the accepted head and the user
-accepts an exact closure proposal or a presented stack-breakdown proposal whose
-first action is closing that named POC.
-Consume the completed-POC Review checkpoint; the narrower
-first-objective-proof checkpoint cannot authorize publication. CI, hosted
-review, and operational proof cannot substitute for local Review. For atomic-
-plan delivery, publish the plan and implementation together as one change set
-in one final PR/MR, with no planning-only or POC artifact. For final OpenSpec
-delivery, create one mergeable PR/MR per top-level delivery unit and no planning
-or reconciliation-only artifact.
+Plan reconciles durable learnings against the
+accepted head and the user accepts an exact closure proposal or a presented
+stack-breakdown proposal whose first action is closing that named POC. For
+atomic-plan delivery, publish the plan and implementation together as one
+change set in one final PR/MR, with no planning-only or POC artifact. For final
+OpenSpec delivery, create one mergeable PR/MR per top-level delivery unit and no
+planning or reconciliation-only artifact.
 
 Create every final MR as draft and verify its live provider state after
 creation or update. Local Review, CI, approvals, hosted review, and technical
@@ -231,7 +236,7 @@ before cleanup; never force-delete as ordinary follow-through.
 | Marking a technically ready MR ready | Leave it draft until explicit merge authority starts its turn. |
 | Stopping at MR creation or green parent CI | Monitor the full current pipeline/review cycle and route failures. |
 | Trusting `No findings` without reading the note | Read the full response and applicable unresolved discussions. |
-| Posting human-readable GitLab or Linear prose under general Finish authority | Show the exact destination-bound draft and obtain message-specific confirmation. |
+| Posting a covered GitLab or Linear comment, reply, note, or update under general Finish authority | Show the exact destination-bound draft and obtain message-specific confirmation. |
 | Waiting for local Review before creating the draft | Publish the hook-clean commit, request hosted review, then run local Review on the same head. |
 | Reusing a stale checkpoint after repair or rebase | Refresh hosted review and run bounded closure or patch-equivalence validation on the new head. |
 | Letting provider choice follow the first remote | Apply policy precedence and block ambiguity. |
@@ -251,6 +256,12 @@ before cleanup; never force-delete as ordinary follow-through.
   content or destinations required confirmation again.
 - REFACTOR: blanket prior approval did not bypass the message checkpoint, and
   mixed command-plus-prose output kept only the command-only note exempt.
+- RED: task `019fcd53-a12d-7171-94c0-a8979b46e333` over-applied the covered
+  message checkpoint to a POC MR title and description and asked for another
+  confirmation before draft creation.
+- GREEN: accepted POC publication creates the template-safe draft without a
+  message-specific prompt, while conversational GitLab and Linear prose through
+  the user's identity remains confirmation-bound.
 - RED: the prior lifecycle left a fresh agent unable to distinguish final-unit
   repository archival from Finish cleanup or place it relative to exact-head
   publication and review.

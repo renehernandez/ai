@@ -175,15 +175,19 @@ creation does not make a multi-MR delivery eligible for that exception.
 One MR per unit is an artifact boundary, not a user approval checkpoint. Apply
 the canonical rule without inventing a pause between accepted eligible units.
 
-For every OpenSpec POC, pause when the first stack objective proof exists: unit
-1, 2, or 3 after at most two reviewed groundwork units. Before broadening the POC, run an
-exact-diff checkpoint against the reviewed reuse contract, target-base SHA,
-diff fingerprint, inspected precedents, and triggered semantic tripwires. It
-must contain separate findings-only `code-quality-review` and `scrutinize`
-reviewer-run identities, a separate findings-only `code-simplifier` reviewer-run
-identity, and targeted proof of the real entrypoint and visible outcome. Every
-first-proof reviewer result records the exact evidence inspected, including a
-passing result. Do not
+For every OpenSpec POC, enter a phase barrier when the first stack objective
+proof exists: unit 1, 2, or 3 after at most two reviewed groundwork units. The
+first-objective phase barrier is not a user approval checkpoint. Before
+broadening the POC, run an exact-diff checkpoint against the reviewed reuse
+contract, target-base SHA, diff fingerprint, inspected precedents, and triggered
+semantic tripwires. A passing checkpoint resumes the accepted POC in Execute
+without renewed permission. Contract-preserving findings return automatically
+to Execute; findings that change a material contract return to Plan and the
+user. The checkpoint must contain separate findings-only `code-quality-review`
+and `scrutinize` reviewer-run identities, a separate findings-only
+`code-simplifier` reviewer-run identity, and targeted proof of the real
+entrypoint and visible outcome. Every first-proof reviewer result records the
+exact evidence inspected, including a passing result. Do not
 run `deslop` or `diff-review` against intentionally incomplete POC code. A later
 architecture-affecting change invalidates the checkpoint. Keep it task-local;
 create no repository ledger or sidecar.
@@ -253,3 +257,8 @@ terminal action.
 - GREEN: the task-wide dispatch barrier pauses every writer only at its next
   mutation until the MR-specific Finish subagent starts, then restores all
   eligible Execute concurrency without waiting for provider completion.
+- RED: task `019fcd53-a12d-7171-94c0-a8979b46e333` treated a passing POC
+  first-objective phase barrier as a request for user acceptance before the
+  remaining accepted rehearsal could continue.
+- GREEN: a passing first-objective checkpoint resumes the accepted POC
+  automatically, while a material architecture finding still returns to Plan.
