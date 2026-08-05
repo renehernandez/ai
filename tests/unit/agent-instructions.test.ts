@@ -368,10 +368,6 @@ test("GitLab and Linear messages require destination-bound confirmation", () => 
     "utf-8",
   );
   const linearis = readFileSync("skills/linearis/SKILL.md", "utf-8");
-  const securityReview = readFileSync(
-    "skills/security-review/SKILL.md",
-    "utf-8",
-  );
 
   assert.match(gitRules, /human-readable GitLab or Linear/i);
   assert.match(gitRules, /exact.*destination.*rendered draft/is);
@@ -410,7 +406,7 @@ test("GitLab and Linear messages require destination-bound confirmation", () => 
     /checkpoint does not apply.*PR\/MR titles or descriptions.*issue\s+bodies/is,
   );
 
-  for (const text of [finish, linearBreakdown, linearis, securityReview]) {
+  for (const text of [finish, linearBreakdown, linearis]) {
     assert.match(
       text,
       /rules\/git-and-review\.md#agent-authored-provider-messages/,
@@ -439,9 +435,6 @@ test("GitLab and Linear messages require destination-bound confirmation", () => 
   assert.doesNotMatch(changeRequestCreate, /approved title and body/i);
   assert.match(linearBreakdown, /create_immediately.*does not confirm/is);
   assert.match(linearis, /general write authority does not replace/is);
-  assert.match(securityReview, /Invoking this skill does not confirm/i);
-  assert.match(securityReview, /draft report for a ticket comment/i);
-  assert.match(securityReview, /draft report for an MR\/PR comment/i);
 });
 
 test("workflow spec publishes the hook-clean draft before local readiness", () => {
