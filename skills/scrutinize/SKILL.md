@@ -5,110 +5,49 @@ description: Use when the user asks to scrutinize, sanity-check, challenge, get 
 
 # Scrutinize
 
-## Overview
+Run a findings-only adversarial review. Ask whether the artifact should exist,
+whether a smaller path achieves the goal, and whether the real system path
+proves its claims. Never edit; normal review lenses retain correctness,
+security, maintainability, and prose ownership.
 
-Stand outside the artifact and ask whether it should exist, whether a smaller path works, and whether the real system path proves its claims.
+## Bind Fresh Evidence
 
-This is a findings-only adversarial review, not a generic review. Never edit the
-artifact. Use the normal review skills for their scopes; use this skill to
-challenge intent and verify claims end to end.
+For a PR, implementation, CI result, hosted finding, or readiness claim, verify
+the live branch, base, exact head, diff, host metadata, and relevant checks.
+For a standalone plan, inspect current repository precedent and any live state
+the plan cites. State the verified boundary when evidence is unavailable.
 
-## When to Use
+## Challenge
 
-- plan, design doc, architecture, or proposed approach scrutiny
-- implementation diff, branch, PR, hosted review feedback, or merge-readiness scrutiny
-- sanity checks, second opinions, and adversarial validation requests
-- mandatory Plan and Execute review gates
+1. Restate the intended outcome in one sentence. If it cannot be stated, the
+   artifact needs `rework`.
+2. Test whether existing code, documentation, workflow, or a smaller change
+   achieves it with less surface.
+3. Trace the real producer-to-consumer code, document, workflow, or hosted path
+   far enough to prove or disprove the central claims. A POC that works through
+   parallel architecture does not prove fit with the planned canonical owner.
+4. Report only evidence-backed findings. Plausible but unproven concerns belong
+   under residual risk.
+5. State what evidence would change the conclusion and return a strict verdict.
 
-Do not use for pure formatting review, prose polish, status briefs, or implementation without a review gate.
+## Gate and Output
 
-## Workflow
+`BLOCKER` and `MAJOR` fail the gate. A Plan `MINOR` returns to Plan. An
+implementation `MINOR` returns to Execute or remains explicitly non-blocking
+when no artifact change is required. Rerun after a material repair.
 
-1. **Intent**: restate the goal in one sentence. If you cannot, verdict is `rework`.
-2. **Simpler path**: ask whether existing code, docs, workflow, or a smaller change solves the same goal with less surface.
-3. **Trace**: follow the real code, doc, workflow, PR, or system path far enough to prove or disprove the main claims.
-4. **Evidence**: report only concrete findings backed by a cited input, path, plan step, diff section, workflow state, or documented assumption.
-5. **Verdict**: end with the strict verdict line.
-
-For a POC, explicitly compare the exact diff with the planned precedents and
-canonical owners. Ask whether it reuses or extends them, or merely reproduces
-the external behavior through parallel architecture. Working end to end is
-necessary proof of behavior, but is not evidence of architecture fit.
-
-## Freshness Rule
-
-Before scrutinizing a PR, branch diff, implementation, CI result, hosted review feedback, or merge-readiness claim, verify live state first: branch, base, diff, relevant PR metadata, checks, and current head.
-
-Before scrutinizing a standalone plan or design doc, inspect live repo context enough to validate assumptions. Full PR and check state is required only when the plan references a PR, branch, CI result, or deployed behavior.
-
-If live state cannot be verified, state the verified scope before findings.
-
-## Gate Behavior
-
-| Severity | Gate behavior |
-| --- | --- |
-| `BLOCKER` | Stop; fix before proceeding. |
-| `MAJOR` | Stop; fix before proceeding unless the user explicitly accepts the trade-off. |
-| `MINOR` in plan scrutiny | Return a scoped finding to Plan before implementation. |
-| `MINOR` in implementation or PR scrutiny | Return a finding to Execute, or report it as non-blocking residual risk when no change is required. |
-
-When the owning mode changes the reviewed artifact, rerun scrutiny before
-proceeding. Scrutinize never applies the change itself.
-
-## Evidence Rule
-
-Do not report speculative findings. Every finding must cite the concrete evidence that exposes it.
-
-If a concern is plausible but unproven, put it under `Residual risk`, not findings.
-
-Before the final verdict, ask what evidence would change the conclusion. Inspect local evidence, name unavailable evidence as residual risk, and use `fix-then-ship` or `rework` when missing evidence is required for the gate.
-
-## Output
-
-For findings:
-
-```markdown
-Reviewed surface: <scope checked>
-
-**[MAJOR] Finding title** [confidence: 0.86 - high | reason: concrete evidence basis]
-Location: `path:line`
+```text
+Reviewed surface: <exact artifact and evidence>
+Finding: [BLOCKER|MAJOR|MINOR] <title> [confidence and reason]
+Location: <path:line or artifact section>
 Why it matters:
 Evidence:
-Suggested change:
-
-Scrutinize verdict: fix-then-ship - <single biggest reason>. [confidence: 0.86 - high | reason: <short evidence basis>]
+Smaller or safer change:
+Residual risk:
+Evidence that would change the verdict:
+Scrutinize verdict: ship | fix-then-ship | rework | reject - <reason> [confidence]
 ```
 
-For clean scrutiny, one paragraph is allowed if it names the reviewed surface, simpler-alternative result, residual risk, and strict verdict line.
-
-Verdicts:
-
-- `ship`: gate passes.
-- `fix-then-ship`: gate fails until findings are fixed and scrutiny is rerun.
-- `rework`: gate fails because the artifact is underspecified or shaped incorrectly.
-- `reject`: gate fails because the goal is invalid, unsafe, unnecessary, or contradicted by current constraints.
-
-`MINOR` findings can coexist with `ship` only when non-blocking or already fixed by the surrounding workflow.
-
-## Common Mistakes
-
-| Mistake | Fix |
-| --- | --- |
-| Reviewing only the diff | Trace unchanged callers, helpers, docs, or workflow paths needed to verify the claim. |
-| Treating approval as scope lock | Still run the simpler-path check unless the user explicitly says not to question scope. |
-| Reporting plausible risks as findings | Move unproven concerns to residual risk. |
-| Rubber-stamping clean output | State what was traced and what residual risk remains. |
-| Letting `MINOR` plan issues carry into coding | Apply scoped mechanical plan fixes before implementation. |
-
-## Validation Scenarios
-
-- Plan adds a new policy helper while an existing helper owns the same invariant: pass only if scrutiny flags the simpler path before implementation.
-- PR claims behavior is preserved but unchanged caller paths can bypass it: pass only if scrutiny traces the real caller path before verdict.
-- Review sees plausible concurrency or CI concerns without evidence: pass only if concerns become residual risk, not findings.
-- POC reproduces the accepted behavior through a sibling helper or service instead of its planned canonical owner: pass only if scrutiny flags the parallel architecture before expansion or publication.
-
-## Test Evidence
-
-- RED: earlier direct-delivery docs allowed completion without any mandatory adversarial scrutiny gate.
-- GREEN: with this skill loaded, the duplicate-helper and retry-claim scenarios produced evidence-backed `MAJOR` findings and `fix-then-ship` verdicts.
-- REFACTOR: with this skill loaded, plausible but unproven concurrency and CI concerns stayed under residual risk instead of becoming findings.
+`ship` passes. `fix-then-ship` requires scoped repair and rerun. `rework` means
+the artifact is underspecified or wrongly shaped. `reject` means the goal is
+invalid, unsafe, unnecessary, or contradicted by current constraints.

@@ -219,6 +219,22 @@ test("documentation evaluation separates authoring, alignment, and rendering", (
   assert.equal(scenario.allowRepositoryWrite, false);
 });
 
+test("focused review evaluation preserves distinct evidence lenses", () => {
+  const scenario = selectedScenarios("focused-review-separation")[0];
+  assert.deepEqual(scenario.skills, [
+    "code-quality-review",
+    "code-simplifier",
+    "deslop",
+    "diff-review",
+    "scrutinize",
+  ]);
+  assert.ok(scenario.required.includes("distinct-review-lenses"));
+  assert.ok(scenario.required.includes("findings-only"));
+  assert.ok(scenario.required.includes("evidence"));
+  assert.ok(scenario.forbidden.includes("repository-write"));
+  assert.equal(scenario.allowRepositoryWrite, false);
+});
+
 test("review evaluation binds read-only findings to an exact target", () => {
   const scenario = selectedScenarios("review-exact-target")[0];
   assert.ok(scenario.required.includes("exact-target"));
