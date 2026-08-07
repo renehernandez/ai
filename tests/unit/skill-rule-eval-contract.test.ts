@@ -19,15 +19,33 @@ import { validateFinalEvalReadiness } from "../../evals/skills-rules/readiness.t
 import {
   behaviorScenarios,
   currentManagedSkillCoverageGaps,
+  plannedSkillRetirements,
   selectedScenarios,
   simulatedCoverageGap,
+  uncoveredManagedSkills,
 } from "../../evals/skills-rules/scenarios.ts";
+import { routeWorkDisposition } from "../../skills/plan/scripts/plan-contract.ts";
 
 const managedSkills = (
   axConfig.blocks["personal-skills"] as {
     skills: Array<{ names: string[] }>;
   }
 ).skills.flatMap(({ names }) => names);
+
+test("RED lifecycle disposition: supersession cannot report completed behavior", () => {
+  assert.deepEqual(uncoveredManagedSkills(["superseded-work"], []), [
+    "superseded-work",
+  ]);
+  assert.notEqual(routeWorkDisposition("superseded"), "complete");
+});
+
+test("GREEN lifecycle disposition: abandoned work routes back to Plan", () => {
+  assert.deepEqual(
+    uncoveredManagedSkills(managedSkills, plannedSkillRetirements),
+    [],
+  );
+  assert.equal(routeWorkDisposition("abandoned"), "plan_disposition");
+});
 
 function allowedTools(skill: string): Set<string> {
   const content = readFileSync(`skills/${skill}/SKILL.md`, "utf8");
@@ -38,11 +56,11 @@ function allowedTools(skill: string): Set<string> {
   );
 }
 
-test("RED skill-rule-evals: an uncovered managed skill is reported", () => {
+test("RED skill-rule-evals: an uncovered managed skill remains a failure", () => {
   assert.deepEqual(simulatedCoverageGap("missing-skill"), ["missing-skill"]);
 });
 
-test("GREEN skill-rule-evals: every managed skill has behavior coverage or an explicit retirement", () => {
+test("GREEN skill-rule-evals: managed skills retain behavior coverage or explicit retirement", () => {
   assert.deepEqual(currentManagedSkillCoverageGaps(managedSkills), []);
 });
 
@@ -95,6 +113,25 @@ test("planning evaluation separates artifact authority from task auditing", () =
   assert.ok(plan.forbidden.includes("production-code"));
   assert.ok(audit.required.includes("task-audit"));
   assert.ok(audit.forbidden.includes("implementation"));
+});
+
+test("RED execute evaluation denies provider writes", () => {
+  const scenario = selectedScenarios("execute-repository-only")[0];
+  assert.ok(scenario.required.includes("repository-write"));
+  assert.ok(scenario.forbidden.includes("provider-write"));
+  assert.equal(scenario.allowRepositoryWrite, true);
+});
+
+test("GREEN execute evaluation preserves the accepted POC review boundary", () => {
+  const executeSkill = readFileSync("skills/execute/SKILL.md", "utf8");
+  assert.match(
+    executeSkill,
+    /phase barrier.*not a user\s+approval checkpoint/is,
+  );
+  assert.match(
+    executeSkill,
+    /contract-preserving findings.*Execute.*material\s+contract findings.*Plan/is,
+  );
 });
 
 test("security evaluation rejects ceremony and provider authority", () => {

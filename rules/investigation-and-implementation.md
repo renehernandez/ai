@@ -87,6 +87,10 @@ ownership, and the mandatory OpenSpec rehearsal boundary.
 - Treat closure, cancellation, supersession, or abandonment of any existing
   PR/MR as exact-scoped artifact disposal. Acceptance of replacement work does
   not authorize disposing of the artifacts it may replace.
+- When accepted work itself becomes abandoned or superseded, return it to Plan
+  for an explicit disposition. Do not silently mark it complete, archive it as
+  completed, or discard its remaining obligations. Disposal of an existing
+  provider artifact still belongs to Finish under the exact-scoped rule above.
 - Generic merge authority covers one unambiguous current or named MR and is
   consumed when that MR merges. If several MRs are plausible and none is
   selected, ask before any ready-state or merge mutation. A multi-MR sequence

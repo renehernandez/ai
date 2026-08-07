@@ -20,13 +20,10 @@ test("mode skills coordinate parallel draft stacks through hosted readiness", ()
     /independent, contract-dependent, or\s+implementation-dependent/,
   );
   assert.match(plan, /branch\/worktree identity/);
-  assert.match(execute, /one singly owned branch\/worktree per\s+unit/);
-  assert.match(
-    execute,
-    /Eligible owners\s+may implement and fix feedback concurrently/,
-  );
+  assert.match(execute, /Each unit has\s+one owned branch\/worktree/);
+  assert.match(execute, /Start independent units\s+immediately/);
   assert.match(execute, /restack only its immediate child/);
-  assert.match(execute, /including the delivery budget/);
+  assert.match(execute, /refresh that child's gates/);
   assert.match(review, /complete available feedback surface/);
   assert.match(
     review,
@@ -106,12 +103,9 @@ test("hook-clean multi-MR units dispatch provider-only Finish subagents", () => 
     implementationRules,
     /do not wait for.*(?:continue|review|approval).*between.*units/is,
   );
-  assert.match(
-    execute,
-    /one MR per unit is an artifact boundary, not a user approval checkpoint/is,
-  );
-  assert.match(execute, /MR-specific Finish subagent/);
-  assert.match(execute, /canonical scheduling rule/);
+  assert.match(execute, /Do not invent a user pause/);
+  assert.match(execute, /MR-scoped, provider-only Finish lane/);
+  assert.match(execute, /shared scheduling\s+barrier/);
   assert.match(execute, /Immutable Publication Packet/);
   assert.doesNotMatch(
     execute,

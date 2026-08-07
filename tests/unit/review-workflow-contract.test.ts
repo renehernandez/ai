@@ -2194,10 +2194,11 @@ test("orchestration guidance keeps review coverage explicit and bounded", () => 
   assert.match(review, /Local: passed \| Nitro: pending \| Readiness: pending/);
   assert.match(review, /pre-commit hook owns the full local suite/i);
   assert.doesNotMatch(review, /distinct reviewer-run identity/i);
-  assert.match(execute, /environment preflight/i);
-  assert.match(execute, /progressive verification/i);
-  assert.match(execute, /do not restart discovery/i);
-  assert.match(execute, /hook-clean commit is published.*hosted review/is);
+  assert.match(execute, /documented setup, runtime, package manager/);
+  assert.match(execute, /small representative command/);
+  assert.match(execute, /smallest cohesive boundary/);
+  assert.match(execute, /run closure only for affected/);
+  assert.match(execute, /After draft publication and hosted-review request/);
   assert.match(docs, /planning contracts/i);
   assert.match(docs, /final stable document text/i);
 });
