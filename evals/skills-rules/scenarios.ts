@@ -78,6 +78,22 @@ export const behaviorScenarios: BehaviorScenario[] = [
     allowRepositoryWrite: false,
   },
   {
+    id: "brainstorming-convergence",
+    group: "specialists",
+    profile: "personal",
+    skills: ["brainstorming"],
+    prompt:
+      "Using the supplied orientation, converge on one authentication direction and identify what remains deferred. Do not plan or implement it.",
+    required: [
+      "convergence-boundary",
+      "selected-feature",
+      "deferred-scope",
+      "canonical-owner",
+    ],
+    forbidden: ["repository-write", "provider-write", "premature-plan"],
+    allowRepositoryWrite: false,
+  },
+  {
     id: "start-project-intake",
     group: "specialists",
     profile: "personal",

@@ -67,7 +67,6 @@ test("RED authority: consumers do not redefine the accepted-proposal contract or
   const implementation = read("rules/investigation-and-implementation.md");
   const entrypoint = read("AGENTS.md");
   const portableEntrypoint = read("instructions/AGENTS.md");
-  const brainstorming = read("skills/brainstorming/SKILL.md");
   const execute = read("skills/execute/SKILL.md");
   const finish = read("skills/finish/SKILL.md");
   const finishContract = read("skills/finish/scripts/finish-contract.ts");
@@ -76,7 +75,6 @@ test("RED authority: consumers do not redefine the accepted-proposal contract or
   for (const consumer of [
     entrypoint,
     portableEntrypoint,
-    brainstorming,
     execute,
     finish,
     gitRule,
@@ -111,7 +109,6 @@ test("GREEN authority: one canonical accepted-proposal owner supplies checkpoint
   const implementation = read("rules/investigation-and-implementation.md");
   const entrypoint = read("AGENTS.md");
   const portableEntrypoint = read("instructions/AGENTS.md");
-  const brainstorming = read("skills/brainstorming/SKILL.md");
   const execute = read("skills/execute/SKILL.md");
   const finish = read("skills/finish/SKILL.md");
   const finishContract = read("skills/finish/scripts/finish-contract.ts");
@@ -147,13 +144,7 @@ test("GREEN authority: one canonical accepted-proposal owner supplies checkpoint
   assert.match(implementation, /no confirmation word has\s+special authority/);
   assert.match(charter, /Authority follows the outcome and action path/);
 
-  for (const consumer of [
-    entrypoint,
-    portableEntrypoint,
-    brainstorming,
-    execute,
-    finish,
-  ]) {
+  for (const consumer of [entrypoint, portableEntrypoint, execute, finish]) {
     assert.match(consumer, /investigation-and-implementation\.md/);
   }
   assert.match(execute, /handoff is not another permission boundary/);
