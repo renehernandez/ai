@@ -88,6 +88,15 @@ test("start-project evaluation separates intake from requested tracker writes", 
   assert.equal(mixed.allowRepositoryWrite, false);
 });
 
+test("planning evaluation separates artifact authority from task auditing", () => {
+  const plan = selectedScenarios("plan-artifact-only")[0];
+  const audit = selectedScenarios("openspec-task-audit")[0];
+  assert.ok(plan.required.includes("planning-artifact"));
+  assert.ok(plan.forbidden.includes("production-code"));
+  assert.ok(audit.required.includes("task-audit"));
+  assert.ok(audit.forbidden.includes("implementation"));
+});
+
 test("security evaluation rejects ceremony and provider authority", () => {
   const scenario = selectedScenarios("security-evidence")[0];
   const securitySkill = readFileSync("skills/security-review/SKILL.md", "utf8");

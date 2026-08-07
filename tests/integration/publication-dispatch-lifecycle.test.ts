@@ -17,9 +17,9 @@ test("mode skills coordinate parallel draft stacks through hosted readiness", ()
 
   assert.match(
     plan,
-    /independent, contract-dependent, or implementation-dependent/,
+    /independent, contract-dependent, or\s+implementation-dependent/,
   );
-  assert.match(plan, /expected branch\/worktree ownership/);
+  assert.match(plan, /branch\/worktree identity/);
   assert.match(execute, /one singly owned branch\/worktree per\s+unit/);
   assert.match(
     execute,
