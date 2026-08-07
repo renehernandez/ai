@@ -6,185 +6,99 @@ allowed-tools: Read, Glob, Grep, Task, AskUserQuestion
 
 # Start Project
 
-## Mode Boundary
+## Boundary
 
-This is a bounded Explore specialist. It is read-only for the entire turn and
-does not create repository, tracker, or provider state. A later accepted mode
-transition owns any resulting write.
+Start Project is a bounded Explore specialist for new-effort intake. It is
+read-only for the whole invocation and does not create tasks, issues, or tracker
+records. It also does not write plans, specs, branches, commits, PRs, or MRs.
+Downstream storage or implementation requires the lifecycle or specialist that
+owns that later outcome.
 
-## Overview
-
-Map the local context for a new effort before planning starts. Return a
-portable Project Brief in chat, then recommend one follow-up workflow.
-
-This skill stops at intake. It does not create tickets, split work into issues,
-write acceptance criteria, estimate effort, create branches, or start
-implementation.
-
-## Use Boundary
-
-Use this skill when the user asks to start, scope, map, kick off, prepare, or
-intake a new project or broad effort and the next useful step is understanding
-the terrain.
-
-Do not use it for:
-
-- clear direct implementation requests with an obvious file or behavior target;
-- active design discussion that should stay in `brainstorming`;
-- already-approved plans ready for Plan or Execute;
-- tracker breakdown work after context intake is already complete.
-
-A single `$start-project` invocation never writes external state. It does not
-create or update Linear projects, Linear issues, GitLab issues, GitHub issues,
-Asana tasks, OpenSpec files, local plan files, branches, commits, PRs, or MRs.
-
-If a prompt mixes intake with breakdown or storage, return the Project Brief
-only and recommend the requested breakdown or storage as a later follow-up.
-Phrases such as "if possible", "Linear-ready", "put it in Linear", "create
-tickets", or "so the team can start tomorrow" are not storage permission inside
-this skill.
-
-The no-write boundary applies to the whole turn. Do not use `start-project` as
-a context boundary and then call Linear, GitLab, GitHub, Asana, filesystem, or
-planning tools to store, update, or create downstream artifacts in the same
-response. If the user asks for both intake and a tracker update in one prompt,
-return the Project Brief and say that tracker mutation requires a
-separate follow-up after the intake result is accepted.
+Use it when the useful first result is a map of a new, broad, unfamiliar, or
+multi-system effort. Do not use it for a narrow code change, active design
+discussion already owned by `brainstorming`, an accepted plan, or issue
+breakdown after intake is complete.
 
 ## Workflow
 
-1. Classify the effort as single-repo, multi-repo, research-heavy,
+1. Classify the effort as single-repository, multi-repository, research-heavy,
    tracker-linked, or unclear.
-2. Inspect local context read-only before asking broad questions: repo
-   instructions, README files, docs, existing plans, package scripts,
-   architecture-signaling files, and targeted search results.
-3. Ask only for missing scope that cannot be discovered safely, usually the
-   goal, repo or system boundary, and any known tracker links.
-4. For multi-repo, large-repo, unfamiliar-domain, or explicitly requested work,
-   optionally launch bounded read-only explorers. Ask each explorer for a short
-   context report, not implementation tasks.
-5. Return one Project Brief in chat.
-6. Recommend exactly one follow-up route and stop.
+2. Inspect local instructions, entrypoints, documentation, existing plans,
+   architecture signals, and targeted search results before asking broad
+   questions.
+3. Ask only for material scope that cannot be discovered safely, such as the
+   intended outcome, system boundary, or known tracker context.
+4. For large or unfamiliar scope, bounded read-only explorers may return short
+   context reports. Do not delegate implementation.
+5. Synthesize one Project Brief in chat, recommend exactly one follow-up route,
+   and stop.
 
 ## Project Brief
 
-Use this structure by default:
+Use this complete portable structure. Remove an empty section only when keeping
+it would be misleading.
 
 ```markdown
 # <Effort Name> - Project Brief
 
 ## Goal
-<one paragraph>
+<desired outcome>
 
 ## Scope
 ### In
-<bullets>
+<included boundaries>
 
 ### Out
-<bullets>
+<excluded boundaries>
 
 ## Repos / Systems
 | Name | Location | Role | Confidence |
 | --- | --- | --- | --- |
 
 ## Current State
-<what exists now based on read-only exploration>
+<evidence-backed description of what exists>
 
 ## Key Interfaces
-<entrypoints, commands, APIs, documents, workflows, or handoff surfaces>
+<entrypoints, commands, APIs, documents, workflows, or handoffs>
 
 ## Constraints
-<workflow, review, repo, runtime, compliance, or delivery constraints>
+<workflow, review, repository, runtime, compliance, or delivery constraints>
 
 ## Open Questions
-<questions that need human or stakeholder decision>
+<material decisions still requiring people or stakeholders>
 
 ## Load-Bearing Assumptions
-<assumptions that would change later planning if wrong>
+<assumptions that would change later planning if false>
 
 ## Observed Risks
-<risks discovered during intake, without mitigation plans>
+<risks discovered during intake, without designing mitigations>
 
 ## Recommended Follow-Up
 <one next workflow and why>
 
 ## Tracker-Ready Summary
-<short title and description suitable for copying to a tracker>
+<copyable title and description with the problem, outcome, success signals,
+dependencies, and next planning step>
 ```
 
-Remove empty sections only when they would be misleading. Keep the brief
-portable Markdown so it can be pasted into a tracker or saved later.
-
-## Hard Stops
-
-Never include downstream breakdown or preview artifacts in the brief:
-
-- Issues
-- Tasks
-- Milestones
-- Workstreams
-- Deliverables
-- Backlog
-- Delivery Arc
-- Proposed First Milestone
-- Implementation Plan
-- Delivery Sequence
-- Acceptance Criteria
-- Issue Titles
-- Estimates
-- Assignees
-
-If the user asks for any of these, say that breakdown belongs in the recommended
-follow-up workflow and keep the brief at context-intake level.
-
-Do not produce `linear_breakdown_preview`, issue-title lists, milestone
-previews, OpenSpec task drafts, or implementation slice previews.
-
-Observed risks are allowed when phrased as planning inputs. Do not add
-mitigation plans unless the user starts a follow-up planning workflow.
+The brief describes context, boundaries, and planning inputs. Keep downstream
+breakdown out of it: no tasks, issues, milestones, acceptance criteria,
+estimates, assignees, implementation slices, or disguised equivalents.
+“Linear-ready” means the summary is copyable; it is not provider-write
+authority. If the prompt also requests storage or breakdown, return the brief
+and route that one next outcome without performing it.
 
 ## Follow-Up Routing
 
-Recommend one route:
+Choose exactly one route based on the primary unresolved outcome:
 
-| Situation | Recommended follow-up |
+| Need | Route |
 | --- | --- |
-| Requirements or tradeoffs need discussion | `brainstorming` |
-| The effort needs specs or acceptance criteria before implementation planning | `openspec-propose` |
-| The effort has a reviewed plan or accepted planning artifact | Plan or Execute, according to its readiness |
-| The user wants Linear issues from the brief | `linear-breakdown` |
-| The request is already narrow enough to code | direct implementation after an explicit implementation trigger |
+| Requirements or tradeoffs remain open | `brainstorming` |
+| A durable cross-component specification is needed | `openspec-propose` |
+| An accepted planning artifact is ready | Plan or Execute, according to its authority |
+| The accepted brief should become Linear issues | `linear-breakdown` |
+| The request has become a narrow code change | explicit implementation transition |
 
-Recommendation only means "next step." Do not invoke the route from this skill.
-When the prompt contains several downstream writes, select the route that owns
-the primary next outcome. State that every non-selected write remains deferred
-to its own later authorized workflow; do not name extra routes merely to account
-for every requested mutation.
-
-## Common Mistakes
-
-| Mistake | Fix |
-| --- | --- |
-| Creating Linear issues because the user said "Linear-ready" | Return a Tracker-Ready Summary that can be copied later |
-| Creating a Linear project because the user said "put it in Linear if possible" | Return the brief and name Linear storage as a separate follow-up workflow |
-| "I used start-project for the context boundary, then Linear for the mutation" violates this skill | Stop after the brief; external mutation requires a separate follow-up turn |
-| Renaming issue breakdown as workstreams, deliverables, backlog, or delivery arc | Remove it; use `Recommended Follow-Up` instead |
-| Writing acceptance criteria in the brief | Record open questions and constraints instead |
-| Treating observed risks as a mitigation plan | List risks as planning inputs only |
-| Asking broad questions before reading the repo | Inspect local context first, then ask only what cannot be discovered |
-
-## Verification Scenarios
-
-The skill is working when these requests produce a Project Brief and preserve the
-boundary:
-
-- "Start this project and create tickets" returns the brief, then routes ticket
-  creation to follow-up.
-- "Make this Linear-ready" returns a copyable tracker summary and names Linear
-  storage as a separate follow-up workflow.
-- "Before continuing, use start-project to update the relevant Linear project"
-  returns the brief and stops; it does not update Linear in the same turn.
-- "Scope this new effort" means map new-effort context before planning, not a
-  full design brainstorm.
-- A small direct code request does not use this skill because intake is
-  unnecessary.
+The route is a recommendation, not an invocation. Leave every other requested
+write deferred to its own later authorized workflow.

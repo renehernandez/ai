@@ -4,194 +4,86 @@ import { join } from "node:path";
 import test from "node:test";
 
 const root = process.cwd();
+const read = (path: string): string => readFileSync(join(root, path), "utf8");
+const words = (content: string): number =>
+  content.trim().split(/\s+/).filter(Boolean).length;
 
-function read(path: string): string {
-  return readFileSync(join(root, path), "utf8");
+function projectBriefTemplate(content: string): string {
+  const match = /## Project Brief[\s\S]*?```markdown\n([\s\S]*?)```/.exec(
+    content,
+  );
+  assert.ok(match, "expected portable Project Brief template");
+  return match[1];
 }
 
-function normalized(content: string): string {
-  return content.replace(/\s+/g, " ").trim();
-}
+test("RED: Explore and Start Project stay compact and defer shared policy", () => {
+  const explore = read("skills/explore/SKILL.md");
+  const intake = read("skills/start-project/SKILL.md");
 
-function extractSection(content: string, heading: string): string {
-  const marker = `## ${heading}`;
-  const start = content.indexOf(marker);
+  assert.ok(words(explore) <= 450, "Explore should remain a focused router");
+  assert.ok(
+    words(intake) <= 800,
+    "Start Project should fit its intake contract",
+  );
+  for (const skill of [explore, intake]) {
+    assert.doesNotMatch(
+      skill,
+      /^## (?:Common Mistakes|Verification Scenarios)$/m,
+    );
+  }
+});
 
-  assert.notEqual(start, -1, `expected section ${heading}`);
+test("GREEN: Explore routes divergent work and intake without gaining writes", () => {
+  const explore = read("skills/explore/SKILL.md");
 
-  const bodyStart = start + marker.length;
-  const nextHeading = content.indexOf("\n## ", bodyStart);
-  const bodyEnd = nextHeading === -1 ? content.length : nextHeading;
-
-  return content.slice(bodyStart, bodyEnd);
-}
-
-function listBullets(section: string): string[] {
-  return section
-    .split("\n")
-    .filter((line) => line.startsWith("- "))
-    .map((line) => line.slice(2).trim());
-}
-
-test("start-project exposes supported frontmatter and OpenAI metadata", () => {
-  const skill = read("skills/start-project/SKILL.md");
-  const metadata = read("skills/start-project/agents/openai.yaml");
-
-  assert.match(skill, /^name: start-project$/m);
-  assert.match(skill, /^description: Use when /m);
   assert.match(
-    skill,
+    explore,
     /^allowed-tools: Read, Glob, Grep, Task, AskUserQuestion$/m,
   );
+  assert.match(explore, /`brainstorming`/);
+  assert.match(explore, /`start-project`/);
+  assert.match(explore, /bounded read-only specialist/i);
+  assert.match(explore, /propose `Plan`/i);
+  assert.doesNotMatch(explore, /^allowed-tools:.*(?:Write|Edit|Bash)/m);
+});
 
-  assert.match(metadata, /^interface:\n/m);
+test("GREEN: Start Project owns complete read-only intake, not breakdown", () => {
+  const intake = read("skills/start-project/SKILL.md");
+  const brief = projectBriefTemplate(intake);
+
+  assert.match(
+    intake,
+    /^allowed-tools: Read, Glob, Grep, Task, AskUserQuestion$/m,
+  );
+  for (const heading of [
+    "Goal",
+    "Scope",
+    "Repos / Systems",
+    "Current State",
+    "Key Interfaces",
+    "Constraints",
+    "Open Questions",
+    "Load-Bearing Assumptions",
+    "Observed Risks",
+    "Recommended Follow-Up",
+    "Tracker-Ready Summary",
+  ]) {
+    assert.match(brief, new RegExp(`^## ${heading.replace("/", "\\/")}$`, "m"));
+  }
+  assert.match(intake, /exactly one follow-up route/i);
+  assert.match(
+    intake,
+    /does not create\s+tasks, issues, or tracker\s+records/i,
+  );
+  assert.doesNotMatch(intake, /^allowed-tools:.*(?:Write|Edit|Bash)/m);
+});
+
+test("start-project metadata advertises intake rather than implementation", () => {
+  const metadata = read("skills/start-project/agents/openai.yaml");
+
   assert.match(metadata, /display_name: "Start Project"/);
-  assert.match(
-    metadata,
-    /short_description: "Map new effort context before planning"/,
-  );
-  assert.match(
-    metadata,
-    /default_prompt: "Use \$start-project within Explore to map local context for a new effort and return a Project Brief before planning\."/,
-  );
-});
-
-test("start-project returns a Project Brief before planning", () => {
-  const skill = read("skills/start-project/SKILL.md");
-
-  assert.doesNotMatch(skill, /Project Context Pack/);
-  assert.match(skill, /# <Effort Name> - Project Brief/);
-  assert.match(skill, /## Goal/);
-  assert.match(skill, /## Scope/);
-  assert.match(skill, /## Repos \/ Systems/);
-  assert.match(skill, /## Current State/);
-  assert.match(skill, /## Key Interfaces/);
-  assert.match(skill, /## Constraints/);
-  assert.match(skill, /## Open Questions/);
-  assert.match(skill, /## Load-Bearing Assumptions/);
-  assert.match(skill, /## Observed Risks/);
-  assert.match(skill, /## Recommended Follow-Up/);
-  assert.match(skill, /## Tracker-Ready Summary/);
-  assert.match(skill, /portable Markdown so it can be pasted into a tracker/);
-});
-
-test("start-project inspects local context before asking broad questions", () => {
-  const workflow = normalized(
-    extractSection(read("skills/start-project/SKILL.md"), "Workflow"),
-  );
-
-  assert.match(
-    workflow,
-    /Inspect local context read-only before asking broad questions/,
-  );
-  assert.match(
-    workflow,
-    /Ask only for missing scope that cannot be discovered safely/,
-  );
-  assert.match(workflow, /Ask each explorer for a short context report/);
-});
-
-test("start-project preserves no-external-write boundary", () => {
-  const skill = normalized(read("skills/start-project/SKILL.md"));
-
-  assert.match(
-    skill,
-    /A single `\$start-project` invocation never writes external state/,
-  );
-  assert.match(
-    skill,
-    /does not create or update Linear projects, Linear issues, GitLab issues, GitHub issues, Asana tasks, OpenSpec files, local plan files, branches, commits, PRs, or MRs/,
-  );
-  assert.match(
-    skill,
-    /Phrases such as "if possible", "Linear-ready", "put it in Linear", "create tickets", or "so the team can start tomorrow" are not storage permission/,
-  );
-  assert.match(
-    skill,
-    /"Make this Linear-ready" returns a copyable tracker summary and names Linear storage as a separate follow-up workflow/,
-  );
-});
-
-test("start-project blocks same-turn tracker mutation rationalizations", () => {
-  const skill = normalized(read("skills/start-project/SKILL.md"));
-
-  assert.match(skill, /The no-write boundary applies to the whole turn/);
-  assert.match(
-    skill,
-    /Do not use `start-project` as a context boundary and then call Linear, GitLab, GitHub, Asana, filesystem, or planning tools to store, update, or create downstream artifacts in the same response/,
-  );
-  assert.match(
-    skill,
-    /If the user asks for both intake and a tracker update in one prompt, return the Project Brief and say that tracker mutation requires a separate follow-up after the intake result is accepted/,
-  );
-  assert.match(
-    skill,
-    /"I used start-project for the context boundary, then Linear for the mutation" violates this skill/,
-  );
-});
-
-test("start-project forbids downstream breakdown artifacts", () => {
-  const skill = read("skills/start-project/SKILL.md");
-  const hardStops = extractSection(skill, "Hard Stops");
-  const normalizedHardStops = normalized(hardStops);
-
-  assert.match(
-    hardStops,
-    /Never include downstream breakdown or preview artifacts/,
-  );
-  assert.deepEqual(listBullets(hardStops), [
-    "Issues",
-    "Tasks",
-    "Milestones",
-    "Workstreams",
-    "Deliverables",
-    "Backlog",
-    "Delivery Arc",
-    "Proposed First Milestone",
-    "Implementation Plan",
-    "Delivery Sequence",
-    "Acceptance Criteria",
-    "Issue Titles",
-    "Estimates",
-    "Assignees",
-  ]);
-  assert.match(
-    normalizedHardStops,
-    /Do not produce `linear_breakdown_preview`/,
-  );
-  assert.match(normalizedHardStops, /issue-title lists/);
-  assert.match(normalizedHardStops, /milestone previews/);
-  assert.match(normalizedHardStops, /OpenSpec task drafts/);
-  assert.match(normalizedHardStops, /implementation slice previews/);
-  assert.match(normalizedHardStops, /Do not add mitigation plans/);
-});
-
-test("start-project recommends one concrete follow-up route and stops", () => {
-  const skill = read("skills/start-project/SKILL.md");
-
-  assert.match(skill, /Recommend exactly one follow-up route and stop/);
-  assert.match(
-    skill,
-    /\| Requirements or tradeoffs need discussion \| `brainstorming` \|/,
-  );
-  assert.match(
-    skill,
-    /\| The effort needs specs or acceptance criteria before implementation planning \| `openspec-propose` \|/,
-  );
-  assert.match(
-    skill,
-    /\| The effort has a reviewed plan or accepted planning artifact \| Plan or Execute, according to its readiness \|/,
-  );
-  assert.match(
-    skill,
-    /\| The user wants Linear issues from the brief \| `linear-breakdown` \|/,
-  );
-  assert.match(
-    skill,
-    /Recommendation only means "next step\." Do not invoke the route from this skill/,
-  );
-  assert.match(
-    normalized(skill),
-    /every non-selected write remains deferred to its own later authorized workflow/,
-  );
+  assert.match(metadata, /short_description:.*(?:map|intake|context)/i);
+  assert.match(metadata, /default_prompt:.*\$start-project/);
+  assert.match(metadata, /default_prompt:.*Project Brief/i);
+  assert.doesNotMatch(metadata, /(?:implement|publish|provider-write)/i);
 });

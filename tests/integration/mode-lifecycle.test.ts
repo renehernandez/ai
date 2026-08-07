@@ -62,13 +62,13 @@ test("RED fixtures preserve the three observed lifecycle failures", () => {
 test("Explore is read-only and creates no planning artifact", () => {
   const skill = read("skills/explore/SKILL.md");
 
-  assert.match(skill, /Explore is read-only/);
   assert.match(
     skill,
-    /Do not create or edit repository files, planning artifacts/,
+    /^allowed-tools: Read, Glob, Grep, Task, AskUserQuestion$/m,
   );
-  assert.match(skill, /propose `Plan` and wait/);
-  assert.match(skill, /Linear-ready means copyable text/);
+  assert.doesNotMatch(skill, /^allowed-tools:.*(?:Write|Edit|Bash)/m);
+  assert.match(skill, /investigation-and-implementation\.md/);
+  assert.match(skill, /propose `Plan`/i);
 });
 
 test("new tasks explore before later mutation authority", () => {
@@ -151,7 +151,7 @@ test("new tasks explore before later mutation authority", () => {
     rules,
     /Existing\s+authenticated commands need no renewed approval, while credential entry or\s+a new credential grant remains a human action/,
   );
-  assert.match(explore, /invoke `brainstorming` by default/);
+  assert.match(explore, /`brainstorming`[^.]*by default/i);
 });
 
 test("GREEN Plan fixtures select one artifact semantically", () => {
@@ -468,8 +468,8 @@ test("modes route to bounded specialists without restoring Codex PR feedback", (
   const review = read("skills/review/SKILL.md");
   const finish = read("skills/finish/SKILL.md");
 
-  assert.match(explore, /Invoke `brainstorming`/);
-  assert.match(explore, /Invoke `start-project`/);
+  assert.match(explore, /`brainstorming`/);
+  assert.match(explore, /`start-project`/);
   assert.match(plan, /invoke `openspec-tasks` before implementation handoff/);
   assert.match(review, /Use `github-adapter-review`/);
   assert.match(review, /`gitlab-adapter-review`/);

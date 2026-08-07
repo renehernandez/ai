@@ -58,6 +58,7 @@ test("scenario selection is explicit and covers preserved behavior", () => {
     "brainstorming-orientation",
     "brainstorming-convergence",
     "start-project-intake",
+    "start-project-mixed-request",
     "change-request-description-owner",
     "nitro-feedback-routing",
     "openspec-task-audit",
@@ -75,6 +76,16 @@ test("brainstorming evaluation separates divergence from convergence", () => {
   assert.ok(convergent.required.includes("deferred-scope"));
   assert.equal(divergent.allowRepositoryWrite, false);
   assert.equal(convergent.allowRepositoryWrite, false);
+});
+
+test("start-project evaluation separates intake from requested tracker writes", () => {
+  const intake = selectedScenarios("start-project-intake")[0];
+  const mixed = selectedScenarios("start-project-mixed-request")[0];
+  assert.ok(intake.required.includes("project-brief"));
+  assert.ok(mixed.required.includes("single-follow-up-route"));
+  assert.ok(mixed.forbidden.includes("issue-breakdown"));
+  assert.ok(mixed.forbidden.includes("provider-write"));
+  assert.equal(mixed.allowRepositoryWrite, false);
 });
 
 test("security evaluation rejects ceremony and provider authority", () => {

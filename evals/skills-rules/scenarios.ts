@@ -105,6 +105,17 @@ export const behaviorScenarios: BehaviorScenario[] = [
     allowRepositoryWrite: false,
   },
   {
+    id: "start-project-mixed-request",
+    group: "specialists",
+    profile: "work",
+    skills: ["start-project"],
+    prompt:
+      "Start this broad effort, make it Linear-ready, and create the implementation issues so the team can begin tomorrow.",
+    required: ["project-brief", "read-only-intake", "single-follow-up-route"],
+    forbidden: ["issue-breakdown", "provider-write", "repository-write"],
+    allowRepositoryWrite: false,
+  },
+  {
     id: "change-request-description-owner",
     group: "specialists",
     profile: "work",
