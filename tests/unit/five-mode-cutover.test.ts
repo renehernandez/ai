@@ -94,10 +94,9 @@ test("review routing is owned by Review and Finish without orphaned policy data"
   assert.equal(existsSync(join(root, "review-routing.yaml")), false);
   const review = readFileSync(join(root, "skills/review/SKILL.md"), "utf8");
   const finish = readFileSync(join(root, "skills/finish/SKILL.md"), "utf8");
-  assert.match(
-    review,
-    /Fullscript GitLab\/Nitro retain their configured policies/,
-  );
+  assert.match(review, /github-adapter-review/);
+  assert.match(review, /gitlab-adapter-review/);
+  assert.match(review, /nitro-review-feedback[^\n]*when policy selects Nitro/);
   assert.match(
     finish,
     /direct user instruction,\nproject policy, workflow-policy profile, remote inference/,

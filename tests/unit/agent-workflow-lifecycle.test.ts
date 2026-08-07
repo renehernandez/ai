@@ -70,6 +70,7 @@ test("RED authority: consumers do not redefine the accepted-proposal contract or
   const plan = read("skills/plan/SKILL.md");
   const planContract = read("skills/plan/scripts/plan-contract.ts");
   const execute = read("skills/execute/SKILL.md");
+  const review = read("skills/review/SKILL.md");
   const finish = read("skills/finish/SKILL.md");
   const finishContract = read("skills/finish/scripts/finish-contract.ts");
   const gitRule = read("rules/git-and-review.md");
@@ -79,6 +80,7 @@ test("RED authority: consumers do not redefine the accepted-proposal contract or
     portableEntrypoint,
     plan,
     execute,
+    review,
     finish,
     gitRule,
   ]) {
@@ -122,6 +124,7 @@ test("GREEN authority: one canonical accepted-proposal owner supplies checkpoint
   const portableEntrypoint = read("instructions/AGENTS.md");
   const plan = read("skills/plan/SKILL.md");
   const execute = read("skills/execute/SKILL.md");
+  const review = read("skills/review/SKILL.md");
   const finish = read("skills/finish/SKILL.md");
   const finishContract = read("skills/finish/scripts/finish-contract.ts");
   const gitRule = read("rules/git-and-review.md");
@@ -166,6 +169,7 @@ test("GREEN authority: one canonical accepted-proposal owner supplies checkpoint
     portableEntrypoint,
     plan,
     execute,
+    review,
     finish,
   ]) {
     assert.match(consumer, /investigation-and-implementation\.md/);
@@ -174,6 +178,8 @@ test("GREEN authority: one canonical accepted-proposal owner supplies checkpoint
   assert.match(plan, /may\s+not write implementation code/i);
   assert.match(execute, /handoff is not another permission/);
   assert.match(execute, /allow exactly one writer/i);
+  assert.match(review, /Review is read-only/i);
+  assert.match(review, /technical_readiness_checkpoint/);
   assert.match(finish, /Any unambiguous contextual acceptance/);
   assert.match(
     finishContract,
@@ -344,13 +350,15 @@ test("GREEN semantic-delivery: budgets exempt removal-only work and preserve sem
   const git = read("rules/git-and-review.md");
   const review = read("skills/review/SKILL.md");
 
-  for (const text of [implementation, git, review]) {
+  for (const text of [implementation, git]) {
     assert.match(text, /removal-only/i);
     assert.match(text, /10 (?:changed\s+)?files/);
     assert.match(text, /500\s+(?:changed\s+lines|additions)/);
     assert.match(text, /15 files/);
     assert.match(text, /1,000 changed\s+lines/);
   }
+  assert.match(review, /canonical delivery budgets/);
+  assert.match(review, /investigation-and-implementation\.md/);
   assert.match(implementation, /accepted outcome/i);
   assert.match(implementation, /unsafe-to-split/i);
   assert.match(

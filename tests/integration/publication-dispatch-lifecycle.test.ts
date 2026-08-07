@@ -24,10 +24,10 @@ test("mode skills coordinate parallel draft stacks through hosted readiness", ()
   assert.match(execute, /Start independent units\s+immediately/);
   assert.match(execute, /restack only its immediate child/);
   assert.match(execute, /refresh that child's gates/);
-  assert.match(review, /complete available feedback surface/);
+  assert.match(review, /complete response/);
   assert.match(
     review,
-    /read the\s+entire response and all unresolved Nitro-authored discussions/,
+    /Read the complete response and every unresolved Nitro-authored discussion/,
   );
   assert.match(finish, /Create every final MR as draft/);
   assert.match(

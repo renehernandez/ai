@@ -134,6 +134,14 @@ test("GREEN execute evaluation preserves the accepted POC review boundary", () =
   );
 });
 
+test("review evaluation binds read-only findings to an exact target", () => {
+  const scenario = selectedScenarios("review-exact-target")[0];
+  assert.ok(scenario.required.includes("exact-target"));
+  assert.ok(scenario.required.includes("read-only"));
+  assert.ok(scenario.forbidden.includes("repository-write"));
+  assert.equal(scenario.allowRepositoryWrite, false);
+});
+
 test("security evaluation rejects ceremony and provider authority", () => {
   const scenario = selectedScenarios("security-evidence")[0];
   const securitySkill = readFileSync("skills/security-review/SKILL.md", "utf8");
