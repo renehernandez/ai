@@ -33,9 +33,9 @@
 
 ## 6. Evaluation-First Writing Skills
 
-- [ ] 6.1 Reduce Writing Skills to its trigger, evaluation-first contract, output expectations, and escalation while preserving required tool capability.
-- [ ] 6.2 Keep testing methods and worked examples in one-level references without repeated enforcement rhetoric.
-- [ ] 6.3 Replace rationalization and phrase tests with retrieval and application evals that accept semantically equivalent instructions.
+- [x] 6.1 Reduce Writing Skills to its trigger, evaluation-first contract, output expectations, and escalation while preserving required tool capability.
+- [x] 6.2 Keep testing methods and worked examples in one-level references without repeated enforcement rhetoric.
+- [x] 6.3 Replace rationalization and phrase tests with retrieval and application evals that accept semantically equivalent instructions.
 
 ## 7. Brainstorming Orientation And Convergence
 
