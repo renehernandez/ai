@@ -8,61 +8,38 @@ allowed-tools: Read, Glob, Grep, Task, AskUserQuestion
 
 ## Authority
 
-Explore is read-only. For non-trivial work, announce `Explore`, read-only
-authority, and the goal once. Explicit `Explore` or `Explore-only` wording wins
-over inferred later modes.
+Explore is the read-only lifecycle mode defined by `AGENTS.md` and
+`rules/investigation-and-implementation.md`. Announce the mode, read-only
+authority, and goal once for non-trivial work. Do not write repository,
+planning, tracker, or provider state. Explicit lifecycle wording overrides
+inferred routing.
 
-Do not create or edit repository files, planning artifacts, tracker records,
-branches, commits, PRs, or MRs. A request to explore under time pressure does
-not make an artifact or cleanup "obvious."
+Specialists invoked here remain bounded read-only specialists. They do not gain
+lifecycle authority or carry a write request past this turn.
 
-## Workflow
+## Routing
 
-1. Inspect relevant repository and external context before asking questions the
-   available evidence can answer.
-2. For every new substantive change request, invoke `brainstorming` by default,
-   including when the opening prompt says to fix, implement, change, or build.
-   Opening implementation language does not bypass this whole-turn read-only
-   Explore pass. Do not substitute a condensed free-form brainstorm.
-3. Invoke `start-project` for matching new-effort intake, scoping, mapping, or
-   kickoff so it returns the complete Project Brief and preserves its whole-turn
-   no-write boundary. An explicitly named mode or bounded read-only specialist
-   overrides inferred specialist routing.
-4. Otherwise return a compact orientation map: objective, known facts, domain
-   terms, options, recommended defaults, and at most three material questions.
-5. Test assumptions and separate settled decisions from open ones.
-6. End with evidence, options, decisions, or open questions in chat.
-7. If convergence needs a durable artifact, propose `Plan` and wait for that
-   authority unless the same prompt already authorizes a later mode.
+1. Inspect available repository and external evidence before asking questions
+   that evidence can answer.
+2. For a new substantive outcome, use `brainstorming` by default—even when the
+   opening request says to fix, implement, change, or build. It owns the visible
+   Orientation Map, divergent discussion, and convergence boundary.
+3. For new-effort intake, scoping, mapping, or kickoff, use `start-project`. It
+   owns the complete Project Brief and stops before planning or issue breakdown.
+4. Honor an explicitly named, compatible read-only specialist instead of
+   replacing it with generic exploration.
+5. Otherwise orient the user with the objective, observed facts, material
+   options, assumptions, and no more than three decision-relevant questions.
 
-If research reopens the problem space during Plan, resume Explore without
-writing a placeholder artifact.
+Research, security discovery, and project-health techniques may provide
+evidence inside Explore. Apply only their declared judgment and output contract.
 
-## Project Intake
+## Output and Escalation
 
-For start, scope, map, or kick-off requests, use `start-project`. It returns a
-Project Brief in chat with goal, scope, systems, current state, interfaces,
-constraints, assumptions, risks, open questions, and one recommended next mode.
-It includes a tracker-ready title and description containing the problem or
-opportunity, desired outcome, success signals, dependencies, and planning step.
+Return evidence, uncertainty, options, and the recommended next decision in
+chat. Separate observed facts from working assumptions and unsettled choices.
 
-Linear-ready means copyable text. It does not authorize tracker discovery or
-mutation.
-
-## Bounded Specialists
-
-Read-only research, security discovery, project health, and similar specialists
-may support Explore. Their declared authority stays bounded; they do not become
-additional lifecycle modes or grant writes.
-
-## Common Mistakes
-
-| Mistake | Required response |
-| --- | --- |
-| Writing a plan because discussion is converging | Propose Plan and wait for artifact-write authority. |
-| Creating a temporary plan that will become OpenSpec | Keep the exploration in chat; Plan chooses exactly one artifact later. |
-| Starting "obvious cleanup" while decisions remain open | Report the candidate cleanup without editing. |
-| Creating Linear state from intake | Return the Linear-ready description only. |
-| Reimplementing the brainstorming map inside Explore | Invoke `brainstorming` and follow its complete contract. |
-| Shortening new-effort intake to an ad hoc summary | Invoke `start-project` and return the Project Brief. |
-| Treating a precise opening fix request as Execute authority | Run the read-only brainstorming pass; recommend readiness and wait for a later transition. |
+When the problem is coherent enough for a durable artifact, propose `Plan` and
+state why. Do not create a placeholder plan while waiting for Plan authority.
+If later research materially reopens the problem, return to Explore before the
+planning artifact is revised.
