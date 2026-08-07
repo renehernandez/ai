@@ -205,6 +205,20 @@ test("Linear evaluation separates preview, breakdown, and provider mechanics", (
   assert.match(overview, /`doc-smith` assists/i);
 });
 
+test("documentation evaluation separates authoring, alignment, and rendering", () => {
+  const scenario = selectedScenarios("documentation-specialist-routing")[0];
+  assert.deepEqual(scenario.skills, [
+    "doc-smith",
+    "docs-alignment-review",
+    "explain-diff-html",
+  ]);
+  assert.ok(scenario.required.includes("documentation-owner"));
+  assert.ok(scenario.required.includes("source-boundary"));
+  assert.ok(scenario.required.includes("renderer-routing"));
+  assert.ok(scenario.forbidden.includes("repository-write"));
+  assert.equal(scenario.allowRepositoryWrite, false);
+});
+
 test("review evaluation binds read-only findings to an exact target", () => {
   const scenario = selectedScenarios("review-exact-target")[0];
   assert.ok(scenario.required.includes("exact-target"));

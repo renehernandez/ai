@@ -76,3 +76,17 @@ Source labels:
 - `[Stage 3 Analysis]` — structured rubric analysis
 - `[Stage 5 Reader Test: New Engineer]` — new engineer sub-agent
 - `[Stage 5 Reader Test: Experienced Engineer]` — experienced engineer sub-agent
+
+## Reader persona prompts
+
+Pass only the stable document and target-reader profile.
+
+- **New engineer:** identify missing context, unexplained terms, unstated setup,
+  confusing steps, and places where the assumed experience differs from the
+  target reader.
+- **Experienced adjacent engineer:** identify inaccuracies, rereading points,
+  missing system links, stale or inconsistent claims, and places where domain
+  knowledge is assumed without explanation.
+
+Ask each persona for concrete locations and reader impact. Treat their output
+as evidence to assess, not findings to copy automatically.

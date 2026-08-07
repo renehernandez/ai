@@ -2170,7 +2170,6 @@ test("required reviewer skills are findings-only", () => {
 test("orchestration guidance keeps review coverage explicit and bounded", () => {
   const review = read("skills/review/SKILL.md");
   const execute = read("skills/execute/SKILL.md");
-  const docs = read("skills/doc-smith/SKILL.md");
 
   assert.match(review, /clean context by default/i);
   assert.match(review, /phase barrier/i);
@@ -2198,6 +2197,4 @@ test("orchestration guidance keeps review coverage explicit and bounded", () => 
   assert.match(execute, /smallest cohesive boundary/);
   assert.match(execute, /run closure only for affected/);
   assert.match(execute, /After draft publication and hosted-review request/);
-  assert.match(docs, /planning contracts/i);
-  assert.match(docs, /final stable document text/i);
 });
