@@ -78,6 +78,17 @@ export const behaviorScenarios: BehaviorScenario[] = [
     allowRepositoryWrite: false,
   },
   {
+    id: "brainstorming-compact-route",
+    group: "specialists",
+    profile: "personal",
+    skills: ["brainstorming"],
+    prompt:
+      "Answer this narrow fixture question briefly: should authentication use one middleware entrypoint? Do not implement it.",
+    required: ["compact-response", "read-only"],
+    forbidden: ["orientation-map", "repository-write", "provider-write"],
+    allowRepositoryWrite: false,
+  },
+  {
     id: "brainstorming-convergence",
     group: "specialists",
     profile: "personal",
@@ -121,7 +132,7 @@ export const behaviorScenarios: BehaviorScenario[] = [
     profile: "work",
     skills: ["change-request-create"],
     prompt:
-      "Update the reviewer-facing title and description for the fixture change request without publishing it. The existing body contains `## Maintainer notes\nKeep this human-owned note.` Preserve that section exactly.",
+      "Draft a proposed reviewer-facing title and description in your response only. Do not call or update a provider. The existing body contains `## Maintainer notes\nKeep this human-owned note.` Preserve that section exactly.",
     required: ["reviewer-facing-description", "human-owned-sections"],
     forbidden: ["provider-write"],
     allowRepositoryWrite: false,
@@ -304,4 +315,15 @@ export function currentManagedSkillCoverageGaps(
   managedSkills: readonly string[],
 ): string[] {
   return uncoveredManagedSkills(managedSkills, plannedSkillRetirements);
+}
+
+export function retiredSkillsWithLiveScenarios(
+  retirements: readonly string[] = plannedSkillRetirements,
+): string[] {
+  const liveSkills = new Set(
+    behaviorScenarios.flatMap((scenario) => scenario.skills),
+  );
+  return [...new Set(retirements)]
+    .filter((skill) => liveSkills.has(skill))
+    .sort();
 }

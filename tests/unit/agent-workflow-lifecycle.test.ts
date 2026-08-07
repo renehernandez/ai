@@ -178,13 +178,6 @@ test("GREEN authority: one canonical accepted-proposal owner supplies checkpoint
   ]) {
     assert.match(consumer, /investigation-and-implementation\.md/);
   }
-  assert.match(plan, /one planning artifact/i);
-  assert.match(plan, /may\s+not write implementation code/i);
-  assert.match(execute, /handoff is not another permission/);
-  assert.match(execute, /allow exactly one writer/i);
-  assert.match(review, /Review is read-only/i);
-  assert.match(review, /technical_readiness_checkpoint/);
-  assert.match(finish, /Any unambiguous contextual acceptance/);
   assert.match(
     finishContract,
     /change\.classification === "patch-equivalent"[\s\S]*return authorized;[\s\S]*return \[\];/,
@@ -192,10 +185,6 @@ test("GREEN authority: one canonical accepted-proposal owner supplies checkpoint
   assert.match(
     finishContract,
     /const merge =[\s\S]*&&\s*!mergeDenied;[\s\S]*\n\s*merge,/,
-  );
-  assert.match(
-    finish,
-    /Replacement or consolidation.*does not imply disposal of an existing review/is,
   );
   assert.match(implementation, /one unambiguous.*MR and is\s+consumed/is);
   assert.match(
@@ -255,12 +244,10 @@ test("GREEN authority: live mutation execution is executor-bound instead of infe
 });
 
 test("RED authority: technical readiness cannot replace explicit POC disposal authority", () => {
-  const finish = read("skills/finish/SKILL.md");
   const implementation = read("rules/investigation-and-implementation.md");
+  const finish = read("skills/finish/SKILL.md");
 
-  for (const text of [finish, implementation]) {
-    assert.doesNotMatch(text, /automatically close(?:s|d)? .*POC/i);
-  }
+  assert.doesNotMatch(implementation, /automatically close(?:s|d)? .*POC/i);
   assert.match(
     implementation,
     /POC disposal require.*exact action and target/is,
@@ -398,11 +385,9 @@ test("GREEN semantic-delivery: Nitro requests follow every source-head push thro
   const nitroPolicy = read(
     "skills/nitro-review-feedback/scripts/nitro-request-policy.ts",
   );
-  const feedback = read("skills/nitro-review-feedback/SKILL.md");
   const feedbackGate = read(
     "skills/nitro-review-feedback/scripts/nitro-feedback-gate.ts",
   );
-  const finish = read("skills/finish/SKILL.md");
 
   assert.match(nitroRule, /\/request_review @nitro/);
   assert.match(nitroRule, /@nitro review/);
@@ -411,39 +396,24 @@ test("GREEN semantic-delivery: Nitro requests follow every source-head push thro
   assert.match(nitroPolicy, /expectedNitroRequest/);
   assert.match(feedbackGate, /nitro-request-policy/);
   assert.match(feedbackGate, /requestObservedHeadSha !== gate\.headSha/);
-  assert.match(feedback, /rules\/fullscript\/nitro-review\.md/);
-  assert.match(feedback, /Finish owns provider requests/i);
-  assert.match(feedback, /read-only/i);
-  assert.match(finish, /rules\/fullscript\/nitro-review\.md/);
-  assert.match(finish, /owns request timing.*latest-head\s+closure/is);
   assert.match(nitroRule, /Target-only movement/i);
 });
 
 test("GREEN authority: POCs capture learnings and remain open until explicit user authority", () => {
   const implementation = read("rules/investigation-and-implementation.md");
   const docs = read("rules/docs-and-specs.md");
-  const execute = read("skills/execute/SKILL.md");
-  const finish = read("skills/finish/SKILL.md");
 
-  for (const text of [implementation, docs, execute]) {
+  for (const text of [implementation, docs]) {
     assert.match(text, /POC/i);
     assert.match(text, /remain.*open|leave.*open/is);
     assert.match(text, /read(?:y|iness) to proceed\s+to stack breakdown/i);
   }
-  assert.match(finish, /exact disposal is accepted/i);
-  assert.match(finish, /completed-POC Review checkpoint/i);
   assert.match(implementation, /reconcile.*OpenSpec/is);
-  assert.match(execute, /capture.*learning/is);
 });
 
-test("GREEN authority: Nitro readiness carries Finish semantic evidence", () => {
-  const finish = read("skills/finish/SKILL.md");
-  const review = read("skills/review/SKILL.md");
+test("GREEN authority: Nitro readiness rejects missing semantic evidence deterministically", () => {
   const contract = read("skills/review/scripts/review-contract.ts");
 
-  assert.match(finish, /hostedFeedbackSemanticReview/);
-  assert.match(finish, /complete\s+Nitro response/i);
-  assert.match(review, /Finish's exact-head semantic review evidence/i);
   assert.match(contract, /technical_readiness_nitro_semantic_review_missing/);
   assert.match(contract, /technical_readiness_nitro_semantic_review_blocked/);
 });

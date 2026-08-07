@@ -150,12 +150,3 @@ test("shared communication preserves focus and cross-turn continuity", () => {
   assert.match(communication, /full\s+explanation.*user requests/is);
   assert.match(communication, /safety.*authority.*evidence.*required format/is);
 });
-
-test("brainstorming has a compact route for narrow requests", () => {
-  const skill = read("skills/brainstorming/SKILL.md");
-
-  assert.match(skill, /quick|narrow/i);
-  assert.match(skill, /answer.*reason.*next decision/is);
-  assert.match(skill, /do not\s+use the\s+orientation map/i);
-  assert.match(skill, /domain terms.*only when/i);
-});
