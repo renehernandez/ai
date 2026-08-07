@@ -88,6 +88,25 @@ test("security evaluation rejects ceremony and provider authority", () => {
   assert.doesNotMatch(securitySkill, /Bash\(git:\*\)|Bash\((?:glab|gh):\*\)/);
 });
 
+test("skill authoring evaluation preserves evaluation-first simplification", () => {
+  const scenario = selectedScenarios("skill-authoring-evaluation-first")[0];
+  const reference = readFileSync(
+    "skills/writing-skills/testing-skills-with-subagents.md",
+    "utf8",
+  );
+  assert.deepEqual(scenario.required, [
+    "evaluation-first",
+    "progressive-disclosure",
+    "canonical-owner",
+  ]);
+  assert.deepEqual(scenario.forbidden, ["repository-write", "wording-test"]);
+  const title = /^# (.+)$/m.exec(reference)?.[1];
+  assert.equal(
+    title?.toLowerCase().replaceAll(" ", "-"),
+    "testing-skills-with-subagents",
+  );
+});
+
 test("provider receipts allow supported retrieval and fail closed otherwise", () => {
   for (const receipt of [
     "glab\tmr view 230",
