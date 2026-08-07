@@ -87,3 +87,13 @@ test("start-project metadata advertises intake rather than implementation", () =
   assert.match(metadata, /default_prompt:.*Project Brief/i);
   assert.doesNotMatch(metadata, /(?:implement|publish|provider-write)/i);
 });
+
+test("Explore routes explicit retrospective outcomes without a new lifecycle mode", () => {
+  const explore = read("skills/explore/SKILL.md");
+  assert.match(
+    explore,
+    /retrospective, reusable learning, or solution\s+note/is,
+  );
+  assert.match(explore, /Route accepted document authoring to `doc-smith`/);
+  assert.match(explore, /do not create\s+an automatic post-task mode/i);
+});

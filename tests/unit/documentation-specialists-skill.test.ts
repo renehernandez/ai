@@ -15,6 +15,8 @@ test("Doc Smith owns evidence-backed reader outcomes without document ceremony",
   assert.match(skill, /material comprehension risk/i);
   assert.match(skill, /Doc Smith never\s+commits/i);
   assert.match(skill, /absolute path.*reader outcome.*evidence inspected/is);
+  assert.match(skill, /references\/retrospective-solution-note\.md/);
+  assert.match(skill, /never trigger documentation or system mutation/is);
   assert.doesNotMatch(skill, /## (?:Test Evidence|Common [Mm]istakes)/);
 });
 

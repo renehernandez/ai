@@ -44,6 +44,11 @@ actionability, tone, and local formatting. Do not require frontmatter,
 prerequisites, recap, See Also, a diagram, or a questionnaire unless the target
 format or reader task needs it.
 
+For an accepted retrospective or reusable solution note, load
+`references/retrospective-solution-note.md`. Capture only evidence-backed,
+non-obvious learning; never trigger documentation or system mutation merely
+because implementation finished.
+
 For a full document:
 
 1. Load the applicable template from

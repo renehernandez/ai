@@ -92,6 +92,7 @@ const behaviorScenarioContracts = {
     greenName: "GREEN skill-rule-evals:",
     owns: (change: Change) =>
       change.path.startsWith("skills/") ||
+      change.path === "ax.config.json" ||
       (change.path.startsWith("rules/") && change.path.endsWith(".md")),
     redEvidence: {
       source: {
