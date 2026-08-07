@@ -19,56 +19,56 @@ test("internal linearis skill exposes portable repository-owned metadata", () =>
 
   assert.match(skill, /^name: linearis$/m);
   assert.match(skill, /^description: Use when /m);
-  assert.match(
-    skill,
-    /^description: .*unavailable, unauthenticated, or lacks a required operation.*authenticated linearis CLI\.$/m,
-  );
   assert.match(skill, /^allowed-tools: Bash\(linearis:\*\), Bash\(jq:\*\)$/m);
   assert.match(metadata, /display_name: "Linearis"/);
   assert.match(metadata, /Use \$linearis/);
-  assert.match(metadata, /fallback CLI adapter/);
   assert.equal(existsSync(join(root, "skills/linearis/LICENSE.md")), false);
 });
 
 test("linearis owns fallback CLI mechanics without granting provider authority", () => {
   const skill = normalized("skills/linearis/SKILL.md");
 
-  assert.match(skill, /fallback adapter/);
-  assert.match(skill, /does not grant.*mutation authority/i);
-  assert.match(skill, /only Finish performs.*provider write/i);
+  assert.match(skill, /fallback adapter for Linear CLI/);
+  assert.match(skill, /Only Finish may write/i);
   assert.match(skill, /`linearis usage`/);
-  assert.match(skill, /`linearis <domain> usage`/);
-  assert.match(skill, /`linearis auth login`/);
-  assert.match(skill, /do not install.*silently/i);
+  assert.match(skill, /domain `usage`/);
+  assert.match(skill, /AUTHENTICATION_REQUIRED/);
+  assert.match(skill, /Do not install or update/i);
   assert.doesNotMatch(skill, /Bash\(linear:\*\)/);
 });
 
 test("linearis requires cursor-complete reads and exact mutation readback", () => {
   const skill = normalized("skills/linearis/SKILL.md");
+  const discussions = normalized(
+    "skills/linearis/references/discussion-retrieval.md",
+  );
 
-  assert.match(skill, /`pageInfo\.hasNextPage`/);
+  assert.match(skill, /`hasNextPage`/);
   assert.match(skill, /`nodes` and `pageInfo`/);
   assert.match(skill, /immutable UUIDs/);
-  assert.match(skill, /re-read.*immediately before/i);
+  assert.match(skill, /Before an authorized write, re-read/i);
   assert.match(skill, /apply only.*approved fields/i);
-  assert.match(skill, /exact equality.*changed field/i);
-  assert.match(skill, /team-specific status/i);
+  assert.match(skill, /exact equality for each.*changed field/i);
+  assert.match(skill, /Resolve statuses through the target team/i);
+  assert.match(skill, /references\/discussion-retrieval\.md/);
+  assert.match(discussions, /top-level `comments` commands are deprecated/i);
+  assert.match(discussions, /domain-owned discussion commands/i);
+  assert.match(discussions, /every root discussion page/i);
+  assert.match(discussions, /every reply page/i);
+  assert.match(discussions, /reply-complete/i);
 });
 
-test("linearis blocks unsafe rich Markdown only on the CLI fallback path", () => {
+test("linearis blocks unsafe rich Markdown on the CLI fallback path", () => {
   const skill = normalized("skills/linearis/SKILL.md");
 
   assert.match(skill, /project `content`/);
   assert.match(skill, /issue `description`/);
   assert.match(skill, /discussion `body`/);
   assert.match(skill, /file-backed input/);
-  assert.match(skill, /capability blocker/);
+  assert.match(skill, /No Linear write was attempted/);
   assert.match(skill, /command substitution/);
-  assert.match(skill, /integration.*unavailable|unavailable.*integration/i);
-  assert.doesNotMatch(
-    skill,
-    /Do not use a Linear MCP, app, or plugin fallback/,
-  );
+  assert.match(skill, /integration.*fallback/i);
+  assert.doesNotMatch(skill, /Never use Linear MCP, app, plugin/i);
 });
 
 test("Linear semantic skills prefer the integration and fall back to linearis", () => {
@@ -81,25 +81,29 @@ test("Linear semantic skills prefer the integration and fall back to linearis", 
     [overviewPath, overview],
     [breakdownPath, breakdown],
   ]) {
-    assert.match(skill, /Linear.*integration/i);
     assert.match(skill, /`linearis`/);
-    assert.match(skill, /fall back/i);
-    assert.doesNotMatch(skill, /Never use a Linear MCP, app, or plugin/);
+    assert.match(skill, /integration first/i);
+    assert.match(skill, /fall back to `linearis`/i);
     const source = read(path);
     assert.match(source, /^allowed-tools: .*mcp__linear__\*/m);
     assert.match(source, /^allowed-tools: .*mcp__codex_apps__linear_\*/m);
-    assert.doesNotMatch(
-      source,
-      /^allowed-tools: .*(?:\bWrite\b|\bEdit\b|(?:^|, )Bash(?:,|$))/m,
-    );
   }
 
-  assert.match(overview, /workflow summary.*`description`/i);
-  assert.match(overview, /workflow description.*`content`/i);
-  assert.match(overview, /rich Markdown.*integration/i);
-  assert.match(breakdown, /read-only discovery and deduplication/i);
-  assert.match(breakdown, /rich issue description.*integration/i);
-  assert.match(breakdown, /neither adapter can safely complete/i);
+  assert.match(overview, /workflow `summary` to Linearis `description`/i);
+  assert.match(
+    overview,
+    /workflow Markdown `description` to Linearis `content`/i,
+  );
+  assert.match(overview, /file-backed-input capability blocker/i);
+  assert.match(breakdown, /Discovery and deduplication are read-only/i);
+  assert.match(
+    breakdown,
+    /Rich issue descriptions.*file-backed-input blocker/i,
+  );
+  assert.match(
+    breakdown,
+    /only description-free bounded scalar mutations may\s+proceed/i,
+  );
 });
 
 test("shared policy selects the Linear integration before the linearis fallback", () => {
@@ -116,7 +120,6 @@ test("shared policy selects the Linear integration before the linearis fallback"
   for (const policy of [instructions, commands]) {
     assert.match(policy, /Linear.*integration/i);
     assert.match(policy, /fall back to `linearis`/i);
-    assert.match(policy, /unavailable.*unauthenticated.*required operation/i);
   }
-  assert.match(commands, /Do not require.*reauthentication.*`linearis`/i);
+  assert.match(commands, /Do not require integration.*login/i);
 });

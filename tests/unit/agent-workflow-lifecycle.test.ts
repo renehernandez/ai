@@ -28,6 +28,7 @@ test("RED authority: Linear provider routing does not force the CLI or block an 
       providerSurface,
       /Do not use (?:a )?Linear MCP, app, or plugin fallback/i,
     );
+    assert.doesNotMatch(providerSurface, /sole Linear provider adapter/i);
   }
 });
 
@@ -44,19 +45,22 @@ test("GREEN authority: Linear uses the connected integration before the Linearis
   assert.match(commands, /Fall back to `linearis`/i);
   assert.match(commands, /Do not require integration\s+reauthentication/i);
   assert.match(linearis, /fallback adapter for Linear/i);
+  assert.match(linearis, /authenticated fallback/i);
   assert.match(
     linearis,
     /^description: .*unavailable, unauthenticated, or lacks a required operation.*authenticated linearis CLI\.$/m,
   );
   for (const semanticOwner of [overview, breakdown]) {
     assert.match(semanticOwner, /Linear MCP or app integration first/i);
-    assert.match(semanticOwner, /Fall back\s+to `linearis`/i);
+    assert.match(semanticOwner, /Fall back to\s+`linearis`/i);
     assert.match(semanticOwner, /^allowed-tools: .*mcp__linear__\*/m);
     assert.match(
       semanticOwner,
       /^allowed-tools: .*mcp__codex_apps__linear_\*/m,
     );
   }
+  assert.match(overview, /native project document owns design content/i);
+  assert.match(overview, /`doc-smith` assists/i);
   assert.match(surfaceRouting, /selection follows.*command-and-tools\.md/is);
   assert.match(surfaceRouting, /`linearis` supplies fallback CLI mechanics/i);
   assert.match(gitRule, /through the selected Linear provider route/i);

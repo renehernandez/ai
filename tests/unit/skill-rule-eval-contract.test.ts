@@ -57,10 +57,18 @@ function allowedTools(skill: string): Set<string> {
 }
 
 test("RED skill-rule-evals: an uncovered managed skill remains a failure", () => {
+  assert.doesNotMatch(
+    readFileSync("skills/linearis/SKILL.md", "utf8"),
+    /top-level `comments` commands are deprecated/i,
+  );
   assert.deepEqual(simulatedCoverageGap("missing-skill"), ["missing-skill"]);
 });
 
 test("GREEN skill-rule-evals: managed skills retain behavior coverage or explicit retirement", () => {
+  assert.match(
+    readFileSync("skills/linearis/references/discussion-retrieval.md", "utf8"),
+    /domain-owned discussion commands[\s\S]*every reply page/i,
+  );
   assert.deepEqual(currentManagedSkillCoverageGaps(managedSkills), []);
 });
 
@@ -176,6 +184,25 @@ test("provider-adapter evaluation preserves exact-head routing and stack ancestr
   assert.ok(scenario.forbidden.includes("provider-write"));
   assert.ok(scenario.forbidden.includes("repository-write"));
   assert.equal(scenario.allowRepositoryWrite, false);
+});
+
+test("Linear evaluation separates preview, breakdown, and provider mechanics", () => {
+  const scenario = selectedScenarios("linear-specialist-boundaries")[0];
+  const overview = readFileSync(
+    "skills/linear-project-overview/SKILL.md",
+    "utf8",
+  );
+  assert.deepEqual(scenario.skills, [
+    "linear-breakdown",
+    "linear-project-overview",
+    "linearis",
+  ]);
+  assert.ok(scenario.required.includes("project-preview"));
+  assert.ok(scenario.required.includes("breakdown-boundary"));
+  assert.ok(scenario.required.includes("provider-mechanics"));
+  assert.ok(scenario.forbidden.includes("provider-write"));
+  assert.match(overview, /native project document owns design content/i);
+  assert.match(overview, /`doc-smith` assists/i);
 });
 
 test("review evaluation binds read-only findings to an exact target", () => {
