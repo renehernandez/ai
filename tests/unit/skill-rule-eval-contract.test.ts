@@ -235,6 +235,21 @@ test("focused review evaluation preserves distinct evidence lenses", () => {
   assert.equal(scenario.allowRepositoryWrite, false);
 });
 
+test("operational evaluation separates runtime, readiness, and brief owners", () => {
+  const scenario = selectedScenarios("operational-brief-routing")[0];
+  assert.deepEqual(scenario.skills, [
+    "ai-readiness-upkeep",
+    "ax-cli",
+    "handoff-brief",
+    "project-health-brief",
+  ]);
+  assert.ok(scenario.required.includes("runtime-routing"));
+  assert.ok(scenario.required.includes("readiness-evidence"));
+  assert.ok(scenario.required.includes("brief-boundaries"));
+  assert.ok(scenario.forbidden.includes("provider-write"));
+  assert.equal(scenario.allowRepositoryWrite, false);
+});
+
 test("review evaluation binds read-only findings to an exact target", () => {
   const scenario = selectedScenarios("review-exact-target")[0];
   assert.ok(scenario.required.includes("exact-target"));
