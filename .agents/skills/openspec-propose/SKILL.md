@@ -116,4 +116,10 @@ Do not infer this adapter from ordinary language. Route ordinary work through th
 
 <!-- ax-openspec-skill: openspec-propose; explicit-only -->
 
-<!-- ax-openspec-content-sha256: sha256:2120f6dd5924fe86a55d852e4e49adb5b6494c6306049c52506d3c78016be30b -->
+## AX Lifecycle Overlay
+
+This adapter runs only inside Plan. It may create the selected OpenSpec planning artifacts, but it does not implement, publish, merge, deploy, or clean up.
+
+<!-- ax-openspec-lifecycle: Plan -->
+
+<!-- ax-openspec-content-sha256: sha256:c859be020a766da583613673c9f88f9ca959577bdfaf484e2579f6c7ca9e83a6 -->

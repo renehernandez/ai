@@ -604,6 +604,9 @@ description: Use when implementing a change
 ---
 # $1
 EOF
+  if [ "$1" = "openspec-archive-change" ]; then
+    printf '%s\n' 'Proceed if user confirms' 'Archive without syncing' "Don't block archive on warnings" >> ".codex/skills/$1/SKILL.md"
+  fi
 }
 write_skill openspec-apply-change
 write_skill openspec-archive-change
@@ -612,6 +615,9 @@ write_skill openspec-propose
 mkdir -p .claude/commands/opsx
 for command in apply archive explore propose; do
   printf '# %s command\n' "$command" > ".claude/commands/opsx/$command.md"
+  if [ "$command" = "archive" ]; then
+    printf '%s\n' 'Proceed if user confirms' 'Archive without syncing' "Don't block archive on warnings" >> ".claude/commands/opsx/$command.md"
+  fi
 done
 exit 0
 `,

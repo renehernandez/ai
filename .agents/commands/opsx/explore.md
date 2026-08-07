@@ -7,7 +7,7 @@ tags: [workflow, explore, experimental, thinking]
 
 Enter explore mode. Think deeply. Visualize freely. Follow the conversation wherever it goes.
 
-**IMPORTANT: Explore mode is for thinking, not implementing.** You may read files, search code, and investigate the codebase, but you must NEVER write code or implement features. If the user asks you to implement something, remind them to exit explore mode first and create a change proposal. You MAY create OpenSpec artifacts (proposals, designs, specs) if the user asks—that's capturing thinking, not implementing.
+**IMPORTANT: Explore mode is for thinking, not implementing.** You may read files, search code, and investigate the codebase, but you must NEVER write code or implement features. If the user asks you to implement something, remind them to exit explore mode first and create a change proposal. OpenSpec artifacts require Plan authority; remain read-only in this adapter.
 
 **This is a stance, not a workflow.** There are no fixed steps, no required sequence, no mandatory outputs. You're a thinking partner helping the user explore.
 
@@ -174,4 +174,10 @@ When things crystallize, you might offer a summary - but it's optional. Sometime
 <!-- ax-openspec-command: explore.md; explicit-only -->
 <!-- Invoke only as /opsx:explore; do not infer from ordinary language. -->
 
-<!-- ax-openspec-content-sha256: sha256:d5c2124bba00f2d20ed4d7c0a8af313039cfa24eafd1ddf1937940eabdb230ec -->
+## AX Lifecycle Overlay
+
+This adapter runs only inside Explore. It is read-only and must not create or update OpenSpec artifacts, repository files, trackers, or providers. Return evidence and route any durable artifact to Plan.
+
+<!-- ax-openspec-lifecycle: Explore -->
+
+<!-- ax-openspec-content-sha256: sha256:b9aefd40193fda16749886b03277d67738032f5a3c8e70e1141be91535ef5c3b -->
