@@ -56,6 +56,7 @@ test("scenario selection is explicit and covers preserved behavior", () => {
     "review-exact-target",
     "finish-terminal-denial",
     "brainstorming-orientation",
+    "brainstorming-convergence",
     "start-project-intake",
     "change-request-description-owner",
     "nitro-feedback-routing",
@@ -64,6 +65,16 @@ test("scenario selection is explicit and covers preserved behavior", () => {
   ]) {
     assert.equal(selectedScenarios(id)[0]?.id, id);
   }
+});
+
+test("brainstorming evaluation separates divergence from convergence", () => {
+  const divergent = selectedScenarios("brainstorming-orientation")[0];
+  const convergent = selectedScenarios("brainstorming-convergence")[0];
+  assert.ok(divergent.required.includes("orientation-map"));
+  assert.ok(convergent.required.includes("selected-feature"));
+  assert.ok(convergent.required.includes("deferred-scope"));
+  assert.equal(divergent.allowRepositoryWrite, false);
+  assert.equal(convergent.allowRepositoryWrite, false);
 });
 
 test("security evaluation rejects ceremony and provider authority", () => {

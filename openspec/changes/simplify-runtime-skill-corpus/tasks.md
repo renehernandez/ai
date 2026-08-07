@@ -39,9 +39,9 @@
 
 ## 7. Brainstorming Orientation And Convergence
 
-- [ ] 7.1 Rewrite Brainstorming around its visible Orientation Map, precedent framing, Discussion Queue, and convergence boundary.
-- [ ] 7.2 Move long methods and examples to references and remove historical runtime evidence after equivalent eval coverage passes.
-- [ ] 7.3 Prove divergent and convergent scenarios preserve the visible output contract without asserting incidental wording.
+- [x] 7.1 Rewrite Brainstorming around its visible Orientation Map, precedent framing, Discussion Queue, and convergence boundary.
+- [x] 7.2 Move long methods and examples to references and remove historical runtime evidence after equivalent eval coverage passes.
+- [x] 7.3 Prove divergent and convergent scenarios preserve the visible output contract without asserting incidental wording.
 
 ## 8. Explore And Start Project Intake
 
