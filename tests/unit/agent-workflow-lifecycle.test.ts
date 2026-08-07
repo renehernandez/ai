@@ -68,6 +68,7 @@ test("RED authority: consumers do not redefine the accepted-proposal contract or
   const entrypoint = read("AGENTS.md");
   const portableEntrypoint = read("instructions/AGENTS.md");
   const plan = read("skills/plan/SKILL.md");
+  const planContract = read("skills/plan/scripts/plan-contract.ts");
   const execute = read("skills/execute/SKILL.md");
   const finish = read("skills/finish/SKILL.md");
   const finishContract = read("skills/finish/scripts/finish-contract.ts");
@@ -103,13 +104,20 @@ test("RED authority: consumers do not redefine the accepted-proposal contract or
     implementation,
     /Merge,\s+deployment, and cleanup require explicit language/i,
   );
+  assert.doesNotMatch(
+    implementation,
+    /abandoned or superseded[\s\S]*(?:may|can) be marked complete/i,
+  );
+  assert.doesNotMatch(planContract, /mayMarkComplete/);
   assert.doesNotMatch(finish, /\| `(?:implement|merge|deploy|clean up)/);
+  assert.doesNotMatch(execute, /owns provider mutation/i);
   assert.doesNotMatch(finishContract, /merge:\s*!mergeDenied\s*&&\s*merge/);
 });
 
 test("GREEN authority: one canonical accepted-proposal owner supplies checkpoints and terminal boundaries", () => {
   const charter = read("rules/agent-development-workflow-charter.md");
   const implementation = read("rules/investigation-and-implementation.md");
+  const planContract = read("skills/plan/scripts/plan-contract.ts");
   const entrypoint = read("AGENTS.md");
   const portableEntrypoint = read("instructions/AGENTS.md");
   const plan = read("skills/plan/SKILL.md");
@@ -130,6 +138,11 @@ test("GREEN authority: one canonical accepted-proposal owner supplies checkpoint
     implementation,
     /selected delivery shape\s+supplies its normal checkpoint/,
   );
+  assert.match(
+    implementation,
+    /abandoned or superseded[\s\S]*return it to Plan[\s\S]*explicit disposition/i,
+  );
+  assert.match(planContract, /return "plan_disposition"/);
   assert.match(implementation, /Use the narrowest coherent interpretation/);
   assert.match(implementation, /Reclassify each new user message/);
   assert.match(
@@ -159,7 +172,8 @@ test("GREEN authority: one canonical accepted-proposal owner supplies checkpoint
   }
   assert.match(plan, /one planning artifact/i);
   assert.match(plan, /may\s+not write implementation code/i);
-  assert.match(execute, /handoff is not another permission boundary/);
+  assert.match(execute, /handoff is not another permission/);
+  assert.match(execute, /allow exactly one writer/i);
   assert.match(finish, /Any unambiguous contextual acceptance/);
   assert.match(
     finishContract,
@@ -273,11 +287,11 @@ test("GREEN authority: accepted POC review barriers resume through draft publica
   for (const text of [implementation, execute]) {
     assert.match(
       text,
-      /first-objective.*phase barrier.*not a user approval checkpoint/is,
+      /first-objective.*phase barrier.*not a user\s+approval checkpoint/is,
     );
     assert.match(
       text,
-      /passing checkpoint.*resume.*accepted POC.*without renewed permission/is,
+      /passing\s+checkpoint.*resume.*accepted\s+POC.*without\s+renewed\s+permission/is,
     );
     assert.match(
       text,

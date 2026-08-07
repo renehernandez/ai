@@ -1,4 +1,5 @@
 export type ArtifactRoute = "atomic_plan" | "openspec";
+export type WorkState = "active" | "completed" | "abandoned" | "superseded";
 
 export type PlanContract = {
   explicitRoute?: ArtifactRoute;
@@ -23,6 +24,18 @@ export type PlanSelection =
       planningMr: false;
       reason: string;
     };
+
+export type WorkDisposition = "continue" | "complete" | "plan_disposition";
+
+export function routeWorkDisposition(state: WorkState): WorkDisposition {
+  if (state === "abandoned" || state === "superseded") {
+    return "plan_disposition";
+  }
+  if (state === "completed") {
+    return "complete";
+  }
+  return "continue";
+}
 
 function requiresOpenSpec(contract: PlanContract): boolean {
   return (

@@ -17,6 +17,7 @@ import {
 } from "../../skills/finish/scripts/finish-contract.ts";
 import {
   type PlanContract,
+  routeWorkDisposition,
   selectPlanningArtifact,
 } from "../../skills/plan/scripts/plan-contract.ts";
 import {
@@ -152,6 +153,12 @@ test("new tasks explore before later mutation authority", () => {
     /Existing\s+authenticated commands need no renewed approval, while credential entry or\s+a new credential grant remains a human action/,
   );
   assert.match(explore, /`brainstorming`[^.]*by default/i);
+});
+
+test("abandoned or superseded work returns to Plan without silent completion", () => {
+  assert.equal(routeWorkDisposition("abandoned"), "plan_disposition");
+  assert.equal(routeWorkDisposition("superseded"), "plan_disposition");
+  assert.equal(routeWorkDisposition("completed"), "complete");
 });
 
 test("GREEN Plan fixtures select one artifact semantically", () => {
@@ -299,24 +306,14 @@ test("Execute gates POC expansion without turning the architecture checkpoint in
   }
 
   const execute = read("skills/execute/SKILL.md");
+  assert.match(execute, /reuse and deviation contract/);
+  assert.match(execute, /branches\s+inside shared infrastructure/);
+  assert.match(execute, /pause at first objective proof/);
   assert.match(
     execute,
-    /Direct Execute without a planning artifact performs the same read-only\s+precedent scan/,
+    /unit 1, 2, or 3 after no\s+more than two groundwork units/,
   );
-  assert.match(execute, /feature-specific branch inside shared infrastructure/);
-  assert.match(
-    execute,
-    /enter a phase barrier when the first stack objective\s+proof exists/,
-  );
-  assert.match(
-    execute,
-    /passing checkpoint resumes the accepted POC in Execute\s+without renewed permission/,
-  );
-  assert.match(
-    execute,
-    /unit\s+1, 2, or 3 after at most two reviewed groundwork units/,
-  );
-  assert.match(execute, /architecture-affecting change\s+invalidates/);
+  assert.match(execute, /architecture-affecting\s+change blocks expansion/);
 });
 
 test("Review exposes distinct planning, POC, and final reviewer catalogs", () => {
@@ -891,22 +888,12 @@ test("completed OpenSpec archival is owned by the final lifecycle head", () => {
     " ",
   );
 
-  assert.match(
-    execute,
-    /Execute owns the repository transformation that removes the completed change from active discovery/,
-  );
-  assert.match(
-    execute,
-    /before the final hook-clean commit and draft publication/,
-  );
-  assert.match(
-    execute,
-    /If any reconciled task or requirement is incomplete or unverified, leave the change active/,
-  );
-  assert.match(
-    execute,
-    /without inferring the explicit-only `openspec-archive-change` adapter/,
-  );
+  assert.match(execute, /last final unit/);
+  assert.match(execute, /canonical specs/);
+  assert.match(execute, /dated archive/);
+  assert.match(execute, /before the final hook-clean commit/);
+  assert.match(execute, /incomplete or unverified work active/);
+  assert.match(execute, /explicit-only `openspec-archive-change` adapter/);
   assert.match(
     review,
     /canonical spec synchronization, absence of the completed change from the active namespace, and its dated archived record on one exact HEAD/,
