@@ -29,19 +29,16 @@ test("mode skills coordinate parallel draft stacks through hosted readiness", ()
     review,
     /Read the complete response and every unresolved Nitro-authored discussion/,
   );
-  assert.match(finish, /Create every final MR as draft/);
+  assert.match(finish, /final MR as draft/i);
+  assert.match(finish, /Readiness never\s+authorizes marking it ready/i);
+  assert.match(finish, /Monitor the newest effective pipeline graph/i);
+  assert.match(finish, /every configured reviewer/i);
+  assert.match(finish, /Continue until draft technical readiness/i);
+  assert.match(finish, /refresh source-head review/i);
+  assert.match(finish, /changed target\s+identity requires a fresh checkpoint/);
   assert.match(
     finish,
-    /technical\s+readiness never authorize changing it from draft to ready/,
-  );
-  assert.match(finish, /Do not stop at publication/);
-  assert.match(finish, /green parent pipeline/);
-  assert.match(finish, /repeat without another user prompt/);
-  assert.match(finish, /Before publication and every hosted-review request/);
-  assert.match(finish, /changed\s+target identity requires a fresh checkpoint/);
-  assert.match(
-    finish,
-    /Report `draft_stack_ready` while every MR\s+remains draft/,
+    /Report `draft_stack_ready`[\s\S]*Every MR remains draft/,
   );
 });
 
@@ -116,25 +113,31 @@ test("hook-clean multi-MR units dispatch provider-only Finish subagents", () => 
   assert.match(finish, /provider-only delegated lane/);
   assert.match(finish, /Immutable Publication Packet/);
   assert.doesNotMatch(finish, /target branch and expected target identity/is);
-  assert.match(finish, /may not edit.*commit.*rebase.*restack/is);
-  assert.match(finish, /mutation ceiling.*broader.*terminal\s+authority/is);
+  assert.match(
+    finish,
+    /may not edit files.*change commits[\s\S]*rebase, restack/is,
+  );
+  assert.match(finish, /mutation\s+ceiling overrides broader task authority/is);
   assert.match(finish, /findings.*current Execute owner/is);
   assert.match(
     finish,
-    /remain active.*draft technical\s+readiness.*canonical\s+scheduling rule/is,
+    /active through draft technical\s+readiness[\s\S]*scheduling rule/is,
   );
   assert.match(
     finish,
-    /before every provider mutation.*lane identity.*ownership generation/is,
-  );
-  assert.match(finish, /lane holding.*revoked.*read-only.*returns status/is);
-  assert.match(
-    finish,
-    /actionable.*require no user decision.*automatic repair.*Nitro.*nonblocking/is,
+    /Before each mutation[\s\S]*lane identity.*ownership generation/is,
   );
   assert.match(
     finish,
-    /pipeline failure.*current Execute owner.*without.*user prompt/is,
+    /revoked generation becomes\s+read-only and returns status/is,
+  );
+  assert.match(
+    finish,
+    /actionable\s+feedback, including findings labeled nonblocking/is,
+  );
+  assert.match(
+    finish,
+    /Diagnose failures and return one in-scope repair batch[\s\S]*Execute owner/is,
   );
   assert.match(
     implementationRules,

@@ -96,7 +96,7 @@ test("change-request-create protects human-owned sections and POC descriptions",
   );
   assert.match(
     finish,
-    /Before every PR\/MR creation or description update.*invoke `change-request-create`/s,
+    /Invoke `change-request-create`.*only selectable description and\s+publication owner/s,
   );
 });
 
