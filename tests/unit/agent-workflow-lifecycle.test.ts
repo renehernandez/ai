@@ -67,6 +67,7 @@ test("RED authority: consumers do not redefine the accepted-proposal contract or
   const implementation = read("rules/investigation-and-implementation.md");
   const entrypoint = read("AGENTS.md");
   const portableEntrypoint = read("instructions/AGENTS.md");
+  const plan = read("skills/plan/SKILL.md");
   const execute = read("skills/execute/SKILL.md");
   const finish = read("skills/finish/SKILL.md");
   const finishContract = read("skills/finish/scripts/finish-contract.ts");
@@ -75,6 +76,7 @@ test("RED authority: consumers do not redefine the accepted-proposal contract or
   for (const consumer of [
     entrypoint,
     portableEntrypoint,
+    plan,
     execute,
     finish,
     gitRule,
@@ -89,6 +91,7 @@ test("RED authority: consumers do not redefine the accepted-proposal contract or
     implementation,
     entrypoint,
     portableEntrypoint,
+    plan,
     execute,
     finish,
     gitRule,
@@ -109,6 +112,7 @@ test("GREEN authority: one canonical accepted-proposal owner supplies checkpoint
   const implementation = read("rules/investigation-and-implementation.md");
   const entrypoint = read("AGENTS.md");
   const portableEntrypoint = read("instructions/AGENTS.md");
+  const plan = read("skills/plan/SKILL.md");
   const execute = read("skills/execute/SKILL.md");
   const finish = read("skills/finish/SKILL.md");
   const finishContract = read("skills/finish/scripts/finish-contract.ts");
@@ -144,9 +148,17 @@ test("GREEN authority: one canonical accepted-proposal owner supplies checkpoint
   assert.match(implementation, /no confirmation word has\s+special authority/);
   assert.match(charter, /Authority follows the outcome and action path/);
 
-  for (const consumer of [entrypoint, portableEntrypoint, execute, finish]) {
+  for (const consumer of [
+    entrypoint,
+    portableEntrypoint,
+    plan,
+    execute,
+    finish,
+  ]) {
     assert.match(consumer, /investigation-and-implementation\.md/);
   }
+  assert.match(plan, /one planning artifact/i);
+  assert.match(plan, /may\s+not write implementation code/i);
   assert.match(execute, /handoff is not another permission boundary/);
   assert.match(finish, /Any unambiguous contextual acceptance/);
   assert.match(

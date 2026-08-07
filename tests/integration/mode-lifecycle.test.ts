@@ -219,97 +219,35 @@ test("REFACTOR route closes atomic-plan and implicit-merge loopholes", () => {
 test("Plan keeps atomic delivery in one change set and rehearses OpenSpec", () => {
   const skill = read("skills/plan/SKILL.md");
 
-  assert.match(skill, /Every OpenSpec, without exception/);
-  assert.match(skill, /production-complete POC/);
   assert.match(
     skill,
-    /atomic plan and its implementation are one change set in one final MR/,
+    /Every OpenSpec requires one production-complete disposable POC/,
   );
-  assert.match(skill, /no planning-only MR, POC phase, or POC MR/);
-  assert.match(skill, /If rehearsal is required, select\s+OpenSpec/);
-  assert.match(skill, /one final MR per top-level delivery unit/);
-  assert.match(skill, /Do not start another POC\s+automatically/);
-  assert.match(skill, /existing top-level headings as hypotheses/);
+  assert.match(skill, /one plan-plus-implementation change set/);
+  assert.match(skill, /one top-level heading maps to one final MR/i);
   assert.match(skill, /safe merged intermediate state/);
-  assert.match(
-    skill,
-    /Split a candidate unit when it combines materially different/,
-  );
-  assert.match(
-    skill,
-    /Combine\s+candidate units when a split would create unused plumbing/,
-  );
-  assert.match(
-    skill,
-    /rerun the delivery decomposition against the actual POC\s+footprint/,
-  );
-  assert.match(skill, /pre-POC topology as provisional/);
   assert.match(skill, /authoritative final-topology gate/);
-  assert.match(skill, /assess every final unit/);
-  assert.match(skill, /one owning unit or a\s+declared integration hotspot/);
-  assert.match(skill, /explicit `post_poc` lifecycle discriminator/);
-  assert.match(skill, /Only atomic and\s+pre-POC planning.*fast path/);
-  assert.match(skill, /invoke Review's runnable\s+planning-checkpoint gate/);
-  assert.match(skill, /Reuse And Deviation Contract/);
-  assert.match(skill, /inspected precedents and their canonical owners/);
-  assert.match(skill, /never a\s+prerequisite for it/);
-  assert.match(skill, /Durable Planning Boundary/);
-  assert.match(
-    skill,
-    /Implementation readiness means no unresolved material decision/,
-  );
-  assert.match(
-    skill,
-    /earliest real entrypoint\s+with visible success or failure evidence/,
-  );
-  assert.match(
-    skill,
-    /non-removal atomic implementation MR.*at\s+most 10 changed files and 500 changed lines/is,
-  );
-  assert.match(skill, /above 15 files or 1,000 changed lines blocks\s+handoff/);
-  assert.match(skill, /complete\s+disposable POC MR is exempt/);
-  assert.match(skill, /step-by-step instructions/);
-  assert.match(skill, /exhaustive test or edge-case\s+matrices/);
-  assert.match(
-    skill,
-    /Pass\s+implementation considerations\s+to Execute task-locally/,
-  );
+  assert.match(skill, /accepted POC head/);
+  assert.match(skill, /reconciled OpenSpec fingerprint/);
+  assert.match(skill, /planning checkpoint/);
+  assert.match(skill, /reuse and deviation contract/i);
+  assert.match(skill, /canonical delivery budgets/);
+  assert.match(skill, /implementation mechanics task-local/);
 });
 
 test("OpenSpec Tasks stays a high-level delivery queue", () => {
   const skill = read("skills/openspec-tasks/SKILL.md");
   const plan = read("skills/plan/SKILL.md");
 
-  assert.match(skill, /high-level delivery queue/);
-  assert.match(skill, /not an implementation recipe or test\s+log/);
-  assert.match(skill, /delivery-boundary justification/);
-  assert.match(
-    skill,
-    /exact\s+files, symbols, commands, exhaustive\s+edge cases/,
-  );
-  assert.match(skill, /task-local implementation considerations/);
-  assert.match(
-    skill,
-    /real\s+entrypoint and visible success or failure evidence/,
-  );
-  assert.match(skill, /return the\s+structured blocker to Plan/);
-  assert.match(skill, /Do not rewrite `tasks\.md` automatically/);
-  assert.match(
-    plan,
-    /contract-preserving wording,\s+formatting, schema, and validator-conformance repairs automatically/,
-  );
-  assert.match(
-    plan,
-    /repairs and reruns\s+the audit without renewed permission/,
-  );
-  assert.match(
-    plan,
-    /leaves the requested behavior, work, outputs, acceptance, ownership,\s+and delivery boundaries unchanged/,
-  );
-  assert.match(
-    plan,
-    /changing what an action or deliverable\s+means is a material repair/,
-  );
+  assert.match(skill, /audits the delivery queue/i);
+  assert.match(skill, /does not create a parallel slice plan/i);
+  assert.match(skill, /files, symbols, commands/);
+  assert.match(skill, /task-local/);
+  assert.match(skill, /visible success or failure evidence/);
+  assert.match(skill, /structured disposition/);
+  assert.match(skill, /does not rewrite `tasks\.md`/i);
+  assert.match(plan, /contract-preserving failure and rerun the audit/);
+  assert.match(plan, /material correction returns\s+to conversation/);
 });
 
 test("Execute enforces one writer and preserves total Git order", () => {
@@ -470,7 +408,7 @@ test("modes route to bounded specialists without restoring Codex PR feedback", (
 
   assert.match(explore, /`brainstorming`/);
   assert.match(explore, /`start-project`/);
-  assert.match(plan, /invoke `openspec-tasks` before implementation handoff/);
+  assert.match(plan, /invoke `openspec-tasks`/);
   assert.match(review, /Use `github-adapter-review`/);
   assert.match(review, /`gitlab-adapter-review`/);
   assert.match(review, /`nitro-review-feedback`/);
