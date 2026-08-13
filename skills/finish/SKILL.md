@@ -59,11 +59,14 @@ After a native hook-clean commit:
    Review closure. Continue until draft technical readiness or a genuine
    contract, authority, credential, ownership, or provider blocker.
 
-Reuse an open artifact for the branch and preserve human-owned body sections.
-Descriptions include reviewer-relevant scope, decisions, dependency links,
-behavior-relevant verification, and actionable gaps; omit private workflow
-evidence and routine green narration. Create every final MR as draft and verify
-live state after each mutation. Readiness never authorizes marking it ready.
+Requests to monitor GitLab feedback use one monitor owner for each MR and the
+shared cooldown and single recovery probe in `rules/git-and-review.md`.
+
+Reuse an open branch artifact and preserve human-owned body sections.
+Descriptions include review scope, decisions, dependencies, verification, and
+actionable gaps; omit private evidence and routine green narration. Create every
+final MR as draft and verify live state after each mutation. Readiness never
+authorizes marking it ready.
 
 For Nitro-selected Fullscript GitLab work, `rules/fullscript/nitro-review.md`
 owns request timing, size routing, duplicate suppression, and latest-head

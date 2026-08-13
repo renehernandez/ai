@@ -118,6 +118,10 @@ test("RED authority: consumers do not redefine the accepted-proposal contract or
   assert.doesNotMatch(finish, /\| `(?:implement|merge|deploy|clean up)/);
   assert.doesNotMatch(execute, /owns provider mutation/i);
   assert.doesNotMatch(finishContract, /merge:\s*!mergeDenied\s*&&\s*merge/);
+  assert.doesNotMatch(
+    finish,
+    /Review agents? (?:may|should) establish (?:another|a competing) poller/i,
+  );
 });
 
 test("GREEN authority: one canonical accepted-proposal owner supplies checkpoints and terminal boundaries", () => {
@@ -198,6 +202,8 @@ test("GREEN authority: one canonical accepted-proposal owner supplies checkpoint
   assert.match(gitRule, /one exact action and target/);
   assert.match(gitRule, /No confirmation word has\s+special authority/);
   assert.doesNotMatch(gitRule, /immediate `proceed`.*merge/is);
+  assert.match(gitRule, /exactly one monitor owner per MR/i);
+  assert.match(finish, /one monitor owner for each MR/i);
 });
 
 test("GREEN authority: live mutation execution is executor-bound instead of inferred from planning", () => {
@@ -317,6 +323,7 @@ test("RED authority: a passing Nitro receipt cannot bypass Finish semantic revie
 });
 
 test("RED semantic-delivery: obsolete automatic stack propagation paths remain absent", () => {
+  const implementation = read("rules/investigation-and-implementation.md");
   const stacked = read("skills/glab-stacked-diffs/SKILL.md");
   const commandReference = read(
     "skills/glab-stacked-diffs/references/command-reference.md",
@@ -335,6 +342,10 @@ test("RED semantic-delivery: obsolete automatic stack propagation paths remain a
       /(?:atomic|atomically).{0,80}(?:affected chain|descendant)/is,
     );
   }
+  assert.doesNotMatch(
+    implementation,
+    /GitLab snapshots.*(?:run|start|execute) concurrently/is,
+  );
 });
 
 test("GREEN semantic-delivery: budgets exempt removal-only work and preserve semantic exceptions", () => {
@@ -378,6 +389,11 @@ test("GREEN semantic-delivery: stack publication stays sequential and restacks o
   }
   assert.match(workflows, /Do not accept an automatic descendant rewrite/i);
   assert.match(workflows, /Never create an empty placeholder MR/i);
+  assert.match(
+    implementation,
+    /30\s+seconds after one snapshot completes.*different MR's snapshot/is,
+  );
+  assert.match(git, /five minutes after the prior snapshot completes/i);
 });
 
 test("GREEN semantic-delivery: Nitro requests follow every source-head push through the canonical rule", () => {

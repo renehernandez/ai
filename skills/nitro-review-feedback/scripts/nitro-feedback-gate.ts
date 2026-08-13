@@ -1,7 +1,11 @@
 #!/usr/bin/env tsx
 import { pathToFileURL } from "node:url";
 import { validateGitLabEvidence } from "./gitlab-evidence.ts";
-import { normalizeFeedback, printTemplate } from "./nitro-feedback-render.ts";
+import {
+  NITRO_POLL_INTERVAL_MINUTES,
+  normalizeFeedback,
+  printTemplate,
+} from "./nitro-feedback-render.ts";
 import {
   expectedNitroRequest,
   nitroArtifactClassifications,
@@ -136,8 +140,10 @@ export function nitroFeedbackGateErrors(input: string): string[] {
   if (gate.timeoutMinutes !== "10") {
     errors.push("start.timeout_minutes must be 10");
   }
-  if (gate.pollIntervalMinutes !== "1") {
-    errors.push("start.poll_interval_minutes must be 1");
+  if (gate.pollIntervalMinutes !== String(NITRO_POLL_INTERVAL_MINUTES)) {
+    errors.push(
+      `start.poll_interval_minutes must be ${NITRO_POLL_INTERVAL_MINUTES}`,
+    );
   }
   if (gate.startStatus && !includes(START_STATUSES, gate.startStatus)) {
     errors.push(`start.status must be one of: ${START_STATUSES.join(", ")}`);
