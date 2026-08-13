@@ -20,12 +20,14 @@ const NITRO_STATUSES = [
   "stale",
 ] as const;
 
+export const NITRO_POLL_INTERVAL_MINUTES = 5;
+
 export function printTemplate(): void {
   console.log(`## Readable Summary
 
 - Status: Nitro feedback gate evidence is ready to validate.
 - Request: latest-head Nitro review was requested after the last material push.
-- Start wait: 10 minutes, polled every 1 minute.
+- Start wait: 10 minutes, polled every ${NITRO_POLL_INTERVAL_MINUTES} minutes.
 - Completion: latest-head Nitro review is clean, pending, or blocked with evidence.
 
 \`\`\`yaml
@@ -57,7 +59,7 @@ nitro_feedback_gate:
   start:
     status: started | blocked | pending
     timeout_minutes: 10
-    poll_interval_minutes: 1
+    poll_interval_minutes: ${NITRO_POLL_INTERVAL_MINUTES}
     evidence:
       - <Nitro pending review, acknowledgement, or start evidence>
   completion:
@@ -209,7 +211,7 @@ function normalizedGateForStatus(input: {
   start:
     status: ${startStatus}
     timeout_minutes: 10
-    poll_interval_minutes: 1
+    poll_interval_minutes: ${NITRO_POLL_INTERVAL_MINUTES}
     evidence:${formatEvidence(input.startEvidence)}
   completion:
     status: ${completionStatus}

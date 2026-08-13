@@ -127,6 +127,15 @@ units; Review fills ready reviewer capacity; and Finish overlaps stable local
 and hosted gates. Preserve a small coherent task inline when delegation,
 worktree setup, or handoff cost would increase latency.
 
+GitLab rate limits are a concrete provider constraint. Serialize task-local
+GitLab snapshots that share a host and credential, even when separate
+MR-specific Finish lanes remain active. When credential identity is unknown,
+treat snapshots to the same host as sharing a credential. Wait at least 30
+seconds after one snapshot completes before starting a different MR's snapshot,
+and apply the cadence and 429 recovery contract in `git-and-review.md`.
+Repository mutation, local Review, and non-GitLab work remain eligible to
+proceed concurrently while a GitLab snapshot or cooldown is pending.
+
 One MR per unit is an artifact boundary, not a user approval checkpoint. Once
 a multi-unit delivery is accepted, continue every eligible unit and publish
 each hook-clean artifact. Do not wait for `continue`, user review, or approval

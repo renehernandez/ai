@@ -40,7 +40,7 @@ responsible for a single resumable stack workflow.
   head.
 - After every push that addresses Nitro feedback, the workflow requests fresh
   Nitro feedback for the new head and waits again.
-- The default Nitro review-start wait is 10 minutes, polling every 1 minute.
+- The default Nitro review-start wait is 10 minutes, polling every 5 minutes.
   This timeout covers Nitro acknowledging or starting a review, not full review
   completion.
 - Once Nitro starts reviewing, the workflow waits for Nitro to complete and
@@ -229,7 +229,7 @@ Default wait configuration:
 nitro_feedback_wait:
   request_required_after_each_push: true
   start_ack_timeout_minutes: 10
-  poll_interval_minutes: 1
+  poll_interval_minutes: 5
   start_timeout_outcome: nitro_review_start_blocked
   full_review_timeout_minutes:
 ```
@@ -266,7 +266,7 @@ nitro_feedback_gate:
   start:
     status: started | blocked | pending
     timeout_minutes: 10
-    poll_interval_minutes: 1
+    poll_interval_minutes: 5
     evidence:
       - <Nitro pending review, acknowledgement, or start evidence>
   completion:

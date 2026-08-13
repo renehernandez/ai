@@ -18,6 +18,13 @@ inspect GitLab discussions or CI. Use `github-adapter-review` for GitHub and
 `diff-review` for local-only diffs. Local reviewer ledgers and readiness state
 are private provenance, not hosted artifact context.
 
+For ongoing monitoring, consume the current timestamped GitLab snapshot from
+Finish's monitor owner. This adapter does not establish a competing poller. If
+the snapshot is absent or due for refresh, return that need to the monitor owner
+or perform only the one collection explicitly assigned by the task-local
+schedule. Apply `rules/git-and-review.md` before any provider read, including
+its cached-status, minimum-cadence, serialization, and 429 cooldown rules.
+
 ## Retrieval Decisions
 
 1. Resolve project and MR through `glab mr view` plus the MR API. Capture IID,

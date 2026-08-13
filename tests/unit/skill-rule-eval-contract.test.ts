@@ -64,6 +64,18 @@ function allowedTools(skill: string): Set<string> {
 }
 
 test("RED skill-rule-evals: an uncovered managed skill remains a failure", () => {
+  const changedMonitoringSurfaces = [
+    "rules/git-and-review.md",
+    "rules/investigation-and-implementation.md",
+    "rules/fullscript/nitro-review.md",
+    "skills/finish/SKILL.md",
+    "skills/gitlab-adapter-review/SKILL.md",
+  ].map((path) => readFileSync(path, "utf8"));
+
+  for (const surface of changedMonitoringSurfaces) {
+    assert.doesNotMatch(surface, /polled every 1 minute/i);
+    assert.doesNotMatch(surface, /parallel recovery probes/i);
+  }
   assert.doesNotMatch(
     readFileSync("skills/linearis/SKILL.md", "utf8"),
     /top-level `comments` commands are deprecated/i,
@@ -72,6 +84,14 @@ test("RED skill-rule-evals: an uncovered managed skill remains a failure", () =>
 });
 
 test("GREEN skill-rule-evals: managed skills retain behavior coverage or explicit retirement", () => {
+  const finish = readFileSync("skills/finish/SKILL.md", "utf8");
+  const gitlabReview = readFileSync(
+    "skills/gitlab-adapter-review/SKILL.md",
+    "utf8",
+  );
+  assert.match(finish, /one monitor owner for each MR/i);
+  assert.match(finish, /shared cooldown.*single recovery probe/is);
+  assert.match(gitlabReview, /does not establish a competing poller/i);
   assert.match(
     readFileSync("skills/linearis/references/discussion-retrieval.md", "utf8"),
     /domain-owned discussion commands[\s\S]*every reply page/i,

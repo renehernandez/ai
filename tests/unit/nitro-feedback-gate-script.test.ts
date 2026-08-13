@@ -55,7 +55,7 @@ const cleanGate = `nitro_feedback_gate:
   start:
     status: started
     timeout_minutes: 10
-    poll_interval_minutes: 1
+    poll_interval_minutes: 5
     evidence:
       - Nitro acknowledged latest-head review
   completion:
@@ -303,6 +303,8 @@ test("template emits a readable summary before YAML", () => {
     result.stdout,
     /start:\n {4}status: started \| blocked \| pending/,
   );
+  assert.match(result.stdout, /polled every 5 minutes/);
+  assert.match(result.stdout, /poll_interval_minutes: 5/);
 });
 
 test("validate accepts a clean latest-head gate", () => {
@@ -310,6 +312,16 @@ test("validate accepts a clean latest-head gate", () => {
 
   assert.equal(result.status, 0);
   assert.match(result.stdout, /nitro_feedback_gate valid/);
+});
+
+test("validate rejects the legacy one-minute polling interval", () => {
+  const result = runNitroGate(
+    "validate",
+    cleanGate.replace("poll_interval_minutes: 5", "poll_interval_minutes: 1"),
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /start\.poll_interval_minutes must be 5/);
 });
 
 test("validate requires explicit Nitro request even when local gates passed", () => {

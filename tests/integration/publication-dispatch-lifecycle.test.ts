@@ -170,3 +170,48 @@ test("hook-clean multi-MR units dispatch provider-only Finish subagents", () => 
   assert.match(handoffRules, /issue relationship or completion semantics/);
   assert.match(handoffRules, /mutation ceiling/);
 });
+
+test("GitLab feedback monitoring is serialized and rate-limit aware", () => {
+  const implementationRules = read("rules/investigation-and-implementation.md");
+  const gitRules = read("rules/git-and-review.md");
+  const nitroRules = read("rules/fullscript/nitro-review.md");
+  const finish = read("skills/finish/SKILL.md");
+  const gitlabReview = read("skills/gitlab-adapter-review/SKILL.md");
+
+  assert.match(gitRules, /exactly one monitor owner per MR/i);
+  assert.match(gitRules, /five minutes after the prior snapshot completes/i);
+  assert.match(gitRules, /status request.*timestamped.*snapshot/is);
+  assert.match(gitRules, /timer or supported wakeup/i);
+  assert.match(gitRules, /do not\s+poll.*clock/is);
+  assert.match(gitRules, /429.*abort.*remaining.*snapshot/is);
+  assert.match(
+    gitRules,
+    /suspend.*task-local GitLab reads and writes.*host and credential/is,
+  );
+  assert.match(gitRules, /RateLimit-ResetTime.*RateLimit-Reset.*Retry-After/is);
+  assert.match(gitRules, /60-second safety buffer/i);
+  assert.match(gitRules, /15 minutes.*30 minutes.*60 minutes/is);
+  assert.match(gitRules, /one lightweight MR read.*recovery probe/is);
+
+  assert.match(
+    implementationRules,
+    /serialize.*GitLab snapshots.*host and credential/is,
+  );
+  assert.match(
+    implementationRules,
+    /credential identity is unknown.*same host.*sharing a credential/is,
+  );
+  assert.match(
+    implementationRules,
+    /30\s+seconds after one snapshot completes.*different MR's snapshot/is,
+  );
+  assert.match(
+    implementationRules,
+    /repository.*non-GitLab work.*remain.*concurrent/is,
+  );
+
+  assert.match(finish, /request.*monitor.*GitLab feedback/is);
+  assert.match(finish, /one monitor owner/i);
+  assert.match(gitlabReview, /does not establish a competing poller/i);
+  assert.match(nitroRules, /five-minute.*snapshot cadence/i);
+});

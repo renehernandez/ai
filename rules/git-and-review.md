@@ -95,6 +95,39 @@ Canceled or superseded older pipelines do not decide the current gate. Missing
 credentials or inaccessible required provider state is a blocker; transient
 provider delay remains under monitoring or a supported wakeup.
 
+### GitLab monitoring cadence and rate-limit recovery
+
+A GitLab snapshot is one bounded collection of the MR, pipeline, notes,
+discussions, and configured-reviewer state needed for the current decision.
+Finish designates exactly one monitor owner per MR. Review and other agents
+consume that owner's current evidence instead of establishing another repeat
+poller.
+
+Allow one immediate snapshot after a relevant push, review request, or provider
+mutation. While state remains pending, start the next snapshot no sooner than
+five minutes after the prior snapshot completes. A status request inside that
+interval reports the latest timestamped snapshot and its age; it does not force
+an early provider read. Use a timer or supported wakeup for the delay. Do not
+poll GitLab or poll the clock to learn whether the delay elapsed. Apply the
+task-local serialization rule in `investigation-and-implementation.md` when
+several MRs share a GitLab host and credential.
+
+On HTTP 429, abort the remaining reads in the current snapshot and suspend all
+task-local GitLab reads and writes that share the host and credential. Compute
+the resume deadline from the latest valid `RateLimit-ResetTime`,
+`RateLimit-Reset`, or `Retry-After` value, add a 60-second safety buffer, and
+never retry in less than five minutes. If no valid deadline is available, wait
+15 minutes; consecutive recovery probes that also receive 429 use fallback
+floors of 30 minutes and then 60 minutes. At the deadline, permit one monitor
+owner to make one lightweight MR read as the recovery probe. Resume serialized
+snapshots only after that probe succeeds, and reset fallback escalation after a
+successful provider read. Never fan out recovery probes or treat a 429 as clean,
+failed, or terminal feedback.
+
+Monitoring ownership, cooldown, and cached evidence remain task-local. Do not
+persist them in the repository, a machine-global lock, or a second provider
+state system.
+
 ## Hosted artifact maintenance
 
 - Before mutating an existing PR/MR, read its current head, target, state,

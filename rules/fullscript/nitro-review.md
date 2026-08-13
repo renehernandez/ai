@@ -11,6 +11,10 @@ or command selection.
 
 - Review retrieves and normalizes Nitro discussions read-only. Finish owns the
   review request, provider polling, and readiness decision.
+- Apply the GitLab monitoring contract in `rules/git-and-review.md`. Pending
+  Nitro feedback uses its five-minute minimum snapshot cadence, single monitor
+  owner, cached status, task-local serialization, and shared 429 cooldown; do
+  not create a Nitro-specific poller or retry policy.
 - A push does not itself start Nitro. Finish explicitly requests it through a
   new top-level MR note after initial publication and every source-head push.
 - For an effective diff of 50 files or fewer, the note contains only
