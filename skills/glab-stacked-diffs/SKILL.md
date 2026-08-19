@@ -30,10 +30,14 @@ exists.
   descendants.
 - After predecessor merge, retarget and restack only its immediate child with
   an exact expected remote-head lease; leave deeper descendants untouched.
-- Technical readiness leaves every MR draft. Single-MR merge authority is
-  consumed by that merge; bottom-to-top continuation requires user-authored
-  aggregate or sequential scope. Material effective-diff change renews
-  affected authority.
+- Technical readiness leaves every MR draft until merge authority marks it
+  ready. Single-MR merge authority is consumed by that merge; bottom-to-top
+  continuation requires user-authored aggregate or sequential scope. Material
+  effective-diff change renews affected authority.
+- Once an MR is marked ready, preserve that state through repairs, restacks,
+  base movement, gate failures, and revalidation. Only a user request naming
+  that exact MR and specifically asking to return it to draft authorizes the
+  transition.
 - Keep hooks enabled. Use `stack save` for a new tip diff and `stack amend` only
   for unpublished construction or the tip. A published non-tip amendment must
   preserve descendant refs.

@@ -396,6 +396,63 @@ test("GREEN semantic-delivery: stack publication stays sequential and restacks o
   assert.match(git, /five minutes after the prior snapshot completes/i);
 });
 
+test("RED authority: workflow pressure cannot return an already-ready MR to draft", () => {
+  const entrypoint = read("AGENTS.md");
+  const portableEntrypoint = read("instructions/AGENTS.md");
+  const git = read("rules/git-and-review.md");
+  const finish = read("skills/finish/SKILL.md");
+  const stacked = read("skills/glab-stacked-diffs/SKILL.md");
+  const workflows = read("skills/glab-stacked-diffs/references/workflows.md");
+
+  for (const text of [
+    entrypoint,
+    portableEntrypoint,
+    git,
+    finish,
+    stacked,
+    workflows,
+  ]) {
+    assert.doesNotMatch(text, /return an already-ready (?:PR|MR) to draft/i);
+  }
+  assert.doesNotMatch(workflows, /leave the child draft/i);
+  assert.doesNotMatch(workflows, /leaves it and changed descendants draft/i);
+});
+
+test("GREEN authority: ready state is preserved while current-head gates still block merge", () => {
+  const entrypoint = read("AGENTS.md").replace(/\s+/g, " ");
+  const portableEntrypoint = read("instructions/AGENTS.md").replace(
+    /\s+/g,
+    " ",
+  );
+  const git = read("rules/git-and-review.md").replace(/\s+/g, " ");
+  const finish = read("skills/finish/SKILL.md").replace(/\s+/g, " ");
+  const stacked = read("skills/glab-stacked-diffs/SKILL.md").replace(
+    /\s+/g,
+    " ",
+  );
+  const workflows = read(
+    "skills/glab-stacked-diffs/references/workflows.md",
+  ).replace(/\s+/g, " ");
+
+  assert.match(
+    git,
+    /changed HEAD.*never authorizes returning it to draft.*user request.*exact PR\/MR/is,
+  );
+  for (const text of [entrypoint, portableEntrypoint, stacked, workflows]) {
+    assert.match(
+      text,
+      /once.*marked ready.*(?:return.*exact MR|exact MR.*return).*draft/i,
+    );
+  }
+  assert.match(finish, /current draft or ready state/i);
+  assert.match(finish, /exact-user rule.*may reverse that state/i);
+  assert.match(
+    workflows,
+    /already-ready child stays ready but remains blocked from merge/i,
+  );
+  assert.match(workflows, /never been marked ready remain draft/i);
+});
+
 test("GREEN semantic-delivery: Nitro requests follow every source-head push through the canonical rule", () => {
   const nitroRule = read("rules/fullscript/nitro-review.md");
   const nitroPolicy = read(

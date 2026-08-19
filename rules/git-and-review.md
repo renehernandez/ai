@@ -235,6 +235,11 @@ review feedback. `codex-review-feedback` remains retired.
 - Every final MR is created as draft and verified live as draft. Local Review,
   CI, approvals, hosted review, and technical readiness never remove draft
   status.
+- Once a PR/MR is marked ready, preserve that state through every later
+  workflow step. A changed HEAD, restack, target-base movement, failed or
+  pending CI, review feedback, revalidation, or follow-up repair never
+  authorizes returning it to draft. Only a user request that names that exact
+  PR/MR and specifically asks to return it to draft authorizes the transition.
 - Final implementation never uses POC commits or ancestry.
 
 ## Multi-unit final delivery
@@ -268,12 +273,16 @@ review feedback. `codex-review-feedback` remains retired.
   Review, CI, approvals, and configured hosted automated review before merge.
 - Stop before the next merge when default-branch CI for the landed predecessor
   is failed, blocked, or unavailable under project policy.
-- Technical stack readiness leaves every MR draft. Single-MR authority marks
-  only that MR ready, waits for any review triggered by that transition, and is
-  consumed after merge. Restack and revalidate its immediate child while
-  leaving it draft. User-authored stack or sequential scope may continue only
-  across patch-equivalent restacks; a material effective-diff change stops the
-  sequence before every affected MR and requires renewed authority.
+- Technical stack readiness leaves every MR draft until merge authority marks
+  it ready. Single-MR authority marks only that MR ready, waits for any review
+  triggered by that transition, and is consumed after merge. Restack and
+  revalidate its immediate child while preserving that child's current draft or
+  ready state. A child that has never been marked ready remains draft; an
+  already-ready child returns to draft only on the exact user request defined
+  above. User-authored stack or sequential scope may continue only across
+  patch-equivalent restacks. A material effective-diff change stops the sequence
+  before every affected MR
+  and requires renewed authority.
 
 ## Commit and artifact titles
 

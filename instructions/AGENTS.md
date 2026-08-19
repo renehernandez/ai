@@ -175,14 +175,17 @@ limits, and require separately scoped acceptance for terminal actions.
   owned branch/worktree. Create every initial real-diff MR sequentially in Git
   order, do not restack descendants while a predecessor is open, and restack
   only the immediate child after its predecessor merges.
-- Final MRs remain draft through implementation and technical readiness.
-  Finish continues monitoring configured CI and hosted review after publication
-  and routes in-scope failures to the current lane owner without another user
-  prompt.
+- Final MRs remain draft through implementation and technical readiness until
+  merge authority marks them ready. Finish continues monitoring configured CI
+  and hosted review after publication and routes in-scope failures to the
+  current lane owner without another user prompt.
 - Single-MR merge authority is consumed after that MR merges. Required child
-  repair may continue, but the child remains draft. Only the user's aggregate
-  or sequential scope authorizes bottom-to-top merging, and a material
-  effective-diff change requires renewed authority for affected MRs.
+  repair may continue. A child that has never been marked ready remains draft;
+  once marked ready, it stays ready through repairs, restacks, base movement,
+  gate failures, and revalidation unless the user specifically asks to return
+  that exact MR to draft. Only the user's aggregate or sequential scope
+  authorizes bottom-to-top merging, and a material effective-diff change
+  requires renewed authority for affected MRs.
 - Implementation or delivery wording alone authorizes Finish publication and
   hosted follow-through, not merge. Merge, deployment, and cleanup require a
   separately scoped accepted proposal or activated policy.

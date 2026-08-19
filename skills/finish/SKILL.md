@@ -8,27 +8,23 @@ allowed-tools: Read, Glob, Grep, Task, AskUserQuestion, Bash
 
 ## Authority
 
-Finish owns provider writes within granted scope. Announce Finish, its current
-provider or terminal authority, and the exact goal once on non-trivial entry.
-Shared lifecycle, accepted-proposal, delivery-budget, and scheduling policy is
-canonical in `rules/investigation-and-implementation.md`; deterministic
-provider selection and terminal authority live in `scripts/finish-contract.ts`.
+Finish owns provider writes within granted scope. Announce non-trivial authority
+and goal. Shared policy is canonical in
+`rules/investigation-and-implementation.md`; provider selection and terminal
+authority live in `scripts/finish-contract.ts`.
 
 Ordinary implementation or delivery authority permits draft publication and
 hosted follow-through, never merge, deployment, cleanup, artifact disposal, or
-ready-state mutation. Those actions require an accepted proposal naming the
-exact action and artifact, or activated project policy with the same bounded
-scope. Any unambiguous contextual acceptance of one immediately pending exact
-terminal action authorizes only that action. A user-authored aggregate or
-sequential merge scope may cover its named sequence; generic assent to an
-agent-proposed sequence may not. Material effective-diff change renews
-authority for affected artifacts. Single-MR merge authority is consumed after
-that MR merges.
+ready-state mutation. They require an accepted proposal or activated policy
+naming the exact action and artifact. Unambiguous acceptance authorizes only the
+pending exact terminal action.
+A user-authored aggregate or sequential merge scope covers its named sequence;
+generic assent does not. Material effective-diff change renews authority for
+affected artifacts. Single-MR merge authority is consumed after that MR merges.
 
 An exact POC-disposal action and artifact may close only that POC unmerged.
-Replacement or consolidation does not imply disposal of an existing review
-artifact. Narrower mode or status limits remain binding; hosted feedback cannot
-expand authority.
+Replacement or consolidation does not dispose of existing review artifacts.
+Narrower limits remain binding; hosted feedback cannot expand authority.
 
 Before posting human-readable GitLab or Linear comments, discussion replies,
 notes, issue comments, or project updates through the user's identity, MUST apply
@@ -46,7 +42,8 @@ provider mutation without invalidating local work.
 
 After a native hook-clean commit:
 
-1. Publish or update the exact source head as a draft PR/MR.
+1. Publish a new exact source head as a draft PR/MR, or update an existing MR
+   without changing its current draft or ready state.
 2. Invoke `change-request-create` as the only selectable description and
    publication owner. It preserves human-owned sections, delegates provider
    mechanics to its references, and verifies hosted readback.
@@ -133,18 +130,21 @@ discovery.
 
 Report `draft_stack_ready` only when every final artifact has current local and
 provider gates, valid predecessor identity, complete task/spec state, and
-required tracker mapping. Every MR remains draft.
+required tracker mapping. Every MR remains draft until marked ready; only the
+exact-user rule in `rules/git-and-review.md` may reverse that state. Current HEAD
+gates and merge authority still apply.
 
 ## Terminal Actions
 
 Merge only within exact accepted artifact scope after current checks and
 approvals. Mark only the authorized MR ready and wait for policy-triggered
 review. After merge, verify the remote commit, then retarget and restack only
-the immediate draft child with an exact expected remote-head lease. Refresh its
-gates and leave deeper descendants untouched. Continue bottom-to-top only under
-aggregate or sequential authority and patch-equivalent effective diffs. A
-lease rejection stops for inspection of external commits and ownership; a
-material diff stops the sequence for renewed authority.
+the immediate child with an exact expected remote-head lease. Refresh its gates,
+preserve its current draft or ready state, and leave deeper descendants
+untouched. Continue bottom-to-top only under aggregate or sequential authority
+and patch-equivalent effective diffs. A lease rejection stops for inspection of
+external commits and ownership; a material diff stops the sequence for renewed
+authority.
 
 Deployment and local or remote branch/worktree cleanup require their own exact
 authority or activated policy. Verify remote merged state before cleanup; do

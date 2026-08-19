@@ -100,6 +100,49 @@ test("GREEN skill-rule-evals: managed skills retain behavior coverage or explici
   assert.deepEqual(retiredSkillsWithLiveScenarios(), []);
 });
 
+test("RED skill-rule-evals: repair and restack guidance cannot redraft a ready MR", () => {
+  const git = readFileSync("rules/git-and-review.md", "utf8");
+  const finish = readFileSync("skills/finish/SKILL.md", "utf8");
+  const stacked = readFileSync("skills/glab-stacked-diffs/SKILL.md", "utf8");
+  const workflows = readFileSync(
+    "skills/glab-stacked-diffs/references/workflows.md",
+    "utf8",
+  );
+
+  for (const text of [git, finish, stacked, workflows]) {
+    assert.doesNotMatch(text, /return an already-ready (?:PR|MR) to draft/i);
+  }
+  assert.doesNotMatch(workflows, /leave the child draft/i);
+});
+
+test("GREEN skill-rule-evals: ready state survives repair while merge gates remain current", () => {
+  const git = readFileSync("rules/git-and-review.md", "utf8").replace(
+    /\s+/g,
+    " ",
+  );
+  const finish = readFileSync("skills/finish/SKILL.md", "utf8").replace(
+    /\s+/g,
+    " ",
+  );
+  const stacked = readFileSync(
+    "skills/glab-stacked-diffs/SKILL.md",
+    "utf8",
+  ).replace(/\s+/g, " ");
+  const workflows = readFileSync(
+    "skills/glab-stacked-diffs/references/workflows.md",
+    "utf8",
+  ).replace(/\s+/g, " ");
+
+  assert.match(git, /Once a PR\/MR is marked ready.*exact PR\/MR/i);
+  assert.match(finish, /current draft or ready state/i);
+  assert.match(finish, /Current HEAD gates and merge authority still apply/i);
+  assert.match(stacked, /Once an MR is marked ready.*exact MR/i);
+  assert.match(
+    workflows,
+    /already-ready child stays ready.*blocked from merge/i,
+  );
+});
+
 test("scenario selection is explicit and covers preserved behavior", () => {
   assert.equal(selectedScenarios("all").length, behaviorScenarios.length);
   assert.throws(() => selectedScenarios("unknown"), /AX_EVAL_GROUP/);

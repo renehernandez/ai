@@ -157,10 +157,11 @@ limits, and require separately scoped acceptance for terminal actions.
   [the Fullscript Nitro rule](rules/fullscript/nitro-review.md) as the canonical
   owner for source-head request timing, size routing, feedback closure, and
   human escalation.
-- Every final MR is created and kept draft through implementation, CI, review,
-  and technical readiness. Finish stays active after publication, follows the
-  complete pipeline graph and hosted feedback, and reactivates the current
-  Execute owner to fix in-scope failures without requiring another user prompt.
+- Every final MR is created as draft and remains draft through implementation,
+  CI, review, and technical readiness until merge authority marks it ready.
+  Finish stays active after publication, follows the complete pipeline graph
+  and hosted feedback, and reactivates the current Execute owner to fix in-scope
+  failures without requiring another user prompt.
 - Implementation or delivery wording alone authorizes publication and hosted
   follow-through, not merge. Merge, deployment, and cleanup require a
   separately scoped accepted proposal or activated policy.
@@ -171,9 +172,13 @@ limits, and require separately scoped acceptance for terminal actions.
   retarget and restack only its immediate child and refresh that child's gates.
 - Technical readiness leaves every MR draft. Single-MR authority marks only
   that MR ready immediately before its merge and is consumed afterward.
-  Required child repair may continue, but the child remains draft. Only the
-  user's aggregate or sequential scope authorizes bottom-to-top merging, and a
-  material effective-diff change requires renewed authority for affected MRs.
+  Required child repair may continue. A child that has never been marked ready
+  remains draft; once marked ready, it stays ready through repairs, restacks,
+  base movement, gate failures, and revalidation unless the user specifically
+  asks to return that exact MR to draft.
+  Only the user's aggregate or sequential scope authorizes bottom-to-top
+  merging, and a material effective-diff change requires renewed authority for
+  affected MRs.
 
 ## AX runtime
 

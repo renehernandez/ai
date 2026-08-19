@@ -198,23 +198,27 @@ This workflow requires explicit merge authority for the predecessor.
    predecessor commits are not replayed.
 6. Publish the child atomically with an explicit lease naming the captured
    remote head.
-7. Refresh every changed effective-diff gate before the child can be marked
-   ready.
+7. Refresh every changed effective-diff gate before an unready child can be
+   marked ready; an already-ready child stays ready but remains blocked from
+   merge until those gates pass.
 8. Leave deeper descendants untouched until their own predecessor merges.
 
 If the lease is rejected, stop and inspect external commits. Do not accept the
 new remote SHA and retry blindly.
 
-All technically ready MRs remain draft. Single-MR merge authority marks only
-the current bottom MR ready immediately before its merge and is consumed after
-that merge. Complete the required child repair, but leave the child draft and
-stop before another merge. Continue bottom-to-top only under a user-authored
-aggregate stack scope or user-authored sequential instruction. Generic assent
-such as `yes`, `agreed`, or `proceed` to an agent-proposed sequence is
-insufficient. Preserve valid sequence authority across a
-patch-equivalent restack only. A material effective-diff change stops the
-sequence before the affected MR and leaves it and changed descendants draft
-until the user renews merge authority after review.
+All technically ready MRs that have never been marked ready remain draft.
+Single-MR merge authority marks only the current bottom MR ready immediately
+before its merge and is consumed after that merge. Complete the required child
+repair while preserving the child's current draft or ready state, then stop
+before another merge. Once an MR is marked ready, only a user request naming
+that exact MR and specifically asking to return it to draft authorizes the
+transition. Continue bottom-to-top only under a user-authored aggregate stack
+scope or user-authored sequential instruction. Generic assent such as `yes`,
+`agreed`, or `proceed` to an agent-proposed sequence is insufficient. Preserve
+valid sequence authority across a patch-equivalent restack only. A material
+effective-diff change stops the sequence before the affected MR and blocks
+changed descendants until the user renews merge authority after review, while
+preserving each MR's current draft or ready state.
 
 ## Maintain Navigation and Descriptions
 
