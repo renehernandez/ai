@@ -243,7 +243,7 @@ review feedback. `codex-review-feedback` remains retired.
 - No planning-only MR is created. A POC is draft and closes unmerged. An atomic
   plan and its implementation form one change set in one final MR, with no POC
   phase; OpenSpec produces one final MR per top-level delivery unit.
-- Under Standard delivery, Every final MR is created as draft and verified live
+- Under Standard delivery: Every final MR is created as draft and verified live
   as draft. Local Review, CI, approvals, hosted review, and technical readiness
   never remove draft status. Explicit eligible Fast delivery creates or updates
   its one final MR as Ready under the canonical profile contract.
@@ -285,7 +285,7 @@ review feedback. `codex-review-feedback` remains retired.
   Review, CI, approvals, and configured hosted automated review before merge.
 - Stop before the next merge when default-branch CI for the landed predecessor
   is failed, blocked, or unavailable under project policy.
-- Under Standard delivery, Technical stack readiness leaves every MR draft until merge authority marks
+- Under Standard delivery: Technical stack readiness leaves every MR draft until merge authority marks
   it ready. Single-MR authority marks only that MR ready, waits for any review
   triggered by that transition, and is consumed after merge. Restack and
   revalidate its immediate child while preserving that child's current draft or

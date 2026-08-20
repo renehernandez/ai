@@ -235,9 +235,11 @@ test("RED skill-rule-evals: generic urgency retains Standard routing", () => {
     "rules/investigation-and-implementation.md",
     "utf8",
   );
+  const finish = readFileSync("skills/finish/SKILL.md", "utf8");
 
   assert.match(implementation, /generic urgency/i);
   assert.match(implementation, /does not select it/i);
+  assert.doesNotMatch(finish, /Keep findings with that current Execute owner/i);
 });
 
 test("GREEN skill-rule-evals: Fast routes Ready publication through hosted closure", () => {
@@ -252,6 +254,10 @@ test("GREEN skill-rule-evals: Fast routes Ready publication through hosted closu
   assert.match(finish, /Do not dispatch completed-code local Review/i);
   assert.match(finish, /every repair push/i);
   assert.match(finish, /Missing Nitro evidence blocks Fast completion/i);
+  assert.match(
+    finish,
+    /Return findings and\s+evidence to the current Execute owner/i,
+  );
   assert.match(
     changeRequest,
     /explicit eligible Fast creates or updates\s+Ready/is,

@@ -133,7 +133,7 @@ limits, and require separately scoped acceptance for terminal actions.
 
 - Plan remains conversational until scope, design, delivery shape, risk,
   acceptance, proof, and policy choices are coherent.
-- Under Standard delivery: Acceptance of a complete atomic plan authorizes its uninterrupted Plan,
+- Under Standard delivery, the following applies: Acceptance of a complete atomic plan authorizes its uninterrupted Plan,
   Execute, Review, and Finish sequence. In a Git repository
   with a valid upstream, implementation is not complete until its dedicated
   draft PR/MR is published and required CI and configured automated reviewers

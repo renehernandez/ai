@@ -493,10 +493,15 @@ test("GREEN authority: Nitro readiness rejects missing semantic evidence determi
 
 test("RED delivery profiles: urgency cannot silently select Fast", () => {
   const implementation = read("rules/investigation-and-implementation.md");
+  const finish = read("skills/finish/SKILL.md");
 
   assert.match(implementation, /generic urgency/i);
   assert.match(implementation, /does not select it/i);
   assert.doesNotMatch(implementation, /Fast (?:is|as) the default/i);
+  assert.doesNotMatch(
+    finish,
+    /current Execute owner[\s\S]{0,80}current Execute owner/i,
+  );
 });
 
 test("GREEN delivery profiles: explicit Fast preserves hooks and hosted gates while omitting local Review", () => {
@@ -546,6 +551,10 @@ test("GREEN delivery profiles: explicit Fast preserves hooks and hosted gates wh
     /request Nitro after initial publication and every repair push/i,
   );
   assert.match(finish, /Missing Nitro evidence blocks Fast completion/i);
+  assert.match(
+    finish,
+    /Return findings and\s+evidence to the current Execute owner/i,
+  );
 });
 
 test("GREEN canonical-ownership: change-request-create is the only selectable creation owner", () => {

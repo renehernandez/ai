@@ -104,14 +104,14 @@ and its dated archive. Missing state returns to Execute; Finish does not create 
 
 An MR-scoped Finish subagent is a provider-only delegated lane. Its Immutable Publication Packet must
 satisfy `rules/handoff-and-resume.md`. Before each mutation, validate source SHA,
-target identity, lane identity, ownership generation, and provider-ownership generation against
+target identity, lane identity, and provider-ownership generation against
 live state; any mismatch invalidates it.
 
 The lane may inspect state, push only its handed-off ref, use
 `change-request-create`, request review, verify state, and monitor gates. It may not edit files,
 change commits, switch worktrees, rebase, restack, repair, mark
-ready, merge, deploy, clean up, comment, or mutate trackers. Return evidence to
-the current Execute owner. Keep findings with that current Execute owner.
+ready, merge, deploy, clean up, comment, or mutate trackers. Return findings and
+evidence to the current Execute owner.
 Never accept repository-write ownership. This mutation
 ceiling overrides broader task authority.
 
