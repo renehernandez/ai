@@ -491,6 +491,63 @@ test("GREEN authority: Nitro readiness rejects missing semantic evidence determi
   assert.match(contract, /technical_readiness_nitro_semantic_review_blocked/);
 });
 
+test("RED delivery profiles: urgency cannot silently select Fast", () => {
+  const implementation = read("rules/investigation-and-implementation.md");
+
+  assert.match(implementation, /generic urgency/i);
+  assert.match(implementation, /does not select it/i);
+  assert.doesNotMatch(implementation, /Fast (?:is|as) the default/i);
+});
+
+test("GREEN delivery profiles: explicit Fast preserves hooks and hosted gates while omitting local Review", () => {
+  const implementation = read(
+    "rules/investigation-and-implementation.md",
+  ).replace(/\s+/g, " ");
+  const git = read("rules/git-and-review.md").replace(/\s+/g, " ");
+  const execute = read("skills/execute/SKILL.md").replace(/\s+/g, " ");
+  const review = read("skills/review/SKILL.md").replace(/\s+/g, " ");
+  const finish = read("skills/finish/SKILL.md").replace(/\s+/g, " ");
+
+  assert.match(implementation, /`standard` is the default/i);
+  assert.match(implementation, /`fast` is an explicit-only delivery profile/i);
+  assert.match(implementation, /active policy selects Nitro/i);
+  assert.match(
+    implementation,
+    /no separate preflight phase, report, checkpoint, or user pause/i,
+  );
+  assert.match(
+    implementation,
+    /several independently reviewable delivery units/i,
+  );
+  assert.match(implementation, /durable cross-component contract/i);
+  assert.match(implementation, /migration design/i);
+  assert.match(implementation, /required rehearsal/i);
+  assert.match(
+    implementation,
+    /skips the completed-code local Review wave and reviewer subagents/i,
+  );
+  assert.match(implementation, /creates or updates the Fast MR as Ready/i);
+  assert.match(
+    implementation,
+    /never authorizes merge, deployment, cleanup, force-push/i,
+  );
+  assert.match(git, /GitLab MR as Ready/i);
+  assert.match(execute, /ordinary Execute setup/i);
+  assert.match(
+    execute,
+    /do not dispatch completed-code local Review or reviewer subagents/i,
+  );
+  assert.match(
+    review,
+    /does not emit a local technical-readiness checkpoint for Fast/i,
+  );
+  assert.match(
+    finish,
+    /request Nitro after initial publication and every repair push/i,
+  );
+  assert.match(finish, /Missing Nitro evidence blocks Fast completion/i);
+});
+
 test("GREEN canonical-ownership: change-request-create is the only selectable creation owner", () => {
   const config = JSON.parse(read("ax.config.json")) as {
     blocks: { "personal-skills": { skills: Array<{ names: string[] }> } };

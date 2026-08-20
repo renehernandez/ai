@@ -9,7 +9,8 @@ ownership, and the mandatory OpenSpec rehearsal boundary.
   authority can exist. `brainstorming` is the default Explore specialist for a
   substantive change request; matching new-effort intake continues to use
   `start-project`, and an explicitly named mode or bounded read-only specialist
-  overrides inference.
+  overrides inference. An explicit user selection of the Fast delivery route
+  below is the only delivery-profile exception to a separate Explore response.
 - Opening imperatives such as "fix", "implement", "change", or "build",
   specificity, urgency, an apparently obvious solution, and a clean owned
   worktree do not independently authorize mutation. The first pass inspects
@@ -31,6 +32,39 @@ ownership, and the mandatory OpenSpec rehearsal boundary.
   similarity wording narrows the scan but never triggers it.
 - If the user rejects a name, structure, taxonomy, folder layout, API shape, or
   other design choice, present alternatives and tradeoffs before changing it.
+
+## Choose the delivery profile
+
+- `standard` is the default. It preserves the existing planning artifact or
+  OpenSpec route, mandatory OpenSpec POC, completed-code local Review, draft
+  publication, and technical-readiness checkpoint.
+- `fast` is an explicit-only delivery profile inside the existing Explore,
+  Plan, Execute, Review, and Finish lifecycle, not a sixth mode. Select it only
+  when the user clearly asks for Fast delivery; generic urgency such as
+  `quick`, `ASAP`, `move fast`, or `one-shot` does not select it.
+- Fast applies only to one concrete, settled, coherent final MR in a Fullscript
+  GitLab project whose active policy selects Nitro. A clear Fast selection is
+  acceptance of that bounded action path and may enter Execute without a
+  separate brainstorming response or committed planning artifact.
+- Fast is ineligible when work exposes an unsettled material decision, several
+  independently reviewable delivery units, a durable cross-component
+  contract, migration design, or required rehearsal. Freeze writes and return
+  the work to Plan under project policy; never silently weaken the contract or
+  fall back from an explicitly limited Fast request.
+- Fast performs ordinary repository setup and precedent discovery inside
+  Execute, runs affected project-native verification, and commits through
+  native hooks. It has no separate preflight phase, report, checkpoint, or
+  user pause, and skips the completed-code local Review wave and reviewer
+  subagents.
+- Finish creates or updates the Fast MR as Ready, explicitly requests Nitro
+  after the initial publication and every source-head push, and monitors the
+  newest required pipeline graph plus the complete exact-head Nitro response
+  and unresolved discussions. It returns actionable findings to Execute,
+  republishes each hook-clean repair, and repeats both gates until the current
+  Ready head is clean.
+- Fast delivery completes at current-head required-CI and Nitro closure. It
+  never authorizes merge, deployment, cleanup, force-push, or another terminal
+  mutation. Missing or unavailable required Nitro evidence remains a blocker.
 
 ## Resolve authority from accepted proposals
 
@@ -407,8 +441,8 @@ handoff evidence.
 
 ## Review and publication boundary
 
-Review gives every planning artifact, completed POC, and final implementation
-one discovery pass covering every phase-specific review type. Planning types
+Under Standard delivery, Review gives every planning artifact, completed POC,
+and final implementation one discovery pass covering every phase-specific review type. Planning types
 are implementation readiness, edge cases and risk, `code-simplifier`,
 refactoring, and delivery shape. Completed-code types are `code-simplifier`,
 `code-quality-review`, `deslop`, `diff-review`, and `scrutinize`. One integrated
@@ -420,6 +454,10 @@ implementation targets; another review type cannot substitute for it.
 Planning Review requests an artifact repair only for a durable contract gap and
 returns implementation mechanics and non-contract discoveries to Execute
 task-locally.
+
+Fast delivery intentionally omits planning and completed-code local Review.
+Review still normalizes hosted CI and Nitro findings read-only after Finish
+retrieves them; those hosted gates never grant merge or another terminal action.
 
 Review evidence is task-local and bound to an artifact fingerprint or exact
 target-base/HEAD pair. It returns one phase-barrier findings batch, then runs one
@@ -433,8 +471,8 @@ changed contract or review risk requires new discovery. A patch-equivalent
 rebase may preserve discovery only after base-sensitive validation and a fresh
 exact-target checkpoint.
 
-Finish follows hosted gates after draft publication. Implementation and
-delivery requests permit publication but do not permit merge. Merge,
+Finish follows hosted gates after Standard draft or Fast Ready publication.
+Implementation and delivery requests permit publication but do not permit merge. Merge,
 deployment, and cleanup remain separately scoped terminal actions under the
 accepted-proposal contract above or activated project policy.
 

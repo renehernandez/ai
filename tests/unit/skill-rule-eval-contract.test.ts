@@ -230,6 +230,34 @@ test("Finish evaluation permits provider routing while denying terminal actions"
   assert.equal(scenario.allowRepositoryWrite, false);
 });
 
+test("RED skill-rule-evals: generic urgency retains Standard routing", () => {
+  const implementation = readFileSync(
+    "rules/investigation-and-implementation.md",
+    "utf8",
+  );
+
+  assert.match(implementation, /generic urgency/i);
+  assert.match(implementation, /does not select it/i);
+});
+
+test("GREEN skill-rule-evals: Fast routes Ready publication through hosted closure", () => {
+  const finish = readFileSync("skills/finish/SKILL.md", "utf8");
+  const changeRequest = readFileSync(
+    "skills/change-request-create/SKILL.md",
+    "utf8",
+  );
+
+  assert.match(finish, /Under explicit Fast delivery/i);
+  assert.match(finish, /GitLab MR as Ready/i);
+  assert.match(finish, /Do not dispatch completed-code local Review/i);
+  assert.match(finish, /every repair push/i);
+  assert.match(finish, /Missing Nitro evidence blocks Fast completion/i);
+  assert.match(
+    changeRequest,
+    /explicit eligible Fast creates or updates\s+Ready/is,
+  );
+});
+
 test("Nitro evaluation preserves read-only collection and feedback routing", () => {
   const scenario = selectedScenarios("nitro-feedback-routing")[0];
   assert.deepEqual(scenario.skills, ["nitro-review-feedback"]);

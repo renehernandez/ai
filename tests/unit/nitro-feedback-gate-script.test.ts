@@ -610,6 +610,7 @@ test("RED nitro-raw-evidence: blocks receipts with unresolved Nitro discussions"
 
   assert.equal(result.status, 0);
   assert.match(result.stdout, /"discussion-1"/);
+  assert.match(result.stdout, /"head_sha": "abc123"/);
   assert.match(result.stdout, /"completion_received": true/);
   assert.match(result.stdout, /"gate_outcome": "blocked"/);
 });

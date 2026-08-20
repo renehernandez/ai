@@ -10,7 +10,7 @@ description: Use when creating or updating any GitHub pull request or GitLab mer
 This bounded Finish specialist is the only selectable PR/MR creation,
 description, and update owner. It does not grant provider, merge, deployment,
 cleanup, ready-state, or disposal authority. Finish supplies the exact
-hook-clean source head and authorized mutation scope; this skill owns the
+hook-clean source head, authorized mutation scope, and delivery profile; this skill owns the
 reviewer-facing title/body and delegates only provider mechanics.
 
 Use it for every request to create, open, prepare, or update a PR, MR, change
@@ -38,16 +38,19 @@ duplicate. Load only the selected adapter:
 
 Require a native hook-clean commit for the exact branch HEAD before creating or
 updating an artifact that publishes agent-authored work. Missing, stale, or
-different-head evidence blocks publication. Local Review and technical
-readiness follow draft publication and hosted review; they do not gate creation
-of the draft.
+different-head evidence blocks publication. Under Standard delivery, local
+Review and technical readiness follow draft publication and hosted review; they
+do not gate creation of the draft. Under explicit eligible Fast delivery,
+create or update the MR as Ready and return its verified live state; do not wait
+for local completed-code Review.
 
 PR/MR titles and descriptions are hosted artifact metadata and do not require
 the destination-bound confirmation used for covered GitLab and Linear
 conversational messages. Once Finish supplies publication authority and this
 skill resolves the route, template, relationships, and hook-clean head, create
-or update the draft without previewing the title or body for a new permission
-prompt.
+or update the artifact without previewing the title or body for a new permission
+prompt. Standard creates Draft; explicit eligible Fast creates or updates
+Ready. Neither state transition authorizes merge.
 
 ## Reviewer-Facing Description
 

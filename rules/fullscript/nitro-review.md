@@ -61,7 +61,9 @@ or command selection.
   the latest head is clean or a material decision requires human follow-up.
   That decision blocks only the affected MR while unrelated authorized work may
   continue.
-- Nitro does not replace local Review, CI, approvals, or user acceptance of a
-  mandatory OpenSpec POC.
+- Under Standard delivery, Nitro does not replace local Review, CI, approvals,
+  or user acceptance of a mandatory OpenSpec POC. Explicit Fast delivery is the
+  only profile that omits completed-code local Review; it still requires native
+  hooks, required CI, and this rule's complete exact-head Nitro closure.
 - Do not apply Nitro policy to GitHub, generic GitLab, personal projects, or a
   Fullscript project whose active policy does not select Nitro.

@@ -18,7 +18,7 @@ and return the decision plus worktree identity to Plan when implementation
 invalidates that condition. Apply the accepted-proposal contract and shared
 scheduling mechanics in `rules/investigation-and-implementation.md`.
 
-## Preflight and Ownership
+## Setup and Ownership
 
 Before the first write and after resume:
 
@@ -28,6 +28,9 @@ Before the first write and after resume:
 3. confirm documented setup, runtime, package manager, required commands, and
    task credentials with one small representative command; and
 4. allow exactly one writer to edit, stage, and commit the artifact.
+
+This is ordinary Execute setup, including under Fast delivery. Do not expose it
+as a separate preflight phase, report, checkpoint, or user pause.
 
 Use another owned worktree for another writer. Read-only reviewers may run in
 parallel. A handoff records branch, worktree, HEAD, changed/untracked paths, and
@@ -45,6 +48,10 @@ Plan.
 
 - Direct or atomic work implements one coherent final MR; atomic work keeps its
   plan and implementation in the same change set and has no POC.
+- Explicit eligible Fast delivery implements one concrete, settled, coherent
+  final MR without a committed plan or POC. If a material decision, multi-unit
+  shape, durable cross-component contract, migration design, or rehearsal need
+  appears, freeze writes and return to Plan under project policy.
 - A POC implements the complete reviewed OpenSpec in a disposable worktree,
   leaves source tasks unchecked, and captures durable learnings for Plan.
 - Final OpenSpec work implements one top-level delivery unit per MR. Nested work
@@ -106,14 +113,20 @@ and launch one MR-scoped, provider-only Finish lane under the shared scheduling
 barrier. The lane never becomes a repository writer. Do not invent a user pause
 between accepted delivery units.
 
-After draft publication and hosted-review request, run read-only Review against
-the exact hosted diff/head. Wait for the phase barrier, receive one deduplicated
-findings batch, repair as the only writer, and run closure only for affected
-findings and proof. Material contract or review-risk change returns to Plan or
-new bounded discovery. Review emits the exact-target technical-readiness
-checkpoint.
+Under Standard delivery: After draft publication and hosted-review request,
+run read-only Review against the exact hosted diff/head. Wait for the phase barrier
+and receive one deduplicated findings batch. Repair as the only writer, then
+run closure only for affected findings and proof. Material contract or review-risk
+change returns to Plan or new bounded discovery. Review emits the exact-target
+technical-readiness checkpoint.
+
+Under Fast delivery, do not dispatch completed-code local Review or reviewer
+subagents. Hand the hook-clean head to Finish for Ready publication, required CI,
+and exact-head Nitro review. Repair every in-scope actionable hosted finding,
+commit through native hooks, and return each new head to Finish until both gates
+pass. This loop does not authorize merge, deployment, or cleanup.
 
 Finish may route CI or hosted findings back to the current owner without a new
-prompt. Execute-only or local-only scope stops before Finish. Standard delivery
-hands the hook-clean commit to Finish; that handoff is not another permission
+prompt. Execute-only or local-only scope stops before Finish. Standard or Fast
+delivery hands the hook-clean commit to Finish; that handoff is not another permission
 boundary and never authorizes merge, deployment, or cleanup.

@@ -17,12 +17,18 @@ Shared lifecycle authority and delivery budgets remain canonical in
 
 ## Coverage
 
-Run one discovery pass for every planning or completed-code target. Resolve
-required types through `scripts/review-contract.ts` and record one current
-`passed`, `finding`, or `blocked` result per type and selected domain specialist.
-Planning covers implementation readiness, edge cases/risk, code simplification,
-refactoring, and delivery shape. Completed code covers `code-simplifier`,
-`code-quality-review`, `deslop`, `diff-review`, and `scrutinize`.
+Under Standard delivery, run one discovery pass for every planning or
+completed-code target. Resolve required types through `scripts/review-contract.ts`
+and record one current `passed`, `finding`, or `blocked` result per type and
+selected domain specialist. Planning covers implementation readiness, edge
+cases/risk, code simplification, refactoring, and delivery shape. Completed code
+covers `code-simplifier`, `code-quality-review`, `deslop`, `diff-review`, and
+`scrutinize`.
+
+Explicit Fast delivery has no planning artifact and skips completed-code local
+Review and reviewer subagents. Review remains the read-only normalizer for CI
+and Nitro evidence retrieved by Finish and returns actionable hosted findings
+to Execute; it does not emit a local technical-readiness checkpoint for Fast.
 
 `code-simplifier` always retains a distinct result. A small coherent target may
 use one integrated inline pass; outcome coverage, not reviewer count, controls
@@ -100,13 +106,16 @@ Read the complete response and every unresolved Nitro-authored discussion.
 Stale source/head/base evidence and reassuring summaries that hide actionable
 feedback do not pass. Codex-authored PR feedback remains retired.
 
-Hosted gates do not replace local coverage. Apply the same findings batch and
-bounded closure rules. Keep provider identity, URL, target, normalized status,
-findings, and routing task-local.
+Under Standard delivery, hosted gates do not replace local coverage. Under Fast
+delivery, required CI plus exact-head Nitro closure intentionally replace only
+the completed-code local Review wave; native hooks and focused implementation
+verification remain required. Apply the same findings batch and bounded closure
+rules. Keep provider identity, URL, target, normalized status, findings, and
+routing task-local.
 
 ## Technical Readiness
 
-After a hook-clean commit is published as draft and hosted review is requested,
+Under Standard delivery, after a hook-clean commit is published as draft and hosted review is requested,
 emit `technical_readiness_checkpoint` only when the exact hosted identity,
 resolved target-base SHA, HEAD, target-base diff, hook evidence, delivery-budget
 assessment, required review/specialist results, repair resolutions, any rebase

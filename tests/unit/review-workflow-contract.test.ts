@@ -48,6 +48,31 @@ const implementationReviewerCatalog = [
   "scrutinize",
 ] as const;
 
+test("RED Fast delivery: completed-code local Review is not silently preserved", () => {
+  const review = read("skills/review/SKILL.md");
+
+  assert.doesNotMatch(review, /Fast.*runs every completed-code review type/is);
+  assert.match(
+    review,
+    /skips completed-code local\s+Review and reviewer subagents/is,
+  );
+});
+
+test("GREEN Fast delivery: hosted normalization remains without a local checkpoint", () => {
+  const review = read("skills/review/SKILL.md");
+
+  assert.match(review, /read-only normalizer for CI\s+and Nitro evidence/is);
+  assert.match(review, /returns actionable hosted findings\s+to Execute/is);
+  assert.match(
+    review,
+    /does not emit a local technical-readiness checkpoint for Fast/i,
+  );
+  assert.match(
+    review,
+    /native hooks and focused implementation\s+verification remain required/is,
+  );
+});
+
 function passingDeliveryBudget(
   sourceHead = "head-a",
   targetBaseSha = "base-a",

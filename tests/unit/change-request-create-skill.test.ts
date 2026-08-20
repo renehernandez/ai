@@ -50,7 +50,7 @@ test("GREEN change-request-owner: one host-neutral owner routes both providers",
     skill,
     /PR\/MR titles and descriptions.*do not require.*destination-bound confirmation/is,
   );
-  assert.match(skill, /create\s+or update the draft/is);
+  assert.match(skill, /create\s+or update the artifact/is);
   assert.match(
     skill,
     /without previewing the title or body.*new permission\s+prompt/is,
@@ -64,6 +64,19 @@ test("GREEN change-request-owner: one host-neutral owner routes both providers",
       /approved (?:title|body)|title and body approved/i,
     );
   }
+});
+
+test("RED change-request-owner: generic urgency cannot create Ready", () => {
+  assert.match(skill, /Standard creates Draft/i);
+  assert.match(skill, /explicit eligible Fast creates or updates\s+Ready/is);
+  assert.doesNotMatch(skill, /urgency.*creates or updates\s+Ready/is);
+});
+
+test("GREEN change-request-owner: Finish supplies the delivery profile and Fast Ready scope", () => {
+  assert.match(skill, /authorized mutation scope, and delivery profile/i);
+  assert.match(skill, /Under explicit eligible Fast delivery/i);
+  assert.match(skill, /return its verified live state/i);
+  assert.match(skill, /Neither state transition authorizes merge/i);
 });
 
 test("description policy is progressively loaded and reviewer-facing", () => {

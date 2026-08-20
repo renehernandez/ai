@@ -45,6 +45,9 @@ Route authority before readiness. Every new substantive task begins in Explore
 and defaults to `brainstorming`; an opening request to fix, implement, change,
 or build does not itself authorize mutation. A materially different requested
 outcome resets the task to Explore. Explicit mode wording overrides inference.
+An explicit user selection of the canonical Fast delivery profile is the only
+exception to a separate Explore response for one concrete, settled, eligible
+Nitro-backed MR.
 After Explore, resolve authority through the accepted-proposal contract in
 [investigation-and-implementation.md](../rules/investigation-and-implementation.md).
 Infer what the user accepts from context rather than confirmation vocabulary;
@@ -116,9 +119,21 @@ limits, and require separately scoped acceptance for terminal actions.
 - `codex-review-feedback` remains retired. GitHub PR review does not request,
   poll, normalize, or gate on Codex-authored review feedback.
 
+- Standard delivery is the default and preserves the existing plan or OpenSpec,
+  POC, local Review, draft, and technical-readiness contracts.
+- Fast delivery is explicit-only for one concrete, settled, coherent Fullscript
+  GitLab MR whose active policy selects Nitro. Generic urgency does not select
+  it. Fast may enter Execute without a separate brainstorming response or
+  committed plan, performs ordinary setup inside Execute, runs focused proof
+  and native hooks, skips completed-code local Review and reviewer subagents,
+  publishes Ready, and follows required CI plus exact-head Nitro through repair
+  closure. Multi-unit, migration, durable cross-component, rehearsal, or
+  materially unsettled work returns to Plan. Fast never authorizes merge,
+  deployment, cleanup, or force-push.
+
 - Plan remains conversational until scope, design, delivery shape, risk,
   acceptance, proof, and policy choices are coherent.
-- Acceptance of a complete atomic plan authorizes its uninterrupted Plan,
+- Under Standard delivery: Acceptance of a complete atomic plan authorizes its uninterrupted Plan,
   Execute, Review, and Finish sequence. In a Git repository
   with a valid upstream, implementation is not complete until its dedicated
   draft PR/MR is published and required CI and configured automated reviewers
@@ -157,7 +172,7 @@ limits, and require separately scoped acceptance for terminal actions.
   Incomplete or unverified requirements block archival. Review inspects that
   canonical-spec/archive state on the exact implementation head, and Finish
   requires it for readiness rather than performing archival as cleanup.
-- Review evidence and the technical-readiness checkpoint remain task-local.
+- Under Standard delivery, Review evidence and the technical-readiness checkpoint remain task-local.
   `code-simplifier` is a core reviewer for planning artifacts, POC first
   objective proof, completed POCs, and final implementations; it always keeps
   its own recorded outcome even when review execution is integrated or falls
@@ -170,15 +185,23 @@ limits, and require separately scoped acceptance for terminal actions.
   target base or HEAD requires a fresh exact-target checkpoint; patch-equivalent
   rebases may preserve discovery only after base-sensitive validation, while
   material contract or review-risk changes require new discovery.
+- Under Fast delivery, Finish publishes the hook-clean MR Ready, requests Nitro
+  after every source-head push, and monitors current required CI plus the full
+  Nitro response and unresolved discussions. Review only normalizes hosted
+  findings; Execute repairs them through native hooks until the current Ready
+  head is clean.
 - For multiple final units, Plan records semantic eligibility and one total Git
   order. Execute may develop eligible units concurrently when each has a singly
   owned branch/worktree. Create every initial real-diff MR sequentially in Git
   order, do not restack descendants while a predecessor is open, and restack
   only the immediate child after its predecessor merges.
-- Final MRs remain draft through implementation and technical readiness until
+- Under Standard delivery, final MRs remain draft through implementation and technical readiness until
   merge authority marks them ready. Finish continues monitoring configured CI
   and hosted review after publication and routes in-scope failures to the
   current lane owner without another user prompt.
+- Under explicit eligible Fast delivery, the one final MR is created or updated
+  as Ready immediately and stays Ready through repairs and revalidation; current
+  required CI and Nitro gates still block completion and merge.
 - Single-MR merge authority is consumed after that MR merges. Required child
   repair may continue. A child that has never been marked ready remains draft;
   once marked ready, it stays ready through repairs, restacks, base movement,

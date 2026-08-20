@@ -39,17 +39,28 @@ target-base diff and HEAD, covers every phase-specific review type, and
 normalizes hosted findings retrieved by Finish. A small coherent change may use
 one integrated inline pass; use subagents only when delegation is faster.
 
-After a native hook-clean commit, Finish pushes and creates or updates the
-draft PR/MR, requests configured hosted review, and starts local Review against
-the same hosted head. Review and its subagents consume the pre-commit hook's
-full-suite evidence instead of rerunning that suite.
+Under Standard delivery, after a native hook-clean commit, Finish pushes and
+creates or updates the draft PR/MR, requests configured hosted review, and
+starts local Review against the same hosted head. Review and its subagents
+consume the pre-commit hook's full-suite evidence instead of rerunning that
+suite.
+
+Under explicit Fast delivery, Finish instead creates or updates the one
+eligible Fullscript GitLab MR as Ready on its first published head. It does not
+dispatch completed-code local Review or reviewer subagents. It requests Nitro
+after every source-head push, monitors the newest required pipeline graph and
+the complete exact-head Nitro feedback surface, and returns actionable findings
+to Execute until both gates pass on the current Ready head. The Fast profile is
+the ready-state authority for this publication step only; it does not authorize
+merge, deployment, cleanup, or force-push.
 
 For a delegated Finish lane, bind provider mutation to its immutable publication
 packet. A changed source HEAD or resolved target-base SHA invalidates the packet
 and every dependent hosted gate. The coordinator must refresh the packet before
 that lane pushes, creates or updates an artifact, or requests review.
 
-Review then emits a task-local `technical_readiness_checkpoint` containing:
+For Standard delivery, Review then emits a task-local
+`technical_readiness_checkpoint` containing:
 
 - hosted artifact, target base, and exact HEAD;
 - current target-base diff scope and repository-hook evidence;
@@ -83,7 +94,7 @@ is consumed after it merges. A multi-MR sequence requires the user's aggregate
 or sequential scope, which survives only patch-equivalent restacks. Hosted
 findings do not expand authority.
 
-Finish remains active after publication. It monitors the newest effective
+Finish remains active after Standard draft or Fast Ready publication. It monitors the newest effective
 pipeline graph and every configured required reviewer, routes in-scope failures
 to the current Execute lane owner, and repeats the Review/push/provider cycle
 without another user prompt. MR creation, pending provider state, a green parent
@@ -232,9 +243,10 @@ review feedback. `codex-review-feedback` remains retired.
 - No planning-only MR is created. A POC is draft and closes unmerged. An atomic
   plan and its implementation form one change set in one final MR, with no POC
   phase; OpenSpec produces one final MR per top-level delivery unit.
-- Every final MR is created as draft and verified live as draft. Local Review,
-  CI, approvals, hosted review, and technical readiness never remove draft
-  status.
+- Under Standard delivery, Every final MR is created as draft and verified live
+  as draft. Local Review, CI, approvals, hosted review, and technical readiness
+  never remove draft status. Explicit eligible Fast delivery creates or updates
+  its one final MR as Ready under the canonical profile contract.
 - Once a PR/MR is marked ready, preserve that state through every later
   workflow step. A changed HEAD, restack, target-base movement, failed or
   pending CI, review feedback, revalidation, or follow-up repair never
@@ -273,7 +285,7 @@ review feedback. `codex-review-feedback` remains retired.
   Review, CI, approvals, and configured hosted automated review before merge.
 - Stop before the next merge when default-branch CI for the landed predecessor
   is failed, blocked, or unavailable under project policy.
-- Technical stack readiness leaves every MR draft until merge authority marks
+- Under Standard delivery, Technical stack readiness leaves every MR draft until merge authority marks
   it ready. Single-MR authority marks only that MR ready, waits for any review
   triggered by that transition, and is consumed after merge. Restack and
   revalidate its immediate child while preserving that child's current draft or

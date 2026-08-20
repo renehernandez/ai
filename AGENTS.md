@@ -47,6 +47,9 @@ Route authority before readiness. Every new substantive task begins in Explore
 and defaults to `brainstorming`; an opening request to fix, implement, change,
 or build does not itself authorize mutation. A materially different requested
 outcome resets the task to Explore. Explicit mode wording overrides inference.
+An explicit user selection of the canonical Fast delivery profile is the only
+exception to a separate Explore response for one concrete, settled, eligible
+Nitro-backed MR.
 After Explore, resolve authority through the accepted-proposal contract in
 [investigation-and-implementation.md](rules/investigation-and-implementation.md).
 Infer what the user accepts from context rather than confirmation vocabulary;
@@ -115,9 +118,21 @@ limits, and require separately scoped acceptance for terminal actions.
 - `codex-review-feedback` remains retired. GitHub PR review does not request,
   poll, normalize, or gate on Codex-authored review feedback.
 
+- Standard delivery is the default and preserves the existing plan or OpenSpec,
+  POC, local Review, draft, and technical-readiness contracts.
+- Fast delivery is explicit-only for one concrete, settled, coherent Fullscript
+  GitLab MR whose active policy selects Nitro. Generic urgency does not select
+  it. Fast may enter Execute without a separate brainstorming response or
+  committed plan, performs ordinary setup inside Execute, runs focused proof
+  and native hooks, skips completed-code local Review and reviewer subagents,
+  publishes Ready, and follows required CI plus exact-head Nitro through repair
+  closure. Multi-unit, migration, durable cross-component, rehearsal, or
+  materially unsettled work returns to Plan. Fast never authorizes merge,
+  deployment, cleanup, or force-push.
+
 - Plan stays conversational until scope, design, delivery shape, risk,
   acceptance, proof, and policy decisions are coherent.
-- AI-repo work uses one atomic plan and one final MR. When a proposed change is
+- Standard AI-repo work uses one atomic plan and one final MR. When a proposed change is
   too broad for one coherent MR, split it into separately accepted atomic
   changes. Do not infer an OpenSpec route for ordinary AI-repo work.
 - OpenSpec adapters remain explicit developer commands. When the user explicitly
@@ -130,7 +145,7 @@ limits, and require separately scoped acceptance for terminal actions.
   final hook-clean commit and draft publication. Review inspects that exact
   canonical-spec/archive head, and Finish treats it as a readiness input rather
   than cleanup. Incomplete or unverified work remains active.
-- Review evidence stays task-local. After a hook-clean commit, publish the
+- Under Standard delivery, Review evidence stays task-local. After a hook-clean commit, publish the
   draft, explicitly request Nitro for that source head, and start local Review
   on the same head.
   `code-simplifier` is a core reviewer for planning artifacts, POC first
@@ -144,6 +159,11 @@ limits, and require separately scoped acceptance for terminal actions.
   checkpoint; patch-equivalent rebases may preserve discovery only after base-
   sensitive validation, while material contract or review-risk changes require
   new discovery.
+- Under Fast delivery, Finish publishes the hook-clean MR Ready, requests Nitro
+  after every source-head push, and monitors current required CI plus the full
+  Nitro response and unresolved discussions. Review only normalizes hosted
+  findings; Execute repairs them through native hooks until the current Ready
+  head is clean.
 
 ## Repository Finish policy
 
@@ -157,11 +177,14 @@ limits, and require separately scoped acceptance for terminal actions.
   [the Fullscript Nitro rule](rules/fullscript/nitro-review.md) as the canonical
   owner for source-head request timing, size routing, feedback closure, and
   human escalation.
-- Every final MR is created as draft and remains draft through implementation,
+- Under Standard delivery, every final MR is created as draft and remains draft through implementation,
   CI, review, and technical readiness until merge authority marks it ready.
   Finish stays active after publication, follows the complete pipeline graph
   and hosted feedback, and reactivates the current Execute owner to fix in-scope
   failures without requiring another user prompt.
+- Under explicit eligible Fast delivery, the one final MR is created or updated
+  as Ready immediately and stays Ready through repairs and revalidation; current
+  required CI and Nitro gates still block completion and merge.
 - Implementation or delivery wording alone authorizes publication and hosted
   follow-through, not merge. Merge, deployment, and cleanup require a
   separately scoped accepted proposal or activated policy.
