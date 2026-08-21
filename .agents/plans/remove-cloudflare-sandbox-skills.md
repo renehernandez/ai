@@ -9,7 +9,8 @@ removal and the current upstream no longer provides the configured name]
 
 ## Approach
 
-- Remove `sandbox-sdk` from the Cloudflare names in `ax.config.json`.
+- Remove `sandbox-sdk` from the Cloudflare names in `ax.config.json` and add it
+  to `runtime.retiredSkills` so the next live sync deletes stale installations.
 - Do not select `sandbox-stable`, `sandbox-next`, or
   `sandbox-migrate-to-next`; no standalone Sandbox skill will be installed.
   The general `cloudflare` skill may continue to provide product references.

@@ -18,6 +18,7 @@
       "plan-unit-delivery",
       "plan-unit-sequencer",
       "review-feedback-routing",
+      "sandbox-sdk",
       "session-start"
     ],
     "canonicalSkillsDir": "~/.agents/skills",

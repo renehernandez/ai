@@ -57,6 +57,7 @@ test("RED skill-rule-evals: standalone Sandbox skills remain detectable", () => 
 
 test("GREEN skill-rule-evals: Cloudflare remains without standalone Sandbox skills", () => {
   assert.ok(cloudflareSkills.includes("cloudflare"));
+  assert.ok(axConfig.runtime.retiredSkills.includes("sandbox-sdk"));
   assert.deepEqual(currentManagedSkillCoverageGaps(managedSkills), []);
   assert.deepEqual(
     cloudflareSkills.filter((name) => name.startsWith("sandbox-")),
