@@ -39,6 +39,31 @@ const managedSkills = (
   }
 ).skills.flatMap(({ names }) => names);
 
+const cloudflareSkills = (
+  axConfig.blocks.cloudflare as {
+    skills: Array<{ names: string[] }>;
+  }
+).skills.flatMap(({ names }) => names);
+
+test("RED skill-rule-evals: standalone Sandbox skills remain detectable", () => {
+  const obsoleteSelection = [...cloudflareSkills, "sandbox-sdk"];
+
+  assert.deepEqual(simulatedCoverageGap("sandbox-sdk"), ["sandbox-sdk"]);
+  assert.deepEqual(
+    obsoleteSelection.filter((name) => name.startsWith("sandbox-")),
+    ["sandbox-sdk"],
+  );
+});
+
+test("GREEN skill-rule-evals: Cloudflare remains without standalone Sandbox skills", () => {
+  assert.ok(cloudflareSkills.includes("cloudflare"));
+  assert.deepEqual(currentManagedSkillCoverageGaps(managedSkills), []);
+  assert.deepEqual(
+    cloudflareSkills.filter((name) => name.startsWith("sandbox-")),
+    [],
+  );
+});
+
 test("RED lifecycle disposition: supersession cannot report completed behavior", () => {
   assert.deepEqual(uncoveredManagedSkills(["superseded-work"], []), [
     "superseded-work",

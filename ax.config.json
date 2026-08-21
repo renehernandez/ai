@@ -178,7 +178,6 @@
             "agents-sdk",
             "cloudflare",
             "durable-objects",
-            "sandbox-sdk",
             "web-perf",
             "workers-best-practices",
             "wrangler"
