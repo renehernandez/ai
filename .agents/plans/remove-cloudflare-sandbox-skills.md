@@ -11,8 +11,8 @@ removal and the current upstream no longer provides the configured name]
 
 - Remove `sandbox-sdk` from the Cloudflare names in `ax.config.json`.
 - Do not select `sandbox-stable`, `sandbox-next`, or
-  `sandbox-migrate-to-next`; Sandbox-specific guidance will no longer be part
-  of the managed runtime.
+  `sandbox-migrate-to-next`; no standalone Sandbox skill will be installed.
+  The general `cloudflare` skill may continue to provide product references.
 - Preserve the Cloudflare source, every other selected Cloudflare skill, the
   active runtime profile, and AX transaction behavior.
 
@@ -69,8 +69,8 @@ authorized.
 
 ## Risks And Controls
 
-- Removing the selection removes specialized Sandbox guidance from future
-  tasks. This is intentional; general Cloudflare guidance remains selected.
+- Removing the selection retires standalone Sandbox routing from future tasks.
+  This is intentional; general Cloudflare guidance remains selected.
 - A feature-branch sync must not touch the live runtime. Use isolated HOME and
   runtime roots until the change is merged.
 - Do not hand-delete stale `compound` or Sandbox paths. AX owns their
