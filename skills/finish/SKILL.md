@@ -70,6 +70,8 @@ merge, deployment, cleanup, artifact disposal, or force-push authority.
 
 Requests to monitor GitLab feedback use one monitor owner for each MR and the
 shared cooldown and single recovery probe in `rules/git-and-review.md`.
+Monitor prompts preserve live state; replayed heartbeats never authorize
+Ready-to-Draft.
 
 Reuse open artifacts and preserve human-owned body sections. Descriptions cover
 scope, decisions, dependencies, verification, and actionable gaps. Create each

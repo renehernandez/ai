@@ -199,6 +199,10 @@ limits, and require separately scoped acceptance for terminal actions.
   remains draft; once marked ready, it stays ready through repairs, restacks,
   base movement, gate failures, and revalidation unless the user specifically
   asks to return that exact MR to draft.
+  An agent-authored heartbeat or monitor prompt does not constitute user
+  authorization to return an MR to Draft. If live provider state is Ready,
+  never issue a draft mutation; preserve Ready and repair stale monitor
+  instructions.
   Only the user's aggregate or sequential scope authorizes bottom-to-top
   merging, and a material effective-diff change requires renewed authority for
   affected MRs.

@@ -161,6 +161,14 @@ test("GREEN skill-rule-evals: ready state survives repair while merge gates rema
 
   assert.match(git, /Once a PR\/MR is marked ready.*exact PR\/MR/i);
   assert.match(finish, /current draft or ready state/i);
+  assert.match(
+    git,
+    /heartbeat.*does not.*user authorization.*return.*Draft.*live provider state is Ready.*never issue `--draft`/i,
+  );
+  assert.match(
+    finish,
+    /monitor prompts preserve live state.*replayed heartbeats never authorize Ready-to-Draft/i,
+  );
   assert.match(finish, /Current HEAD gates and merge authority still apply/i);
   assert.match(stacked, /Once an MR is marked ready.*exact MR/i);
   assert.match(

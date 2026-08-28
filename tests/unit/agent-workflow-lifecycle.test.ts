@@ -453,6 +453,31 @@ test("GREEN authority: ready state is preserved while current-head gates still b
   assert.match(workflows, /never been marked ready remain draft/i);
 });
 
+test("RED authority: a replayed heartbeat cannot authorize Ready to Draft", () => {
+  const entrypoint = read("AGENTS.md").replace(/\s+/g, " ");
+  const portableEntrypoint = read("instructions/AGENTS.md").replace(
+    /\s+/g,
+    " ",
+  );
+  const git = read("rules/git-and-review.md").replace(/\s+/g, " ");
+  const finish = read("skills/finish/SKILL.md").replace(/\s+/g, " ");
+
+  for (const text of [entrypoint, portableEntrypoint, git]) {
+    assert.match(
+      text,
+      /(?:heartbeat|monitor prompt).*(?:does not|never).*(?:user authorization|authorize).*(?:return|mark).*(?:draft|Draft)/i,
+    );
+  }
+  assert.match(
+    git,
+    /live.*ready.*(?:must not|never).*(?:--draft|draft mutation)/i,
+  );
+  assert.match(
+    finish,
+    /monitor prompts preserve live state.*replayed heartbeats never authorize Ready-to-Draft/i,
+  );
+});
+
 test("GREEN semantic-delivery: Nitro requests follow every source-head push through the canonical rule", () => {
   const nitroRule = read("rules/fullscript/nitro-review.md");
   const nitroPolicy = read(

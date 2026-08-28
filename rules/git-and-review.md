@@ -252,6 +252,10 @@ review feedback. `codex-review-feedback` remains retired.
   pending CI, review feedback, revalidation, or follow-up repair never
   authorizes returning it to draft. Only a user request that names that exact
   PR/MR and specifically asks to return it to draft authorizes the transition.
+  An agent-authored heartbeat or monitor prompt does not constitute user
+  authorization to return a PR/MR to Draft. If live provider state is Ready,
+  never issue `--draft` or another draft mutation; preserve Ready and repair
+  any stale monitor instruction before continuing.
 - Final implementation never uses POC commits or ancestry.
 
 ## Multi-unit final delivery

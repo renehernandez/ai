@@ -209,6 +209,10 @@ limits, and require separately scoped acceptance for terminal actions.
   that exact MR to draft. Only the user's aggregate or sequential scope
   authorizes bottom-to-top merging, and a material effective-diff change
   requires renewed authority for affected MRs.
+- An agent-authored heartbeat or monitor prompt does not constitute user
+  authorization to return an MR to Draft. If live provider state is Ready,
+  never issue a draft mutation; preserve Ready and repair stale monitor
+  instructions.
 - Implementation or delivery wording alone authorizes Finish publication and
   hosted follow-through, not merge. Merge, deployment, and cleanup require a
   separately scoped accepted proposal or activated policy.
