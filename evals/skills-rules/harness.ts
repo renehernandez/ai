@@ -158,6 +158,7 @@ export async function createEvalSandbox(
     join(repository, "src/auth.ts"),
     "export function canRead(userId: string, recordOwnerId: string) { return Boolean(userId && recordOwnerId); }\n",
   );
+  installVerificationSkillFixture(repository, id);
   installProviderShims(shimBin, providerLog);
   writeEvalConfig(configPath);
   if (credentialOwner === "codex") {
@@ -177,6 +178,59 @@ export async function createEvalSandbox(
     providerLog,
     configPath,
   };
+}
+
+function installVerificationSkillFixture(repository: string, id: string): void {
+  if (id === "create-verification-skill-baseline") {
+    mkdirSync(join(repository, ".agents", "skills"), { recursive: true });
+    writeFileSync(
+      join(repository, "package.json"),
+      `${JSON.stringify(
+        {
+          scripts: { dev: "tsx missing-entrypoint.ts" },
+          dependencies: { tsx: "declared-by-fixture" },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    writeFileSync(
+      join(repository, "README.md"),
+      "# Authentication fixture\n\nRun `pnpm dev`. The referenced entrypoint is absent, so the documented baseline is broken. `.agents/skills` is the canonical project-local skill root.\n",
+    );
+    return;
+  }
+
+  if (id !== "maintain-verification-skill-regression") return;
+
+  const verificationRoot = join(repository, ".agents", "skills", "verify-auth");
+  mkdirSync(join(verificationRoot, "features"), { recursive: true });
+  mkdirSync(join(repository, "evidence"), { recursive: true });
+  writeFileSync(
+    join(verificationRoot, "SKILL.md"),
+    "---\nname: verify-auth\ndescription: Verify the fixture authentication UI.\n---\n# Verify Auth\n## Launch\nUse the fixture service.\n## Doctor\nRead evidence/doctor.txt.\n## Drive\nFollow each feature recipe.\n## Evidence\nRead evidence/live.txt.\n## Cleanup\nNo process is started.\n",
+  );
+  writeFileSync(
+    join(verificationRoot, "features", "README.md"),
+    "# Features\n\n- [Owner access](owner-access.md)\n- [Stranger denial](stranger-denial.md)\n",
+  );
+  for (const [file, title, expected] of [
+    ["owner-access.md", "Owner access", "owner receives access"],
+    ["stranger-denial.md", "Stranger denial", "stranger is denied"],
+  ]) {
+    writeFileSync(
+      join(verificationRoot, "features", file),
+      `# ${title}\n\n## Sub-features\n\n- Authorization result\n\n## How to get to it (user POV)\n\nOpen the protected record.\n\n## Driving it with fixture evidence\n\nConfirm ${expected}.\n\n## Gotchas\n\nNone.\n`,
+    );
+  }
+  writeFileSync(
+    join(repository, "evidence", "doctor.txt"),
+    "fixture instance healthy\n",
+  );
+  writeFileSync(
+    join(repository, "evidence", "live.txt"),
+    "owner-access: passed\nstranger-denial: failed; stranger received access\n",
+  );
 }
 
 function writeEvalConfig(path: string): void {

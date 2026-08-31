@@ -1,0 +1,4 @@
+interface:
+  display_name: "Maintain Verification Skill"
+  short_description: "Audit a verification skill against the app"
+  default_prompt: "Use $maintain-verification-skill to compare every mapped feature with current source and live application behavior."
