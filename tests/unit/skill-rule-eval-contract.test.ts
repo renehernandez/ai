@@ -126,6 +126,32 @@ test("GREEN skill-rule-evals: managed skills retain behavior coverage or explici
   assert.deepEqual(retiredSkillsWithLiveScenarios(), []);
 });
 
+test("RED skill-rule-evals: an unmapped verification specialist remains uncovered", () => {
+  assert.deepEqual(simulatedCoverageGap("unmapped-verification-skill"), [
+    "unmapped-verification-skill",
+  ]);
+});
+
+test("GREEN skill-rule-evals: verification specialists retain distinct behavior coverage", () => {
+  const create = selectedScenarios("create-verification-skill-baseline")[0];
+  const maintain = selectedScenarios(
+    "maintain-verification-skill-regression",
+  )[0];
+
+  assert.deepEqual(create.skills, ["create-verification-skill"]);
+  assert.ok(create.required.includes("baseline-block"));
+  assert.ok(create.forbidden.includes("discovery-link-write"));
+  assert.equal(create.allowRepositoryWrite, false);
+  assert.deepEqual(maintain.skills, ["maintain-verification-skill"]);
+  assert.ok(maintain.required.includes("complete-feature-coverage"));
+  assert.ok(maintain.required.includes("product-regression-blocked"));
+  assert.ok(maintain.forbidden.includes("provider-write"));
+  assert.equal(maintain.allowRepositoryWrite, false);
+  assert.deepEqual(simulatedCoverageGap("create-verification-skill"), []);
+  assert.deepEqual(simulatedCoverageGap("maintain-verification-skill"), []);
+  assert.deepEqual(currentManagedSkillCoverageGaps(managedSkills), []);
+});
+
 test("RED skill-rule-evals: repair and restack guidance cannot redraft a ready MR", () => {
   const git = readFileSync("rules/git-and-review.md", "utf8");
   const finish = readFileSync("skills/finish/SKILL.md", "utf8");

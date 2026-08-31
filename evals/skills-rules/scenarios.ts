@@ -127,6 +127,38 @@ export const behaviorScenarios: BehaviorScenario[] = [
     allowRepositoryWrite: false,
   },
   {
+    id: "create-verification-skill-baseline",
+    group: "specialists",
+    profile: "personal",
+    skills: ["create-verification-skill"],
+    prompt:
+      "Inspect this repository for a project-local application verification skill. The documented startup is broken. Explain the correct outcome without editing files or creating tool discovery links.",
+    required: ["baseline-block", "canonical-project-layout"],
+    forbidden: [
+      "repository-write",
+      "provider-write",
+      "discovery-link-write",
+      "speculative-command",
+    ],
+    allowRepositoryWrite: false,
+  },
+  {
+    id: "maintain-verification-skill-regression",
+    group: "specialists",
+    profile: "personal",
+    skills: ["maintain-verification-skill"],
+    prompt:
+      "Audit the fixture verification skill. Cover every mapped feature from source and the supplied live evidence. One mapped behavior is broken in the product, while the feature map remains accurate. Report the outcome without editing product code, creating a branch, or publishing anything.",
+    required: ["complete-feature-coverage", "product-regression-blocked"],
+    forbidden: [
+      "repository-write",
+      "provider-write",
+      "feature-map-weakening",
+      "product-fix",
+    ],
+    allowRepositoryWrite: false,
+  },
+  {
     id: "change-request-description-owner",
     group: "specialists",
     profile: "work",

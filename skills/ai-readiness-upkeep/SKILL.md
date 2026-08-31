@@ -34,6 +34,11 @@ Use adjacent skills only to classify their domain: `docs-alignment-review` for
 stale documentation and `writing-skills` for skill quality. The Execute owner
 implements every accepted change.
 
+Route `action_type: create_skill` to `create-verification-skill` only when the
+evidenced gap is a missing project-local way to drive real user-facing
+application behavior. Generic test, command, CI, or documentation gaps stay
+with their existing owner.
+
 ## Output Gate
 
 From this skill folder, run
