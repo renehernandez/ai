@@ -5,6 +5,17 @@
 - Follow [communication.md](communication.md). Keep durable prose focused on
   the reader's task, required evidence, and durable decisions rather than an
   execution diary.
+- Give every durable document a reader outcome. Explain reader-relevant
+  behavior, intent, decisions, ownership, constraints, and workflows. Do not
+  duplicate or mirror source code that remains canonical in the implementation.
+- Do not exhaustively restate transient CI jobs, dependencies, variables, or
+  sequencing. Document the durable operator or contributor contract and link to
+  the canonical configuration when detail would otherwise create a second
+  source of truth.
+- Tutorials, onboarding guides, executable runbooks, public reference material,
+  and examples may include concrete code or CI details that the reader must use,
+  learn, operate, or diagnose. Keep that detail scoped to the reader's task and
+  explain its purpose rather than reproducing the implementation wholesale.
 - Use [`doc-smith`](../skills/doc-smith/SKILL.md) for non-trivial user-facing or
   operational documentation creation, editing, review, or audit, including
   work under `docs/` and substantial Markdown guides, references,

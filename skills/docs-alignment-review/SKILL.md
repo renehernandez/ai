@@ -20,6 +20,12 @@ documentation or provider descriptions.
    shared skills/automations, and reviewer-facing change description.
 4. Return actionable gaps or a reasoned clean/not-applicable verdict.
 
+Require an update only for a durable reader contract. Do not demand
+documentation churn for implementation detail that remains canonical in source
+or for transient CI job, dependency, variable, and sequencing changes. When an
+update is required, route source-mirroring prose and unnecessary CI-detail
+duplication to `doc-smith` as quality findings.
+
 Route prose quality to `doc-smith`. Route a newly exposed contract that should
 be mechanically enforced to `ai-readiness-upkeep`; missing automation is not
 merely a documentation finding. Re-run this review when repairs materially

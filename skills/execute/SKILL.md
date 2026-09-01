@@ -20,7 +20,7 @@ scheduling mechanics in `rules/investigation-and-implementation.md`.
 
 ## Setup and Ownership
 
-Before the first write and after resume:
+Before writing or resuming:
 
 1. inspect repository instructions, branch, HEAD, remotes, hosted artifact,
    changed paths, and untracked paths;
@@ -29,12 +29,12 @@ Before the first write and after resume:
    task credentials with one small representative command; and
 4. allow exactly one writer to edit, stage, and commit the artifact.
 
-This is ordinary Execute setup, including under Fast delivery. Do not expose it
-as a separate preflight phase, report, checkpoint, or user pause.
+This is ordinary Execute setup, including under Fast delivery. Do not expose a
+separate setup checkpoint or user pause.
 
-Use another owned worktree for another writer. Read-only reviewers may run in
+Use another worktree for another writer. Read-only reviewers may run in
 parallel. A handoff records branch, worktree, HEAD, changed/untracked paths, and
-diff fingerprint; the previous writer stops before ownership moves.
+diff fingerprint; the writer stops before ownership moves.
 
 Verify the accepted reuse and deviation contract against current precedents and
 canonical owners. Search for sibling helpers, parsers, services, policies,
@@ -90,6 +90,8 @@ schema, or other narrow project-native proof. At first objective proof, run the
 real entrypoint or fidelity-equivalent integration proof. Stage only intended
 files and commit with native hooks; never bypass them. The hook owns the full
 repository suite, so Review consumes that evidence instead of rerunning it.
+Apply the test-worthiness rule in `rules/testing-and-verification.md`; omit
+implementation mirrors and speculative local CI proof.
 
 Measure the complete effective diff before publication and apply the canonical
 budget, removal-only, POC exemption, and semantic-exception rules from the
