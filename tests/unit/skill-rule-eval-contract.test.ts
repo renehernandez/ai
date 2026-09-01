@@ -31,6 +31,7 @@ import {
   simulatedCoverageGap,
   uncoveredManagedSkills,
 } from "../../evals/skills-rules/scenarios.ts";
+import { read } from "../../scripts/charter-validator-reader.ts";
 import { routeWorkDisposition } from "../../skills/plan/scripts/plan-contract.ts";
 
 const managedSkills = (
@@ -44,6 +45,53 @@ const cloudflareSkills = (
     skills: Array<{ names: string[] }>;
   }
 ).skills.flatMap(({ names }) => names);
+
+test("RED skill-rule-evals: artifact guidance does not ban valid test or documentation forms", () => {
+  const testing = read("rules/testing-and-verification.md");
+  const docs = read("rules/docs-and-specs.md");
+  const rubric = read("skills/doc-smith/references/quality-rubric.md");
+  const alignment = read("skills/docs-alignment-review/SKILL.md");
+  const execute = read("skills/execute/SKILL.md");
+  const review = read("skills/review/SKILL.md");
+
+  assert.deepEqual(simulatedCoverageGap("artifact-worthiness"), [
+    "artifact-worthiness",
+  ]);
+  assert.match(
+    testing,
+    /not a blanket ban.*snapshots.*string assertions.*source\s+reads/is,
+  );
+  assert.doesNotMatch(docs, /never include.*(?:code|CI)/is);
+  assert.doesNotMatch(rubric, /reject every.*(?:code|CI)/is);
+  assert.doesNotMatch(alignment, /document every implementation detail/is);
+  assert.doesNotMatch(
+    execute,
+    /local CI assertions prove hosted pipeline behavior/is,
+  );
+  assert.doesNotMatch(
+    review,
+    /configuration presence proves pipeline execution/is,
+  );
+});
+
+test("GREEN skill-rule-evals: artifact guidance requires reader and behavioral outcomes", () => {
+  const testing = read("rules/testing-and-verification.md");
+  const docs = read("rules/docs-and-specs.md");
+  const rubric = read("skills/doc-smith/references/quality-rubric.md");
+  const alignment = read("skills/docs-alignment-review/SKILL.md");
+  const execute = read("skills/execute/SKILL.md");
+  const review = read("skills/review/SKILL.md");
+
+  assert.deepEqual(currentManagedSkillCoverageGaps(managedSkills), []);
+  assert.match(testing, /observable behavior.*behavior-preserving refactor/is);
+  assert.match(testing, /does not prove.*hosted pipeline/is);
+  assert.match(docs, /reader outcome.*Do not.*mirror source code/is);
+  assert.match(docs, /tutorials.*onboarding guides.*runbooks.*reference/is);
+  assert.match(rubric, /Source-of-truth fit.*reader outcome/is);
+  assert.match(alignment, /durable reader contract.*implementation detail/is);
+  assert.match(execute, /test-worthiness.*testing-and-verification/is);
+  assert.match(review, /low-value test.*actionable finding/is);
+});
 
 test("RED skill-rule-evals: standalone Sandbox skills remain detectable", () => {
   const obsoleteSelection = [...cloudflareSkills, "sandbox-sdk"];

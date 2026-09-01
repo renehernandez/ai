@@ -25,6 +25,7 @@ Use this rubric during both the quality gate (writing phase) and structured anal
 | **Tone and slop** | No weasel words ("simply", "just", "easily", "straightforward"); no filler phrases ("it's worth noting", "keep in mind that"); no hedging in instructions ("might want to", "could potentially"); imperative mood used for steps |
 | **Formatting** | Required frontmatter is complete; code blocks have language identifiers; headings are sentence-cased; no emojis in headings; tables are used appropriately; internal links are relative |
 | **Cross-links** | Required cross-links are present; internal links use relative paths; no obviously broken references; related docs are linked where the reader task needs them |
+| **Source-of-truth fit** | The document serves a reader outcome instead of duplicating or mirroring source code; it does not exhaustively restate CI jobs, dependencies, variables, or sequencing that canonical configuration owns; tutorials, onboarding guides, executable runbooks, public reference material, and examples retain only the concrete detail their reader task requires |
 
 For the **Accuracy** dimension, use `Grep` to locate relevant source files and `Read` to verify technical claims. Do not flag accuracy issues without evidence — either confirm via code search or explicitly label the finding as unverified.
 
@@ -43,6 +44,7 @@ Before presenting a near-final draft, self-assess against every criterion below.
 | Tone | Direct, imperative, concise — no hedging or filler |
 | Formatting | Code blocks have language identifiers; tables used for comparisons; no emojis in headings |
 | Cross-links | Reader-required related docs are linked; internal links use relative paths |
+| Source-of-truth fit | Prose does not mirror source or transient CI internals; concrete tutorial, onboarding, runbook, reference, and example details serve the reader outcome |
 
 ---
 

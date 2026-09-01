@@ -3,6 +3,28 @@
 These rules cover test selection, regression coverage, and verification wording
 across local work, hosted review feedback, CI failures, and browser checks.
 
+## Test worthiness
+
+Add or materially change a test only when it proves observable behavior or an
+executable contract: inputs and outputs, state transitions, security boundaries,
+integration behavior, or a stable public artifact. A useful diagnostic is
+whether the test survives a behavior-preserving refactor. Omit tests that merely
+duplicate or mirror implementation text, generated output, internal call order,
+or configuration bytes.
+
+The diagnostic is not a blanket ban on snapshots, string assertions, source
+reads, SQL assertions, or configuration tests. Those techniques are appropriate
+when the bytes are themselves a public or published contract, or when the
+changed product is a generator, parser, validator, migration, policy, or
+security invariant whose semantics the test exercises independently.
+
+Local CI parsing, linting, rendering, and validation can prove configuration
+structure. It does not prove that the hosted pipeline schedules jobs, starts
+services, transfers artifacts, propagates credentials, enforces dependencies,
+or deploys successfully. Require those claims from the pipeline that executes
+the configuration. Do not add a repository test that restates CI YAML as a
+substitute for hosted pipeline evidence.
+
 ## Fastest Durable Regression
 
 When a bug fix, review comment, CI failure, or browser check reveals missing

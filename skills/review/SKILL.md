@@ -81,6 +81,11 @@ remediation outcome, invalidated surfaces, and one disposition: `repair`,
 `defer`, or `plan_required`. Hold mutation until the barrier, then return one
 deduplicated findings batch to Plan or the single Execute owner.
 
+Apply the test-worthiness boundary in `rules/testing-and-verification.md` to new
+or materially changed tests. Report a low-value test as an actionable finding
+when it mirrors implementation or claims hosted CI behavior from local
+configuration assertions without exercising an independent contract.
+
 Closure is limited to enumerated repairs and affected proof. Emit exactly one
 resolution per repair with `findingId`, `resolutionEvidence`,
 `recheckedSurfaces`, and `affectedVerificationPassed`. Missing, duplicate,
