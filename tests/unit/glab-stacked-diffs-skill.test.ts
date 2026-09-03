@@ -78,27 +78,27 @@ test("runtime routes authority without duplicating long procedures", () => {
 test("published corrections preserve descendants until predecessor promotion", () => {
   assert.match(skill, /Change only the substantive MR/i);
   assert.match(skill, /Do not restack\s+descendants/i);
-  assert.match(skill, /restack only its immediate child/i);
-  assert.match(skill, /exact expected remote-head lease/i);
-  assert.match(workflows, /Preserve the\s+descendants' existing source heads/);
-  assert.match(workflows, /Do not accept an automatic descendant rewrite/);
+  assert.match(skill, /retarget only its immediate child/i);
+  assert.match(skill, /merge the updated\s+target into that child/i);
+  assert.match(skill, /ordinary push/i);
+  assert.match(workflows, /preserve the\s+descendants' existing source heads/i);
+  assert.match(workflows, /Do not amend any published MR/i);
 });
 
 test("new stacks publish real diffs sequentially and stay draft", () => {
   assert.match(skill, /Publish coherent real-diff draft MRs sequentially/i);
   assert.match(skill, /Never create empty\s+placeholders/i);
   assert.match(skill, /Technical readiness leaves every MR draft/i);
-  assert.match(
-    commands,
-    /--force-with-lease=refs\/heads\/<branch>:<expected-sha>/,
-  );
+  assert.match(commands, /git push <selected-GitLab-url>/);
+  assert.match(commands, /Agents do not run `stack sync`/i);
+  assert.doesNotMatch(workflows, /git push --force/);
   assert.match(workflows, /Invoke `change-request-create`/);
 });
 
 test("unsupported or divergent topology fails closed", () => {
   assert.match(skill, /direct commit[\s\S]*freezes mutation/i);
-  assert.match(skill, /`glab stack sync` is not the default/i);
-  assert.match(skill, /mid-stack insertion[\s\S]*returns to Plan/i);
+  assert.match(skill, /Agents never run `glab stack sync`/i);
+  assert.match(skill, /mid-stack\s+insertion[\s\S]*returns to Plan/i);
 
   const directCommit = markdownSection(
     troubleshooting,

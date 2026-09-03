@@ -23,9 +23,16 @@ publication, provider policy, and explicit terminal authority.
 - Stage only the cohesive planning or implementation boundary owned by the
   current worktree. Fix and restage after a hook failure before retrying.
 - Never commit or push a default branch without explicit user authorization.
-- Do not force-push ordinary feedback, CI-fix, or follow-up commits. Force-push
-  only for an explicitly authorized history rewrite or a necessary history
-  repair such as rebase/conflict recovery.
+- Never force-push from an agent workflow. This includes explicit force options,
+  force-with-lease, and force refspecs; explicit user authority does not create
+  an agent-side exception. When the target branch advances, fetch it,
+  merge it into the feature branch, resolve conflicts, commit normally, and
+  publish with an ordinary push so implementation and repair history remains
+  visible. If additive reconciliation is genuinely insufficient, stop and
+  report the repository, feature branch or detached state, matching PR/MR,
+  target branch, local head, remote head, and why a human-owned history rewrite
+  is required. Do not locally rebase a branch that the agent is expected to
+  publish.
 - Before pushing a non-default branch, inspect matching hosted artifacts. Do not
   push when the only matching PR/MR is closed or merged; ask whether to create a
   new branch, reopen or explicitly reuse the artifact, or take another path.

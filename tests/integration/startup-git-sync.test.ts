@@ -1,3 +1,4 @@
+// charter-contracts: hook-registration
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
@@ -334,7 +335,7 @@ test("startup Git sync advances a clean detached task worktree", () => {
   });
 });
 
-test("startup Git sync rebases clean current worktrees", () => {
+test("RED hook-registration: startup Git sync never rebases a diverged feature worktree", () => {
   withGitFixture((fixture) => {
     const feature = join(fixture.directory, "feature");
     runGit(
@@ -343,16 +344,15 @@ test("startup Git sync rebases clean current worktrees", () => {
     );
     configureUser(feature);
     commitFile(feature, "feature.txt", "feature\n", "feature");
-    const remoteCommit = pushRemoteUpdate(fixture, "remote\n");
+    pushRemoteUpdate(fixture, "remote\n");
+    const originalHead = runGit(["rev-parse", "HEAD"], feature);
 
     const result = runHook(feature);
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
-    assert.match(result.stderr, /Rebased current worktree/);
-    assert.equal(
-      runGit(["merge-base", "--is-ancestor", remoteCommit, "HEAD"], feature),
-      "",
-    );
+    assert.equal(runGit(["rev-parse", "HEAD"], feature), originalHead);
+    assert.match(result.stderr, /left diverged feature worktree.*unchanged/u);
+    assert.match(result.stderr, /merging the target branch/u);
     assert.equal(
       readFileSync(join(feature, "feature.txt"), "utf-8"),
       "feature\n",
@@ -402,41 +402,24 @@ test("startup Git sync fails for in-progress current Git operation state", () =>
   });
 });
 
-test("startup Git sync aborts conflicted rebases and leaves no rebase state", () => {
+test("GREEN hook-registration: startup Git sync fast-forwards feature worktrees without unique commits", () => {
   withGitFixture((fixture) => {
     const feature = join(fixture.directory, "feature");
     runGit(
       ["worktree", "add", "-b", "feature", feature, "HEAD"],
       fixture.primary,
     );
-    configureUser(feature);
-    const originalHead = commitFile(
-      feature,
-      "README.md",
-      "feature\n",
-      "feature",
-    );
-    pushRemoteUpdate(fixture, "remote\n");
+    const remoteCommit = pushRemoteUpdate(fixture, "remote\n");
 
     const result = runHook(feature);
-    const rebaseMerge = runGit(
-      ["rev-parse", "--git-path", "rebase-merge"],
-      feature,
-    );
-    const rebaseApply = runGit(
-      ["rev-parse", "--git-path", "rebase-apply"],
-      feature,
-    );
 
-    assert.notEqual(result.status, 0);
-    assert.equal(runGit(["rev-parse", "HEAD"], feature), originalHead);
-    assert.equal(existsSync(rebaseMerge), false);
-    assert.equal(existsSync(rebaseApply), false);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(runGit(["rev-parse", "HEAD"], feature), remoteCommit);
     assert.equal(
       runGit(["status", "--porcelain=v1", "--untracked-files=all"], feature),
       "",
     );
-    assert.match(result.stderr, /aborted rebase/);
+    assert.match(result.stderr, /Fast-forwarded current feature worktree/u);
   });
 });
 

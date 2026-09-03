@@ -28,8 +28,9 @@ exists.
   placeholders.
 - Change only the substantive MR while its predecessor is open. Do not restack
   descendants.
-- After predecessor merge, retarget and restack only its immediate child with
-  an exact expected remote-head lease; leave deeper descendants untouched.
+- After predecessor merge, retarget only its immediate child, merge the updated
+  target into that child, and publish the additive reconciliation with an
+  ordinary push; leave deeper descendants untouched.
 - Technical readiness leaves every MR draft until merge authority marks it
   ready. Single-MR merge authority is consumed by that merge; bottom-to-top
   continuation requires user-authored aggregate or sequential scope. Material
@@ -39,8 +40,8 @@ exists.
   that exact MR and specifically asking to return it to draft authorizes the
   transition.
 - Keep hooks enabled. Use `stack save` for a new tip diff and `stack amend` only
-  for unpublished construction or the tip. A published non-tip amendment must
-  preserve descendant refs.
+  during unpublished construction. Correct every published MR with a new
+  additive commit so its implementation and repair history remains visible.
 
 ## Routing Decisions
 
@@ -50,11 +51,11 @@ draft state, and SHA. A direct commit, missing entry, unexpected target,
 closed/merged artifact, or external head change freezes mutation for recovery
 inspection.
 
-`glab stack sync` is not the default publication or propagation path: it cannot
-create the required drafts safely and may rewrite or remove managed entries.
-Never use it to propagate an open predecessor change. A mid-stack insertion or
-unrepresentable topology returns to Plan. Destructive recovery needs explicit
-authority.
+Agents never run `glab stack sync`: it may force-push rewritten branches,
+rebase later entries, or remove managed entries. Never use it to publish,
+propagate an open predecessor change, or reconcile target movement. A mid-stack
+insertion or unrepresentable topology returns to Plan. A required history
+rewrite is human-owned and blocks agent continuation.
 
 Load only the needed procedure:
 
@@ -69,6 +70,6 @@ Load only the needed procedure:
 ## Output
 
 Return the managed stack map, substantive owner, propagation-only descendants,
-current lifecycle owner, exact command/procedure selected, expected remote-head
-lease where applicable, draft/target state, and any topology, authority, or
-recovery blocker.
+current lifecycle owner, exact additive command/procedure selected, observed
+remote head, draft/target state, and any topology, authority, or recovery
+blocker.

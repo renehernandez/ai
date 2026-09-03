@@ -197,20 +197,6 @@ function isAncestor(
   );
 }
 
-function hasRebaseState(cwd: string): boolean {
-  return (
-    existsSync(gitPath(cwd, "rebase-merge")) ||
-    existsSync(gitPath(cwd, "rebase-apply"))
-  );
-}
-
-function abortRebase(cwd: string): GitResult | undefined {
-  if (hasRebaseState(cwd)) {
-    return git(cwd, ["rebase", "--abort"]);
-  }
-  return undefined;
-}
-
 function fastForwardPrimary(
   primary: Worktree | undefined,
   remoteRef: string,
@@ -301,23 +287,22 @@ function syncCurrentWorktree(
     return "skipped";
   }
 
-  const rebase = git(cwd, ["rebase", remoteRef]);
-  if (rebase.status === 0) {
-    messages.push(`Rebased current worktree ${currentPath} onto ${remoteRef}.`);
+  const head = currentHead(cwd);
+  if (isAncestor(cwd, remoteRef, head)) {
+    messages.push(`Current feature worktree already contains ${remoteRef}.`);
     return "synced";
   }
-
-  const abort = abortRebase(cwd);
-  if (abort && (abort.status !== 0 || hasRebaseState(cwd))) {
+  if (isAncestor(cwd, head, remoteRef)) {
+    checkedGit(cwd, ["merge", "--ff-only", remoteRef]);
     messages.push(
-      `Rebase conflict while syncing current worktree; failed to abort rebase and checkout may need manual recovery: ${(abort.stderr || abort.stdout).trim()}`,
+      `Fast-forwarded current feature worktree ${currentPath} to ${remoteRef}.`,
     );
-    return "failed";
+    return "synced";
   }
   messages.push(
-    `Rebase conflict while syncing current worktree; aborted rebase and left checkout unchanged: ${(rebase.stderr || rebase.stdout).trim()}`,
+    `Fetched ${remoteRef} but left diverged feature worktree ${currentPath} unchanged; reconcile it during Execute by merging the target branch and publishing an ordinary push.`,
   );
-  return "failed";
+  return "skipped";
 }
 
 export function syncStartupGit(options: SyncOptions): SyncResult {
@@ -366,7 +351,7 @@ function printDiscovery(): void {
       name: HOOK_NAME,
       type: "startup",
       description:
-        "Fetches the remote default branch, discards uncommitted primary-worktree changes, fast-forwards the primary worktree, and synchronizes only safe current worktrees.",
+        "Fetches the remote default branch, discards uncommitted primary-worktree changes, fast-forwards safe worktrees, and leaves diverged feature history unchanged for additive reconciliation during Execute.",
       command: argv.map((arg) => JSON.stringify(arg)).join(" "),
       argv,
     })}\n`,
@@ -381,8 +366,9 @@ Usage:
   startup-git-sync.ts --agent-discovery
 
 The hook discards uncommitted changes in a fast-forwardable primary default-
-branch worktree. It never resets local commits, force pushes, or creates merge
-commits.
+branch worktree. It never rewrites feature history, force pushes, or creates
+merge commits. Diverged feature branches remain unchanged for additive target-
+branch reconciliation during Execute.
 `);
 }
 

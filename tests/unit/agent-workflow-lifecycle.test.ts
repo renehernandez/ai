@@ -160,7 +160,7 @@ test("GREEN authority: one canonical accepted-proposal owner supplies checkpoint
     implementation,
     /observation, correction, question, or diagnostic fact.*does not authorize a broader inferred action/is,
   );
-  assert.match(implementation, /restacking or rebasing several MRs/);
+  assert.match(implementation, /restacking or reconciling several\s+MRs/);
   assert.match(
     implementation,
     /closing, canceling, superseding, or abandoning an existing PR\/MR/,
@@ -371,23 +371,47 @@ test("GREEN semantic-delivery: budgets exempt removal-only work and preserve sem
   assert.match(git, /non-removal.*more than 50.*files is prohibited/is);
 });
 
-test("GREEN semantic-delivery: stack publication stays sequential and restacks only the merged predecessor child", () => {
+test("RED semantic-delivery: agent publication guidance contains no force-push escape", () => {
+  const entrypoint = read("AGENTS.md");
+  const portableEntrypoint = read("instructions/AGENTS.md");
+  const git = read("rules/git-and-review.md");
+  const implementation = read("rules/investigation-and-implementation.md");
+  const stacked = read("skills/glab-stacked-diffs/SKILL.md");
+  const startup = read("hooks/startup-git-sync.ts");
+
+  for (const text of [entrypoint, portableEntrypoint, git, implementation]) {
+    assert.doesNotMatch(text, /Force-push only for/i);
+    assert.doesNotMatch(text, /authorized history rewrite/i);
+  }
+  assert.doesNotMatch(stacked, /Agents may run `glab stack sync`/i);
+  assert.doesNotMatch(startup, /git\(cwd, \["rebase", remoteRef\]\)/u);
+});
+
+test("GREEN semantic-delivery: stack publication is additive and preserves only-child promotion", () => {
   const implementation = read("rules/investigation-and-implementation.md");
   const git = read("rules/git-and-review.md");
   const stacked = read("skills/glab-stacked-diffs/SKILL.md");
   const workflows = read("skills/glab-stacked-diffs/references/workflows.md");
+  const entrypoint = read("AGENTS.md");
+  const portableEntrypoint = read("instructions/AGENTS.md");
 
   assert.match(implementation, /one after another|sequential/i);
   assert.match(git, /one after another|sequential/i);
+  for (const text of [entrypoint, portableEntrypoint, git, implementation]) {
+    assert.match(text, /never force-push/i);
+    assert.match(text, /merge.*target branch|target branch.*merg/is);
+    assert.match(text, /human-owned.*rewrite|rewrite.*user/is);
+  }
   assert.match(stacked, /real-diff draft MRs sequentially/i);
   assert.match(stacked, /Do not restack\s+descendants/i);
-  assert.match(stacked, /exact expected remote-head lease/i);
+  assert.match(stacked, /retarget only its immediate child/i);
+  assert.match(stacked, /ordinary push/i);
   assert.match(workflows, /Publish real diffs sequentially/i);
   for (const text of [implementation, git, stacked, workflows]) {
     assert.match(text, /immediate\s+child/i);
     assert.match(text, /predecessor.*merge|merge.*predecessor/is);
   }
-  assert.match(workflows, /Do not accept an automatic descendant rewrite/i);
+  assert.match(workflows, /Do not amend a published MR/i);
   assert.match(workflows, /Never create an empty placeholder MR/i);
   assert.match(
     implementation,

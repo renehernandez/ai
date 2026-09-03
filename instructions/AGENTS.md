@@ -65,8 +65,13 @@ limits, and require separately scoped acceptance for terminal actions.
   removing dependencies, or accepting dependency manifest or lockfile changes,
   requires explicit user authorization or an accepted implementation contract.
   Destructive commands still require explicit authorization.
-- Do not force-push ordinary follow-up, feedback, or CI-fix commits. Reserve
-  force-push for an authorized history rewrite or required history repair.
+- Never force-push from an agent workflow, even after conversational
+  authorization. When the target branch advances, merge it into the feature
+  branch, resolve conflicts, commit normally, and publish with an ordinary push.
+  If additive reconciliation is insufficient, stop with the repository,
+  feature branch or detached state, matching PR/MR, target branch, local head,
+  remote head, and reason a human-owned history rewrite is required. Do not
+  locally rebase a branch the agent is expected to publish.
 - Before pushing a non-default branch, inspect live hosted state. Do not reuse a
   branch whose only review artifact is closed or merged without user direction.
 - Request narrow reusable approval prefixes for recurring safe commands. Avoid

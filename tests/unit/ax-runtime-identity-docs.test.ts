@@ -94,6 +94,12 @@ test("hook source is repository-relative and snapshot-backed", () => {
   const readme = readFileSync("hooks/README.md", "utf-8");
 
   assert.equal(config.runtime.hooks.sourceDir, "hooks");
+  assert.ok(
+    config.runtime.hooks.registrations.some(
+      (registration: { id?: string }) =>
+        registration.id === "block-agent-force-push",
+    ),
+  );
   assert.match(readme, /repository-relative `hooks`/i);
   assert.match(readme, /immutable source snapshot/i);
   assert.doesNotMatch(readme, /\/Users\//);

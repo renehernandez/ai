@@ -46,6 +46,55 @@ const cloudflareSkills = (
   }
 ).skills.flatMap(({ names }) => names);
 
+test("RED skill-rule-evals: shared workflow surfaces expose no agent force-push route", () => {
+  const git = read("rules/git-and-review.md");
+  const implementation = read("rules/investigation-and-implementation.md");
+  const stacked = read("skills/glab-stacked-diffs/SKILL.md");
+  const commands = read(
+    "skills/glab-stacked-diffs/references/command-reference.md",
+  );
+  const troubleshooting = read(
+    "skills/glab-stacked-diffs/references/troubleshooting.md",
+  );
+  const workflows = read("skills/glab-stacked-diffs/references/workflows.md");
+
+  assert.deepEqual(simulatedCoverageGap("agent-force-push"), [
+    "agent-force-push",
+  ]);
+  for (const text of [git, implementation]) {
+    assert.doesNotMatch(text, /Force-push only for/i);
+    assert.doesNotMatch(text, /authorized history rewrite/i);
+  }
+  assert.doesNotMatch(stacked, /Agents may run `glab stack sync`/i);
+  assert.doesNotMatch(workflows, /git push --force/u);
+  assert.doesNotMatch(commands, /agent may force-push/i);
+  assert.doesNotMatch(troubleshooting, /retry.*force/i);
+});
+
+test("GREEN skill-rule-evals: shared workflow surfaces route additive publication", () => {
+  const config = read("ax.config.json");
+  const git = read("rules/git-and-review.md");
+  const implementation = read("rules/investigation-and-implementation.md");
+  const stacked = read("skills/glab-stacked-diffs/SKILL.md");
+  const commands = read(
+    "skills/glab-stacked-diffs/references/command-reference.md",
+  );
+  const troubleshooting = read(
+    "skills/glab-stacked-diffs/references/troubleshooting.md",
+  );
+  const workflows = read("skills/glab-stacked-diffs/references/workflows.md");
+
+  assert.deepEqual(currentManagedSkillCoverageGaps(managedSkills), []);
+  assert.match(config, /block-agent-force-push/u);
+  assert.match(git, /Never force-push from an agent workflow/i);
+  assert.match(implementation, /Reconcile upstream movement additively/i);
+  assert.match(stacked, /merge the updated\s+target into that child/i);
+  assert.match(commands, /Additive Publication for an Updated MR/i);
+  assert.match(troubleshooting, /Do not force past the rejection/i);
+  assert.match(workflows, /Reconcile an Updated Base/i);
+  assert.match(workflows, /git merge <resolved-base-sha>/u);
+});
+
 test("RED skill-rule-evals: artifact guidance does not ban valid test or documentation forms", () => {
   const testing = read("rules/testing-and-verification.md");
   const docs = read("rules/docs-and-specs.md");

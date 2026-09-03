@@ -65,9 +65,8 @@ Amends the current managed diff with staged changes and rebases later diffs.
 That local rebase changes descendant commit identities even when their
 incremental content is propagation-only.
 
-Use this command only while constructing an unpublished stack or when the
-selected entry is the stack tip. For feedback on a published non-tip MR, amend
-that source branch directly with a native hook-enabled `git commit --amend`;
+Use this command only while constructing an entirely unpublished stack. For
+feedback on any published MR, create a native hook-enabled follow-up commit;
 leave every descendant ref at its existing commit until predecessor promotion.
 
 Relevant live flags in `glab` 1.108 include:
@@ -104,28 +103,28 @@ creation, so `stack sync` is not the publication owner. Create each coherent
 real-diff draft sequentially through `change-request-create`, using the normal
 base for the root and the immediate predecessor branch for each descendant.
 
-Do not use `stack sync` to publish rewritten branches in an existing stack.
-Version 1.108 fetches the remote and then performs one bulk push with an
-unqualified lease. That does not bind the push to the remote SHAs captured by
-preflight and does not expose predecessor-ordered branch checkpoints.
+Agents do not run `stack sync`. Version 1.108 fetches the remote and then
+performs one bulk force-push with an unqualified lease, which violates the
+human-only rewritten-history boundary and hides predecessor-ordered branch
+checkpoints. Use additive commits and ordinary pushes for published branches.
 
 `stack sync` does not own reviewer-facing description policy. Apply
 `change-request-create`, then its selected internal provider mechanics, for description
 creation or updates and hosted readback.
 
-### Exact-Leased Publication for an Updated MR
+### Additive Publication for an Updated MR
 
-After a tip `glab stack amend` or a direct native amendment of a published
-non-tip MR, Finish pushes only the substantive MR source branch:
+After a native hook-enabled follow-up commit, Finish pushes only the substantive
+MR source branch without rewriting its published history:
 
 ```bash
-git push --force-with-lease=refs/heads/<branch>:<expected-sha> <selected-GitLab-url> refs/heads/<branch>:refs/heads/<branch>
+git push <selected-GitLab-url> refs/heads/<branch>:refs/heads/<branch>
 ```
 
-Read the expected SHA immediately before publication. The explicit lease makes
-any concurrent remote update reject the push instead of being absorbed by an
-intervening fetch. Leave every descendant source head untouched while its
-predecessor remains open. After success, read the amended MR source SHA back.
+Read the remote SHA immediately before publication. A concurrent or unexpected
+remote update makes the ordinary push reject; inspect it instead of bypassing
+the rejection. Leave every descendant source head untouched while its
+predecessor remains open. After success, read the updated MR source SHA back.
 
 ## Navigation and Inspection
 
@@ -164,10 +163,10 @@ an empty placeholder to reserve topology.
 
 ### Existing published stack
 
-After each substantive amendment, push only that MR source branch with its
-explicit expected-SHA lease. Do not rebase or publish descendants while the
-predecessor remains open. Their hosted gates stay provisional until
-predecessor promotion reaches them.
+After each substantive follow-up commit, ordinarily push only that MR source
+branch. Do not rebase or publish descendants while the predecessor remains
+open. Their hosted gates stay provisional until predecessor promotion reaches
+them.
 
 ### Reordered or rebased stack
 
@@ -183,8 +182,9 @@ predecessor remains open.
 - Keep native commit and push hooks enabled.
 - Treat a closed or merged MR as a topology change, not an ordinary sync input.
 - Do not run sync solely to “see what happens”; inspect its mutation set first.
-- Do not use an unqualified force push or unqualified lease for an amended MR.
-- Bind each published branch to the remote head captured immediately before the
-  wave. A mismatch or lease rejection requires inspection.
+- Never force-push or amend a published MR from an agent workflow.
+- Compare each published branch with the remote head captured immediately
+  before the wave. A non-fast-forward rejection requires inspection and an
+  additive reconciliation or a human-owned rewrite.
 - Keep MRs draft through technical readiness. Ready, merge, deployment, and
   cleanup stay with explicit terminal authority.

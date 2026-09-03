@@ -37,6 +37,16 @@
       },
       "registrations": [
         {
+          "id": "block-agent-force-push",
+          "event": "PreToolUse",
+          "matcher": "^Bash$",
+          "command": "pnpm exec tsx ~/.agents/hooks/block-agent-force-push.ts",
+          "targets": {
+            "claude": "~/.claude/settings.json",
+            "codex": "~/.codex/hooks.json"
+          }
+        },
+        {
           "id": "block-delete-outside-cwd",
           "event": "PreToolUse",
           "matcher": "^Bash$",

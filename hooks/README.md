@@ -57,11 +57,12 @@ The startup hook synchronizes a repository before a local agent session:
 - fast-forward the primary worktree that owns the configured default branch;
 - advance a clean detached task worktree when its HEAD is already reachable
   from the fetched remote default branch;
-- rebase a clean current feature worktree when safe;
+- fast-forward a clean current feature worktree when it has no unique commits;
+- leave a diverged feature worktree unchanged for additive target-branch
+  reconciliation during Execute;
 - fail startup for dirty task worktrees, detached task worktrees with local
   commits, diverged primary branches, and in-progress Git operations;
 - skip non-Git startup directories;
-- abort a conflicted rebase and leave the checkout unchanged;
 - emit structured agent-discovery metadata.
 
 Session context and lifecycle authority remain in the shared startup rule and
@@ -99,6 +100,33 @@ pnpm exec tsx ~/.agents/hooks/block-node-modules-bin.ts --help
 Malformed, missing, or unsupported hook payloads write a diagnostic to stderr
 and do not block an unrelated command. A matched direct binary path returns a
 deny decision with the path, command excerpt, reason, and replacement guidance.
+
+## `block-agent-force-push.ts`
+
+This `PreToolUse` guard denies agent Git pushes that would rewrite remote
+history. It covers force options, force-with-lease, short `-f` forms, leading-
+plus refspecs, supported command wrappers, literal nested shells, and dynamic
+push arguments that cannot be proven safe. It also blocks `git push --mirror`
+and `glab stack sync`, which can force-update published refs without spelling a
+force option in the outer agent command.
+
+When a target branch advances, agents fetch it, merge it into the feature
+branch, resolve conflicts, commit normally, and publish with an ordinary push.
+If a linear-history rewrite is genuinely required, the agent stops with the
+repository, branch, PR/MR, target, and local/remote head evidence for a human-
+owned operation. Conversational authorization does not bypass the guard.
+
+Inspect metadata or help from the synchronized runtime:
+
+```bash
+pnpm exec tsx ~/.agents/hooks/block-agent-force-push.ts --agent-discovery
+pnpm exec tsx ~/.agents/hooks/block-agent-force-push.ts --help
+```
+
+The hook protects supported intercepted shell calls. It does not intercept a
+human terminal, provider API mutation, or child process whose push is not
+statically visible. Treat it as an agent guardrail, not an operating-system or
+server-side branch-protection boundary.
 
 ## `block-delete-outside-cwd.ts`
 
@@ -144,6 +172,7 @@ Run the hook integration suite after changing source or registration behavior:
 
 ```bash
 pnpm exec tsx --test tests/integration/startup-git-sync.test.ts
+pnpm exec tsx --test tests/integration/block-agent-force-push.test.ts
 pnpm exec tsx --test tests/integration/block-delete-outside-cwd.test.ts
 pnpm exec tsx --test tests/integration/hook-registration-runtime.test.ts
 pnpm exec tsx --test tests/unit/hook-registration.test.ts

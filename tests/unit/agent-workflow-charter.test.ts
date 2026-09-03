@@ -106,6 +106,10 @@ test("GREEN canonical-ownership: the charter validation gate runs from the nativ
   assert.match(contracts, /const minimalReaderBinding =/);
   assert.match(
     contracts,
+    /change\.path\.startsWith\("hooks\/"\).*change\.path\.endsWith\("\.ts"\)/s,
+  );
+  assert.match(
+    contracts,
     /linear-breakdown\|linear-project-overview\|linearis/,
   );
   assert.match(

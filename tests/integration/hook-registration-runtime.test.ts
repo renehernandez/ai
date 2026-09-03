@@ -61,6 +61,10 @@ function fixture(root: string): {
       "utf-8",
     ),
   );
+  writeFileSync(
+    join(sourceRoot, "hooks", "shell-command.ts"),
+    readFileSync(join(repoRoot, "hooks", "shell-command.ts"), "utf-8"),
+  );
   mkdirSync(join(home, ".codex"), { recursive: true });
   mkdirSync(join(home, ".claude"), { recursive: true });
   writeFileSync(

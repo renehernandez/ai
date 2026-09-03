@@ -421,11 +421,9 @@ const behaviorScenarioContracts = {
     redName: "RED hook-registration:",
     greenName: "GREEN hook-registration:",
     owns: (change: Change) =>
-      [
-        "hooks/README.md",
-        "hooks/block-delete-outside-cwd.ts",
-        "scripts/ax/hook-registration.ts",
-      ].includes(change.path) ||
+      change.path === "hooks/README.md" ||
+      (change.path.startsWith("hooks/") && change.path.endsWith(".ts")) ||
+      change.path === "scripts/ax/hook-registration.ts" ||
       (change.path === "ax.config.json" &&
         /"registrations"/.test(change.additions)) ||
       (change.path === "scripts/ax/runtime-sync.ts" &&
