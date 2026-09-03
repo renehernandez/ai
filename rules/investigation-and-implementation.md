@@ -90,12 +90,17 @@ ownership, and the mandatory OpenSpec rehearsal boundary.
 - Reclassify each new user message against the accepted proposal before acting.
   A later observation, correction, question, or diagnostic fact supplies only
   that information; it does not authorize a broader inferred action. Pause and
-  present the exact proposed action before restacking or rebasing several MRs,
-  force-pushing, moving work between delivery units, rewriting a plan or spec,
+  present the exact proposed action before restacking or reconciling several
+  MRs, moving work between delivery units, rewriting a plan or spec,
   closing, canceling, superseding, or abandoning an existing PR/MR, changing
   required CI or release behavior, mutating shared infrastructure, or assigning
   reviewers or agents outside the accepted path. Narrow investigation and
   direct contract-preserving fixes remain authorized.
+- An agent never force-pushes. Reconcile upstream movement additively by merging
+  the target branch into the feature branch and publishing a normal commit. If
+  a linear-history rewrite is truly required, stop with the exact repository,
+  branch and PR/MR identities, target branch, local and remote heads, and the
+  reason the rewrite must be performed by the user.
 - Planning, documenting, recommending, or accepting a plan that contains a live
   mutation does not authorize executing it. First-person user ownership such as
   `I will` or `I'll` perform the mutation reserves that action to the user and

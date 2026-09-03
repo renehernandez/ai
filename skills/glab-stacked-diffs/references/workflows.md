@@ -11,7 +11,7 @@ authority remains with Explore, Plan, Execute, Review, and Finish.
 - Update one published MR
 - Review provisional descendants
 - Add or reorder a diff
-- Rebase onto an updated base
+- Reconcile an updated base
 - Handle a predecessor merge
 - Maintain navigation and descriptions
 
@@ -85,9 +85,8 @@ When feedback changes one MR, amend and publish only that MR:
 3. Resolve the live MR for that exact source branch.
 4. Apply only that MR's correction.
 5. Stage intended files and run focused proof.
-6. Amend only the selected source branch with native hooks enabled. Use
-   `glab stack amend` only when the selected entry is the stack tip; otherwise
-   use `git commit --amend` so descendant refs do not move.
+6. Commit the correction on the selected source branch with native hooks
+   enabled. Do not amend any published MR or move descendant refs.
 
 ```bash
 git branch --show-current
@@ -102,23 +101,27 @@ git add <paths>
 ```
 
 ```bash
-git commit --amend --no-edit
+git commit -m "Address review feedback"
 ```
 
-Do not accept an automatic descendant rewrite or invoke the stack tool's
-descendant-rewriting amendment path for a published non-tip MR. Preserve the
-descendants' existing source heads and mark their gates provisional.
+Do not amend a published MR or accept an automatic descendant rewrite. Create a
+native hook-enabled follow-up commit on the substantive MR, preserve the
+descendants' existing source heads, and mark their gates provisional.
 
-Immediately before publication, re-read this MR's remote head. If it still
-matches preflight, Finish publishes only this branch with an exact lease:
+Immediately before publication, re-read this MR's remote head. If the local
+branch remains a fast-forward of that head, Finish publishes only this branch
+with an ordinary push:
 
 ```bash
-git push --force-with-lease=refs/heads/<branch>:<expected-sha> <selected-GitLab-url> refs/heads/<branch>:refs/heads/<branch>
+git push <selected-GitLab-url> refs/heads/<branch>:refs/heads/<branch>
 ```
 
-After success, verify that branch's live head and target, update reviewer-facing
-content through `change-request-create`, and explicitly request current hosted
-review. Do not restack or request Nitro for target-only movement on descendants.
+A non-fast-forward rejection blocks publication until the agent can merge the
+target or remote branch additively; a required rewritten-history recovery is
+human-owned. After success, verify that branch's live head and target, update
+reviewer-facing content through `change-request-create`, and explicitly request
+current hosted review. Do not restack or request Nitro for target-only movement
+on descendants.
 
 ## Review Provisional Descendants
 
@@ -152,25 +155,24 @@ hosted MRs; it does not rebase Git ancestry. If Plan accepts a recovery, it must
 name the recoverable ancestry operation, exact source-versus-target diff proof,
 and total target order. Execute repairs and verifies local ancestry first.
 Finish alone may run `stack reorder` or otherwise retarget hosted MRs, followed
-by one exact-leased source publication at a time in the accepted total order
-and refreshed gates for every materially changed effective diff. This is an
+by one ordinary source publication at a time in the accepted total order and
+refreshed gates for every materially changed effective diff. This is an
 explicit topology repair, not automatic descendant propagation after ordinary
 feedback. Do not present `stack save` plus `stack reorder` as an insertion or
 restack primitive.
 
-## Rebase onto an Updated Base
+## Reconcile an Updated Base
 
-Rebase only for a concrete reason such as conflicts, base-sensitive failures,
-or an explicit request. Avoid churn from routine freshness rebases.
+Agents reconcile an updated base additively. They never rebase a published
+branch that they must subsequently push.
 
 1. Fetch the normal base.
 2. Navigate to the first diff.
 3. Record current remote heads.
-4. Rebase onto the resolved base commit.
-5. Resolve conflicts bottom-to-top and inspect every incremental diff.
-6. If this changes an already published predecessor, publish only that branch
-   with an exact expected-SHA lease. Do not propagate the rewrite to
-   descendants before predecessor merge.
+4. Merge the resolved base commit into the current published branch.
+5. Resolve conflicts, commit normally, and inspect every incremental diff.
+6. Publish only that branch with an ordinary push. Do not modify descendants
+   before predecessor merge.
 
 ```bash
 git fetch origin <base>
@@ -181,10 +183,13 @@ glab stack first
 ```
 
 ```bash
-git rebase <resolved-base-sha>
+git merge <resolved-base-sha>
 ```
 
-Do not combine these observations and mutations into one compound command.
+Resolve conflicts, create a native hook-enabled merge commit, and publish with
+an ordinary push. Do not combine these observations and mutations into one
+compound command. If project policy requires a linear rewrite, stop with the
+exact stack and head evidence for a human-owned operation.
 
 ## Handle a Predecessor Merge
 
@@ -193,18 +198,17 @@ This workflow requires explicit merge authority for the predecessor.
 1. Verify the predecessor's live source head and merge result.
 2. Fetch the normal base and resolve the merged commit.
 3. Confirm GitLab retargeted the immediate child to the normal base.
-4. Capture the child's exact remote source SHA.
-5. Restack the child using the merged commit and old predecessor head so the
-   predecessor commits are not replayed.
-6. Publish the child atomically with an explicit lease naming the captured
-   remote head.
+4. Capture the child's remote source SHA.
+5. Merge the updated normal base into the child so reconciliation is additive.
+6. Publish the child with an ordinary push; a non-fast-forward rejection stops
+   the workflow for inspection.
 7. Refresh every changed effective-diff gate before an unready child can be
    marked ready; an already-ready child stays ready but remains blocked from
    merge until those gates pass.
 8. Leave deeper descendants untouched until their own predecessor merges.
 
-If the lease is rejected, stop and inspect external commits. Do not accept the
-new remote SHA and retry blindly.
+If the ordinary push is rejected, stop and inspect external commits. Do not
+force past the rejection or accept the new remote SHA blindly.
 
 All technically ready MRs that have never been marked ready remain draft.
 Single-MR merge authority marks only the current bottom MR ready immediately

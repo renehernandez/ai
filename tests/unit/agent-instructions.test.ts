@@ -329,6 +329,13 @@ test("Git rules separate Review from Finish and use native hook-enabled commits"
 
   assert.match(text, /native.*Git commit|Git commit.*repository hooks/i);
   assert.match(text, /never.*--no-verify/i);
+  assert.match(text, /Never force-push from an agent workflow/i);
+  assert.match(
+    text,
+    /merge it into the feature branch.*ordinary push.*history remains/is,
+  );
+  assert.match(text, /human-owned history rewrite/i);
+  assert.match(text, /Do not locally rebase.*expected to\s+publish/is);
   assert.match(text, /Review.*read-only/is);
   assert.match(text, /Finish.*provider mutation/is);
   assert.match(text, /technical_readiness_checkpoint/);

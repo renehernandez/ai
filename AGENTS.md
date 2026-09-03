@@ -62,9 +62,13 @@ limits, and require separately scoped acceptance for terminal actions.
   and no `--no-verify`.
 - Use native hook-enabled Git commits. Fix hook failures before retrying; never
   bypass repository hooks.
-- Do not force-push ordinary follow-up, review-feedback, or CI-fix commits.
-  Force-push only for an explicitly authorized history rewrite or a required
-  history repair such as rebase/conflict recovery.
+- Never force-push from an agent workflow, even after conversational
+  authorization. When the target branch advances, merge it into the feature
+  branch, resolve conflicts, commit normally, and publish with an ordinary push.
+  If additive reconciliation is insufficient, stop with the repository,
+  feature branch or detached state, matching PR/MR, target branch, local head,
+  remote head, and reason a human-owned history rewrite is required. Do not
+  locally rebase a branch the agent is expected to publish.
 - Before pushing a non-default branch, inspect live hosted state. Do not reuse a
   branch whose only review artifact is closed or merged without user direction.
 - Ask for narrowly scoped reusable approval prefixes for recurring safe
