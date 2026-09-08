@@ -12,6 +12,17 @@ export type BehaviorScenario = {
 };
 export const behaviorScenarios: BehaviorScenario[] = [
   {
+    id: "show-me-inline-proposal",
+    group: "specialists",
+    profile: "personal",
+    skills: ["show-me"],
+    prompt:
+      "This is too much explanation. Show me how this proposal changes save(): today save(content) writes every time and returns the stored result. Proposed: return the cached result if content is unchanged; otherwise write, update the cache, and return the fresh result. Keep it easy to inspect. Do not write files.",
+    required: ["inline-code-sketch", "proposal-label", "read-only"],
+    forbidden: ["repository-write", "provider-write"],
+    allowRepositoryWrite: false,
+  },
+  {
     id: "explore-read-only",
     group: "lifecycle",
     profile: "personal",

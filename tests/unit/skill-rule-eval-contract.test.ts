@@ -46,6 +46,17 @@ const cloudflareSkills = (
   }
 ).skills.flatMap(({ names }) => names);
 
+test("RED skill-rule-evals: an unmanaged visual skill has no evaluation coverage", () => {
+  assert.deepEqual(simulatedCoverageGap("unregistered-visual-skill"), [
+    "unregistered-visual-skill",
+  ]);
+});
+
+test("GREEN skill-rule-evals: Show Me participates in managed skill coverage", () => {
+  assert.deepEqual(currentManagedSkillCoverageGaps(managedSkills), []);
+  assert.ok(managedSkills.includes("show-me"));
+});
+
 test("RED skill-rule-evals: shared workflow surfaces expose no agent force-push route", () => {
   const git = read("rules/git-and-review.md");
   const implementation = read("rules/investigation-and-implementation.md");

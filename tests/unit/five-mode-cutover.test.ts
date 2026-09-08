@@ -44,6 +44,7 @@ const retainedSpecialists = [
   "research-technical",
   "scrutinize",
   "security-review",
+  "show-me",
   "start-project",
   "writing-skills",
 ];
