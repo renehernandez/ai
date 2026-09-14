@@ -12,6 +12,17 @@ test("GREEN authority: managed Pi workflow keeps Ready publication separate from
   assert.match(workflow, /Merge requires separate\s+user authority/);
   assert.match(workflow, /one hosted\s+repair batch/);
   assert.match(workflow, /direct unmanaged Pi sessions/);
+  assert.match(workflow, /project-policy source or explicit user disposition/);
+  assert.match(workflow, /cannot excuse failed, pending or unknown/);
+});
+
+test("RED authority: absent CI does not create a publication policy", () => {
+  const workflow = read("skills/handoff-brief/references/paseo-workflow.md");
+  assert.doesNotMatch(workflow, /an empty check list establishes/i);
+  assert.match(
+    workflow,
+    /An empty check list alone does not establish that policy/,
+  );
 });
 
 test("RED authority: Linear provider routing does not force the CLI or block an available integration", () => {

@@ -140,14 +140,27 @@ export function github(
   )
     throw new Error("Unknown required CI state");
   result.status =
-    !completion || checks.some((check) => check.bucket === "pending")
-      ? "waiting"
-      : "completed";
+    checks.length === 0 && !options.noRequiredCiEvidence?.trim()
+      ? "awaiting-user"
+      : !completion || checks.some((check) => check.bucket === "pending")
+        ? "waiting"
+        : "completed";
   result.evidence = JSON.stringify({
     head: options.head,
     bot: options.botLogin,
     completionReceived: completion,
     requiredCi: checks,
+    ...(checks.length === 0
+      ? {
+          noRequiredCiEvidence: options.noRequiredCiEvidence?.trim() || null,
+          ...(result.status === "awaiting-user"
+            ? {
+                blocker:
+                  "Empty required CI set needs explicit policy or user disposition",
+              }
+            : {}),
+        }
+      : {}),
     reviews,
     comments,
     inline,

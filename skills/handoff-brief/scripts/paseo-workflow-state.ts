@@ -1,5 +1,13 @@
 import { execFile } from "node:child_process";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,6 +33,7 @@ export type Review = {
   outcomes?: Record<string, Outcome>;
   error?: string;
 };
+export type Snapshot = { path: string; sha256: string };
 export type Decision = {
   id: string;
   action: "fix" | "dismiss" | "question";
@@ -67,14 +76,15 @@ export type Workflow = {
       Phase,
       {
         fingerprint: string;
-        artifact: string;
+        artifact: Snapshot;
+        lenses: Snapshot;
         head?: string;
         reviews: Record<string, Review>;
       }
     >
   >;
   decisions: Partial<Record<Phase | "hosted", Decision[]>>;
-  handoff?: Review;
+  handoff?: Review & { brief: Snapshot; planResolution: Snapshot };
   repairs: Partial<
     Record<
       "implementation" | "hosted",
@@ -110,6 +120,26 @@ export function phaseOf(value: unknown): Phase {
   );
   return value;
 }
+export async function createSnapshots(
+  statePath: string,
+  contents: Record<string, string>,
+) {
+  const directory = await mkdtemp(
+    resolve(dirname(statePath), ".paseo-snapshot-"),
+  );
+  const snapshots: Record<string, Snapshot> = {};
+  for (const [name, content] of Object.entries(contents)) {
+    requireThat(/^[a-z-]+\.(md|json)$/.test(name), "Invalid snapshot filename");
+    const path = resolve(directory, name);
+    await writeFile(path, content, { flag: "wx", mode: 0o400 });
+    snapshots[name] = {
+      path,
+      sha256: createHash("sha256").update(content).digest("hex"),
+    };
+  }
+  return snapshots;
+}
+
 async function save(path: string, state: Workflow) {
   const temporary = `${path}.${process.pid}.tmp`;
   await writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`, {

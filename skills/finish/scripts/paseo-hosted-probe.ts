@@ -16,6 +16,7 @@ export type ProbeOptions = {
   reviewer: "genie" | "nitro";
   botLogin: string;
   classification?: "standard" | "removal-only";
+  noRequiredCiEvidence?: string;
 };
 export type Command = (
   program: string,
@@ -313,6 +314,7 @@ function main(): void {
       reviewer: { type: "string" },
       "bot-login": { type: "string" },
       classification: { type: "string" },
+      "no-required-ci-evidence": { type: "string" },
     },
     strict: true,
   });
@@ -325,10 +327,10 @@ function main(): void {
       !["standard", "removal-only"].includes(values.classification))
   )
     throw new Error(
-      "Required: --artifact-url URL --head SHA --reviewer genie|nitro --bot-login POLICY_LOGIN [--classification standard|removal-only]",
+      "Required: --artifact-url URL --head SHA --reviewer genie|nitro --bot-login POLICY_LOGIN [--classification standard|removal-only] [--no-required-ci-evidence POLICY_DISPOSITION]",
     );
   process.stdout.write(
-    `${JSON.stringify(probeHosted({ artifactUrl: values["artifact-url"], head: values.head, reviewer: values.reviewer as ProbeOptions["reviewer"], botLogin: values["bot-login"], classification: values.classification as ProbeOptions["classification"] }))}\n`,
+    `${JSON.stringify(probeHosted({ artifactUrl: values["artifact-url"], head: values.head, reviewer: values.reviewer as ProbeOptions["reviewer"], botLogin: values["bot-login"], classification: values.classification as ProbeOptions["classification"], noRequiredCiEvidence: values["no-required-ci-evidence"] }))}\n`,
   );
 }
 if (

@@ -61,8 +61,23 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
   assert.deepEqual(currentManagedSkillCoverageGaps(managedSkills), []);
   assert.ok(managedSkills.includes("handoff-brief"));
   assert.ok(managedSkills.includes("review"));
+  assert.ok(managedSkills.includes("finish"));
+  assert.match(
+    read("skills/handoff-brief/references/paseo-workflow.md"),
+    /project-policy source or explicit user disposition/,
+  );
   assert.ok(
     axConfig.runtime.skillSymlinkTargets.includes("~/.pi/agent/skills"),
+  );
+});
+
+test("RED skill-rule-evals: missing CI does not introduce an ungoverned waiver skill", () => {
+  assert.deepEqual(simulatedCoverageGap("automatic-ci-waiver"), [
+    "automatic-ci-waiver",
+  ]);
+  assert.match(
+    read("skills/handoff-brief/references/paseo-workflow.md"),
+    /An empty check list alone does not establish that policy/,
   );
 });
 

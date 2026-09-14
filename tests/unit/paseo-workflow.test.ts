@@ -1,8 +1,9 @@
 // charter-contracts: pi-paseo-workflow
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import test from "node:test";
 import {
   collectReviews,
@@ -129,6 +130,8 @@ test("GREEN pi-paseo-workflow: deliberate handoff reaches Ready once without spa
     f.transport,
   );
   await f.review("implementation");
+  const reviewed = await f.read();
+  await writeFile(f.artifactPath, "Original edited after review and handoff.");
   const receipt = {
     artifactUrl: "https://github.com/owner/repo/pull/1",
     head: "first",
@@ -146,6 +149,15 @@ test("GREEN pi-paseo-workflow: deliberate handoff reaches Ready once without spa
     finished.finished,
     "Finish inspected provider head and Ready state.",
   );
+  assert.deepEqual(
+    finished.rounds.planning?.artifact,
+    reviewed.rounds.planning?.artifact,
+  );
+  assert.deepEqual(
+    finished.rounds.implementation?.artifact,
+    reviewed.rounds.implementation?.artifact,
+  );
+  assert.deepEqual(finished.handoff?.brief, reviewed.handoff?.brief);
   assert.equal((await f.read()).finished, receipt.evidence);
   assert.equal(f.calls.filter((args) => args[0] === "run").length, 6);
   assert.equal(new Set(f.sessions.keys()).size, 6);
@@ -178,10 +190,17 @@ test("GREEN pi-paseo-workflow: deliberate handoff reaches Ready once without spa
 
 test("RED pi-paseo-workflow: repeated phase cannot dispatch another review", async () => {
   const f = await fixture();
+  const originalArtifact = await readFile(f.artifactPath, "utf8");
   await dispatchReview(
     f.path,
     { phase: "planning", artifactPath: f.artifactPath },
     f.transport,
+  );
+  const reserved = (await f.read()).rounds.planning?.artifact;
+  assert.ok(reserved);
+  await writeFile(
+    f.artifactPath,
+    "A different artifact cannot replace the reserved review.",
   );
   await assert.rejects(
     dispatchReview(
@@ -191,6 +210,8 @@ test("RED pi-paseo-workflow: repeated phase cannot dispatch another review", asy
     ),
     /already dispatched/,
   );
+  assert.deepEqual((await f.read()).rounds.planning?.artifact, reserved);
+  assert.equal(await readFile(reserved.path, "utf8"), originalArtifact);
   assert.equal(f.calls.length, 2);
 });
 
@@ -494,4 +515,64 @@ test("implementation questions block publication and applicable fixes consume on
   );
   await transition(f.path, "publication", { ...receipt, head: "repaired" });
   assert.equal((await f.read()).publication?.head, "repaired");
+});
+
+test("large plan, implementation and handoff use private snapshots with bounded argv", async () => {
+  const f = await fixture();
+  const large = "Source evidence.\n".repeat(20_000);
+  assert.ok(Buffer.byteLength(large) > 200 * 1024);
+  const transport: Transport = async (args, timeout) => {
+    if (args[0] === "run") {
+      assert.ok(Buffer.byteLength(args.join("\0")) < 8 * 1024);
+      assert.ok(!args.join("\0").includes(large));
+      await writeFile(f.artifactPath, "Original changed after reservation.");
+    }
+    return f.transport(args, timeout);
+  };
+  const verify = async (
+    snapshot: { path: string; sha256: string },
+    content: string,
+  ) => {
+    assert.equal(await readFile(snapshot.path, "utf8"), content);
+    assert.equal(
+      snapshot.sha256,
+      createHash("sha256").update(content).digest("hex"),
+    );
+    assert.equal((await stat(snapshot.path)).mode & 0o777, 0o400);
+    assert.equal((await stat(dirname(snapshot.path))).mode & 0o777, 0o700);
+  };
+  const review = async (phase: "planning" | "implementation") => {
+    const content = `${phase}\n${large}`;
+    await writeFile(f.artifactPath, content);
+    await dispatchReview(
+      f.path,
+      { phase, artifactPath: f.artifactPath, head: "first" },
+      transport,
+    );
+    const round = (await f.read()).rounds[phase];
+    assert.ok(round);
+    await verify(round.artifact, content);
+    await verify(round.lenses, JSON.stringify((await f.read()).lenses[phase]));
+    await collectReviews(f.path, { phase }, transport);
+    await transition(f.path, "triage", { phase, decisions: [] });
+  };
+  await review("planning");
+  const brief = `Accepted implementation brief\n${large}`;
+  const planResolution = `Plan decisions\n${large}`;
+  await writeFile(f.artifactPath, brief);
+  await handoff(
+    f.path,
+    { briefPath: f.artifactPath, planResolution },
+    transport,
+  );
+  const handed = (await f.read()).handoff;
+  assert.ok(handed);
+  await verify(handed.brief, brief);
+  await verify(handed.planResolution, planResolution);
+  await review("implementation");
+  assert.equal(f.calls.filter((args) => args[0] === "run").length, 6);
+  await assert.rejects(
+    handoff(f.path, { briefPath: f.artifactPath, planResolution }, transport),
+    /already dispatched/,
+  );
 });

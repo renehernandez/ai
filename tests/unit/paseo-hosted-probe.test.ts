@@ -24,12 +24,18 @@ function github(
     partial?: boolean;
     pending?: boolean;
     human?: boolean;
+    checks?: unknown[] | string;
   } = {},
 ): Command {
   let reads = 0;
   return (program, args) => {
     assert.equal(program, "gh");
     assert.ok(!args.includes("--method"));
+    if (args[0] === "pr")
+      if (overrides.checks !== undefined)
+        return typeof overrides.checks === "string"
+          ? overrides.checks
+          : JSON.stringify(overrides.checks);
     if (args[0] === "pr")
       return JSON.stringify([
         { name: "unit", bucket: overrides.pending ? "pending" : "pass" },
@@ -116,6 +122,71 @@ test("RED pi-paseo-hosted: stale bot review and pending required CI cannot compl
   assert.equal(
     probeHosted(options, github({ pending: true })).status,
     "waiting",
+  );
+});
+
+test("RED pi-paseo-hosted: an empty required CI set needs explicit nonblank disposition", () => {
+  for (const noRequiredCiEvidence of [undefined, "", "  \n "]) {
+    const result = probeHosted(
+      { ...options, noRequiredCiEvidence },
+      github({ checks: [] }),
+    );
+    assert.equal(result.status, "awaiting-user");
+    assert.match(result.evidence, /Empty required CI set/);
+  }
+});
+
+test("GREEN pi-paseo-hosted: explicit no-CI disposition is retained for an empty required set", () => {
+  const noRequiredCiEvidence =
+    "Project policy explicitly requires no hosted CI for this artifact";
+  const result = probeHosted(
+    { ...options, noRequiredCiEvidence },
+    github({ checks: [] }),
+  );
+  assert.equal(result.status, "completed");
+  assert.equal(
+    JSON.parse(result.evidence).noRequiredCiEvidence,
+    noRequiredCiEvidence,
+  );
+  assert.equal(
+    probeHosted(
+      { ...options, noRequiredCiEvidence },
+      github({ checks: [], completion: false }),
+    ).status,
+    "waiting",
+  );
+});
+
+test("RED pi-paseo-hosted: no-CI disposition cannot hide failures, pending CI, or unavailable evidence", () => {
+  const disposition = {
+    ...options,
+    noRequiredCiEvidence: "Explicit project no-CI disposition",
+  };
+  const failed = probeHosted(
+    disposition,
+    github({ checks: [{ name: "unit", bucket: "fail" }] }),
+  );
+  // Completed denotes collection for repair, never successful CI.
+  assert.equal(failed.status, "completed");
+  assert.ok(
+    failed.findings.some(
+      (finding) => JSON.parse(String(finding.evidence)).kind === "ci",
+    ),
+  );
+  assert.equal(JSON.parse(failed.evidence).requiredCi[0].bucket, "fail");
+  assert.equal(JSON.parse(failed.evidence).noRequiredCiEvidence, undefined);
+  assert.equal(
+    probeHosted(disposition, github({ pending: true })).status,
+    "waiting",
+  );
+  assert.equal(
+    probeHosted(disposition, github({ checks: [{ bucket: "unknown" }] }))
+      .status,
+    "awaiting-user",
+  );
+  assert.equal(
+    probeHosted(disposition, github({ checks: "" })).status,
+    "awaiting-user",
   );
 });
 

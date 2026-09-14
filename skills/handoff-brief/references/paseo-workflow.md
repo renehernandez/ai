@@ -130,6 +130,17 @@ the URL, `--head`, the full SHA, `--reviewer`, the configured reviewer, and
 no shell interpolation is involved. Probe output is raw evidence for semantic
 triage. Never convert a missing bot completion or absent CI policy into a pass.
 
+For GitHub repositories that intentionally have no required CI, pass
+`--no-required-ci-evidence` with the project-policy source or explicit user disposition.
+An empty check list alone does not establish that policy. This exception applies
+only to an empty required check set; it cannot excuse failed, pending or unknown
+CI, or missing reviewer completion.
+
+The runner stores review artifacts, lens definitions and handoff content in
+private read-only snapshots beside its state. Launch prompts carry snapshot paths
+and digests instead of full documents. Preserve these snapshots with the task;
+editing an original document does not change an already-dispatched assignment.
+
 Stop on any failed phase and report the saved error. A reserved launch with
 no returned identity needs Paseo inspection before human-directed recovery;
 never delete state to bypass the one-pass limit. After hosted repair, inspect

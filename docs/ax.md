@@ -146,6 +146,16 @@ Install Pi and Paseo using their official installers, and authenticate Pi's
 repository does not supply or synchronize credentials. The initial integration
 targets Pi 0.85.1, Paseo 0.8.0 and the pinned pi-mcp-adapter 2.34.0.
 
+Install the pinned MCP package before the first managed session, so a cold
+package download does not consume the wrapper's 60-second startup deadline:
+
+```bash
+pi install npm:pi-mcp-adapter@2.34.0
+```
+
+If startup times out, inspect the package installation before requesting a new
+session. The workflow does not retry a failed launch automatically.
+
 After the migration is merged, use the clean default-branch source:
 
 ```bash
