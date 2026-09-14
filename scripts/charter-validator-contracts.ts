@@ -85,6 +85,102 @@ export type Change = {
 };
 
 const behaviorScenarioContracts = {
+  "pi-paseo-workflow": {
+    principles: ["authority", "canonical-ownership"],
+    path: "tests/unit/paseo-workflow.test.ts",
+    redName: "RED pi-paseo-workflow:",
+    greenName: "GREEN pi-paseo-workflow:",
+    owns: (change: Change) => change.path.startsWith("skills/handoff-brief/"),
+    redEvidence: {
+      source: {
+        binding: {
+          kind: "import",
+          module: "../../skills/handoff-brief/scripts/paseo-workflow.ts",
+          name: "dispatchReview",
+        },
+        callee: /^dispatchReview$/,
+      },
+      assertion: { callee: /^assert\.rejects$/ },
+    },
+    greenEvidence: {
+      source: {
+        binding: {
+          kind: "import",
+          module: "../../skills/handoff-brief/scripts/paseo-workflow.ts",
+          name: "transition",
+        },
+        callee: /^transition$/,
+      },
+      assertion: { callee: /^assert\.equal$/ },
+    },
+  },
+  "pi-paseo-hosted": {
+    principles: ["authority", "canonical-ownership"],
+    path: "tests/unit/paseo-hosted-probe.test.ts",
+    redName: "RED pi-paseo-hosted:",
+    greenName: "GREEN pi-paseo-hosted:",
+    owns: (change: Change) =>
+      change.path.startsWith("skills/finish/scripts/paseo-"),
+    redEvidence: {
+      source: {
+        binding: {
+          kind: "import",
+          module: "../../skills/finish/scripts/paseo-hosted-probe.ts",
+          name: "probeHosted",
+        },
+        callee: /^probeHosted$/,
+      },
+      assertion: { callee: /^assert\.equal$/ },
+    },
+    greenEvidence: {
+      source: {
+        binding: {
+          kind: "import",
+          module: "../../skills/finish/scripts/paseo-hosted-probe.ts",
+          name: "probeHosted",
+        },
+        callee: /^probeHosted$/,
+      },
+      assertion: { callee: /^assert\.equal$/ },
+    },
+  },
+  "pi-paseo-config": {
+    principles: ["canonical-ownership", "authority"],
+    path: "tests/unit/json-config-sync.test.ts",
+    redName: "RED pi-paseo-config:",
+    greenName: "GREEN pi-paseo-config:",
+    owns: (change: Change) =>
+      [
+        "scripts/ax.ts",
+        "scripts/ax/config-sync.ts",
+        "scripts/ax/runtime-sync.ts",
+        "scripts/ax/source-snapshot.ts",
+        "scripts/ax/json-config.ts",
+        "scripts/ax/toml-config.ts",
+      ].includes(change.path),
+    redEvidence: {
+      source: {
+        binding: {
+          kind: "import",
+          module: "../../scripts/ax/config-sync.ts",
+          name: "syncManagedConfigs",
+        },
+        callee: /^syncManagedConfigs$/,
+      },
+      assertion: { callee: /^assert\.throws$/ },
+    },
+    greenEvidence: {
+      source: {
+        binding: {
+          kind: "import",
+          module: "../../scripts/ax/config-sync.ts",
+          name: "syncManagedConfigs",
+        },
+        callee: /^syncManagedConfigs$/,
+      },
+      assertion: { callee: /^assert\.(?:equal|deepEqual)$/ },
+    },
+  },
   "openspec-lifecycle-overlay": {
     principles: ["authority", "canonical-ownership"],
     path: "tests/unit/openspec-lifecycle-overlay-contract.test.ts",

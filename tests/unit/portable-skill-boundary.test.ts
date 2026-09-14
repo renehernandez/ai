@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { validateSkillFolder } from "../../scripts/skill-validate.ts";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const modeNames = ["explore", "plan", "execute", "review", "finish"];
@@ -10,32 +11,18 @@ const modeScriptDirs = ["plan", "execute", "review", "finish"].map(
   (mode) => `skills/${mode}/scripts`,
 );
 
-function collectTypeScriptFiles(dir: string): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const path = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      return collectTypeScriptFiles(path);
-    }
-    return entry.isFile() && path.endsWith(".ts") ? [path] : [];
-  });
-}
-
 test("mode-owned helper scripts stay inside their portable skill folder", () => {
-  const forbiddenImportPatterns = [
-    /\.\.\/\.\.\/\.\.\/scripts\//,
-    /\.\.\/\.\.\/[^/]+\/scripts\//,
-    /from\s+["']\/[^"']+/, // absolute local imports
-  ];
-
   for (const scriptDir of modeScriptDirs) {
     const absoluteScriptDir = join(repoRoot, scriptDir);
     assert.equal(statSync(absoluteScriptDir).isDirectory(), true);
-    for (const file of collectTypeScriptFiles(absoluteScriptDir)) {
-      const content = readFileSync(file, "utf8");
-      for (const pattern of forbiddenImportPatterns) {
-        assert.doesNotMatch(content, pattern, file);
-      }
-    }
+    // The canonical validator rejects static and dynamic cross-package imports,
+    // while allowing an explicitly invoked CLI owned by another installed skill.
+    const result = validateSkillFolder(dirname(absoluteScriptDir));
+    assert.deepEqual(
+      result.errors.filter((error) => error.includes("portable-boundary:")),
+      [],
+      scriptDir,
+    );
   }
 });
 

@@ -117,13 +117,63 @@ file, constructs a source-preserving candidate, parses the complete TOML, and
 runs `codex features list` against a temporary `CODEX_HOME`. This loads the
 complete config schema and types without requiring auth or connectivity. AX then
 verifies that Codex Desktop has not changed the original bytes and uses a
-same-directory atomic rename. A matching file is not rewritten. Validate is
+recoverable transaction. A matching file is not rewritten. Validate is
 read-only and requires both convergence and a successful Codex load.
 
 A missing config is ordinary drift; sync creates the minimum managed document.
 AX rejects alternate targets, symlinked config paths, unsafe parent paths,
 ambiguous TOML representations, validator failures, and concurrent target
 changes without replacing the original file.
+
+Pi settings, Pi model overrides and Paseo config use JSON `managedPaths` at
+`~/.pi/agent/settings.json`, `~/.pi/agent/models.json` and `~/.paseo/config.json`.
+Each entry names a path and value. An object or array at that path is replaced
+as a whole; other JSON values survive, although formatting may change.
+`expandHome: true` expands strings beginning with `~/` within that entry.
+
+The tracked Paseo profile array and five `ax-` provider objects are AX-owned.
+Add or modify those profiles in source. Unrelated provider objects remain
+unowned. Credentials, sessions and Pi's `auth.json` are never AX targets.
+Top-level sync applies configs, instructions, skills, hooks and selected profile
+through the same runtime transaction. Use it for migrations that change both
+provider commands and their adapters.
+
+## Use Pi with Paseo
+
+Install Pi and Paseo using their official installers, and authenticate Pi's
+`openai-codex` provider with your ChatGPT account. Configure the
+`cloudflare-ai-gateway` provider locally for your account and Gateway. This
+repository does not supply or synchronize credentials. The initial integration
+targets Pi 0.85.1, Paseo 0.8.0 and the pinned pi-mcp-adapter 2.34.0.
+
+After the migration is merged, use the clean default-branch source:
+
+```bash
+pnpm ax sync --profile personal
+pnpm ax validate
+paseo reload
+```
+
+Use `work` instead of `personal` for work instructions. Both profiles initially
+use ChatGPT for OpenAI and Cloudflare AI Gateway for open-weight models.
+Paseo applies provider/profile changes to new sessions; existing sessions keep
+their launch configuration. Read its reload result before assuming changes
+were applied.
+
+Select **Astra · Plan** in Paseo for brainstorming, research and planning.
+The [Pi workflow](../skills/handoff-brief/references/paseo-workflow.md) hands the
+accepted brief to a fresh Sol session and runs the fixed reviewers. You do not
+choose a model each time a reviewer or implementation worker starts.
+
+Managed launches require Node 26, Pi on PATH, and the synchronized mandatory
+adapter. Nonreview roles explicitly load the pinned MCP adapter; its first
+launch can require package download. Reviewers only receive read/search tools.
+Direct unmanaged `pi` launches do not acquire the managed wrapper's guarantees.
+
+AX corrects GLM 5.3's bundled output/context limits and enables its supported
+reasoning-effort control. A successful config validation does not prove model
+availability: the workflow rejects provider errors, empty/truncated review
+output and missing reviewer evidence.
 
 ## Synchronize repo-local OpenSpec
 

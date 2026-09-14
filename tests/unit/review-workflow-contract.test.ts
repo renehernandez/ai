@@ -681,6 +681,49 @@ test("authoritative removal-only evidence rejects a differing declaration", () =
   );
 });
 
+test("RED removal-only-evidence: exported lens catalog cannot replace completed review evidence", () => {
+  const catalog = JSON.parse(
+    execFileSync(
+      process.execPath,
+      [join(root, "skills/review/scripts/review-catalog.ts")],
+      { encoding: "utf8" },
+    ),
+  );
+  const checkpoint = passingCheckpoint();
+  checkpoint.reviewResults = catalog.implementation;
+  assert.throws(() =>
+    validateTechnicalReadinessCheckpoint(checkpoint, {
+      target: "final_implementation",
+      targetBase: "main",
+      targetBaseSha: "base-a",
+      head: "head-a",
+    }),
+  );
+});
+
+test("GREEN removal-only-evidence: exported catalog retains complete implementation coverage", () => {
+  const catalog = JSON.parse(
+    execFileSync(
+      process.execPath,
+      [join(root, "skills/review/scripts/review-catalog.ts")],
+      { encoding: "utf8" },
+    ),
+  );
+  const checkpoint = passingCheckpoint();
+  assert.deepEqual(
+    catalog.implementation.map((lens: { id: string }) => lens.id),
+    checkpoint.reviewResults.map((result) => result.reviewType),
+  );
+  assert.doesNotThrow(() =>
+    validateTechnicalReadinessCheckpoint(checkpoint, {
+      target: "final_implementation",
+      targetBase: "main",
+      targetBaseSha: "base-a",
+      head: "head-a",
+    }),
+  );
+});
+
 test("RED removal-only-evidence: production readiness cannot accept injected diff evidence", () => {
   const checkpoint = passingCheckpoint();
   checkpoint.deliveryBudget = {

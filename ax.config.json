@@ -22,11 +22,16 @@
       "session-start"
     ],
     "canonicalSkillsDir": "~/.agents/skills",
-    "skillSymlinkTargets": ["~/.codex/skills", "~/.claude/skills"],
+    "skillSymlinkTargets": [
+      "~/.codex/skills",
+      "~/.claude/skills",
+      "~/.pi/agent/skills"
+    ],
     "instructionSymlinkTargets": {
       "agents": "~/.agents",
       "claude": "~/.claude",
-      "codex": "~/.codex"
+      "codex": "~/.codex",
+      "pi": "~/.pi/agent"
     },
     "hooks": {
       "sourceDir": "hooks",
@@ -59,6 +64,257 @@
       ]
     },
     "configs": {
+      "pi": {
+        "target": "~/.pi/agent/settings.json",
+        "managedPaths": [
+          { "path": ["defaultProvider"], "value": "openai-codex" },
+          { "path": ["defaultModel"], "value": "gpt-6-astra" },
+          { "path": ["defaultThinkingLevel"], "value": "low" },
+          { "path": ["retry", "enabled"], "value": false },
+          { "path": ["retry", "provider", "maxRetries"], "value": 0 },
+          { "path": ["retry", "provider", "timeoutMs"], "value": 300000 }
+        ]
+      },
+      "piModels": {
+        "target": "~/.pi/agent/models.json",
+        "managedPaths": [
+          {
+            "path": [
+              "providers",
+              "cloudflare-ai-gateway",
+              "modelOverrides",
+              "workers-ai/@cf/zai-org/glm-5.3",
+              "maxTokens"
+            ],
+            "value": 32768
+          },
+          {
+            "path": [
+              "providers",
+              "cloudflare-ai-gateway",
+              "modelOverrides",
+              "workers-ai/@cf/zai-org/glm-5.3",
+              "contextWindow"
+            ],
+            "value": 1048576
+          },
+          {
+            "path": [
+              "providers",
+              "cloudflare-ai-gateway",
+              "modelOverrides",
+              "workers-ai/@cf/zai-org/glm-5.3",
+              "compat",
+              "supportsReasoningEffort"
+            ],
+            "value": true
+          },
+          {
+            "path": [
+              "providers",
+              "cloudflare-ai-gateway",
+              "modelOverrides",
+              "workers-ai/@cf/zai-org/glm-5.3",
+              "thinkingLevelMap"
+            ],
+            "value": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": null,
+              "high": "high",
+              "xhigh": null,
+              "max": "max"
+            }
+          }
+        ]
+      },
+      "paseo": {
+        "target": "~/.paseo/config.json",
+        "managedPaths": [
+          { "path": ["daemon", "mcp", "enabled"], "value": true },
+          { "path": ["daemon", "mcp", "injectIntoAgents"], "value": true },
+          {
+            "path": ["daemon", "agentProfiles"],
+            "value": [
+              {
+                "id": "ax-planner",
+                "name": "Astra · Plan",
+                "provider": "ax-planner",
+                "model": "openai-codex/gpt-6-astra",
+                "thinkingOptionId": "low"
+              },
+              {
+                "id": "ax-implementer",
+                "name": "Sol · Implement",
+                "provider": "ax-implementer",
+                "model": "openai-codex/gpt-5.6-sol",
+                "thinkingOptionId": "medium"
+              },
+              {
+                "id": "ax-review-glm",
+                "name": "GLM · Review",
+                "provider": "ax-review-glm",
+                "model": "cloudflare-ai-gateway/workers-ai/@cf/zai-org/glm-5.3",
+                "thinkingOptionId": "low"
+              },
+              {
+                "id": "ax-review-deepseek",
+                "name": "DeepSeek · Review",
+                "provider": "ax-review-deepseek",
+                "model": "cloudflare-ai-gateway/workers-ai/@cf/deepseek-ai/deepseek-v4-pro-0813",
+                "thinkingOptionId": "off"
+              },
+              {
+                "id": "ax-review-astra",
+                "name": "Astra · Review",
+                "provider": "ax-review-astra",
+                "model": "openai-codex/gpt-6-astra",
+                "thinkingOptionId": "low"
+              }
+            ]
+          },
+          {
+            "path": ["agents", "providers", "ax-planner"],
+            "expandHome": true,
+            "value": {
+              "extends": "pi",
+              "label": "Astra · Plan",
+              "command": [
+                "node",
+                "~/.agents/hooks/pi/launch.ts",
+                "planner",
+                "openai-codex",
+                "gpt-6-astra",
+                "low"
+              ],
+              "models": [
+                {
+                  "id": "openai-codex/gpt-6-astra",
+                  "label": "Astra",
+                  "isDefault": true,
+                  "thinkingOptions": [{ "id": "low", "label": "Low" }]
+                }
+              ],
+              "paseoTools": {
+                "enabled": true,
+                "disabledTools": [
+                  "create_agent",
+                  "update_agent",
+                  "respond_to_permission"
+                ]
+              }
+            }
+          },
+          {
+            "path": ["agents", "providers", "ax-implementer"],
+            "expandHome": true,
+            "value": {
+              "extends": "pi",
+              "label": "Sol · Implement",
+              "command": [
+                "node",
+                "~/.agents/hooks/pi/launch.ts",
+                "implementer",
+                "openai-codex",
+                "gpt-5.6-sol",
+                "medium"
+              ],
+              "models": [
+                {
+                  "id": "openai-codex/gpt-5.6-sol",
+                  "label": "Sol",
+                  "isDefault": true,
+                  "thinkingOptions": [{ "id": "medium", "label": "Medium" }]
+                }
+              ],
+              "paseoTools": {
+                "enabled": true,
+                "disabledTools": [
+                  "create_agent",
+                  "update_agent",
+                  "respond_to_permission"
+                ]
+              }
+            }
+          },
+          {
+            "path": ["agents", "providers", "ax-review-glm"],
+            "expandHome": true,
+            "value": {
+              "extends": "pi",
+              "label": "GLM · Review",
+              "command": [
+                "node",
+                "~/.agents/hooks/pi/launch.ts",
+                "review-glm",
+                "cloudflare-ai-gateway",
+                "workers-ai/@cf/zai-org/glm-5.3",
+                "low"
+              ],
+              "models": [
+                {
+                  "id": "cloudflare-ai-gateway/workers-ai/@cf/zai-org/glm-5.3",
+                  "label": "GLM 5.3",
+                  "isDefault": true,
+                  "thinkingOptions": [{ "id": "low", "label": "Low" }]
+                }
+              ],
+              "paseoTools": { "enabled": false }
+            }
+          },
+          {
+            "path": ["agents", "providers", "ax-review-deepseek"],
+            "expandHome": true,
+            "value": {
+              "extends": "pi",
+              "label": "DeepSeek · Review",
+              "command": [
+                "node",
+                "~/.agents/hooks/pi/launch.ts",
+                "review-deepseek",
+                "cloudflare-ai-gateway",
+                "workers-ai/@cf/deepseek-ai/deepseek-v4-pro-0813",
+                "off"
+              ],
+              "models": [
+                {
+                  "id": "cloudflare-ai-gateway/workers-ai/@cf/deepseek-ai/deepseek-v4-pro-0813",
+                  "label": "DeepSeek V4 Pro",
+                  "isDefault": true,
+                  "thinkingOptions": [{ "id": "off", "label": "Off" }]
+                }
+              ],
+              "paseoTools": { "enabled": false }
+            }
+          },
+          {
+            "path": ["agents", "providers", "ax-review-astra"],
+            "expandHome": true,
+            "value": {
+              "extends": "pi",
+              "label": "Astra · Review",
+              "command": [
+                "node",
+                "~/.agents/hooks/pi/launch.ts",
+                "review-astra",
+                "openai-codex",
+                "gpt-6-astra",
+                "low"
+              ],
+              "models": [
+                {
+                  "id": "openai-codex/gpt-6-astra",
+                  "label": "Astra",
+                  "isDefault": true,
+                  "thinkingOptions": [{ "id": "low", "label": "Low" }]
+                }
+              ],
+              "paseoTools": { "enabled": false }
+            }
+          }
+        ]
+      },
       "codex": {
         "target": "~/.codex/config.toml",
         "managed": {

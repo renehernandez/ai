@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import {
+  chmodSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -9,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { prepareManagedConfigs } from "../../scripts/ax/config-sync.ts";
 import {
   type AxRuntimeConfig,
   syncRuntime,
@@ -163,6 +166,108 @@ test("runtime profile selection is explicit and locally persisted", () => {
     assert.throws(
       () => syncRuntime({ ...input, surface: "skills", profile: "personal" }),
       /profile_selection_scoped/,
+    );
+  });
+});
+
+test("config, assets and profile switch commit together and roll back with private permissions", () => {
+  withTempDir((root) => {
+    const input = fixture(root);
+    input.config.profiles.work = { ...input.config.profiles.personal };
+    syncRuntime({ ...input, profile: "personal" });
+    const home = join(root, "config-home");
+    const target = join(home, ".pi/agent/settings.json");
+    mkdirSync(join(target, ".."), { recursive: true });
+    writeFileSync(target, '{"defaultModel":"old"}');
+    chmodSync(target, 0o600);
+    input.config.runtime.configs = {
+      pi: {
+        target: "~/.pi/agent/settings.json",
+        managedPaths: [{ path: ["defaultModel"], value: "new" }],
+      },
+    };
+    const configOptions = {
+      ...input,
+      home,
+      liveHome: join(root, "live"),
+      sourceVerified: false,
+    };
+    writeFileSync(
+      join(input.sourceRoot, "instructions/AGENTS.md"),
+      "# Changed\n",
+    );
+    assert.throws(
+      () =>
+        syncRuntime({
+          ...input,
+          profile: "work",
+          preparedConfigs: prepareManagedConfigs(configOptions),
+          transactionFault: (point) => {
+            if (point === `after-target:${target}`)
+              throw new Error("injected config failure");
+          },
+        }),
+      /injected config failure/,
+    );
+    assert.equal(readFileSync(target, "utf-8"), '{"defaultModel":"old"}');
+    assert.equal(lstatSync(target).mode & 0o777, 0o600);
+    assert.equal(
+      readFileSync(join(input.installRoot, "agents/AGENTS.md"), "utf-8"),
+      "# Agents\n",
+    );
+    assert.equal(
+      JSON.parse(
+        readFileSync(join(input.runtimeRoot, "selected-profile.json"), "utf-8"),
+      ).selectedProfile,
+      "personal",
+    );
+    syncRuntime({
+      ...input,
+      profile: "work",
+      preparedConfigs: prepareManagedConfigs(configOptions),
+    });
+    assert.equal(JSON.parse(readFileSync(target, "utf-8")).defaultModel, "new");
+    assert.equal(lstatSync(target).mode & 0o777, 0o600);
+    assert.equal(
+      readFileSync(join(input.installRoot, "agents/AGENTS.md"), "utf-8"),
+      "# Changed\n",
+    );
+    assert.equal(
+      JSON.parse(
+        readFileSync(join(input.runtimeRoot, "selected-profile.json"), "utf-8"),
+      ).selectedProfile,
+      "work",
+    );
+  });
+});
+
+test("concurrent config modification aborts combined sync before replacing assets", () => {
+  withTempDir((root) => {
+    const input = fixture(root);
+    const home = join(root, "config-home");
+    input.config.runtime.configs = {
+      pi: {
+        target: "~/.pi/agent/settings.json",
+        managedPaths: [{ path: ["defaultModel"], value: "new" }],
+      },
+    };
+    const preparedConfigs = prepareManagedConfigs({
+      ...input,
+      home,
+      liveHome: join(root, "live"),
+      sourceVerified: false,
+    });
+    const target = join(home, ".pi/agent/settings.json");
+    mkdirSync(join(target, ".."), { recursive: true });
+    writeFileSync(target, '{"concurrent":true}');
+    assert.throws(
+      () => syncRuntime({ ...input, profile: "personal", preparedConfigs }),
+      /target_changed/,
+    );
+    assert.equal(readFileSync(target, "utf-8"), '{"concurrent":true}');
+    assert.throws(
+      () => lstatSync(join(input.installRoot, "agents/AGENTS.md")),
+      /ENOENT/,
     );
   });
 });

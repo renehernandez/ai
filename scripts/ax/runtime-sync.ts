@@ -21,6 +21,11 @@ import {
   resolve,
 } from "node:path";
 import {
+  type ManagedConfigDeclaration,
+  type PreparedManagedConfigs,
+  stageManagedConfigs,
+} from "./config-sync.ts";
+import {
   assertRegistrationTargetSafe,
   type HookRegistrationDeclaration,
   inspectHookRegistration,
@@ -64,13 +69,7 @@ export type AxRuntimeConfig = {
       targets?: Record<string, string>;
       registrations?: HookRegistrationDeclaration[];
     };
-    configs?: Record<
-      string,
-      {
-        target: string;
-        managed: Record<string, unknown>;
-      }
-    >;
+    configs?: Record<string, ManagedConfigDeclaration>;
     openspec?: Record<string, unknown>;
   };
   profiles: Record<
@@ -96,6 +95,7 @@ export type RuntimeSyncOptions = {
   surface?: RuntimeSurface;
   profile?: string;
   transactionFault?: Parameters<typeof applyTransaction>[0]["fault"];
+  preparedConfigs?: PreparedManagedConfigs;
 };
 
 export type RuntimeSyncResult = {
@@ -180,6 +180,16 @@ export function syncRuntime(options: RuntimeSyncOptions): RuntimeSyncResult {
       surface: options.surface,
       runtimeRoot: paths.runtimeRoot,
     });
+    if (options.preparedConfigs) {
+      if (
+        options.surface ||
+        resolve(options.preparedConfigs.runtimeRoot) !== paths.runtimeRoot
+      )
+        throw new Error("managed_config_runtime_mismatch");
+      operations.push(
+        ...stageManagedConfigs(options.preparedConfigs, stagingRoot),
+      );
+    }
     const candidateSelectionPath = options.surface
       ? undefined
       : join(stagingRoot, "selected-profile.json");

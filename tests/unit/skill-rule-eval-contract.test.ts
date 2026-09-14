@@ -57,6 +57,15 @@ test("GREEN skill-rule-evals: Show Me participates in managed skill coverage", (
   assert.ok(managedSkills.includes("show-me"));
 });
 
+test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", () => {
+  assert.deepEqual(currentManagedSkillCoverageGaps(managedSkills), []);
+  assert.ok(managedSkills.includes("handoff-brief"));
+  assert.ok(managedSkills.includes("review"));
+  assert.ok(
+    axConfig.runtime.skillSymlinkTargets.includes("~/.pi/agent/skills"),
+  );
+});
+
 test("RED skill-rule-evals: plain English does not require a separate skill", () => {
   assert.deepEqual(simulatedCoverageGap("plain-english"), ["plain-english"]);
   assert.equal(managedSkills.includes("plain-english"), false);

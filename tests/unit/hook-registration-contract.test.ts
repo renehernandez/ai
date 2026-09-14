@@ -57,6 +57,15 @@ test("RED hook-registration: registration rejects an unowned target", () => {
   assert.throws(
     () =>
       assertRegistrationTargetSafe({
+        path: "/tmp/isolated-home/.pi/agent/settings.json",
+        target: "codex",
+        home: "/tmp/isolated-home",
+      }),
+    /hook_registration_target_invalid/u,
+  );
+  assert.throws(
+    () =>
+      assertRegistrationTargetSafe({
         path: "/tmp/isolated-home-sibling/.codex/hooks.json",
         target: "codex",
         home: "/tmp/isolated-home",

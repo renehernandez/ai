@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import {
   basename,
   commandFromPayload,
@@ -95,7 +96,7 @@ function forcePushMatch(words: ShellWord[]): BlockMatch | undefined {
   return undefined;
 }
 
-function findForcePush(command: string): BlockMatch | undefined {
+export function findForcePush(command: string): BlockMatch | undefined {
   for (const words of tokenize(command)) {
     const match = forcePushMatch(words);
     if (match) return match;
@@ -215,4 +216,8 @@ function main(): void {
   if (match) deny(match, lookup.command);
 }
 
-main();
+if (
+  process.argv[1] &&
+  realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)
+)
+  main();

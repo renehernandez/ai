@@ -7,6 +7,13 @@ import { read } from "../../scripts/charter-validator-reader.ts";
 
 const root = process.cwd();
 
+test("GREEN authority: managed Pi workflow keeps Ready publication separate from merge", () => {
+  const workflow = read("skills/handoff-brief/references/paseo-workflow.md");
+  assert.match(workflow, /Merge requires separate\s+user authority/);
+  assert.match(workflow, /one hosted\s+repair batch/);
+  assert.match(workflow, /direct unmanaged Pi sessions/);
+});
+
 test("RED authority: Linear provider routing does not force the CLI or block an available integration", () => {
   const commands = read("rules/command-and-tools.md");
   const linearis = read("skills/linearis/SKILL.md");

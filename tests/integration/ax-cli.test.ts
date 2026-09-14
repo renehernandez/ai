@@ -324,6 +324,74 @@ test("CLI synchronizes an isolated runtime and reports offline local state", () 
   });
 });
 
+test("top-level sync installs JSON configs with the selected profile", () => {
+  withTempDir((root) => {
+    const fixture = createRuntimeSource(root);
+    const tracked = JSON.parse(readFileSync(fixture.configPath, "utf-8"));
+    tracked.profiles.work = { ...tracked.profiles.personal };
+    tracked.runtime.configs = {
+      pi: {
+        target: "~/.pi/agent/settings.json",
+        managedPaths: [{ path: ["defaultModel"], value: "gpt-5.6-sol" }],
+      },
+      paseo: {
+        target: "~/.paseo/config.json",
+        managedPaths: [
+          {
+            path: ["agents", "providers", "pi-ax"],
+            value: {
+              extends: "pi",
+              command: ["pi", "--extension", "~/.agents/hooks/pi/index.ts"],
+            },
+            expandHome: true,
+          },
+        ],
+      },
+    };
+    writeFileSync(fixture.configPath, JSON.stringify(tracked));
+    const home = join(root, "home");
+    const env = { HOME: home };
+    for (const profile of ["personal", "work"]) {
+      const result = runAx(
+        [
+          "--config",
+          fixture.configPath,
+          "--runtime-root",
+          fixture.runtimeRoot,
+          "sync",
+          "--profile",
+          profile,
+          "--json",
+        ],
+        { cwd: root, sourceRoot: fixture.sourceRoot, env },
+      );
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      const report = JSON.parse(result.stdout);
+      assert.equal(report.selectedProfile, profile);
+      assert.equal(report.managedConfigs.status, "synchronized");
+      assert.equal(
+        JSON.parse(
+          readFileSync(
+            join(fixture.runtimeRoot, "selected-profile.json"),
+            "utf-8",
+          ),
+        ).selectedProfile,
+        profile,
+      );
+      assert.equal(
+        JSON.parse(readFileSync(join(home, ".pi/agent/settings.json"), "utf-8"))
+          .defaultModel,
+        "gpt-5.6-sol",
+      );
+      assert.equal(
+        JSON.parse(readFileSync(join(home, ".paseo/config.json"), "utf-8"))
+          .agents.providers["pi-ax"].command[2],
+        join(home, ".agents/hooks/pi/index.ts"),
+      );
+    }
+  });
+});
+
 test("configs status identifies exact drift before sync and validate converge it", () => {
   withTempDir((root) => {
     const fixture = createRuntimeSource(root);

@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   basename,
   commandFromPayload,
@@ -569,4 +570,8 @@ function main(): void {
   if (reason) deny(reason, lookup.command, resolve(cwd));
 }
 
-main();
+if (
+  process.argv[1] &&
+  realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)
+)
+  main();

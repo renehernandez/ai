@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -80,6 +81,15 @@ function fetchJson(endpoint: string): Record<string, unknown> {
 }
 
 function main(): void {
+  if (process.argv[2] === "--parse-page") {
+    if (process.argv.length !== 3) {
+      throw new Error("usage: gitlab-evidence-collect --parse-page < response");
+    }
+    process.stdout.write(
+      `${JSON.stringify(parseIncludedJsonPage(readFileSync(0, "utf8")))}\n`,
+    );
+    return;
+  }
   const [iid, artifactLifecycle, artifactClassification] =
     process.argv.slice(2);
   if (!iid || !artifactLifecycle || !artifactClassification) {
