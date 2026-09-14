@@ -4,11 +4,47 @@ Use these rules for agent conversation and durable technical prose. They use
 applicable Simplified Technical English principles without claiming
 ASD-STE100 compliance or enforcing its controlled dictionary.
 
+## Plain English first
+
+Use the simplest English that keeps the full meaning, even when the reader is
+an expert. Apply this to progress updates, technical answers, questions, and
+documents. Technical depth does not require difficult English.
+
+- Prefer everyday words: say what runs, changes, fails, or needs a decision.
+  Replace avoidable jargon with the action it describes. Do not copy dense
+  wording from a tool, skill, or user prompt into your explanation.
+- Use a technical term only when it helps identify or explain the subject.
+  Define an unfamiliar term in ordinary words on first use. Also explain a term
+  whose meaning is unclear in context. Keep exact code names, type expressions,
+  commands, paths, headers, and quoted text unchanged; explain them alongside
+  the name when needed. A simpler synonym that is just as obscure does not help.
+- Name who or what does the action. Unpack phrases that stack several concepts
+  together. Prefer an extra clear sentence over a compressed phrase.
+- State the answer and why it matters before implementation details. Include
+  the details needed to understand or act, with relevant limits and uncertainty.
+  Do not simplify by removing the reason, changing the facts, or claiming more
+  than the evidence shows.
+
+Examples of the same meaning in plainer English:
+
+| Dense wording | Plain wording |
+| --- | --- |
+| Gate the TypeScript validation lanes on staged paths. | Run the TypeScript tasks only when the files included in the commit require them. |
+| Include configuration/dependency triggers. | Also run the tasks when files that control settings or required packages change. |
+| Exact-head review is pending. | The latest commit has not been reviewed yet. |
+| Use an idempotency key for retries. | Send the same request ID with each retry so the server can recognize the request and avoid doing it twice. This ID is called an idempotency key. |
+
+Before sending, reread for meaning: can the reader tell what happens, why, and
+what they need to do without translating jargon? Rewrite unclear passages,
+then confirm that facts, exact names, and relevant limits still match. Do not
+show this self-review. Word counts and reading-age scores are not proof that
+an answer is understandable.
+
 ## Core style
 
 - Lead with the result, decision, or blocker.
 - Put one point in each sentence. Prefer active voice and concrete words.
-- Use one stable term for each concept. Preserve exact technical names.
+- Use one stable term for each concept.
 - Remove filler, hedging in instructions, and formulaic contrast phrases.
 - Add structure only when it makes the content easier to scan.
 - Keep required evidence and [confidence annotations](confidence.md) close to
@@ -35,8 +71,6 @@ clear. Prefer two or three useful sentences over a shorter response that leaves
 a missing explanatory link.
 
 Do not introduce a new abstraction unless it helps answer the current question.
-Define an unfamiliar term in ordinary language on first use. Preserve exact
-technical names and type expressions.
 
 Name both entities and the concrete relationship when that relationship is
 material. Do not rely on a vague pronoun or spatial metaphor such as `beneath

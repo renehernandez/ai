@@ -1,24 +1,7 @@
 // charter-contracts: complete-explanations
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
 import test from "node:test";
 import { read } from "../../scripts/charter-validator-reader.ts";
-
-test("runtime profiles install one shared communication rule", () => {
-  assert.equal(existsSync("rules/communication.md"), true);
-
-  const config = JSON.parse(read("ax.config.json")) as {
-    profiles: Record<string, { paths: Array<string | { sourcePath: string }> }>;
-  };
-
-  for (const profile of ["personal", "work"]) {
-    assert.equal(
-      config.profiles[profile]?.paths.includes("rules/communication.md"),
-      true,
-      `${profile} does not install rules/communication.md`,
-    );
-  }
-});
 
 test("RED complete-explanations: claim-level confidence repetition is removed", () => {
   const communication = read("rules/communication.md");
@@ -35,6 +18,9 @@ test("RED complete-explanations: claim-level confidence repetition is removed", 
   assert.match(communication, /filler.*formulaic contrast/i);
   assert.match(communication, /required evidence/i);
   assert.match(communication, /confidence/i);
+  // These guard instruction presence; live reader tests establish comprehension.
+  assert.match(communication, /do not simplify by removing the reason/i);
+  assert.match(communication, /reading-age scores are not proof/i);
   assert.match(
     confidence,
     /one annotation.*coherent conclusion or recommendation block/is,
@@ -55,9 +41,20 @@ test("RED complete-explanations: claim-level confidence repetition is removed", 
   }
 });
 
-test("GREEN complete-explanations: first-pass answers supply the causal chain", () => {
+test("GREEN complete-explanations: Plain English first preserves meaning", () => {
   const communication = read("rules/communication.md");
 
+  assert.match(communication, /simplest English.*full meaning/is);
+  assert.match(communication, /even when the reader is\s+an expert/i);
+  assert.match(communication, /replace avoidable jargon with the action/is);
+  assert.match(
+    communication,
+    /facts, exact names, and relevant limits still match/i,
+  );
+});
+
+test("GREEN complete-explanations: first-pass answers supply the causal chain", () => {
+  const communication = read("rules/communication.md");
   assert.match(communication, /answer the exact question/i);
   assert.match(
     communication,
@@ -91,6 +88,12 @@ test("clarification repairs the mental model without forcing ceremony", () => {
     /do not introduce.*abstraction.*current question/is,
   );
   assert.match(communication, /define.*unfamiliar term.*first use/is);
+  assert.equal(
+    (communication.match(/define an unfamiliar term/gi) ?? []).length,
+    1,
+    "term explanations have one instruction owner",
+  );
+  assert.match(communication, /keep exact code names, type expressions/is);
   assert.match(
     communication,
     /name both entities.*concrete relationship.*material/is,

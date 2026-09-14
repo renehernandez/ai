@@ -57,6 +57,27 @@ test("GREEN skill-rule-evals: Show Me participates in managed skill coverage", (
   assert.ok(managedSkills.includes("show-me"));
 });
 
+test("RED skill-rule-evals: plain English does not require a separate skill", () => {
+  assert.deepEqual(simulatedCoverageGap("plain-english"), ["plain-english"]);
+  assert.equal(managedSkills.includes("plain-english"), false);
+  assert.equal(existsSync("rules/plain-english.md"), false);
+});
+
+test("GREEN skill-rule-evals: both profiles install the shared communication rule", () => {
+  assert.deepEqual(currentManagedSkillCoverageGaps(managedSkills), []);
+  assert.equal(existsSync("rules/communication.md"), true);
+  const stagedConfig = JSON.parse(read("ax.config.json")) as typeof axConfig;
+  for (const profile of ["personal", "work"] as const) {
+    assert.equal(
+      stagedConfig.profiles[profile].paths.filter(
+        (path) => path === "rules/communication.md",
+      ).length,
+      1,
+      `${profile} must install one shared communication rule`,
+    );
+  }
+});
+
 test("RED skill-rule-evals: shared workflow surfaces expose no agent force-push route", () => {
   const git = read("rules/git-and-review.md");
   const implementation = read("rules/investigation-and-implementation.md");
