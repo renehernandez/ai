@@ -240,13 +240,22 @@ review feedback. `codex-review-feedback` remains retired.
 
 ## AI repository delivery
 
-- This repository publishes through GitLab `origin`. A single or root MR targets
+- For this repository, the selected `personal` profile uses GitHub `origin` with Genie.
+- The selected `work` profile uses GitLab `origin` with Nitro on Fullscript GitLab.
+  These routes describe this repository on each machine, not every repository
+  opened on that machine. Verify the selected AX profile and the actual origin
+  push URL before publication. If profile and origin disagree, resolve the
+  routing mismatch with the user; do not silently switch hosts or reviewers.
+- A single or root MR targets
   `main`; each stacked descendant targets its immediate predecessor branch until
   that predecessor merges and the child is retargeted.
-- The GitHub remote is a mirror and is used only under explicit direction or a
-  documented GitLab outage path.
-- Finish inspects CI or explicit no-pipeline state and latest-effective-diff
-  Nitro before reporting readiness.
+- Other remotes are not publication targets unless explicitly selected. When
+  origin has multiple push URLs, publish only to the selected provider URL.
+- Finish follows automatic Genie feedback on the personal GitHub route. On the
+  work Fullscript GitLab route, retain the canonical Nitro request and feedback
+  policy. Inspect CI or explicit no-pipeline state and the selected reviewer's
+  latest-effective-diff feedback before reporting readiness. Never apply Nitro
+  policy to the personal GitHub route or treat Ready state alone as review completion.
 - No planning-only MR is created. A POC is draft and closes unmerged. An atomic
   plan and its implementation form one change set in one final MR, with no POC
   phase; OpenSpec produces one final MR per top-level delivery unit.

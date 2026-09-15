@@ -62,6 +62,14 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
   assert.ok(managedSkills.includes("handoff-brief"));
   assert.ok(managedSkills.includes("review"));
   assert.ok(managedSkills.includes("finish"));
+  assert.match(
+    read("rules/git-and-review.md"),
+    /personal.*GitHub `origin` with Genie/,
+  );
+  assert.match(
+    read("rules/git-and-review.md"),
+    /work.*GitLab `origin` with Nitro/,
+  );
   const relay = axConfig.runtime.configs.paseo.managedPaths.find(
     (entry) => entry.path.join(".") === "daemon.relay.enabled",
   );

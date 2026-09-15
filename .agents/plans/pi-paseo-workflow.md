@@ -95,7 +95,9 @@ startup acknowledgment must precede forwarding the initial prompt. Model/effort
 validation also runs before every tool call. Handoff creates a new Paseo agent
 and records its new identity; normal Paseo session-file arguments are preserved.
 The handoff carries resolved publication host and reviewer before publication.
-Unresolved host metadata blocks external publication, not local implementation.
+For this repository, personal selects GitHub origin with Genie; work selects
+Fullscript GitLab origin with Nitro. Verify origin matches the selected profile
+before publication; a mismatch blocks external publication, not local implementation.
 
 Each model request has a finite timeout and requires a nonempty successful
 response with complete review outcomes. Transport failure, malformed output or
@@ -138,6 +140,6 @@ merge, synchronize from verified clean main. Never commit authentication data.
 
 Paseo 0.8.0 and Pi 0.85.1 are installed. Exact configured model availability
 requires provider validation; a catalog entry alone is not account entitlement.
-The current origin points to GitHub while repository instructions still name
-GitLab, so publication host must be resolved before external publication.
+This laptop's GitHub origin matches the personal route. The work laptop retains
+its GitLab origin and Nitro route; no remote is rewritten by the migration.
 Runtime activation remains separate from feature implementation and publication.

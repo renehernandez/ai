@@ -14,6 +14,23 @@ test("GREEN authority: managed Pi workflow keeps Ready publication separate from
   assert.match(workflow, /direct unmanaged Pi sessions/);
   assert.match(workflow, /project-policy source or explicit user disposition/);
   assert.match(workflow, /cannot excuse failed, pending or unknown/);
+  assert.match(
+    read("rules/git-and-review.md"),
+    /personal.*GitHub `origin` with Genie/,
+  );
+  assert.match(
+    read("rules/git-and-review.md"),
+    /work.*GitLab `origin` with Nitro/,
+  );
+});
+
+test("RED authority: this repository does not force personal publication through GitLab", () => {
+  const policy = read("rules/git-and-review.md");
+  assert.doesNotMatch(
+    policy,
+    /This repository publishes through GitLab `origin`/,
+  );
+  assert.match(policy, /If profile and origin disagree, resolve/);
 });
 
 test("RED authority: absent CI does not create a publication policy", () => {
