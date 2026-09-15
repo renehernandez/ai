@@ -35,6 +35,7 @@ export function launchArguments(argv: string[]): {
     "-e",
     "--append-system-prompt",
   ]);
+  if (!role.startsWith("review-")) valueFlags.add("--mcp-config");
   const booleanFlags = new Set([
     "--offline",
     "--no-session",
