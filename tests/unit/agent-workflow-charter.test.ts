@@ -77,6 +77,15 @@ test("the universal charter governs every shared behavior surface", () => {
   }
 });
 
+test("Pi config changes require their transaction behavior scenarios", () => {
+  const errors: string[] = [];
+  const changes = [
+    { path: "scripts/ax/config-sync.ts", content: "", additions: "" },
+  ];
+  validateBehaviorContractCoverage(changes, changes, errors);
+  assert.ok(errors.some((error) => error.includes("pi-paseo-config")));
+});
+
 test("GREEN canonical-ownership: the charter validation gate runs from the native behavior hook", () => {
   const packageJson = JSON.parse(read("package.json")) as {
     scripts: Record<string, string>;

@@ -568,7 +568,13 @@ test("normalize-feedback does not synthesize hosted Nitro evidence", () => {
 });
 
 test("GREEN nitro-raw-evidence: derives an exact-head completion receipt", () => {
-  const result = runNitroGate("validate-gitlab-evidence", rawGitLabEvidence());
+  const page = parseIncludedJsonPage<{ body: string }>(
+    'HTTP/2 200 OK\r\nX-Page: 1\r\nX-Next-Page: \r\n\r\n[{"body":"Review complete. No findings."}]',
+  );
+  const result = runNitroGate(
+    "validate-gitlab-evidence",
+    rawGitLabEvidence({ completionBody: page.items[0].body }),
+  );
 
   assert.equal(result.status, 0);
   assert.match(result.stdout, /"head_sha": "abc123"/);
@@ -603,9 +609,12 @@ test("validate-gitlab-evidence binds the request to the current MR head transiti
 });
 
 test("RED nitro-raw-evidence: blocks receipts with unresolved Nitro discussions", () => {
+  const page = parseIncludedJsonPage<{ body: string }>(
+    'HTTP/2 200 OK\r\nX-Page: 1\r\nX-Next-Page: \r\n\r\n[{"body":"Review complete. No findings."}]',
+  );
   const result = runNitroGate(
     "validate-gitlab-evidence",
-    rawGitLabEvidence({ unresolved: true }),
+    rawGitLabEvidence({ unresolved: true, completionBody: page.items[0].body }),
   );
 
   assert.equal(result.status, 0);

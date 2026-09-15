@@ -17,9 +17,12 @@ validates the full candidate before success.
 ## Managed configs
 
 Use `configs status`, `configs sync`, and `configs validate`. Ownership is the
-exact TOML leaves declared under `runtime.configs`; parent tables are grouping
-only. Validation includes the Codex config loader. Preserve unowned values and
-never hand-edit a managed config leaf.
+exact TOML leaves or JSON `managedPaths` declared under `runtime.configs`.
+JSON arrays and objects at a managed path are owned as a whole; other values
+are preserved. Validation includes the Codex config loader for TOML and JSON
+structure for Pi/Paseo. It does not prove provider authentication or inference.
+Never hand-edit a managed value. Use top-level sync when model configuration
+and runtime adapters change together so they share one transaction.
 
 ## OpenSpec
 

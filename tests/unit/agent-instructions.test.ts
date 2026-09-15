@@ -465,13 +465,19 @@ test("workflow spec publishes the hook-clean draft before local readiness", () =
   assert.doesNotMatch(text, /Review emits `publication_checkpoint`/);
 });
 
-test("AI repo Finish policy remains GitLab and Nitro specific", () => {
+test("AI repo Finish policy routes personal GitHub and work GitLab separately", () => {
   const repoAgents = readFileSync("AGENTS.md", "utf-8");
   const portableAgents = readFileSync("instructions/AGENTS.md", "utf-8");
   const gitRules = readFileSync("rules/git-and-review.md", "utf-8");
   const nitroRules = readFileSync("rules/fullscript/nitro-review.md", "utf-8");
 
   assert.match(repoAgents, /GitLab `origin`/);
+  assert.match(repoAgents, /personal.*GitHub `origin`.*Genie/);
+  assert.match(repoAgents, /work.*GitLab `origin`.*Nitro/);
+  assert.doesNotMatch(repoAgents, /The `github` remote is a mirror/);
+  assert.match(gitRules, /personal.*GitHub `origin`.*Genie/);
+  assert.match(gitRules, /work.*GitLab `origin`.*Nitro/);
+  assert.match(gitRules, /profile and origin disagree.*resolve/is);
   assert.match(repoAgents, /Nitro/);
   assert.match(repoAgents, /Fullscript Nitro rule.*canonical/is);
   assert.match(portableAgents, /Nitro.*Fullscript GitLab/is);

@@ -18,7 +18,6 @@ import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Command } from "commander";
 import {
-  applyPreparedManagedConfigs,
   inspectManagedConfigs,
   prepareManagedConfigs,
   syncManagedConfigs,
@@ -195,10 +194,16 @@ export function executeParsedCommand(input: ParsedArgs): void {
     const preparedConfigs = input.scope
       ? undefined
       : prepareManagedConfigs(managedConfigOptions);
+    const result = syncRuntime({ ...runtimeOptions, preparedConfigs });
     const managedConfigs = preparedConfigs
-      ? applyPreparedManagedConfigs(preparedConfigs)
+      ? {
+          status: "synchronized",
+          changedPaths: preparedConfigs.candidates
+            .filter((entry) => entry.candidate !== (entry.original ?? ""))
+            .map((entry) => entry.tool.target),
+          tools: preparedConfigs.report.tools,
+        }
       : undefined;
-    const result = syncRuntime(runtimeOptions);
     printResult(
       managedConfigs
         ? {

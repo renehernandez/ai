@@ -87,7 +87,7 @@ export function copyPath(source: string, target: string): void {
     verbatimSymlinks: true,
   });
   if (sourceStats.isFile()) {
-    chmodSync(target, sourceStats.mode & 0o111 ? 0o755 : 0o644);
+    chmodSync(target, sourceStats.mode & 0o777);
   }
 }
 

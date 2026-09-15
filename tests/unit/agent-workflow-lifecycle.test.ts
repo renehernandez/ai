@@ -7,6 +7,41 @@ import { read } from "../../scripts/charter-validator-reader.ts";
 
 const root = process.cwd();
 
+test("GREEN authority: managed Pi workflow keeps Ready publication separate from merge", () => {
+  const workflow = read("skills/handoff-brief/references/paseo-workflow.md");
+  assert.match(workflow, /Merge requires separate\s+user authority/);
+  assert.match(workflow, /one hosted\s+repair batch/);
+  assert.match(workflow, /direct unmanaged Pi sessions/);
+  assert.match(workflow, /project-policy source or explicit user disposition/);
+  assert.match(workflow, /cannot excuse failed, pending or unknown/);
+  assert.match(
+    read("rules/git-and-review.md"),
+    /personal.*GitHub `origin` with Genie/,
+  );
+  assert.match(
+    read("rules/git-and-review.md"),
+    /work.*GitLab `origin` with Nitro/,
+  );
+});
+
+test("RED authority: this repository does not force personal publication through GitLab", () => {
+  const policy = read("rules/git-and-review.md");
+  assert.doesNotMatch(
+    policy,
+    /This repository publishes through GitLab `origin`/,
+  );
+  assert.match(policy, /If profile and origin disagree, resolve/);
+});
+
+test("RED authority: absent CI does not create a publication policy", () => {
+  const workflow = read("skills/handoff-brief/references/paseo-workflow.md");
+  assert.doesNotMatch(workflow, /an empty check list establishes/i);
+  assert.match(
+    workflow,
+    /An empty check list alone does not establish that policy/,
+  );
+});
+
 test("RED authority: Linear provider routing does not force the CLI or block an available integration", () => {
   const commands = read("rules/command-and-tools.md");
   const linearis = read("skills/linearis/SKILL.md");

@@ -6,8 +6,11 @@ description: Use when pausing, transferring, summarizing, or resuming non-trivia
 # Handoff Brief
 
 Create a paste-ready continuation artifact that another agent or session can
-verify against live state and act on immediately. This skill summarizes; it
-does not mutate repository or provider state.
+verify against live state and act on immediately. Brief creation is read-only.
+In AX-managed Pi/Paseo sessions, follow
+[the Pi workflow](references/paseo-workflow.md). The owning Plan/Execute mode
+may launch the accepted implementation handoff through the finite runner;
+this skill never independently grants launch, write or publication authority.
 
 ## Build the Brief
 

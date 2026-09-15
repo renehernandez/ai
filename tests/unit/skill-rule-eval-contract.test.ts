@@ -57,6 +57,50 @@ test("GREEN skill-rule-evals: Show Me participates in managed skill coverage", (
   assert.ok(managedSkills.includes("show-me"));
 });
 
+test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", () => {
+  const deepseek = axConfig.runtime.configs.paseo.managedPaths.find(
+    (entry) => entry.path.join(".") === "agents.providers.ax-review-deepseek",
+  );
+  assert.equal(deepseek?.value.command[5], "medium");
+  assert.equal(
+    deepseek?.value.command[4],
+    "workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731",
+  );
+  assert.deepEqual(currentManagedSkillCoverageGaps(managedSkills), []);
+  assert.ok(managedSkills.includes("handoff-brief"));
+  assert.ok(managedSkills.includes("review"));
+  assert.ok(managedSkills.includes("finish"));
+  assert.match(
+    read("rules/git-and-review.md"),
+    /personal.*GitHub `origin` with Genie/,
+  );
+  assert.match(
+    read("rules/git-and-review.md"),
+    /work.*GitLab `origin` with Nitro/,
+  );
+  const relay = axConfig.runtime.configs.paseo.managedPaths.find(
+    (entry) => entry.path.join(".") === "daemon.relay.enabled",
+  );
+  assert.equal(relay?.value, true);
+  assert.match(
+    read("skills/handoff-brief/references/paseo-workflow.md"),
+    /project-policy source or explicit user disposition/,
+  );
+  assert.ok(
+    axConfig.runtime.skillSymlinkTargets.includes("~/.pi/agent/skills"),
+  );
+});
+
+test("RED skill-rule-evals: missing CI does not introduce an ungoverned waiver skill", () => {
+  assert.deepEqual(simulatedCoverageGap("automatic-ci-waiver"), [
+    "automatic-ci-waiver",
+  ]);
+  assert.match(
+    read("skills/handoff-brief/references/paseo-workflow.md"),
+    /An empty check list alone does not establish that policy/,
+  );
+});
+
 test("RED skill-rule-evals: plain English does not require a separate skill", () => {
   assert.deepEqual(simulatedCoverageGap("plain-english"), ["plain-english"]);
   assert.equal(managedSkills.includes("plain-english"), false);

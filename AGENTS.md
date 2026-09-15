@@ -150,7 +150,7 @@ limits, and require separately scoped acceptance for terminal actions.
   canonical-spec/archive head, and Finish treats it as a readiness input rather
   than cleanup. Incomplete or unverified work remains active.
 - Under Standard delivery, Review evidence stays task-local. After a hook-clean commit, publish the
-  draft, explicitly request Nitro for that source head, and start local Review
+  draft, request the configured hosted reviewer for that source head, and start local Review
   on the same head.
   `code-simplifier` is a core reviewer for planning artifacts, POC first
   objective proof, completed POCs, and final implementations; it always keeps
@@ -171,13 +171,17 @@ limits, and require separately scoped acceptance for terminal actions.
 
 ## Repository Finish policy
 
-- Finish routes this repo through GitLab `origin`. A single or root MR targets
+- The selected `personal` profile uses GitHub `origin` with Genie.
+- The selected `work` profile uses GitLab `origin` with Nitro.
+  Resolve routing through [AI repository delivery](rules/git-and-review.md#ai-repository-delivery)
+  and verify the actual origin before publication. A single or root MR targets
   `main`; each stacked descendant targets its immediate predecessor branch
   until that predecessor merges and the child retargets. Do not push `main` or
   publish directly to it without explicit user authorization.
-- The `github` remote is a mirror. When a remote has several push URLs, publish
-  only to the selected GitLab URL or a provider-specific remote.
-- Finish inspects CI or no-pipeline state and applies
+- When a remote has several push URLs, publish only to the selected provider URL
+  or a provider-specific remote; never publish to every destination implicitly.
+- Finish inspects CI or explicit no-pipeline state and the selected hosted review.
+  For the work profile's Fullscript GitLab route, apply
   [the Fullscript Nitro rule](rules/fullscript/nitro-review.md) as the canonical
   owner for source-head request timing, size routing, feedback closure, and
   human escalation.
