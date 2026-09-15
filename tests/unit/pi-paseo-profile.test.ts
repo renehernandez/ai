@@ -4,7 +4,7 @@ import test from "node:test";
 
 const config = JSON.parse(readFileSync("ax.config.json", "utf8"));
 
-test("DeepSeek reviewer pins V4 Flash with a bounded output and low reasoning effort", () => {
+test("DeepSeek reviewer pins V4 Flash with a bounded output and medium reasoning effort", () => {
   const entries = config.runtime.configs.paseo.managedPaths;
   const reviewer = entries.find(
     (entry) => entry.path.join(".") === "agents.providers.ax-review-deepseek",
@@ -14,7 +14,7 @@ test("DeepSeek reviewer pins V4 Flash with a bounded output and low reasoning ef
     reviewer.value.command[4],
     "workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731",
   );
-  assert.equal(reviewer.value.command[5], "low");
+  assert.equal(reviewer.value.command[5], "medium");
   const overrides = config.runtime.configs.piModels.managedPaths.filter(
     (entry) =>
       entry.path.includes("workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731"),

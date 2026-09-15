@@ -61,6 +61,7 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
   const deepseek = axConfig.runtime.configs.paseo.managedPaths.find(
     (entry) => entry.path.join(".") === "agents.providers.ax-review-deepseek",
   );
+  assert.equal(deepseek?.value.command[5], "medium");
   assert.equal(
     deepseek?.value.command[4],
     "workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731",

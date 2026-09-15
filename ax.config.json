@@ -213,7 +213,7 @@
                 "name": "DeepSeek · Review",
                 "provider": "ax-review-deepseek",
                 "model": "cloudflare-ai-gateway/workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731",
-                "thinkingOptionId": "low"
+                "thinkingOptionId": "medium"
               },
               {
                 "id": "ax-review-astra",
@@ -325,14 +325,14 @@
                 "review-deepseek",
                 "cloudflare-ai-gateway",
                 "workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731",
-                "low"
+                "medium"
               ],
               "models": [
                 {
                   "id": "cloudflare-ai-gateway/workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731",
                   "label": "DeepSeek V4 Flash",
                   "isDefault": true,
-                  "thinkingOptions": [{ "id": "low", "label": "Low" }]
+                  "thinkingOptions": [{ "id": "medium", "label": "Medium" }]
                 }
               ],
               "paseoTools": { "enabled": false }
