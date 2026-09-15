@@ -4,6 +4,42 @@ import test from "node:test";
 
 const config = JSON.parse(readFileSync("ax.config.json", "utf8"));
 
+test("DeepSeek reviewer pins V4 Flash with a bounded output and low reasoning effort", () => {
+  const entries = config.runtime.configs.paseo.managedPaths;
+  const reviewer = entries.find(
+    (entry) => entry.path.join(".") === "agents.providers.ax-review-deepseek",
+  );
+  assert.ok(reviewer);
+  assert.equal(
+    reviewer.value.command[4],
+    "workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731",
+  );
+  assert.equal(reviewer.value.command[5], "low");
+  const overrides = config.runtime.configs.piModels.managedPaths.filter(
+    (entry) =>
+      entry.path.includes("workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731"),
+  );
+  assert.equal(
+    overrides.find((entry) => entry.path.at(-1) === "maxTokens")?.value,
+    32768,
+  );
+  assert.equal(
+    overrides.find((entry) => entry.path.at(-1) === "supportsReasoningEffort")
+      ?.value,
+    true,
+  );
+  const workflow = readFileSync(
+    "skills/handoff-brief/scripts/paseo-workflow-state.ts",
+    "utf8",
+  );
+  assert.match(workflow, /planning: \["review-glm", "review-deepseek"\]/);
+  assert.match(
+    workflow,
+    /implementation: \["review-glm", "review-deepseek", "review-astra"\]/,
+  );
+  assert.doesNotMatch(JSON.stringify(config), /kimi-k3|deepseek-v4-pro/);
+});
+
 test("Paseo hosted relay is explicit and keeps pairing identity machine-local", () => {
   const relay = Object.fromEntries(
     config.runtime.configs.paseo.managedPaths
@@ -48,7 +84,11 @@ test("Pi and Paseo roles are configured without a model selection step", () => {
 
 test("Pi model overrides correct the live Gateway limit without managing credentials", () => {
   const entries = config.runtime.configs.piModels.managedPaths;
-  const limit = entries.find((entry) => entry.path.at(-1) === "maxTokens");
+  const limit = entries.find(
+    (entry) =>
+      entry.path.at(-1) === "maxTokens" &&
+      entry.path.includes("workers-ai/@cf/zai-org/glm-5.3"),
+  );
   assert.equal(limit.value, 32768);
   assert.ok(limit.path.includes("workers-ai/@cf/zai-org/glm-5.3"));
   for (const tool of Object.values(config.runtime.configs)) {

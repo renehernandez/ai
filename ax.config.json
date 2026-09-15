@@ -83,6 +83,45 @@
               "providers",
               "cloudflare-ai-gateway",
               "modelOverrides",
+              "workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731",
+              "maxTokens"
+            ],
+            "value": 32768
+          },
+          {
+            "path": [
+              "providers",
+              "cloudflare-ai-gateway",
+              "modelOverrides",
+              "workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731",
+              "compat",
+              "supportsReasoningEffort"
+            ],
+            "value": true
+          },
+          {
+            "path": [
+              "providers",
+              "cloudflare-ai-gateway",
+              "modelOverrides",
+              "workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731",
+              "thinkingLevelMap"
+            ],
+            "value": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": null,
+              "max": null
+            }
+          },
+          {
+            "path": [
+              "providers",
+              "cloudflare-ai-gateway",
+              "modelOverrides",
               "workers-ai/@cf/zai-org/glm-5.3",
               "maxTokens"
             ],
@@ -173,8 +212,8 @@
                 "id": "ax-review-deepseek",
                 "name": "DeepSeek · Review",
                 "provider": "ax-review-deepseek",
-                "model": "cloudflare-ai-gateway/workers-ai/@cf/deepseek-ai/deepseek-v4-pro-0813",
-                "thinkingOptionId": "off"
+                "model": "cloudflare-ai-gateway/workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731",
+                "thinkingOptionId": "low"
               },
               {
                 "id": "ax-review-astra",
@@ -285,15 +324,15 @@
                 "~/.agents/hooks/pi/launch.ts",
                 "review-deepseek",
                 "cloudflare-ai-gateway",
-                "workers-ai/@cf/deepseek-ai/deepseek-v4-pro-0813",
-                "off"
+                "workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731",
+                "low"
               ],
               "models": [
                 {
-                  "id": "cloudflare-ai-gateway/workers-ai/@cf/deepseek-ai/deepseek-v4-pro-0813",
-                  "label": "DeepSeek V4 Pro",
+                  "id": "cloudflare-ai-gateway/workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731",
+                  "label": "DeepSeek V4 Flash",
                   "isDefault": true,
-                  "thinkingOptions": [{ "id": "off", "label": "Off" }]
+                  "thinkingOptions": [{ "id": "low", "label": "Low" }]
                 }
               ],
               "paseoTools": { "enabled": false }

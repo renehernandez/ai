@@ -57,7 +57,7 @@ The tracked role catalog fixes these routes for both profiles:
 | Planner | openai-codex/gpt-6-astra | low |
 | Implementer | openai-codex/gpt-5.6-sol | medium |
 | GLM reviewer | cloudflare-ai-gateway/workers-ai/@cf/zai-org/glm-5.3 | low |
-| DeepSeek reviewer | cloudflare-ai-gateway/workers-ai/@cf/deepseek-ai/deepseek-v4-pro-0813 | off |
+| DeepSeek reviewer | cloudflare-ai-gateway/workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731 | low |
 | Astra reviewer | openai-codex/gpt-6-astra | low |
 
 AX's existing `sync --profile personal|work` selects the profile; later syncs
@@ -75,8 +75,10 @@ Paseo's generated native integration extension remains loaded.
 
 GLM reasoning is always enabled. Manage its supported reasoning-effort mapping,
 32,768 output-token limit and 1,048,576 context limit instead of Pi's invalid
-catalog defaults. Sol, GLM and DeepSeek have account-specific response proof;
-this validates the machine's current credentials, not another machine's profile.
+catalog defaults. DeepSeek uses V4 Flash (0731), low reasoning effort and a
+32,768 output-token cap. Sol, GLM and DeepSeek Flash have account-specific
+response proof; this validates the machine's current credentials, not another
+machine's profile or completion of an implementation review.
 Provider command arguments are the role contract consumed by the wrapper and
 runner; verify display model/effort metadata agrees with that contract.
 
