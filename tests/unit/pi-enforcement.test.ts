@@ -240,6 +240,56 @@ test("subprocess RPC waits for adapter handshake and filters role mutations", ()
   }
 });
 
+test("Paseo MCP config reaches the pinned adapter only for nonreview roles", () => {
+  for (const role of ["planner", "implementer"]) {
+    for (const tail of [
+      ["--mcp-config", "/tmp/paseo mcp.json"],
+      ["--mcp-config=/tmp/paseo mcp.json"],
+    ]) {
+      const result = launchArguments([
+        role,
+        "openai-codex",
+        "gpt-5.6-sol",
+        "medium",
+        "--mode",
+        "rpc",
+        ...tail,
+      ]);
+      const index = result.args.indexOf("--mcp-config");
+      assert.notEqual(index, -1);
+      assert.equal(result.args[index + 1], "/tmp/paseo mcp.json");
+      assert.ok(result.args.includes("npm:pi-mcp-adapter@2.34.0"));
+    }
+    assert.throws(
+      () =>
+        launchArguments([
+          role,
+          "openai-codex",
+          "gpt-5.6-sol",
+          "medium",
+          "--mode",
+          "rpc",
+          "--mcp-config",
+        ]),
+      /Missing value/,
+    );
+  }
+  assert.throws(
+    () =>
+      launchArguments([
+        "review-astra",
+        "openai-codex",
+        "gpt-6-astra",
+        "low",
+        "--mode",
+        "rpc",
+        "--mcp-config",
+        "/tmp/mcp.json",
+      ]),
+    /Unsupported managed Pi argument/,
+  );
+});
+
 test("adapter injects the canonical workflow and retains preexisting system prompt", () => {
   const f = fixture();
   const savedContract = process.env.AX_PI_CONTRACT;

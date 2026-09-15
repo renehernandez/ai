@@ -7,11 +7,11 @@ import {
   renderHookRegistrationDocument,
 } from "../../scripts/ax/hook-registration.ts";
 
-test("RED hook-registration: force-push guard rejects an unowned target", () => {
+test("RED hook-registration: MCP configuration is not a hook registration target", () => {
   assert.throws(
     () =>
       assertRegistrationTargetSafe({
-        path: "/tmp/human-git-hooks/pre-push",
+        path: "/tmp/isolated-home/.pi/agent/mcp.json",
         target: "codex",
         home: "/tmp/isolated-home",
       }),
