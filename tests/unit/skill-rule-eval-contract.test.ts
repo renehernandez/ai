@@ -62,6 +62,10 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
   assert.ok(managedSkills.includes("handoff-brief"));
   assert.ok(managedSkills.includes("review"));
   assert.ok(managedSkills.includes("finish"));
+  const relay = axConfig.runtime.configs.paseo.managedPaths.find(
+    (entry) => entry.path.join(".") === "daemon.relay.enabled",
+  );
+  assert.equal(relay?.value, true);
   assert.match(
     read("skills/handoff-brief/references/paseo-workflow.md"),
     /project-policy source or explicit user disposition/,

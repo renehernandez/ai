@@ -170,6 +170,19 @@ Paseo applies provider/profile changes to new sessions; existing sessions keep
 their launch configuration. Read its reload result before assuming changes
 were applied.
 
+Both profiles enable Paseo's hosted relay at `relay.paseo.sh:443`, with TLS for
+the daemon and public client connection. AX owns the five `daemon.relay` leaves:
+`enabled`, `endpoint`, `publicEndpoint`, `useTls`, and `publicUseTls`. It leaves
+daemon identity, encryption keys, pairing offers and authentication machine-local.
+Relay traffic is end-to-end encrypted; see [Paseo connectivity](https://paseo.sh/docs/connectivity).
+
+Relay enablement can reload, but endpoint or TLS changes require a restart.
+After activation, inspect `restartRequiredPaths` and `overrideControlledPaths`
+from `paseo reload`. Restart the selected daemon if required; remove conflicting
+deployment overrides before expecting the file to control relay behavior.
+Then use Paseo Desktop's **Pair a device** or `paseo daemon pair` to pair your
+device. Keep the pairing link private; it is not repository configuration.
+
 Select **Astra · Plan** in Paseo for brainstorming, research and planning.
 The [Pi workflow](../skills/handoff-brief/references/paseo-workflow.md) hands the
 accepted brief to a fresh Sol session and runs the fixed reviewers. You do not

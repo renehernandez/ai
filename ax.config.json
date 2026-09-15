@@ -132,6 +132,17 @@
       "paseo": {
         "target": "~/.paseo/config.json",
         "managedPaths": [
+          { "path": ["daemon", "relay", "enabled"], "value": true },
+          {
+            "path": ["daemon", "relay", "endpoint"],
+            "value": "relay.paseo.sh:443"
+          },
+          {
+            "path": ["daemon", "relay", "publicEndpoint"],
+            "value": "relay.paseo.sh:443"
+          },
+          { "path": ["daemon", "relay", "useTls"], "value": true },
+          { "path": ["daemon", "relay", "publicUseTls"], "value": true },
           { "path": ["daemon", "mcp", "enabled"], "value": true },
           { "path": ["daemon", "mcp", "injectIntoAgents"], "value": true },
           {

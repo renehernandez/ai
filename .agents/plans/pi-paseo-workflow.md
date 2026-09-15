@@ -85,6 +85,11 @@ transaction with assets, and profile state commits last. JSON ownership is an
 explicit list of managed paths; provider definitions are atomic subtrees.
 Credential files are outside every managed path.
 
+Both profiles also manage Paseo hosted relay enablement, daemon/public endpoints
+(`relay.paseo.sh:443`) and both TLS flags. Pairing identities and encryption keys
+remain machine-local. Endpoint/TLS changes require restart after runtime
+activation; deployment overrides must not silently replace the tracked values.
+
 The transaction includes the entire managed hooks tree and Pi adapter. A private
 startup acknowledgment must precede forwarding the initial prompt. Model/effort
 validation also runs before every tool call. Handoff creates a new Paseo agent

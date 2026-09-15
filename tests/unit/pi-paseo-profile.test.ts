@@ -4,6 +4,26 @@ import test from "node:test";
 
 const config = JSON.parse(readFileSync("ax.config.json", "utf8"));
 
+test("Paseo hosted relay is explicit and keeps pairing identity machine-local", () => {
+  const relay = Object.fromEntries(
+    config.runtime.configs.paseo.managedPaths
+      .filter((entry) => entry.path.slice(0, 2).join(".") === "daemon.relay")
+      .map((entry) => [entry.path[2], entry.value]),
+  );
+  assert.deepEqual(relay, {
+    enabled: true,
+    endpoint: "relay.paseo.sh:443",
+    publicEndpoint: "relay.paseo.sh:443",
+    useTls: true,
+    publicUseTls: true,
+  });
+  assert.ok(
+    Object.values(config.runtime.configs).every(
+      (tool) => !tool.target.includes("daemon-keypair"),
+    ),
+  );
+});
+
 test("Pi and Paseo roles are configured without a model selection step", () => {
   const entries = config.runtime.configs.paseo.managedPaths;
   const providers = entries.filter(
