@@ -115,7 +115,16 @@ ownership, and the mandatory OpenSpec rehearsal boundary.
   behavior, architecture, migration, safety, ownership, ordering,
   cross-component, verification, delivery, or rollout decision.
   Contract-preserving wording, formatting, validation, test, CI, review, and
-  schema repairs return automatically to the current owner.
+  schema repairs return automatically to the current owner. In the managed
+  Pi/Paseo workflow, failed or degraded non-absolute quality evidence remains
+  visible but does not erase explicit user authority. A user may waive named
+  gates only for one exact action and current artifact or head; the owner must
+  record the failed evidence and waiver without broadening that action. Such a
+  waiver never permits force-push, credential disclosure, hook bypass,
+  destructive action without authority, or a provider/OS-denied operation.
+  Immediately before an already-authorized terminal action, its owner consumes
+  the exact-action gate disposition against the current head; that validation
+  never supplies terminal authority.
 - When a response clearly accepts a recommendation bundle, accept the bundle
   it refers to without inventing unstated scope or unrelated mutation. Merge,
   deployment, cleanup, destructive actions, and POC disposal require a

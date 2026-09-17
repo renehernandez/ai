@@ -24,6 +24,52 @@ test("GREEN authority: managed Pi workflow keeps Ready publication separate from
   );
 });
 
+test("GREEN authority: managed Pi workflow degrades reviewer outages and scopes waivers without granting terminal actions", () => {
+  const workflow = read("skills/handoff-brief/references/paseo-workflow.md");
+  const implementation = read("rules/investigation-and-implementation.md");
+  const finish = read("skills/finish/SKILL.md");
+
+  assert.match(workflow, /reviewer.*records degraded\s+evidence/is);
+  assert.match(workflow, /every required lens/i);
+  assert.match(workflow, /Incomplete lens coverage\s+is rejected/i);
+  assert.match(workflow, /exact scoped user waiver/i);
+  assert.match(
+    workflow,
+    /failed, timed-out,[\s\S]*missing hosted gates remain explicit failed evidence/i,
+  );
+  assert.match(workflow, /does not grant.*terminal action/is);
+  assert.match(workflow, /Ready-publication contract takes precedence/i);
+  assert.match(
+    implementation,
+    /failed or degraded non-absolute quality evidence/i,
+  );
+  assert.match(
+    implementation,
+    /one exact action and current artifact or head/i,
+  );
+  assert.match(finish, /waiver preserves failed evidence/i);
+  assert.match(finish, /grants no terminal authority/i);
+  assert.match(finish, /preserve human-owned body sections/i);
+  assert.match(
+    finish,
+    /Descriptions state[\s\S]*verification[\s\S]*actionable gaps/i,
+  );
+  assert.match(finish, /Verify live state/i);
+  assert.match(finish, /allowed, manual, skipped, and absent jobs/i);
+  assert.match(
+    finish,
+    /exact-action gate[\s\S]*current HEAD[\s\S]*grants no authority/i,
+  );
+});
+
+test("RED authority: scoped gate waivers cannot convert failed evidence into a pass", () => {
+  const workflow = read("skills/handoff-brief/references/paseo-workflow.md");
+  const finish = read("skills/finish/SKILL.md");
+
+  assert.doesNotMatch(workflow, /waiver (?:marks|records).*as passed/i);
+  assert.doesNotMatch(finish, /gate disposition grants.*authority/i);
+});
+
 test("RED authority: this repository does not force personal publication through GitLab", () => {
   const policy = read("rules/git-and-review.md");
   assert.doesNotMatch(

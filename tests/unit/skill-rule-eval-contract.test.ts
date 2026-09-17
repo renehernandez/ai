@@ -91,6 +91,42 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
   );
 });
 
+test("RED skill-rule-evals: degraded reviews and waivers never become passes or terminal authority", () => {
+  const workflow = read("skills/handoff-brief/references/paseo-workflow.md");
+  const implementation = read("rules/investigation-and-implementation.md");
+  const finish = read("skills/finish/SKILL.md");
+
+  assert.doesNotMatch(
+    workflow,
+    /degraded evidence (?:is|counts as) (?:a )?pass/i,
+  );
+  for (const surface of [workflow, implementation, finish]) {
+    assert.doesNotMatch(
+      surface,
+      /waiver (?:grants|authorizes) (?:merge|deployment)/i,
+    );
+  }
+  assert.deepEqual(simulatedCoverageGap("automatic-terminal-waiver"), [
+    "automatic-terminal-waiver",
+  ]);
+});
+
+test("GREEN skill-rule-evals: managed review fallback and waivers remain exact and fail-honest", () => {
+  const workflow = read("skills/handoff-brief/references/paseo-workflow.md");
+  const implementation = read("rules/investigation-and-implementation.md");
+  const finish = read("skills/finish/SKILL.md");
+
+  assert.match(workflow, /degraded evidence, never passing reviews/i);
+  assert.match(workflow, /per-required-lens[\s\S]*fallback assessment/i);
+  assert.match(workflow, /current\s+exact target/i);
+  assert.match(
+    implementation,
+    /one exact action and current artifact or head/i,
+  );
+  assert.match(finish, /waiver preserves failed evidence/i);
+  assert.deepEqual(currentManagedSkillCoverageGaps(managedSkills), []);
+});
+
 test("RED skill-rule-evals: missing CI does not introduce an ungoverned waiver skill", () => {
   assert.deepEqual(simulatedCoverageGap("automatic-ci-waiver"), [
     "automatic-ci-waiver",

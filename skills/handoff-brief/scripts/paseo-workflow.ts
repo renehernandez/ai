@@ -26,6 +26,7 @@ import {
 } from "./paseo-workflow-state.ts";
 
 export {
+  assertActionGateDisposition,
   initialize,
   routesFromConfig,
   type Transport,
@@ -92,12 +93,14 @@ async function launch(
       });
     });
   } catch (error) {
+    const reviewerFailure = role.startsWith("review-");
     await locked(path, (current) => {
       Object.assign(locate(current), {
-        status: "failed",
+        status: reviewerFailure ? "degraded" : "failed",
         error: String(error),
       });
     });
+    if (!reviewerFailure) throw error;
   }
 }
 export async function dispatchReview(
@@ -271,7 +274,7 @@ export async function collectReviews(
         }
         await locked(path, (state) => {
           Object.assign(roundOf(state, phase).reviews[role], {
-            status: "failed",
+            status: "degraded",
             error: String(error),
           });
         });
@@ -292,7 +295,7 @@ export async function handoff(
   );
   const snapshots = await locked(path, async (state) => {
     requireThat(!state.finished, "Workflow already finished");
-    settled(state, "planning");
+    settled(state, "planning", "handoff");
     requireThat(!state.handoff, "Implementation handoff already dispatched");
     const snapshots = await createSnapshots(path, {
       "brief.md": brief,
