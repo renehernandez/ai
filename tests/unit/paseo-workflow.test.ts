@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import {
+  assertActionGateDisposition,
   collectReviews,
   dispatchReview,
   handoff,
@@ -115,6 +116,26 @@ async function fixture() {
     transport,
     read,
     review,
+  };
+}
+
+function fallbackAssessment(
+  state: Workflow,
+  phase: "planning" | "implementation",
+  role: "review-glm" | "review-deepseek" | "review-astra",
+) {
+  return {
+    role,
+    outcomes: Object.fromEntries(
+      state.lenses[phase].map((lens) => [
+        lens.id,
+        {
+          status: "passed" as const,
+          evidence: `Owner inspected ${lens.id} against the exact target.`,
+          findings: [],
+        },
+      ]),
+    ),
   };
 }
 
@@ -249,18 +270,13 @@ test("reviewer launch and response failures become degraded evidence without ret
       (review) => review.status === "degraded",
     ),
   );
+  const degraded = await f.read();
   await transition(f.path, "triage", {
     phase: "planning",
     decisions: [],
     assessments: [
-      {
-        role: "review-glm",
-        assessment: "Astra inspected every planning lens inline.",
-      },
-      {
-        role: "review-deepseek",
-        assessment: "Astra inspected every planning lens inline.",
-      },
+      fallbackAssessment(degraded, "planning", "review-glm"),
+      fallbackAssessment(degraded, "planning", "review-deepseek"),
     ],
   });
   await handoff(
@@ -291,6 +307,20 @@ test("reviewer launch and response failures become degraded evidence without ret
       g.transport,
     ),
     /fallback assessment/,
+  );
+  const incomplete = fallbackAssessment(
+    await g.read(),
+    "planning",
+    "review-glm",
+  );
+  delete incomplete.outcomes["code-simplifier"];
+  await assert.rejects(
+    transition(g.path, "triage", {
+      phase: "planning",
+      decisions: [],
+      assessments: [incomplete],
+    }),
+    /complete per-lens owner fallback assessment/,
   );
 });
 
@@ -535,10 +565,77 @@ test("monitor quietly expires and does not infer success from missing hosted fee
   );
   assert.equal((await f.read()).hosted?.status, "timed-out");
   assert.equal(probes, 2);
-  await assert.rejects(
-    transition(f.path, "triage", { phase: "hosted", decisions: [] }),
-    /has not completed/,
+  await transition(f.path, "triage", {
+    phase: "hosted",
+    decisions: [
+      {
+        id: "hosted:timed-out",
+        action: "question",
+        reason: "The hosted deadline remains failed evidence.",
+      },
+    ],
+  });
+  await transition(f.path, "waiver", {
+    phase: "hosted",
+    target: "first",
+    requestedAction: "finish",
+    failedGates: ["hosted:timed-out"],
+    reason: "Finish despite this exact timed-out hosted gate.",
+  });
+  const waived = await f.read();
+  assert.equal(waived.hosted?.status, "timed-out");
+  assert.doesNotThrow(() =>
+    assertActionGateDisposition(waived, "hosted", "finish", "first"),
   );
+});
+
+test("failed, awaiting-user, and missing hosted evidence expose exact waivable gates without passing", async () => {
+  for (const status of ["failed", "awaiting-user", "missing"] as const) {
+    const f = await fixture();
+    await f.review("planning");
+    await handoff(
+      f.path,
+      { briefPath: f.artifactPath, planResolution: "No findings." },
+      f.transport,
+    );
+    await f.review("implementation");
+    const receipt = {
+      artifactUrl: "https://github.com/owner/repo/pull/1",
+      head: "first",
+      reviewer: "genie" as const,
+      ready: true as const,
+      evidence: "Observed source.",
+    };
+    await transition(f.path, "publication", receipt);
+    if (status !== "missing") {
+      await monitor(f.path, { probeCommand: ["probe"] }, async () =>
+        JSON.stringify({ ...receipt, status, findings: [] }),
+      );
+    }
+    const gate = `hosted:${status}`;
+    await transition(f.path, "triage", {
+      phase: "hosted",
+      decisions: [
+        {
+          id: gate,
+          action: "question",
+          reason: "Preserve the unresolved hosted gate.",
+        },
+      ],
+    });
+    await transition(f.path, "waiver", {
+      phase: "hosted",
+      target: "first",
+      requestedAction: "finish",
+      failedGates: [gate],
+      reason: "Finish despite this exact hosted gate.",
+    });
+    const waived = await f.read();
+    assert.equal(waived.hosted?.status ?? "missing", status);
+    assert.doesNotThrow(() =>
+      assertActionGateDisposition(waived, "hosted", "finish", "first"),
+    );
+  }
 });
 
 test("implementation questions block publication and applicable fixes consume one verified repair batch", async () => {
@@ -630,6 +727,125 @@ test("implementation questions block publication and applicable fixes consume on
   );
   await transition(f.path, "publication", { ...receipt, head: "repaired" });
   assert.equal((await f.read()).publication?.head, "repaired");
+});
+
+test("terminal gate disposition rejects an A-to-B stale waiver and consumes an exact-current deployment waiver", async () => {
+  const f = await fixture();
+  await f.review("planning");
+  await handoff(
+    f.path,
+    { briefPath: f.artifactPath, planResolution: "No planning findings." },
+    f.transport,
+  );
+  await dispatchReview(
+    f.path,
+    { phase: "implementation", artifactPath: f.artifactPath, head: "head-a" },
+    f.transport,
+  );
+  await collectReviews(
+    f.path,
+    { phase: "implementation" },
+    async (args, timeout) => {
+      const output = await f.transport(args, timeout);
+      if (args[0] !== "logs") return output;
+      const report = JSON.parse(
+        output.replace("AX_REVIEW_BEGIN", "").replace("AX_REVIEW_END", ""),
+      );
+      report.outcomes["diff-review"] = {
+        status: "finding",
+        evidence: "One repair and one user-owned risk decision remain.",
+        findings: [
+          { id: "repair", evidence: "The implementation needs a repair." },
+          {
+            id: "risk",
+            evidence: "Deployment requires explicit risk acceptance.",
+          },
+        ],
+      };
+      return `AX_REVIEW_BEGIN${JSON.stringify(report)}AX_REVIEW_END`;
+    },
+  );
+  const roles = ["review-glm", "review-deepseek", "review-astra"];
+  const decisions = roles.flatMap((role) => [
+    {
+      id: `${role}:diff-review:repair`,
+      action: "fix" as const,
+      reason: "Repair in the one authorized batch.",
+    },
+    {
+      id: `${role}:diff-review:risk`,
+      action: "question" as const,
+      reason: "Only the user can accept this deployment risk.",
+    },
+  ]);
+  const riskGates = decisions
+    .filter((decision) => decision.action === "question")
+    .map((decision) => decision.id);
+  const actionGates = decisions.map((decision) => decision.id);
+  await transition(f.path, "triage", {
+    phase: "implementation",
+    decisions,
+  });
+  await transition(f.path, "waiver", {
+    phase: "implementation",
+    target: "head-a",
+    requestedAction: "deployment",
+    failedGates: actionGates,
+    reason: "Deploy head A despite the named repair and risk gates.",
+  });
+  const headA = await f.read();
+  assert.doesNotThrow(() =>
+    assertActionGateDisposition(
+      headA,
+      "implementation",
+      "deployment",
+      "head-a",
+    ),
+  );
+  await transition(f.path, "waiver", {
+    phase: "implementation",
+    target: "head-a",
+    requestedAction: "publication",
+    failedGates: riskGates,
+    reason: "Permit the one repair batch despite the user-owned risk gates.",
+  });
+  await transition(f.path, "repair", {
+    phase: "implementation",
+    stage: "start",
+  });
+  await transition(f.path, "repair", {
+    phase: "implementation",
+    stage: "complete",
+    head: "head-b",
+    verification: "Focused behavior regression passes.",
+  });
+  const repaired = await f.read();
+  assert.throws(
+    () =>
+      assertActionGateDisposition(
+        repaired,
+        "implementation",
+        "deployment",
+        "head-b",
+      ),
+    /user input/,
+  );
+  await transition(f.path, "waiver", {
+    phase: "implementation",
+    target: "head-b",
+    requestedAction: "deployment",
+    failedGates: actionGates,
+    reason: "Deploy repaired head B despite the same named gates.",
+  });
+  const waived = await f.read();
+  assert.doesNotThrow(() =>
+    assertActionGateDisposition(
+      waived,
+      "implementation",
+      "deployment",
+      "head-b",
+    ),
+  );
 });
 
 test("large plan, implementation and handoff use private snapshots with bounded argv", async () => {

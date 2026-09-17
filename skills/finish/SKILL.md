@@ -14,19 +14,17 @@ live in `scripts/finish-contract.ts`.
 
 Ordinary Standard implementation or delivery authority permits
 draft publication and hosted follow-through, never merge, deployment, cleanup,
-artifact disposal, or ready-state mutation. A clear eligible Fast selection is
-activated profile authority to create or update its one MR as Ready, not merge
-authority. Terminal actions require accepted authority naming the action and
-artifact.
+artifact disposal, or ready-state mutation. Eligible Fast selection authorizes
+one Ready MR, not merge. Terminal actions require accepted authority naming the
+action and artifact.
 A user-authored aggregate or sequential merge scope covers its named sequence;
 generic assent does not. Material effective-diff change renews authority for
 affected artifacts. Single-MR merge authority is consumed after that MR merges.
 
 An exact POC-disposal action and artifact closes only that POC unmerged.
 Narrower limits remain binding; hosted feedback cannot expand authority. A
-managed Pi/Paseo waiver preserves failed evidence and removes only named gates
-for an exact artifact/action. It grants no terminal authority or exception to
-independent prohibitions.
+managed Pi/Paseo waiver preserves failed evidence and removes only named gates;
+it grants no terminal authority or prohibited exception.
 
 Before posting human-readable GitLab or Linear comments, discussion replies,
 notes, issue comments, or project updates through the user's identity, MUST apply
@@ -38,12 +36,9 @@ commits, PR/MR titles or descriptions, issue bodies, or historical messages.
 
 ## Publish and Follow Through
 
-Managed Pi/Paseo publishes Ready under its finite contract without authorizing
-merge.
-
 Resolve provider and reviewer policy in this order: direct user instruction,
 project policy, workflow-policy profile, remote inference. Ambiguity blocks
-provider mutation without invalidating local work.
+provider mutation.
 
 Under Standard delivery, after a native hook-clean commit:
 
@@ -79,8 +74,10 @@ shared cooldown and single recovery probe in `rules/git-and-review.md`.
 Monitor prompts preserve live state; replayed heartbeats never authorize
 Ready-to-Draft.
 
-Create each Standard final MR as draft; explicit eligible Fast creates or
-updates Ready. For Standard, Readiness never authorizes marking it ready.
+Reuse open artifacts; preserve human-owned body sections. Descriptions state
+scope, decisions, dependencies, verification, and actionable gaps. Create each
+Standard final MR as draft; explicit eligible Fast creates or updates Ready.
+Verify live state. Standard Readiness never authorizes marking it ready.
 
 For Nitro-selected Fullscript GitLab work, `rules/fullscript/nitro-review.md`
 owns request timing, size routing, duplicate suppression, and latest-head
@@ -90,7 +87,8 @@ Nitro response and all unresolved Nitro-authored discussions. Record exact-head
 feedback, including findings labeled nonblocking. Target-only movement on an
 unpromoted descendant neither requests Nitro nor permits a restack.
 
-Superseded pipelines do not prove newest diff.
+Apply project policy to allowed, manual, skipped, and absent jobs. Superseded
+pipelines do not prove the newest effective diff.
 
 ## Delivery Shapes
 
@@ -140,8 +138,8 @@ exact-user rule in `rules/git-and-review.md` may reverse that state. Current HEA
 gates and merge authority still apply.
 
 For Fast, report current-head Ready delivery only after required CI and the
-complete Nitro feedback surface are clean. Current HEAD gates and merge
-authority still apply; the report never implies merge authorization.
+complete Nitro feedback surface are clean. The report never implies merge
+authorization.
 
 ## Terminal Actions
 
@@ -152,6 +150,7 @@ draft or ready state, and leave deeper descendants untouched. Continue only
 under aggregate or sequential authority and patch-equivalent diffs. Lease
 rejection or material change stops the sequence.
 
-Deployment and local or remote branch/worktree cleanup require their own exact
-authority or activated policy. Verify remote merged state before cleanup; do
-not force-delete as routine follow-through.
+Deployment and local or remote branch/worktree cleanup require exact authority
+or activated policy. Before acting, consume managed Pi/Paseo exact-action gate
+disposition against current HEAD; this grants no authority. Verify remote merged
+state before cleanup; do not force-delete routinely.

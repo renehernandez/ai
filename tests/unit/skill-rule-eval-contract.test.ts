@@ -93,8 +93,6 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
 
 test("RED skill-rule-evals: degraded reviews and waivers never become passes or terminal authority", () => {
   const workflow = read("skills/handoff-brief/references/paseo-workflow.md");
-  const state = read("skills/handoff-brief/scripts/paseo-workflow-state.ts");
-  const runner = read("skills/handoff-brief/scripts/paseo-workflow.ts");
   const implementation = read("rules/investigation-and-implementation.md");
   const finish = read("skills/finish/SKILL.md");
 
@@ -102,8 +100,6 @@ test("RED skill-rule-evals: degraded reviews and waivers never become passes or 
     workflow,
     /degraded evidence (?:is|counts as) (?:a )?pass/i,
   );
-  assert.doesNotMatch(state, /status: "complete",\s*error:/);
-  assert.doesNotMatch(runner, /reviewerFailure \? "complete"/);
   for (const surface of [workflow, implementation, finish]) {
     assert.doesNotMatch(
       surface,
@@ -117,16 +113,12 @@ test("RED skill-rule-evals: degraded reviews and waivers never become passes or 
 
 test("GREEN skill-rule-evals: managed review fallback and waivers remain exact and fail-honest", () => {
   const workflow = read("skills/handoff-brief/references/paseo-workflow.md");
-  const state = read("skills/handoff-brief/scripts/paseo-workflow-state.ts");
-  const runner = read("skills/handoff-brief/scripts/paseo-workflow.ts");
   const implementation = read("rules/investigation-and-implementation.md");
   const finish = read("skills/finish/SKILL.md");
 
   assert.match(workflow, /degraded evidence, never passing reviews/i);
-  assert.match(workflow, /fallback assessment/i);
-  assert.match(state, /input\.target === target/);
-  assert.match(state, /waiver\.requestedAction === requestedAction/);
-  assert.match(runner, /reviewerFailure \? "degraded" : "failed"/);
+  assert.match(workflow, /per-required-lens[\s\S]*fallback assessment/i);
+  assert.match(workflow, /current\s+exact target/i);
   assert.match(
     implementation,
     /one exact action and current artifact or head/i,

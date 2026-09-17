@@ -53,8 +53,9 @@ Bind reports to the inspected source and base. Require a complete nonempty
 report from every model when available. A reviewer timeout, provider error,
 malformed report, truncated response, or unavailable reviewer records degraded
 evidence; it never becomes a pass and never triggers replacement dispatch. Sol
-must assess the missing lens coverage inline and record that fallback before
-advancing. A valid `blocked` outcome remains unresolved until repaired, answered,
+must assess every required lens inline, record one structured outcome per lens,
+and resolve every fallback finding before advancing. Incomplete lens coverage
+is rejected. A valid `blocked` outcome remains unresolved until repaired, answered,
 or covered by an exact scoped user waiver. Never treat an exit code alone as
 review evidence.
 
@@ -122,7 +123,7 @@ contract; omit optional fields unless needed.
 | `init` | Plan: `cwd`; optional `configPath`, `timeoutSeconds`, and `additionalLenses` keyed by planning/implementation. |
 | `review` | Plan or Execute: `phase`, `artifactPath`, and implementation `head`. The artifact includes the exact diff/base or complete plan and original evidence references. Dispatches once and collects. |
 | `collect` | Owning mode: `phase`; retrieves the existing sessions without starting replacements. |
-| `triage` | Plan or Execute: `phase`, `decisions` containing each finding's `id`, `action` (fix/dismiss/question) and `reason`; for each degraded reviewer, `assessments` with its `role` and the owner's complete inline `assessment`. |
+| `triage` | Plan or Execute: `phase`, `decisions` containing each finding's `id`, `action` (fix/dismiss/question) and `reason`; for each degraded reviewer, `assessments` with its `role` and complete per-lens `outcomes` using the review outcome shape. |
 | `waiver` | Owning mode: `phase`, exact current `target`, exact `requestedAction`, nonempty `failedGates`, and `reason`. Records failed evidence without granting the action itself. |
 | `handoff` | Plan: `briefPath`, `planResolution`; creates the fresh Sol session and records its identity. |
 | `repair` | Execute: `phase` (implementation/hosted), `stage` (start/complete); completion includes `head` and named `verification`. |
@@ -149,8 +150,13 @@ private read-only snapshots beside its state. Launch prompts carry snapshot path
 and digests instead of full documents. Preserve these snapshots with the task;
 editing an original document does not change an already-dispatched assignment.
 
-Continue past degraded reviewer evidence only after recorded owner fallback
-assessment or an exact scoped waiver. Stop on any hard-failed orchestration phase
+Continue past degraded reviewer evidence only after a complete per-required-lens
+owner fallback assessment or an exact scoped waiver. Failed, timed-out,
+awaiting-user, waiting, and missing hosted gates remain explicit failed evidence
+that can receive an exact-action waiver; no waiver changes their recorded status
+to passed. Terminal owners consume the gate disposition against the current
+exact target immediately before an already-authorized action such as deployment;
+the consumer supplies no terminal authority. Stop on any hard-failed orchestration phase
 and report the saved error. A reserved launch with no returned identity needs
 Paseo inspection before human-directed recovery; never delete state to bypass
 the one-pass limit. Before acting on a waiver, the runner compares its interpreted

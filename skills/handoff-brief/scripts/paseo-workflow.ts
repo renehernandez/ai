@@ -26,6 +26,7 @@ import {
 } from "./paseo-workflow-state.ts";
 
 export {
+  assertActionGateDisposition,
   initialize,
   routesFromConfig,
   type Transport,

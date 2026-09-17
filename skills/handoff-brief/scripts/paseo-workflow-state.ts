@@ -41,7 +41,7 @@ export type Decision = {
 };
 export type FallbackAssessment = {
   role: Extract<Role, `review-${string}`>;
-  assessment: string;
+  outcomes: Record<string, Outcome>;
 };
 export type Waiver = {
   phase: Phase | "hosted";
@@ -313,57 +313,102 @@ function currentTarget(state: Workflow, phase: Phase | "hosted") {
   }
   const round = state.rounds[phase];
   requireThat(round, "Review has not run");
-  return phase === "planning" ? round.fingerprint : round.head;
+  if (phase === "planning") return round.fingerprint;
+  return state.repairs.implementation?.head ?? round.head;
 }
-function reviewGates(state: Workflow, phase: Phase | "hosted") {
-  if (phase === "hosted") {
-    requireThat(
-      state.hosted?.status === "completed",
-      "Hosted review has not completed",
+function outcomeGates(role: string, outcomes: Record<string, Outcome>) {
+  return Object.entries(outcomes).flatMap(([id, outcome]) => {
+    if (outcome.status === "blocked") return [`${role}:${id}:blocked`];
+    return outcome.status === "finding"
+      ? outcome.findings.map((finding) => `${role}:${id}:${finding.id}`)
+      : [];
+  });
+}
+function validOutcomes(
+  outcomes: Record<string, Outcome> | undefined,
+  lenses: Lens[],
+) {
+  if (!outcomes || Object.keys(outcomes).length !== lenses.length) return false;
+  return lenses.every((lens) => {
+    const outcome = outcomes[lens.id];
+    return (
+      outcome &&
+      ["passed", "finding", "blocked"].includes(outcome.status) &&
+      nonempty(outcome.evidence) &&
+      Array.isArray(outcome.findings) &&
+      outcome.findings.every(
+        (finding) =>
+          nonempty(finding.id) &&
+          !finding.id.includes(":") &&
+          nonempty(finding.evidence),
+      ) &&
+      new Set(outcome.findings.map((finding) => finding.id)).size ===
+        outcome.findings.length &&
+      (outcome.status !== "finding" || outcome.findings.length > 0) &&
+      (outcome.status !== "passed" || outcome.findings.length === 0)
     );
-    return state.hosted.findings.map((item) => item.id);
+  });
+}
+function reviewGates(
+  state: Workflow,
+  phase: Phase | "hosted",
+  candidateAssessments = state.assessments[phase as Phase] ?? [],
+) {
+  if (phase === "hosted") {
+    const hosted = state.hosted;
+    if (!hosted) return ["hosted:missing"];
+    const statusGate =
+      hosted.status === "completed" ? [] : [`hosted:${hosted.status}`];
+    return [...statusGate, ...hosted.findings.map((item) => item.id)];
   }
   const round = state.rounds[phase];
   requireThat(round, "Review has not run");
   return reviewRoles[phase].flatMap((role) => {
     const review = round.reviews[role];
     if (review.status === "degraded" || review.status === "failed") {
-      return [`${role}:review-evidence`];
+      const assessment = candidateAssessments.find(
+        (item) => item.role === role,
+      );
+      return [
+        `${role}:review-evidence`,
+        ...(assessment ? outcomeGates(role, assessment.outcomes) : []),
+      ];
     }
     requireThat(
       review.status === "complete" && review.outcomes,
       `${role} review is incomplete`,
     );
-    return Object.entries(review.outcomes).flatMap(([id, outcome]) => {
-      if (outcome.status === "blocked") return [`${role}:${id}:blocked`];
-      return outcome.status === "finding"
-        ? outcome.findings.map((finding) => `${role}:${id}:${finding.id}`)
-        : [];
-    });
+    return outcomeGates(role, review.outcomes);
   });
+}
+type WaiverMatch = {
+  phase: Phase | "hosted";
+  target: string;
+  requestedAction?: string;
+  gate?: string;
+};
+function matchesWaiver(waiver: Waiver, match: WaiverMatch) {
+  return (
+    waiver.phase === match.phase &&
+    waiver.target === match.target &&
+    (match.requestedAction === undefined ||
+      waiver.requestedAction === match.requestedAction) &&
+    (match.gate === undefined || waiver.failedGates.includes(match.gate))
+  );
 }
 function waiverFor(
   state: Workflow,
   phase: Phase | "hosted",
-  requestedAction: string,
+  requestedAction: string | undefined,
   gate: string,
 ) {
-  const target = currentTarget(state, phase);
-  return state.waivers?.some(
-    (waiver) =>
-      waiver.phase === phase &&
-      waiver.target === target &&
-      waiver.requestedAction === requestedAction &&
-      waiver.failedGates.includes(gate),
-  );
-}
-function anyWaiverForGate(state: Workflow, phase: Phase, gate: string) {
-  const target = currentTarget(state, phase);
-  return state.waivers?.some(
-    (waiver) =>
-      waiver.phase === phase &&
-      waiver.target === target &&
-      waiver.failedGates.includes(gate),
+  return state.waivers?.some((waiver) =>
+    matchesWaiver(waiver, {
+      phase,
+      target: currentTarget(state, phase),
+      requestedAction,
+      gate,
+    }),
   );
 }
 export function settled(
@@ -380,9 +425,11 @@ export function settled(
       const gate = `${role}:review-evidence`;
       requireThat(
         assessments.some(
-          (item) => item.role === role && nonempty(item.assessment),
+          (item) =>
+            item.role === role &&
+            validOutcomes(item.outcomes, state.lenses[phase]),
         ) || waiverFor(state, phase, requestedAction, gate),
-        `${role} degraded evidence needs an owner fallback assessment or exact scoped waiver`,
+        `${role} degraded evidence needs a complete per-lens owner fallback assessment or exact scoped waiver`,
       );
     }
   }
@@ -418,6 +465,20 @@ function repaired(
     `${phase} repairs require completed verification or an exact scoped waiver`,
   );
 }
+export function assertActionGateDisposition(
+  state: Workflow,
+  phase: Phase | "hosted",
+  requestedAction: string,
+  target: string,
+) {
+  requireThat(nonempty(requestedAction), "Exact requested action is required");
+  requireThat(
+    target === currentTarget(state, phase),
+    "Action target differs from the current exact artifact or head",
+  );
+  if (phase === "planning") settled(state, phase, requestedAction);
+  else repaired(state, phase, requestedAction);
+}
 export function receipt(input: Partial<Receipt>): Receipt {
   requireThat(
     nonempty(input.artifactUrl) &&
@@ -449,7 +510,30 @@ export async function transition(path: string, action: string, input: Input) {
             : state.repairs.hosted),
         "Triage is already consumed by the next phase",
       );
-      const ids = reviewGates(state, phase).filter(
+      let assessments: FallbackAssessment[] = [];
+      if (phase !== "hosted") {
+        const degradedRoles = reviewRoles[phase].filter((role) => {
+          const status = roundOf(state, phase).reviews[role].status;
+          return status === "degraded" || status === "failed";
+        });
+        assessments = input.assessments ?? [];
+        requireThat(
+          new Set(assessments.map((item) => item.role)).size ===
+            assessments.length &&
+            assessments.every(
+              (item) =>
+                degradedRoles.includes(item.role) &&
+                validOutcomes(item.outcomes, state.lenses[phase]),
+            ) &&
+            degradedRoles.every(
+              (role) =>
+                assessments.some((item) => item.role === role) ||
+                waiverFor(state, phase, undefined, `${role}:review-evidence`),
+            ),
+          "Every degraded reviewer needs one complete per-lens owner fallback assessment or exact scoped waiver",
+        );
+      }
+      const ids = reviewGates(state, phase, assessments).filter(
         (id) => !id.endsWith(":review-evidence"),
       );
       requireThat(
@@ -467,25 +551,6 @@ export async function transition(path: string, action: string, input: Input) {
       );
       state.decisions[phase] = input.decisions;
       if (phase !== "hosted") {
-        const degradedRoles = reviewRoles[phase].filter((role) => {
-          const status = roundOf(state, phase).reviews[role].status;
-          return status === "degraded" || status === "failed";
-        });
-        const assessments = input.assessments ?? [];
-        requireThat(
-          new Set(assessments.map((item) => item.role)).size ===
-            assessments.length &&
-            assessments.every(
-              (item) =>
-                degradedRoles.includes(item.role) && nonempty(item.assessment),
-            ) &&
-            degradedRoles.every(
-              (role) =>
-                assessments.some((item) => item.role === role) ||
-                anyWaiverForGate(state, phase, `${role}:review-evidence`),
-            ),
-          "Every degraded reviewer needs one owner fallback assessment or exact scoped waiver",
-        );
         state.assessments ??= {};
         state.assessments[phase] = assessments;
       }
@@ -508,11 +573,12 @@ export async function transition(path: string, action: string, input: Input) {
       );
       state.waivers ??= [];
       requireThat(
-        !state.waivers.some(
-          (waiver) =>
-            waiver.phase === phase &&
-            waiver.target === target &&
-            waiver.requestedAction === input.requestedAction,
+        !state.waivers.some((waiver) =>
+          matchesWaiver(waiver, {
+            phase,
+            target,
+            requestedAction: input.requestedAction,
+          }),
         ),
         "A waiver for this phase, target, and action is already recorded",
       );

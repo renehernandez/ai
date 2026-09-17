@@ -122,6 +122,9 @@ ownership, and the mandatory OpenSpec rehearsal boundary.
   record the failed evidence and waiver without broadening that action. Such a
   waiver never permits force-push, credential disclosure, hook bypass,
   destructive action without authority, or a provider/OS-denied operation.
+  Immediately before an already-authorized terminal action, its owner consumes
+  the exact-action gate disposition against the current head; that validation
+  never supplies terminal authority.
 - When a response clearly accepts a recommendation bundle, accept the bundle
   it refers to without inventing unstated scope or unrelated mutation. Merge,
   deployment, cleanup, destructive actions, and POC disposal require a
