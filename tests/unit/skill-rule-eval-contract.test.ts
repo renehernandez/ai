@@ -32,6 +32,7 @@ import {
   uncoveredManagedSkills,
 } from "../../evals/skills-rules/scenarios.ts";
 import { read } from "../../scripts/charter-validator-reader.ts";
+import { parseReview } from "../../skills/handoff-brief/scripts/paseo-workflow.ts";
 import { routeWorkDisposition } from "../../skills/plan/scripts/plan-contract.ts";
 
 const managedSkills = (
@@ -88,6 +89,36 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
   );
   assert.ok(
     axConfig.runtime.skillSymlinkTargets.includes("~/.pi/agent/skills"),
+  );
+});
+
+test("RED skill-rule-evals: ambiguous reviewer envelopes remain rejected", () => {
+  const lenses = [{ id: "diff-review", objective: "Inspect the exact diff." }];
+  const envelope = `AX_REVIEW_BEGIN${JSON.stringify({ fingerprint: "target", outcomes: { "diff-review": { status: "passed", evidence: "Inspected the exact diff.", findings: [] } } })}AX_REVIEW_END`;
+
+  assert.throws(
+    () => parseReview(`${envelope}\n${envelope}`, "target", lenses),
+    /Missing or ambiguous/,
+  );
+});
+
+test("GREEN skill-rule-evals: one embedded reviewer envelope remains usable", () => {
+  const lenses = [{ id: "diff-review", objective: "Inspect the exact diff." }];
+  const envelope = `AX_REVIEW_BEGIN${JSON.stringify({ fingerprint: "target", outcomes: { "diff-review": { status: "passed", evidence: "Inspected the exact diff.", findings: [] } } })}AX_REVIEW_END`;
+
+  assert.deepEqual(
+    parseReview(
+      `Review complete.\n${envelope}\nEnd of review.`,
+      "target",
+      lenses,
+    ),
+    {
+      "diff-review": {
+        status: "passed",
+        evidence: "Inspected the exact diff.",
+        findings: [],
+      },
+    },
   );
 });
 
