@@ -28,7 +28,7 @@ export type Outcome = {
   findings: { id: string; evidence: string }[];
 };
 export type Review = {
-  status: "reserved" | "running" | "complete" | "failed";
+  status: "reserved" | "running" | "complete" | "degraded" | "failed";
   agentId?: string;
   outcomes?: Record<string, Outcome>;
   error?: string;
@@ -37,6 +37,17 @@ export type Snapshot = { path: string; sha256: string };
 export type Decision = {
   id: string;
   action: "fix" | "dismiss" | "question";
+  reason: string;
+};
+export type FallbackAssessment = {
+  role: Extract<Role, `review-${string}`>;
+  assessment: string;
+};
+export type Waiver = {
+  phase: Phase | "hosted";
+  target: string;
+  requestedAction: string;
+  failedGates: string[];
   reason: string;
 };
 export type Receipt = {
@@ -51,12 +62,14 @@ export type Hosted = Omit<Receipt, "ready"> & {
   status: "waiting" | "completed" | "awaiting-user" | "failed" | "timed-out";
   findings: { id: string; evidence: string }[];
 };
-export type Input = Partial<Receipt> & {
-  phase?: Phase | "hosted";
-  decisions?: Decision[];
-  stage?: "start" | "complete";
-  verification?: string;
-};
+export type Input = Partial<Receipt> &
+  Partial<Waiver> & {
+    phase?: Phase | "hosted";
+    decisions?: Decision[];
+    assessments?: FallbackAssessment[];
+    stage?: "start" | "complete";
+    verification?: string;
+  };
 export type ManagedConfig = {
   agents?: {
     providers?: Record<
@@ -84,6 +97,8 @@ export type Workflow = {
     >
   >;
   decisions: Partial<Record<Phase | "hosted", Decision[]>>;
+  assessments: Partial<Record<Phase, FallbackAssessment[]>>;
+  waivers: Waiver[];
   handoff?: Review & { brief: Snapshot; planResolution: Snapshot };
   repairs: Partial<
     Record<
@@ -275,6 +290,8 @@ export async function initialize(
     timeoutSeconds,
     rounds: {},
     decisions: {},
+    assessments: {},
+    waivers: [],
     repairs: {},
   };
   await mkdir(dirname(path), { recursive: true });
@@ -289,7 +306,16 @@ export function roundOf(state: Workflow, phase: Phase) {
   requireThat(round, "Review has not run");
   return round;
 }
-function findings(state: Workflow, phase: Phase | "hosted") {
+function currentTarget(state: Workflow, phase: Phase | "hosted") {
+  if (phase === "hosted") {
+    requireThat(state.publication, "Hosted target requires publication");
+    return state.repairs.hosted?.head ?? state.publication.head;
+  }
+  const round = state.rounds[phase];
+  requireThat(round, "Review has not run");
+  return phase === "planning" ? round.fingerprint : round.head;
+}
+function reviewGates(state: Workflow, phase: Phase | "hosted") {
   if (phase === "hosted") {
     requireThat(
       state.hosted?.status === "completed",
@@ -301,36 +327,95 @@ function findings(state: Workflow, phase: Phase | "hosted") {
   requireThat(round, "Review has not run");
   return reviewRoles[phase].flatMap((role) => {
     const review = round.reviews[role];
+    if (review.status === "degraded" || review.status === "failed") {
+      return [`${role}:review-evidence`];
+    }
     requireThat(
       review.status === "complete" && review.outcomes,
-      `${role} review is incomplete or failed`,
+      `${role} review is incomplete`,
     );
     return Object.entries(review.outcomes).flatMap(([id, outcome]) => {
-      requireThat(
-        outcome.status !== "blocked",
-        `${role}:${id} is blocked evidence`,
-      );
+      if (outcome.status === "blocked") return [`${role}:${id}:blocked`];
       return outcome.status === "finding"
         ? outcome.findings.map((finding) => `${role}:${id}:${finding.id}`)
         : [];
     });
   });
 }
-export function settled(state: Workflow, phase: Phase | "hosted") {
-  findings(state, phase);
-  const decisions = state.decisions[phase];
+function waiverFor(
+  state: Workflow,
+  phase: Phase | "hosted",
+  requestedAction: string,
+  gate: string,
+) {
+  const target = currentTarget(state, phase);
+  return state.waivers?.some(
+    (waiver) =>
+      waiver.phase === phase &&
+      waiver.target === target &&
+      waiver.requestedAction === requestedAction &&
+      waiver.failedGates.includes(gate),
+  );
+}
+function anyWaiverForGate(state: Workflow, phase: Phase, gate: string) {
+  const target = currentTarget(state, phase);
+  return state.waivers?.some(
+    (waiver) =>
+      waiver.phase === phase &&
+      waiver.target === target &&
+      waiver.failedGates.includes(gate),
+  );
+}
+export function settled(
+  state: Workflow,
+  phase: Phase | "hosted",
+  requestedAction: string,
+) {
+  const gates = reviewGates(state, phase);
+  if (phase !== "hosted") {
+    const assessments = state.assessments?.[phase] ?? [];
+    for (const role of reviewRoles[phase]) {
+      const review = roundOf(state, phase).reviews[role];
+      if (review.status !== "degraded" && review.status !== "failed") continue;
+      const gate = `${role}:review-evidence`;
+      requireThat(
+        assessments.some(
+          (item) => item.role === role && nonempty(item.assessment),
+        ) || waiverFor(state, phase, requestedAction, gate),
+        `${role} degraded evidence needs an owner fallback assessment or exact scoped waiver`,
+      );
+    }
+  }
+  const decisions = state.decisions[phase] ?? [];
+  const actionable = gates.filter((gate) => !gate.endsWith(":review-evidence"));
   requireThat(
-    decisions && !decisions.some((decision) => decision.action === "question"),
-    `${phase} findings need explicit triage or user input`,
+    decisions.length === actionable.length &&
+      actionable.every((gate) => decisions.some((item) => item.id === gate)),
+    `${phase} findings need explicit triage`,
+  );
+  requireThat(
+    !decisions.some(
+      (decision) =>
+        decision.action === "question" &&
+        !waiverFor(state, phase, requestedAction, decision.id),
+    ),
+    `${phase} findings need user input or an exact scoped waiver`,
   );
   return decisions;
 }
-function repaired(state: Workflow, phase: "implementation" | "hosted") {
-  const decisions = settled(state, phase);
+function repaired(
+  state: Workflow,
+  phase: "implementation" | "hosted",
+  requestedAction: string,
+) {
+  const decisions = settled(state, phase, requestedAction);
   requireThat(
-    !decisions.some((decision) => decision.action === "fix") ||
-      state.repairs[phase]?.status === "complete",
-    `${phase} repairs require completed verification`,
+    !decisions.some(
+      (decision) =>
+        decision.action === "fix" &&
+        !waiverFor(state, phase, requestedAction, decision.id),
+    ) || state.repairs[phase]?.status === "complete",
+    `${phase} repairs require completed verification or an exact scoped waiver`,
   );
 }
 export function receipt(input: Partial<Receipt>): Receipt {
@@ -364,7 +449,9 @@ export async function transition(path: string, action: string, input: Input) {
             : state.repairs.hosted),
         "Triage is already consumed by the next phase",
       );
-      const ids = findings(state, phase);
+      const ids = reviewGates(state, phase).filter(
+        (id) => !id.endsWith(":review-evidence"),
+      );
       requireThat(
         Array.isArray(input.decisions) &&
           input.decisions.length === ids.length &&
@@ -379,13 +466,74 @@ export async function transition(path: string, action: string, input: Input) {
         "Every finding needs one explicit decision and reason",
       );
       state.decisions[phase] = input.decisions;
+      if (phase !== "hosted") {
+        const degradedRoles = reviewRoles[phase].filter((role) => {
+          const status = roundOf(state, phase).reviews[role].status;
+          return status === "degraded" || status === "failed";
+        });
+        const assessments = input.assessments ?? [];
+        requireThat(
+          new Set(assessments.map((item) => item.role)).size ===
+            assessments.length &&
+            assessments.every(
+              (item) =>
+                degradedRoles.includes(item.role) && nonempty(item.assessment),
+            ) &&
+            degradedRoles.every(
+              (role) =>
+                assessments.some((item) => item.role === role) ||
+                anyWaiverForGate(state, phase, `${role}:review-evidence`),
+            ),
+          "Every degraded reviewer needs one owner fallback assessment or exact scoped waiver",
+        );
+        state.assessments ??= {};
+        state.assessments[phase] = assessments;
+      }
+    } else if (action === "waiver") {
+      const phase = input.phase === "hosted" ? "hosted" : phaseOf(input.phase);
+      const target = currentTarget(state, phase);
+      const gates = reviewGates(state, phase);
+      requireThat(
+        nonempty(input.target) && input.target === target,
+        "Waiver target differs from the current exact artifact or head",
+      );
+      requireThat(
+        nonempty(input.requestedAction) &&
+          nonempty(input.reason) &&
+          Array.isArray(input.failedGates) &&
+          input.failedGates.length > 0 &&
+          new Set(input.failedGates).size === input.failedGates.length &&
+          input.failedGates.every((gate) => gates.includes(gate)),
+        "Waiver requires an exact action, reason, and current failed gates",
+      );
+      state.waivers ??= [];
+      requireThat(
+        !state.waivers.some(
+          (waiver) =>
+            waiver.phase === phase &&
+            waiver.target === target &&
+            waiver.requestedAction === input.requestedAction,
+        ),
+        "A waiver for this phase, target, and action is already recorded",
+      );
+      state.waivers.push({
+        phase,
+        target,
+        requestedAction: input.requestedAction,
+        failedGates: input.failedGates,
+        reason: input.reason,
+      });
     } else if (action === "repair") {
       requireThat(
         input.phase === "implementation" || input.phase === "hosted",
         "Invalid repair phase",
       );
       const phase = input.phase as "implementation" | "hosted";
-      const decisions = settled(state, phase);
+      const decisions = settled(
+        state,
+        phase,
+        phase === "implementation" ? "publication" : "finish",
+      );
       if (input.stage === "start") {
         requireThat(
           !state.repairs[phase] &&
@@ -408,7 +556,7 @@ export async function transition(path: string, action: string, input: Input) {
         };
       }
     } else if (action === "publication") {
-      repaired(state, "implementation");
+      repaired(state, "implementation", "publication");
       requireThat(!state.publication, "Publication already recorded");
       const observed = receipt(input);
       requireThat(
@@ -419,7 +567,7 @@ export async function transition(path: string, action: string, input: Input) {
       );
       state.publication = observed;
     } else if (action === "finish") {
-      repaired(state, "hosted");
+      repaired(state, "hosted", "finish");
       const final = receipt(input);
       requireThat(
         final.artifactUrl === state.publication?.artifactUrl &&

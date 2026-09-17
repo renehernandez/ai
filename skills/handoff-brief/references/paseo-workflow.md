@@ -12,7 +12,7 @@ user authority.
 Use the configured planner for brainstorming, research and the initial plan.
 Role model and effort come from the managed Paseo provider command. Never ask
 the user to select a worker model, override it, or substitute another model.
-Unavailable models and incomplete responses are blockers, not passing reviews.
+Unavailable reviewer models and incomplete reviewer responses are degraded evidence, never passing reviews. The owning Astra or Sol session records a complete inline fallback assessment against the same lenses before advancing. Uncertain implementer launch, missing session identity, corrupt state, snapshot failure, or ownership-transfer failure remains a hard blocker.
 
 The planning owner starts one planning review round. GLM and DeepSeek each
 review the whole plan against every applicable lens from the Review catalog.
@@ -50,20 +50,27 @@ lenses when the change requires them. Thermonuclear review is quality-review
 depth, not an extra worker. Do not spawn a worker per lens.
 
 Bind reports to the inspected source and base. Require a complete nonempty
-report from every model. A timeout, provider error, uncertain launch, malformed
-report or truncated response blocks that checkpoint. Never treat an exit code
-alone as review evidence or silently redispatch a failed role.
+report from every model when available. A reviewer timeout, provider error,
+malformed report, truncated response, or unavailable reviewer records degraded
+evidence; it never becomes a pass and never triggers replacement dispatch. Sol
+must assess the missing lens coverage inline and record that fallback before
+advancing. A valid `blocked` outcome remains unresolved until repaired, answered,
+or covered by an exact scoped user waiver. Never treat an exit code alone as
+review evidence.
 
 Sol evaluates the combined findings, applies relevant repairs and runs the
 affected verification. Record rejected findings with reasons. Escalate material
 uncertainty to the user. This is one local repair batch; do not automatically
-rerun reviewers after it. Identify the reviewed head and subsequent repair
-head accurately instead of claiming repairs received another independent review.
+rerun reviewers after it. Identify the reviewed, degraded, waived, and subsequent
+repair heads accurately instead of claiming repairs received another independent
+review.
 
 ## Publish and follow hosted feedback
 
 Finish uses Change Request Create to publish the hook-clean implementation as
-a Ready PR or MR and requests the configured Genie or Nitro review. Respect
+a Ready PR or MR and requests the configured Genie or Nitro review. This managed
+Pi/Paseo Ready-publication contract takes precedence over generic Standard draft
+publication rules. Respect
 the provider-specific review request mechanism. Publication never authorizes
 merge, deployment or cleanup.
 
@@ -115,7 +122,8 @@ contract; omit optional fields unless needed.
 | `init` | Plan: `cwd`; optional `configPath`, `timeoutSeconds`, and `additionalLenses` keyed by planning/implementation. |
 | `review` | Plan or Execute: `phase`, `artifactPath`, and implementation `head`. The artifact includes the exact diff/base or complete plan and original evidence references. Dispatches once and collects. |
 | `collect` | Owning mode: `phase`; retrieves the existing sessions without starting replacements. |
-| `triage` | Plan or Execute: `phase`, `decisions` containing each finding's `id`, `action` (fix/dismiss/question) and `reason`. |
+| `triage` | Plan or Execute: `phase`, `decisions` containing each finding's `id`, `action` (fix/dismiss/question) and `reason`; for each degraded reviewer, `assessments` with its `role` and the owner's complete inline `assessment`. |
+| `waiver` | Owning mode: `phase`, exact current `target`, exact `requestedAction`, nonempty `failedGates`, and `reason`. Records failed evidence without granting the action itself. |
 | `handoff` | Plan: `briefPath`, `planResolution`; creates the fresh Sol session and records its identity. |
 | `repair` | Execute: `phase` (implementation/hosted), `stage` (start/complete); completion includes `head` and named `verification`. |
 | `publication` | Finish: observed `artifactUrl`, `head`, `reviewer` (genie/nitro), `ready: true`, and `evidence`. |
@@ -141,7 +149,13 @@ private read-only snapshots beside its state. Launch prompts carry snapshot path
 and digests instead of full documents. Preserve these snapshots with the task;
 editing an original document does not change an already-dispatched assignment.
 
-Stop on any failed phase and report the saved error. A reserved launch with
-no returned identity needs Paseo inspection before human-directed recovery;
-never delete state to bypass the one-pass limit. After hosted repair, inspect
+Continue past degraded reviewer evidence only after recorded owner fallback
+assessment or an exact scoped waiver. Stop on any hard-failed orchestration phase
+and report the saved error. A reserved launch with no returned identity needs
+Paseo inspection before human-directed recovery; never delete state to bypass
+the one-pass limit. Before acting on a waiver, the runner compares its interpreted
+target with the current artifact or head. A waiver preserves failed evidence,
+does not grant its requested terminal action, and never permits force-push,
+credential disclosure, hook bypass, destructive action without authority, or a
+provider/OS-denied operation. After hosted repair, inspect
 and report later feedback through Finish without restarting the repair monitor.

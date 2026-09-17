@@ -235,7 +235,7 @@ test("parallel phase callers reserve each reviewer only once", async () => {
   );
 });
 
-test("uncertain launch and malformed outputs remain failed without retry", async () => {
+test("reviewer launch and response failures become degraded evidence without retry", async () => {
   const f = await fixture();
   await dispatchReview(
     f.path,
@@ -244,12 +244,32 @@ test("uncertain launch and malformed outputs remain failed without retry", async
       throw new Error("lost response");
     },
   );
-  await collectReviews(f.path, { phase: "planning" }, f.transport);
-  await assert.rejects(
-    transition(f.path, "triage", { phase: "planning", decisions: [] }),
-    /incomplete or failed/,
+  assert.ok(
+    Object.values((await f.read()).rounds.planning?.reviews ?? {}).every(
+      (review) => review.status === "degraded",
+    ),
   );
-  assert.equal(f.calls.length, 0);
+  await transition(f.path, "triage", {
+    phase: "planning",
+    decisions: [],
+    assessments: [
+      {
+        role: "review-glm",
+        assessment: "Astra inspected every planning lens inline.",
+      },
+      {
+        role: "review-deepseek",
+        assessment: "Astra inspected every planning lens inline.",
+      },
+    ],
+  });
+  await handoff(
+    f.path,
+    { briefPath: f.artifactPath, planResolution: "Fallback review complete." },
+    f.transport,
+  );
+  assert.equal(f.calls.length, 1);
+
   const g = await fixture();
   await dispatchReview(
     g.path,
@@ -261,20 +281,115 @@ test("uncertain launch and malformed outputs remain failed without retry", async
   );
   assert.ok(
     Object.values((await g.read()).rounds.planning?.reviews ?? {}).every(
-      (review) => review.status === "failed",
+      (review) => review.status === "degraded",
     ),
   );
   await assert.rejects(
     handoff(
       g.path,
-      { briefPath: g.artifactPath, planResolution: "Ignore empty response" },
+      { briefPath: g.artifactPath, planResolution: "No fallback assessment" },
       g.transport,
     ),
-    /incomplete or failed/,
+    /fallback assessment/,
   );
 });
 
-test("actual session model mismatch rejects successful process output", async () => {
+test("scoped waivers preserve failed evidence, bind the current target, and do not widen authority", async () => {
+  const f = await fixture();
+  await dispatchReview(
+    f.path,
+    { phase: "planning", artifactPath: f.artifactPath },
+    f.transport,
+  );
+  await collectReviews(f.path, { phase: "planning" }, async (args, timeout) => {
+    const output = await f.transport(args, timeout);
+    if (args[0] !== "logs") return output;
+    const report = JSON.parse(
+      output.replace("AX_REVIEW_BEGIN", "").replace("AX_REVIEW_END", ""),
+    );
+    report.outcomes["edge-cases-and-risk"] = {
+      status: "blocked",
+      evidence: "A material risk remains unresolved.",
+      findings: [],
+    };
+    return `AX_REVIEW_BEGIN${JSON.stringify(report)}AX_REVIEW_END`;
+  });
+  const state = await f.read();
+  const target = state.rounds.planning?.fingerprint;
+  assert.ok(target);
+  const blocked = ["review-glm", "review-deepseek"].map(
+    (role) => `${role}:edge-cases-and-risk:blocked`,
+  );
+  await transition(f.path, "triage", {
+    phase: "planning",
+    decisions: blocked.map((id) => ({
+      id,
+      action: "question",
+      reason: "Only the user may accept this risk.",
+    })),
+  });
+  await assert.rejects(
+    transition(f.path, "waiver", {
+      phase: "planning",
+      target: "stale-target",
+      requestedAction: "handoff",
+      failedGates: blocked,
+      reason: "Proceed despite the recorded blockers.",
+    }),
+    /target differs/,
+  );
+  await transition(f.path, "waiver", {
+    phase: "planning",
+    target,
+    requestedAction: "handoff",
+    failedGates: blocked,
+    reason: "Proceed despite the recorded blockers.",
+  });
+  await assert.rejects(
+    transition(f.path, "publication", {
+      artifactUrl: "https://github.com/owner/repo/pull/1",
+      head: target,
+      reviewer: "genie",
+      ready: true,
+      evidence: "A handoff waiver cannot authorize publication.",
+    }),
+    /implementation review|publication|Review has not run/i,
+  );
+  await handoff(
+    f.path,
+    { briefPath: f.artifactPath, planResolution: "Blocked evidence waived." },
+    f.transport,
+  );
+  const waived = await f.read();
+  assert.deepEqual(waived.waivers?.[0]?.failedGates, blocked);
+  assert.equal(
+    waived.rounds.planning?.reviews["review-glm"].outcomes?.[
+      "edge-cases-and-risk"
+    ].status,
+    "blocked",
+  );
+});
+
+test("uncertain implementer launch remains a hard blocker without retry", async () => {
+  const f = await fixture();
+  await f.review("planning");
+  let attempts = 0;
+  await assert.rejects(
+    handoff(
+      f.path,
+      { briefPath: f.artifactPath, planResolution: "Planning is settled." },
+      async () => {
+        attempts++;
+        throw new Error("lost implementer launch response");
+      },
+    ),
+    /lost implementer launch response/,
+  );
+  assert.equal(attempts, 1);
+  assert.equal((await f.read()).handoff?.status, "failed");
+});
+
+test("actual session model mismatch records degraded evidence", async () => {
   const f = await fixture();
   await dispatchReview(
     f.path,
@@ -289,7 +404,7 @@ test("actual session model mismatch rejects successful process output", async ()
   });
   assert.ok(
     Object.values((await f.read()).rounds.planning?.reviews ?? {}).every(
-      (review) => review.status === "failed",
+      (review) => review.status === "degraded",
     ),
   );
 });

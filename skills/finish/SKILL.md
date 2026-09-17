@@ -23,7 +23,10 @@ generic assent does not. Material effective-diff change renews authority for
 affected artifacts. Single-MR merge authority is consumed after that MR merges.
 
 An exact POC-disposal action and artifact closes only that POC unmerged.
-Narrower limits remain binding; hosted feedback cannot expand authority.
+Narrower limits remain binding; hosted feedback cannot expand authority. A
+managed Pi/Paseo waiver preserves failed evidence and removes only named gates
+for an exact artifact/action. It grants no terminal authority or exception to
+independent prohibitions.
 
 Before posting human-readable GitLab or Linear comments, discussion replies,
 notes, issue comments, or project updates through the user's identity, MUST apply
@@ -34,6 +37,9 @@ review requests, service-generated output through a distinct service identity,
 commits, PR/MR titles or descriptions, issue bodies, or historical messages.
 
 ## Publish and Follow Through
+
+Managed Pi/Paseo publishes Ready under its finite contract without authorizing
+merge.
 
 Resolve provider and reviewer policy in this order: direct user instruction,
 project policy, workflow-policy profile, remote inference. Ambiguity blocks
@@ -73,10 +79,8 @@ shared cooldown and single recovery probe in `rules/git-and-review.md`.
 Monitor prompts preserve live state; replayed heartbeats never authorize
 Ready-to-Draft.
 
-Reuse open artifacts and preserve human-owned body sections. Descriptions cover
-scope, decisions, dependencies, verification, and actionable gaps. Create each
-Standard final MR as draft; explicit eligible Fast creates or
-updates Ready. Verify live state. For Standard, Readiness never authorizes marking it ready.
+Create each Standard final MR as draft; explicit eligible Fast creates or
+updates Ready. For Standard, Readiness never authorizes marking it ready.
 
 For Nitro-selected Fullscript GitLab work, `rules/fullscript/nitro-review.md`
 owns request timing, size routing, duplicate suppression, and latest-head
@@ -86,8 +90,7 @@ Nitro response and all unresolved Nitro-authored discussions. Record exact-head
 feedback, including findings labeled nonblocking. Target-only movement on an
 unpromoted descendant neither requests Nitro nor permits a restack.
 
-Apply project policy to allowed, manual, skipped, or absent jobs. Superseded
-pipelines do not prove the newest effective diff.
+Superseded pipelines do not prove newest diff.
 
 ## Delivery Shapes
 

@@ -24,6 +24,28 @@ test("GREEN authority: managed Pi workflow keeps Ready publication separate from
   );
 });
 
+test("GREEN authority: managed Pi workflow degrades reviewer outages and scopes waivers without granting terminal actions", () => {
+  const workflow = read("skills/handoff-brief/references/paseo-workflow.md");
+  const implementation = read("rules/investigation-and-implementation.md");
+  const finish = read("skills/finish/SKILL.md");
+
+  assert.match(workflow, /reviewer.*records degraded\s+evidence/is);
+  assert.match(workflow, /fallback assessment/i);
+  assert.match(workflow, /exact scoped user waiver/i);
+  assert.match(workflow, /does not grant.*terminal action/is);
+  assert.match(workflow, /Ready-publication contract takes precedence/i);
+  assert.match(
+    implementation,
+    /failed or degraded non-absolute quality evidence/i,
+  );
+  assert.match(
+    implementation,
+    /one exact action and current artifact or head/i,
+  );
+  assert.match(finish, /waiver preserves failed evidence/i);
+  assert.match(finish, /grants no terminal authority/i);
+});
+
 test("RED authority: this repository does not force personal publication through GitLab", () => {
   const policy = read("rules/git-and-review.md");
   assert.doesNotMatch(
