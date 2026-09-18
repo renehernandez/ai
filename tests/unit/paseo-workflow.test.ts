@@ -439,6 +439,56 @@ test("actual session model mismatch records degraded evidence", async () => {
   );
 });
 
+test("review envelope accepts harmless surrounding prose", () => {
+  const lenses = [
+    { id: "diff-review", objective: "Inspect the exact implementation diff." },
+  ];
+  const envelope = `AX_REVIEW_BEGIN${JSON.stringify({ fingerprint: "target", outcomes: { "diff-review": { status: "passed", evidence: "Inspected the exact diff.", findings: [] } } })}AX_REVIEW_END`;
+
+  assert.deepEqual(
+    parseReview(
+      `I completed the requested review after inspecting the immutable snapshots.\n\n${envelope}`,
+      "target",
+      lenses,
+    ),
+    {
+      "diff-review": {
+        status: "passed",
+        evidence: "Inspected the exact diff.",
+        findings: [],
+      },
+    },
+  );
+  assert.doesNotThrow(() =>
+    parseReview(`${envelope}\n\nReview complete.`, "target", lenses),
+  );
+});
+
+test("review envelope remains fail-closed for missing, ambiguous, malformed, and stale evidence", () => {
+  const lenses = [
+    { id: "diff-review", objective: "Inspect the exact implementation diff." },
+  ];
+  const envelope = `AX_REVIEW_BEGIN${JSON.stringify({ fingerprint: "target", outcomes: { "diff-review": { status: "passed", evidence: "Inspected the exact diff.", findings: [] } } })}AX_REVIEW_END`;
+
+  assert.throws(
+    () => parseReview("Review complete without an envelope.", "target", lenses),
+    /Missing or ambiguous/,
+  );
+  assert.throws(
+    () => parseReview(`${envelope}\n${envelope}`, "target", lenses),
+    /Missing or ambiguous/,
+  );
+  assert.throws(
+    () =>
+      parseReview("AX_REVIEW_BEGIN{not-json}AX_REVIEW_END", "target", lenses),
+    /JSON/,
+  );
+  assert.throws(
+    () => parseReview(envelope, "new-target", lenses),
+    /fingerprint mismatch/,
+  );
+});
+
 test("canonical lenses cannot be omitted and incomplete report is rejected", async () => {
   const f = await fixture();
   const lenses = (await f.read()).lenses.planning;

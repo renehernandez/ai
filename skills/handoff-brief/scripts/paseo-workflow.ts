@@ -162,11 +162,18 @@ export function parseReview(
   fingerprint: string,
   lenses: Lens[],
 ): Record<string, Outcome> {
-  const match = /^\s*AX_REVIEW_BEGIN\s*([\s\S]+?)\s*AX_REVIEW_END\s*$/.exec(
-    text,
+  const beginMarker = "AX_REVIEW_BEGIN";
+  const endMarker = "AX_REVIEW_END";
+  const begin = text.indexOf(beginMarker);
+  const end = text.indexOf(endMarker);
+  requireThat(
+    begin !== -1 &&
+      begin === text.lastIndexOf(beginMarker) &&
+      end > begin &&
+      end === text.lastIndexOf(endMarker),
+    "Missing or ambiguous final review envelope",
   );
-  requireThat(match, "Missing or ambiguous final review envelope");
-  const report = JSON.parse(match[1]);
+  const report = JSON.parse(text.slice(begin + beginMarker.length, end));
   requireThat(
     report.fingerprint === fingerprint,
     "Review target fingerprint mismatch",
