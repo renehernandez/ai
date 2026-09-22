@@ -114,6 +114,20 @@ test("RED skill-rule-evals: Paseo workspace binding rejects a wrong directory", 
       JSON.parse(readFileSync(statePath, "utf8")).workspace,
       undefined,
     );
+    let lists = 0;
+    await assert.rejects(
+      bindWorkspace(statePath, { registerWorkspace: true }, async (args) => {
+        if (args[1] === "create") throw new Error("lost response");
+        lists++;
+        if (lists === 1) return "[]";
+        throw new Error("inspection failed");
+      }),
+      /inspection failed/,
+    );
+    assert.equal(
+      JSON.parse(readFileSync(statePath, "utf8")).workspaceRegistration.status,
+      "uncertain",
+    );
   } finally {
     rmSync(directory, { recursive: true });
   }
@@ -127,10 +141,12 @@ test("GREEN skill-rule-evals: Paseo workspace binding records one exact director
     await bindWorkspace(statePath, {}, async () =>
       JSON.stringify([{ workspaceId: "exact", cwd: directory }]),
     );
-    assert.deepEqual(JSON.parse(readFileSync(statePath, "utf8")).workspace, {
+    const state = JSON.parse(readFileSync(statePath, "utf8"));
+    assert.deepEqual(state.workspace, {
       id: "exact",
       cwd: directory,
     });
+    assert.equal(state.workspaceRegistration, undefined);
     assert.match(
       read("skills/handoff-brief/references/paseo-workflow.md"),
       /inert assignment[\s\S]*verifies cwd/,

@@ -21,6 +21,7 @@ import {
   transition,
   type Workflow,
 } from "../../skills/handoff-brief/scripts/paseo-workflow.ts";
+import { locked } from "../../skills/handoff-brief/scripts/paseo-workflow-state.ts";
 
 const policySourceFingerprint = "a".repeat(64);
 const targetBase = "b".repeat(40);
@@ -413,6 +414,22 @@ test("workspace binding rejects mismatches and ambiguity, and registers once", a
     1,
   );
   assert.equal((await registration.read()).workspace?.id, "registered");
+
+  const uncertain = await fixture();
+  let listCalls = 0;
+  await assert.rejects(
+    bindWorkspace(uncertain.path, { registerWorkspace: true }, async (args) => {
+      if (args[1] === "create") throw new Error("lost create response");
+      listCalls++;
+      if (listCalls === 1) return "[]";
+      throw new Error("workspace inspection unavailable");
+    }),
+    /workspace inspection unavailable/,
+  );
+  assert.equal(
+    (await uncertain.read()).workspaceRegistration?.status,
+    "uncertain",
+  );
 });
 
 test("RED pi-paseo-workflow: repeated phase cannot dispatch another review", async () => {
@@ -739,6 +756,25 @@ test("authorized known-misroute recovery archives history and launches once", as
       ? JSON.stringify({ ...JSON.parse(output), Cwd: "/wrong/worktree" })
       : output;
   };
+  const launchesBeforeRace = f.calls.filter((args) => args[0] === "run").length;
+  await assert.rejects(
+    retryMisroutedHandoff(f.path, input, async (args, timeout) => {
+      const output = await recoveryTransport(args, timeout);
+      if (args[0] === "inspect" && args[args.length - 1] === previousAgentId)
+        await locked(f.path, (state) => {
+          state.repairs.implementation = { status: "started" };
+        });
+      return output;
+    }),
+    /eligibility changed before recovery reservation/,
+  );
+  assert.equal(
+    f.calls.filter((args) => args[0] === "run").length,
+    launchesBeforeRace,
+  );
+  await locked(f.path, (state) => {
+    delete state.repairs.implementation;
+  });
   const recovered = await retryMisroutedHandoff(
     f.path,
     input,

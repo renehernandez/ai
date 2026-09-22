@@ -130,19 +130,18 @@ export async function bindWorkspace(
       );
       returnedId = created.workspaceId;
     } catch (error) {
+      await locked(path, (current) => {
+        current.workspaceRegistration = {
+          status: "uncertain",
+          cwd,
+          error: String(error),
+        };
+      });
       const inspected = matchingWorkspace(await listWorkspaces(transport), cwd);
-      if (!inspected) {
-        await locked(path, (current) => {
-          current.workspaceRegistration = {
-            status: "uncertain",
-            cwd,
-            error: String(error),
-          };
-        });
+      if (!inspected)
         throw new Error(
           `Workspace creation response is uncertain and no unique matching workspace was found: ${String(error)}`,
         );
-      }
       returnedId = inspected.id;
     }
     try {
@@ -563,6 +562,19 @@ export async function handoff(
   );
 }
 
+function recoverableHandoff(state: Workflow, previousAgentId: string) {
+  return (
+    state.handoff?.agentId === previousAgentId &&
+    (state.handoff.status === "running" || state.handoff.status === "failed") &&
+    !state.rounds.implementation &&
+    !state.repairs.implementation &&
+    !state.repairs.hosted &&
+    !state.publication &&
+    !state.hosted &&
+    !state.finished
+  );
+}
+
 export async function retryMisroutedHandoff(
   path: string,
   input: WorkspaceOptions & {
@@ -596,15 +608,7 @@ export async function retryMisroutedHandoff(
     "Handoff recovery is already reserved; inspect the recorded attempt",
   );
   requireThat(
-    state.handoff?.agentId === input.previousAgentId &&
-      (state.handoff.status === "running" ||
-        state.handoff.status === "failed") &&
-      !state.rounds.implementation &&
-      !state.repairs.implementation &&
-      !state.repairs.hosted &&
-      !state.publication &&
-      !state.hosted &&
-      !state.finished,
+    recoverableHandoff(state, input.previousAgentId),
     "Only an unused known implementation handoff is recoverable",
   );
   for (const snapshot of [state.handoff.brief, state.handoff.planResolution]) {
@@ -661,9 +665,8 @@ export async function retryMisroutedHandoff(
     if (current.handoffRecovery?.previousAgentId === input.previousAgentId)
       return false;
     requireThat(
-      current.handoff?.agentId === input.previousAgentId &&
-        !current.rounds.implementation,
-      "Handoff changed before recovery reservation",
+      recoverableHandoff(current, input.previousAgentId),
+      "Handoff eligibility changed before recovery reservation",
     );
     current.history ??= [];
     const previous = structuredClone(current.handoff);
