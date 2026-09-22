@@ -32,7 +32,10 @@ import {
   uncoveredManagedSkills,
 } from "../../evals/skills-rules/scenarios.ts";
 import { read } from "../../scripts/charter-validator-reader.ts";
-import { parseReview } from "../../skills/handoff-brief/scripts/paseo-workflow.ts";
+import {
+  bindWorkspace,
+  parseReview,
+} from "../../skills/handoff-brief/scripts/paseo-workflow.ts";
 import { routeWorkDisposition } from "../../skills/plan/scripts/plan-contract.ts";
 
 const managedSkills = (
@@ -94,6 +97,63 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
     read("skills/handoff-brief/scripts/paseo-workflow-state.ts"),
     /Publication requires the exact target-base SHA/,
   );
+});
+
+test("RED skill-rule-evals: Paseo workspace binding rejects a wrong directory", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "paseo-binding-red-"));
+  const statePath = join(directory, "state.json");
+  writeFileSync(statePath, JSON.stringify({ version: 1, cwd: directory }));
+  try {
+    await assert.rejects(
+      bindWorkspace(statePath, { workspaceId: "wrong" }, async () =>
+        JSON.stringify([{ workspaceId: "wrong", cwd: "/other" }]),
+      ),
+      /does not match canonical cwd/,
+    );
+    assert.equal(
+      JSON.parse(readFileSync(statePath, "utf8")).workspace,
+      undefined,
+    );
+    let lists = 0;
+    await assert.rejects(
+      bindWorkspace(statePath, { registerWorkspace: true }, async (args) => {
+        if (args[1] === "create") throw new Error("lost response");
+        lists++;
+        if (lists === 1) return "[]";
+        throw new Error("inspection failed");
+      }),
+      /inspection failed/,
+    );
+    assert.equal(
+      JSON.parse(readFileSync(statePath, "utf8")).workspaceRegistration.status,
+      "uncertain",
+    );
+  } finally {
+    rmSync(directory, { recursive: true });
+  }
+});
+
+test("GREEN skill-rule-evals: Paseo workspace binding records one exact directory", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "paseo-binding-green-"));
+  const statePath = join(directory, "state.json");
+  writeFileSync(statePath, JSON.stringify({ version: 1, cwd: directory }));
+  try {
+    await bindWorkspace(statePath, {}, async () =>
+      JSON.stringify([{ workspaceId: "exact", cwd: directory }]),
+    );
+    const state = JSON.parse(readFileSync(statePath, "utf8"));
+    assert.deepEqual(state.workspace, {
+      id: "exact",
+      cwd: directory,
+    });
+    assert.equal(state.workspaceRegistration, undefined);
+    assert.match(
+      read("skills/handoff-brief/references/paseo-workflow.md"),
+      /inert assignment[\s\S]*verifies cwd/,
+    );
+  } finally {
+    rmSync(directory, { recursive: true });
+  }
 });
 
 test("RED skill-rule-evals: ambiguous reviewer envelopes remain rejected", () => {

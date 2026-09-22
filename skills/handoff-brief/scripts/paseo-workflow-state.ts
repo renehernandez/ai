@@ -27,13 +27,24 @@ export type Outcome = {
   evidence: string;
   findings: { id: string; evidence: string }[];
 };
+export type LaunchInspection = {
+  cwd: string;
+  provider: string;
+  model: string;
+  thinking: string;
+  status: string;
+};
 export type Review = {
   status: "reserved" | "running" | "complete" | "degraded" | "failed";
   agentId?: string;
+  launchStatus?: "identity-recorded" | "verified" | "released" | "blocked";
+  inspection?: LaunchInspection;
+  assignment?: Snapshot;
   outcomes?: Record<string, Outcome>;
   error?: string;
 };
 export type Snapshot = { path: string; sha256: string };
+export type WorkspaceBinding = { id: string; cwd: string };
 export type Decision = {
   id: string;
   action: "fix" | "dismiss" | "question";
@@ -99,6 +110,12 @@ export type ManagedConfig = {
 export type Workflow = {
   version: 1;
   cwd: string;
+  workspace?: WorkspaceBinding;
+  workspaceRegistration?: {
+    status: "reserved" | "uncertain";
+    cwd: string;
+    error?: string;
+  };
   routes: Record<Role, Route>;
   lenses: Record<Phase, Lens[]>;
   timeoutSeconds: number;
@@ -136,6 +153,12 @@ export type Workflow = {
     expectedHead: string;
     artifactUrl?: string;
   };
+  handoffRecovery?: {
+    status: "reserved" | "complete";
+    previousAgentId: string;
+    authorizationSource: string;
+    evidence?: string;
+  };
   history?: {
     batchId: string;
     authorization?: Workflow["currentAuthorization"];
@@ -149,6 +172,19 @@ export type Workflow = {
     publication?: Receipt;
     hosted?: Hosted;
     finished?: string;
+    failedHandoff?: {
+      previousAgentId: string;
+      error: string;
+      inspection: LaunchInspection;
+      authorizationSource: string;
+      target: {
+        cwd: string;
+        branch: string;
+        head: string;
+        dirtyStatus: string[];
+      };
+      noWritesEvidence: string;
+    };
   }[];
 };
 export type Transport = (args: string[], timeoutMs: number) => Promise<string>;

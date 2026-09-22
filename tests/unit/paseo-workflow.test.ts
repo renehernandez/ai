@@ -1,5 +1,6 @@
 // charter-contracts: pi-paseo-workflow
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -7,17 +8,20 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import {
   assertActionGateDisposition,
+  bindWorkspace,
   collectReviews,
   dispatchReview,
   handoff,
   initialize,
   monitor,
   parseReview,
+  retryMisroutedHandoff,
   routesFromConfig,
   type Transport,
   transition,
   type Workflow,
 } from "../../skills/handoff-brief/scripts/paseo-workflow.ts";
+import { locked } from "../../skills/handoff-brief/scripts/paseo-workflow-state.ts";
 
 const policySourceFingerprint = "a".repeat(64);
 const targetBase = "b".repeat(40);
@@ -83,22 +87,43 @@ async function fixture(
     "Objective: test the accepted behavior. Exact target evidence: test fixture.",
   );
   const calls: string[][] = [];
+  const workspaceId = "workspace-fixture";
   const sessions = new Map<
     string,
-    { provider: string; model: string; thinking: string; prompt: string }
+    {
+      provider: string;
+      model: string;
+      thinking: string;
+      cwd: string;
+      prompt: string;
+    }
   >();
   const transport: Transport = async (args) => {
     calls.push(args);
+    if (args[0] === "workspace" && args[1] === "ls")
+      return JSON.stringify([{ workspaceId, cwd: dir }]);
     if (args[0] === "run") {
       const agentId = `agent-${sessions.size}`;
       const flag = (name: string) => args[args.indexOf(name) + 1];
+      assert.equal(flag("--workspace"), workspaceId);
       sessions.set(agentId, {
         provider: flag("--provider"),
         model: flag("--model"),
         thinking: flag("--thinking"),
+        cwd: flag("--cwd"),
         prompt: args[args.length - 1],
       });
       return JSON.stringify({ agentId });
+    }
+    if (args[0] === "send") {
+      const agentId = args[1];
+      const session = sessions.get(agentId);
+      assert.ok(session);
+      session.prompt = await readFile(
+        args[args.indexOf("--prompt-file") + 1],
+        "utf8",
+      );
+      return JSON.stringify({ agentId, status: "sent" });
     }
     const agentId = args[args.length - 1];
     const session = sessions.get(agentId);
@@ -111,6 +136,8 @@ async function fixture(
         Model: session.model,
         Thinking: session.thinking,
         Status: "idle",
+        Cwd: session.cwd,
+        Archived: false,
         PendingPermissions: [],
       });
     const state = JSON.parse(await readFile(path, "utf8")) as Workflow;
@@ -326,6 +353,85 @@ test("GREEN pi-paseo-workflow: authorized continuation preserves prior evidence"
   );
 });
 
+test("workspace binding rejects mismatches and ambiguity, and registers once", async () => {
+  const wrong = await fixture();
+  await assert.rejects(
+    bindWorkspace(wrong.path, { workspaceId: "other" }, async () =>
+      JSON.stringify([{ workspaceId: "other", cwd: "/other" }]),
+    ),
+    /does not match canonical cwd/,
+  );
+  const ambiguous = await fixture();
+  await assert.rejects(
+    bindWorkspace(ambiguous.path, {}, async () =>
+      JSON.stringify([
+        { workspaceId: "one", cwd: ambiguous.dir },
+        { workspaceId: "two", cwd: ambiguous.dir },
+      ]),
+    ),
+    /ambiguous Paseo workspaces/,
+  );
+  const registration = await fixture();
+  let created = false;
+  let createCalls = 0;
+  let releaseCreation: () => void = () => {};
+  let signalCreation: () => void = () => {};
+  const creationStarted = new Promise<void>((resolve) => {
+    signalCreation = resolve;
+  });
+  const creationReleased = new Promise<void>((resolve) => {
+    releaseCreation = resolve;
+  });
+  const transport: Transport = async (args) => {
+    if (args[0] === "workspace" && args[1] === "ls")
+      return JSON.stringify(
+        created ? [{ workspaceId: "registered", cwd: registration.dir }] : [],
+      );
+    assert.equal(args[1], "create");
+    createCalls++;
+    signalCreation();
+    await creationReleased;
+    created = true;
+    return JSON.stringify({ workspaceId: "registered" });
+  };
+  const first = bindWorkspace(
+    registration.path,
+    { registerWorkspace: true, projectId: "project" },
+    transport,
+  );
+  await creationStarted;
+  const second = bindWorkspace(
+    registration.path,
+    { registerWorkspace: true, projectId: "project" },
+    transport,
+  );
+  await assert.rejects(second, /registration is already reserved/);
+  releaseCreation();
+  const results = await Promise.allSettled([first]);
+  assert.equal(createCalls, 1);
+  assert.equal(
+    results.filter((result) => result.status === "fulfilled").length,
+    1,
+  );
+  assert.equal((await registration.read()).workspace?.id, "registered");
+
+  const uncertain = await fixture();
+  let listCalls = 0;
+  await assert.rejects(
+    bindWorkspace(uncertain.path, { registerWorkspace: true }, async (args) => {
+      if (args[1] === "create") throw new Error("lost create response");
+      listCalls++;
+      if (listCalls === 1) return "[]";
+      throw new Error("workspace inspection unavailable");
+    }),
+    /workspace inspection unavailable/,
+  );
+  assert.equal(
+    (await uncertain.read()).workspaceRegistration?.status,
+    "uncertain",
+  );
+});
+
 test("RED pi-paseo-workflow: repeated phase cannot dispatch another review", async () => {
   const f = await fixture();
   const originalArtifact = await readFile(f.artifactPath, "utf8");
@@ -350,7 +456,7 @@ test("RED pi-paseo-workflow: repeated phase cannot dispatch another review", asy
   );
   assert.deepEqual((await f.read()).rounds.planning?.artifact, reserved);
   assert.equal(await readFile(reserved.path, "utf8"), originalArtifact);
-  assert.equal(f.calls.length, 2);
+  assert.equal(f.calls.filter((args) => args[0] === "run").length, 2);
 });
 
 test("parallel phase callers reserve each reviewer only once", async () => {
@@ -365,7 +471,7 @@ test("parallel phase callers reserve each reviewer only once", async () => {
     ),
   );
   assert.equal(results.filter((item) => item.status === "rejected").length, 1);
-  assert.equal(f.calls.length, 2);
+  assert.equal(f.calls.filter((args) => args[0] === "run").length, 2);
   assert.ok(
     Object.values((await f.read()).rounds.planning?.reviews ?? {}).every(
       (review) => review.status === "running",
@@ -378,8 +484,9 @@ test("reviewer launch and response failures become degraded evidence without ret
   await dispatchReview(
     f.path,
     { phase: "planning", artifactPath: f.artifactPath },
-    async () => {
-      throw new Error("lost response");
+    async (args, timeout) => {
+      if (args[0] === "run") throw new Error("lost response");
+      return f.transport(args, timeout);
     },
   );
   assert.ok(
@@ -401,7 +508,7 @@ test("reviewer launch and response failures become degraded evidence without ret
     { briefPath: f.artifactPath, planResolution: "Fallback review complete." },
     f.transport,
   );
-  assert.equal(f.calls.length, 1);
+  assert.equal(f.calls.filter((args) => args[0] === "run").length, 1);
 
   const g = await fixture();
   await dispatchReview(
@@ -525,15 +632,168 @@ test("uncertain implementer launch remains a hard blocker without retry", async 
     handoff(
       f.path,
       { briefPath: f.artifactPath, planResolution: "Planning is settled." },
-      async () => {
-        attempts++;
-        throw new Error("lost implementer launch response");
+      async (args, timeout) => {
+        if (args[0] === "run") {
+          attempts++;
+          throw new Error("lost implementer launch response");
+        }
+        return f.transport(args, timeout);
       },
     ),
     /lost implementer launch response/,
   );
   assert.equal(attempts, 1);
   assert.equal((await f.read()).handoff?.status, "failed");
+});
+
+test("uncertain assignment release preserves the known identity and blocks retry", async () => {
+  const f = await fixture();
+  await f.review("planning");
+  await assert.rejects(
+    handoff(
+      f.path,
+      { briefPath: f.artifactPath, planResolution: "Planning is settled." },
+      async (args, timeout) => {
+        if (args[0] === "send") throw new Error("lost send response");
+        return f.transport(args, timeout);
+      },
+    ),
+    /lost send response/,
+  );
+  const failed = await f.read();
+  assert.ok(failed.handoff?.agentId);
+  assert.equal(failed.handoff?.launchStatus, "blocked");
+  await assert.rejects(
+    handoff(
+      f.path,
+      { briefPath: f.artifactPath, planResolution: "Do not resend." },
+      f.transport,
+    ),
+    /already dispatched/,
+  );
+});
+
+test("wrong-cwd inert launch never receives the task assignment", async () => {
+  const f = await fixture();
+  await f.review("planning");
+  await assert.rejects(
+    handoff(
+      f.path,
+      { briefPath: f.artifactPath, planResolution: "Planning is settled." },
+      async (args, timeout) => {
+        const output = await f.transport(args, timeout);
+        return args[0] === "inspect"
+          ? JSON.stringify({ ...JSON.parse(output), Cwd: "/wrong/worktree" })
+          : output;
+      },
+    ),
+    /Session cwd.*differs/,
+  );
+  const failed = await f.read();
+  assert.equal(failed.handoff?.launchStatus, "blocked");
+  assert.equal(
+    f.calls.filter(
+      (args) => args[0] === "send" && args[1] === failed.handoff?.agentId,
+    ).length,
+    0,
+  );
+});
+
+test("authorized known-misroute recovery archives history and launches once", async () => {
+  const f = await fixture();
+  const gitEnv = {
+    ...process.env,
+    GIT_DIR: undefined,
+    GIT_WORK_TREE: undefined,
+    GIT_INDEX_FILE: undefined,
+  };
+  const git = (args: string[]) =>
+    execFileSync("git", args, {
+      cwd: f.dir,
+      env: gitEnv,
+      encoding: "utf8",
+    });
+  git(["init", "-b", "recovery"]);
+  git(["config", "user.email", "fixture@example.test"]);
+  git(["config", "user.name", "Fixture"]);
+  git(["add", "."]);
+  git(["commit", "-m", "fixture"]);
+  await f.review("planning");
+  await assert.rejects(
+    handoff(
+      f.path,
+      { briefPath: f.artifactPath, planResolution: "Planning is settled." },
+      async (args, timeout) => {
+        const output = await f.transport(args, timeout);
+        return args[0] === "inspect"
+          ? JSON.stringify({ ...JSON.parse(output), Cwd: "/wrong/worktree" })
+          : output;
+      },
+    ),
+    /Session cwd.*differs/,
+  );
+  const failed = await f.read();
+  const previousAgentId = failed.handoff?.agentId;
+  assert.ok(previousAgentId);
+  const head = git(["rev-parse", "HEAD"]).trim();
+  const dirtyStatus = git(["status", "--porcelain=v1"])
+    .trimEnd()
+    .split("\n")
+    .filter(Boolean);
+  const input = {
+    previousAgentId,
+    authorizationSource:
+      "User authorized retry of this exact no-write misroute.",
+    branch: "recovery",
+    head,
+    dirtyStatus,
+    noWritesEvidence:
+      "The original session stopped after cwd verification and made no writes.",
+  };
+  const recoveryTransport: Transport = async (args, timeout) => {
+    const output = await f.transport(args, timeout);
+    return args[0] === "inspect" && args[args.length - 1] === previousAgentId
+      ? JSON.stringify({ ...JSON.parse(output), Cwd: "/wrong/worktree" })
+      : output;
+  };
+  const launchesBeforeRace = f.calls.filter((args) => args[0] === "run").length;
+  await assert.rejects(
+    retryMisroutedHandoff(f.path, input, async (args, timeout) => {
+      const output = await recoveryTransport(args, timeout);
+      if (args[0] === "inspect" && args[args.length - 1] === previousAgentId)
+        await locked(f.path, (state) => {
+          state.repairs.implementation = { status: "started" };
+        });
+      return output;
+    }),
+    /eligibility changed before recovery reservation/,
+  );
+  assert.equal(
+    f.calls.filter((args) => args[0] === "run").length,
+    launchesBeforeRace,
+  );
+  await locked(f.path, (state) => {
+    delete state.repairs.implementation;
+  });
+  const recovered = await retryMisroutedHandoff(
+    f.path,
+    input,
+    recoveryTransport,
+  );
+  assert.equal(recovered.handoffRecovery?.status, "complete");
+  assert.notEqual(recovered.handoff?.agentId, previousAgentId);
+  assert.equal(recovered.handoff?.launchStatus, "released");
+  assert.equal(
+    recovered.history?.at(-1)?.failedHandoff?.previousAgentId,
+    previousAgentId,
+  );
+  assert.equal(
+    recovered.rounds.planning?.fingerprint,
+    failed.rounds.planning?.fingerprint,
+  );
+  const launches = f.calls.filter((args) => args[0] === "run").length;
+  await retryMisroutedHandoff(f.path, input, recoveryTransport);
+  assert.equal(f.calls.filter((args) => args[0] === "run").length, launches);
 });
 
 test("actual session model mismatch records degraded evidence", async () => {

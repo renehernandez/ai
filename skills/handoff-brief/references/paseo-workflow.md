@@ -31,11 +31,23 @@ Keep the brief and workflow state task-local. Preserve the plan's durable
 content in the repository; do not commit private review receipts.
 
 When implementation is accepted, the Plan owner uses the handoff runner to
-start a new Paseo-managed Sol session with that brief. Record the returned
-session identity and transfer write ownership before Sol starts edits. The
-planning session remains available for user conversation; it does not keep
-writing the implementation worktree. Do not fork accumulated conversation or
-reuse a previous worker session for the handoff.
+start a new Paseo-managed Sol session with that brief. The runner resolves one
+unique Paseo workspace whose directory exactly matches the canonical workflow
+cwd, or performs an explicitly requested local registration for that directory.
+It passes the verified workspace identity on every launch; ambient caller
+workspace, project-name similarity, and repository containment are never
+routing evidence.
+
+A launch begins with an inert assignment. The runner records the returned
+identity, waits for the startup turn to become idle, then verifies cwd,
+provider, model, effort, archive state, and pending permissions. Only after
+that verification does it send the immutable task assignment and transfer
+write ownership. A missing, ambiguous, moved, or archived workspace, wrong cwd
+or route, unknown identity, or uncertain assignment response blocks release
+without an automatic replacement. The planning session remains available for
+user conversation; it does not keep writing the implementation worktree. Do
+not fork accumulated conversation or reuse a previous worker session for the
+handoff.
 
 Sol follows Execute, implements the accepted work and runs the project-native
 verification. Reviewers only read the frozen artifact. Independent concurrent
@@ -124,11 +136,12 @@ contract; omit optional fields unless needed.
 | --- | --- |
 | `init` | Plan: `cwd`; optional `configPath`, `timeoutSeconds`, and `additionalLenses` keyed by planning/implementation. |
 | `policy` | Plan: `deliveryPolicy` with provider/repository identity, independent CI and reviewer status, source, and source fingerprint. Unknown policy blocks handoff. |
-| `review` | Plan or Execute: `phase`, `artifactPath`, and implementation `head`. The artifact includes the exact diff/base or complete plan and original evidence references. Dispatches once and collects. |
+| `review` | Plan or Execute: `phase`, `artifactPath`, and implementation `head`. The artifact includes the exact diff/base or complete plan and original evidence references. Dispatches once and collects. Optional `workspaceId`; when no exact workspace exists, explicit `registerWorkspace: true` and optional `projectId` register the canonical cwd locally. |
 | `collect` | Owning mode: `phase`; retrieves the existing sessions without starting replacements. |
 | `triage` | Plan or Execute: `phase`, `decisions` containing each finding's `id`, `action` (fix/dismiss/question) and `reason`; for each degraded reviewer, `assessments` with its `role` and complete per-lens `outcomes` using the review outcome shape. |
 | `waiver` | Owning mode: `phase`, exact current `target`, exact `requestedAction`, nonempty `failedGates`, and `reason`. Records failed evidence without granting the action itself. |
-| `handoff` | Plan: `briefPath`, `planResolution`; creates the fresh Sol session and records its identity. |
+| `handoff` | Plan: `briefPath`, `planResolution`; creates the fresh Sol session and records its identity. Accepts the same optional workspace fields as `review`. |
+| `retry-handoff` | Plan: exact `previousAgentId`, immutable authorization source, target `branch` and `head`, exact porcelain `dirtyStatus`, and `noWritesEvidence`; optional explicit workspace registration fields. Recovers only an inactive known wrong-cwd implementation handoff with unused implementation/review phases. |
 | `repair` | Execute: `phase` (implementation/hosted), `stage` (start/complete); completion includes `head` and named `verification`. |
 | `publication` | Finish: observed `artifactUrl`, `head`, exact `targetBase` SHA, optional policy-required `reviewer`, `ready: true`, `evidence`, and the unchanged policy-source fingerprint. |
 | `monitor` | Finish: `probeCommand` argv array; optional `deadlineMs` and `pollMs`. |
@@ -143,13 +156,25 @@ no shell interpolation is involved. An empty required-check response remains
 failed evidence. When both gates are not required, skip monitoring after exact
 open Ready artifact readback.
 
-For legacy recovery, the task owner inspects immutable authorization evidence,
-sole writer ownership, live artifact URL/head/base/Ready state, and a copy of the
-old state. Preview and test the `continuation` input against that isolated copy,
-then apply the identical transition to the original under the runner lock only
-when identities still match. Never hand-edit or replace state. A moved head,
-mismatched artifact, unsupported format, or uncertain ownership stops recovery;
-bookkeeping reconciliation neither launches reviewers nor grants terminal authority.
+For a known legacy wrong-cwd implementation handoff, `retry-handoff` verifies
+the original exact session is idle, unarchived, route-matched, and outside the
+accepted cwd. It verifies both immutable snapshots plus the target branch, head,
+and dirty inventory, and requires explicit no-write evidence. The runner then
+archives the failed identity, inspection, authorization, and target in
+`Workflow.history`, reserves one replacement, and uses the normal verified
+workspace launch. Repeating the same completed request is idempotent. An active
+or unknown old session, used implementation phase, target drift, missing
+snapshot, uncertain registration, or reserved replacement stops recovery; do
+not hand-edit state, stop/archive the old session, or create another attempt.
+
+For other legacy recovery, the task owner inspects immutable authorization
+evidence, sole writer ownership, live artifact URL/head/base/Ready state, and a
+copy of the old state. Preview and test the `continuation` input against that
+isolated copy, then apply the identical transition to the original under the
+runner lock only when identities still match. Never hand-edit or replace state.
+A moved head, mismatched artifact, unsupported format, or uncertain ownership
+stops recovery; bookkeeping reconciliation neither launches reviewers nor
+grants terminal authority.
 
 The runner stores review artifacts, lens definitions and handoff content in
 private read-only snapshots beside its state. Launch prompts carry snapshot paths
