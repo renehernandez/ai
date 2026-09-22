@@ -12,11 +12,14 @@ test("GREEN authority: managed Pi workflow keeps Ready publication separate from
   assert.match(workflow, /Merge requires separate\s+user authority/);
   assert.match(workflow, /one hosted\s+repair batch/);
   assert.match(workflow, /direct unmanaged Pi sessions/);
-  assert.match(workflow, /project-policy source or explicit user disposition/);
-  assert.match(workflow, /cannot excuse failed, pending or unknown/);
+  assert.match(workflow, /source fingerprint/);
+  assert.match(
+    workflow,
+    /empty required-check response remains\s+failed evidence/,
+  );
   assert.match(
     read("rules/git-and-review.md"),
-    /personal.*GitHub `origin` with Genie/,
+    /personal.*GitHub `origin` with neither required hosted CI nor an automated hosted reviewer/,
   );
   assert.match(
     read("rules/git-and-review.md"),
@@ -84,7 +87,7 @@ test("RED authority: absent CI does not create a publication policy", () => {
   assert.doesNotMatch(workflow, /an empty check list establishes/i);
   assert.match(
     workflow,
-    /An empty check list alone does not establish that policy/,
+    /empty required-check response remains\s+failed evidence/,
   );
 });
 

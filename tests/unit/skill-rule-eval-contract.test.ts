@@ -73,7 +73,7 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
   assert.ok(managedSkills.includes("finish"));
   assert.match(
     read("rules/git-and-review.md"),
-    /personal.*GitHub `origin` with Genie/,
+    /personal.*GitHub `origin` with neither required hosted CI nor an automated hosted reviewer/,
   );
   assert.match(
     read("rules/git-and-review.md"),
@@ -85,7 +85,7 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
   assert.equal(relay?.value, true);
   assert.match(
     read("skills/handoff-brief/references/paseo-workflow.md"),
-    /project-policy source or explicit user disposition/,
+    /source fingerprint/,
   );
   assert.ok(
     axConfig.runtime.skillSymlinkTargets.includes("~/.pi/agent/skills"),
@@ -164,7 +164,7 @@ test("RED skill-rule-evals: missing CI does not introduce an ungoverned waiver s
   ]);
   assert.match(
     read("skills/handoff-brief/references/paseo-workflow.md"),
-    /An empty check list alone does not establish that policy/,
+    /empty required-check response remains\s+failed evidence/,
   );
 });
 

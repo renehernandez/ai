@@ -50,10 +50,21 @@ export type Waiver = {
   failedGates: string[];
   reason: string;
 };
+export type GatePolicy = "required" | "not-required" | "unknown";
+export type DeliveryPolicy = {
+  provider: "github" | "gitlab";
+  repository: string;
+  ci: GatePolicy;
+  reviewer: GatePolicy;
+  reviewerKind?: "genie" | "nitro";
+  source: string;
+  sourceFingerprint: string;
+};
 export type Receipt = {
   artifactUrl: string;
   head: string;
-  reviewer: "genie" | "nitro";
+  targetBase?: string;
+  reviewer?: "genie" | "nitro";
   ready: true;
   evidence: string;
 };
@@ -69,6 +80,13 @@ export type Input = Partial<Receipt> &
     assessments?: FallbackAssessment[];
     stage?: "start" | "complete";
     verification?: string;
+    deliveryPolicy?: DeliveryPolicy;
+    batchId?: string;
+    authorizationSource?: string;
+    purpose?: string;
+    allowedPhases?: (Phase | "hosted")[];
+    expectedHead?: string;
+    policySourceFingerprint?: string;
   };
 export type ManagedConfig = {
   agents?: {
@@ -106,9 +124,34 @@ export type Workflow = {
       { status: "started" | "complete"; head?: string; verification?: string }
     >
   >;
+  deliveryPolicy?: DeliveryPolicy;
   publication?: Receipt;
   hosted?: Hosted;
   finished?: string;
+  batchId?: string;
+  currentAuthorization?: {
+    authorizationSource: string;
+    purpose: string;
+    allowedPhases: (Phase | "hosted")[];
+    expectedHead: string;
+  };
+  history?: {
+    batchId: string;
+    authorizationSource: string;
+    purpose: string;
+    allowedPhases: (Phase | "hosted")[];
+    expectedHead: string;
+    artifactUrl?: string;
+    rounds: Workflow["rounds"];
+    handoff?: Workflow["handoff"];
+    decisions: Workflow["decisions"];
+    assessments: Workflow["assessments"];
+    waivers: Waiver[];
+    repairs: Workflow["repairs"];
+    publication?: Receipt;
+    hosted?: Hosted;
+    finished?: string;
+  }[];
 };
 export type Transport = (args: string[], timeoutMs: number) => Promise<string>;
 export const roles: Role[] = [
@@ -293,6 +336,8 @@ export async function initialize(
     assessments: {},
     waivers: [],
     repairs: {},
+    batchId: "initial",
+    history: [],
   };
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, `${JSON.stringify(state, null, 2)}\n`, {
@@ -470,37 +515,174 @@ export function assertActionGateDisposition(
   phase: Phase | "hosted",
   requestedAction: string,
   target: string,
+  liveArtifact?: { artifactUrl: string; targetBase?: string },
 ) {
   requireThat(nonempty(requestedAction), "Exact requested action is required");
   requireThat(
     target === currentTarget(state, phase),
     "Action target differs from the current exact artifact or head",
   );
+  if (phase === "hosted" && liveArtifact)
+    requireThat(
+      liveArtifact.artifactUrl === state.publication?.artifactUrl &&
+        liveArtifact.targetBase === state.publication?.targetBase,
+      "Bookkeeping mismatch: live artifact or target base differs from publication",
+    );
   if (phase === "planning") settled(state, phase, requestedAction);
   else repaired(state, phase, requestedAction);
 }
-export function receipt(input: Partial<Receipt>): Receipt {
+function validatedPolicy(policy: DeliveryPolicy | undefined) {
+  requireThat(policy, "Resolved delivery policy is required");
+  requireThat(
+    ["github", "gitlab"].includes(policy.provider) &&
+      nonempty(policy.repository) &&
+      ["required", "not-required", "unknown"].includes(policy.ci) &&
+      ["required", "not-required", "unknown"].includes(policy.reviewer) &&
+      nonempty(policy.source) &&
+      /^[a-f0-9]{64}$/.test(policy.sourceFingerprint) &&
+      (policy.reviewer !== "required" ||
+        policy.reviewerKind === "genie" ||
+        policy.reviewerKind === "nitro") &&
+      (policy.reviewer === "required" || policy.reviewerKind === undefined) &&
+      (policy.reviewerKind === undefined ||
+        (policy.provider === "github" && policy.reviewerKind === "genie") ||
+        (policy.provider === "gitlab" && policy.reviewerKind === "nitro")),
+    "Invalid delivery policy",
+  );
+  return policy;
+}
+
+export function receipt(
+  input: Partial<Receipt>,
+  policy?: DeliveryPolicy,
+): Receipt {
+  const reviewerRequired = policy?.reviewer === "required";
+  let policyUrlValid = true;
+  if (policy && input.artifactUrl) {
+    const url = new URL(input.artifactUrl);
+    const repositoryPath = `/${policy.repository}/`;
+    policyUrlValid =
+      (policy.provider === "github" && url.hostname === "github.com") ||
+      (policy.provider === "gitlab" && url.hostname === "git.fullscript.io");
+    policyUrlValid &&= url.pathname.startsWith(repositoryPath);
+  }
   requireThat(
     nonempty(input.artifactUrl) &&
       /^https:\/\//.test(input.artifactUrl) &&
       nonempty(input.head) &&
-      (input.reviewer === "genie" || input.reviewer === "nitro") &&
       input.ready === true &&
-      nonempty(input.evidence),
-    "Finish must supply observed Ready artifact, head, reviewer and source evidence",
+      nonempty(input.evidence) &&
+      policyUrlValid &&
+      (!policy ||
+        (reviewerRequired
+          ? input.reviewer === policy.reviewerKind
+          : input.reviewer === undefined)),
+    "Finish must supply observed Ready artifact, head, policy-aligned reviewer and source evidence",
   );
   return {
     artifactUrl: input.artifactUrl,
     head: input.head,
-    reviewer: input.reviewer,
+    ...(input.targetBase ? { targetBase: input.targetBase } : {}),
+    ...(input.reviewer ? { reviewer: input.reviewer } : {}),
     ready: true,
     evidence: input.evidence,
   };
 }
 export async function transition(path: string, action: string, input: Input) {
   return locked(path, (state) => {
-    requireThat(!state.finished, "Workflow already finished");
-    if (action === "triage") {
+    if (action !== "continuation")
+      requireThat(!state.finished, "Workflow already finished");
+    if (action === "policy") {
+      requireThat(
+        !state.publication,
+        "Delivery policy must be resolved before publication",
+      );
+      const policy = validatedPolicy(input.deliveryPolicy);
+      requireThat(
+        !state.deliveryPolicy || state.currentAuthorization,
+        "Delivery policy is already recorded",
+      );
+      state.deliveryPolicy = policy;
+    } else if (action === "continuation") {
+      if (
+        input.batchId === state.batchId &&
+        input.authorizationSource ===
+          state.currentAuthorization?.authorizationSource &&
+        input.purpose === state.currentAuthorization?.purpose &&
+        input.expectedHead === state.currentAuthorization?.expectedHead
+      )
+        return state;
+      requireThat(
+        nonempty(input.batchId) &&
+          input.batchId !== state.batchId &&
+          nonempty(input.authorizationSource) &&
+          nonempty(input.purpose) &&
+          Array.isArray(input.allowedPhases) &&
+          input.allowedPhases.length > 0 &&
+          new Set(input.allowedPhases).size === input.allowedPhases.length &&
+          input.allowedPhases.every((phase) =>
+            ["planning", "implementation", "hosted"].includes(phase),
+          ) &&
+          nonempty(input.expectedHead),
+        "Continuation requires explicit bounded authorization and expected head",
+      );
+      const currentHead =
+        state.repairs.hosted?.head ??
+        state.repairs.implementation?.head ??
+        state.publication?.head ??
+        state.rounds.implementation?.head;
+      requireThat(
+        input.expectedHead === currentHead &&
+          (!state.publication ||
+            input.artifactUrl === state.publication.artifactUrl),
+        "Bookkeeping mismatch: continuation head or artifact identity differs from recorded state",
+      );
+      state.history ??= [];
+      requireThat(
+        !state.history.some((batch) => batch.batchId === input.batchId),
+        "Continuation batch identity is already historical",
+      );
+      state.history.push({
+        batchId: state.batchId ?? "legacy-initial",
+        authorizationSource: input.authorizationSource,
+        purpose: input.purpose,
+        allowedPhases: input.allowedPhases,
+        expectedHead: input.expectedHead,
+        artifactUrl: state.publication?.artifactUrl,
+        rounds: structuredClone(state.rounds),
+        handoff: state.handoff && structuredClone(state.handoff),
+        decisions: structuredClone(state.decisions),
+        assessments: structuredClone(state.assessments),
+        waivers: structuredClone(state.waivers),
+        repairs: structuredClone(state.repairs),
+        publication: state.publication && structuredClone(state.publication),
+        hosted: state.hosted && structuredClone(state.hosted),
+        finished: state.finished,
+      });
+      state.batchId = input.batchId;
+      state.currentAuthorization = {
+        authorizationSource: input.authorizationSource,
+        purpose: input.purpose,
+        allowedPhases: input.allowedPhases,
+        expectedHead: input.expectedHead,
+      };
+      if (input.allowedPhases.includes("planning")) {
+        state.rounds = {};
+        delete state.handoff;
+      } else if (input.allowedPhases.includes("implementation"))
+        delete state.rounds.implementation;
+      state.decisions = {};
+      state.assessments = {};
+      state.waivers = [];
+      state.repairs = {};
+      if (
+        input.allowedPhases.includes("planning") ||
+        input.allowedPhases.includes("implementation")
+      )
+        delete state.publication;
+      delete state.hosted;
+      delete state.finished;
+    } else if (action === "triage") {
       const phase = input.phase === "hosted" ? "hosted" : phaseOf(input.phase);
       requireThat(
         !(phase === "planning"
@@ -594,6 +776,11 @@ export async function transition(path: string, action: string, input: Input) {
         input.phase === "implementation" || input.phase === "hosted",
         "Invalid repair phase",
       );
+      requireThat(
+        !state.currentAuthorization ||
+          state.currentAuthorization.allowedPhases.includes(input.phase),
+        `Active continuation does not authorize ${input.phase} repair`,
+      );
       const phase = input.phase as "implementation" | "hosted";
       const decisions = settled(
         state,
@@ -624,7 +811,16 @@ export async function transition(path: string, action: string, input: Input) {
     } else if (action === "publication") {
       repaired(state, "implementation", "publication");
       requireThat(!state.publication, "Publication already recorded");
-      const observed = receipt(input);
+      const policy = validatedPolicy(state.deliveryPolicy);
+      requireThat(
+        policy.ci !== "unknown" && policy.reviewer !== "unknown",
+        "Unknown delivery policy blocks publication",
+      );
+      requireThat(
+        input.policySourceFingerprint === policy.sourceFingerprint,
+        "Delivery policy source changed since handoff; re-resolve policy before publication",
+      );
+      const observed = receipt(input, policy);
       requireThat(
         observed.head ===
           (state.repairs.implementation?.head ??
@@ -632,9 +828,17 @@ export async function transition(path: string, action: string, input: Input) {
         "Publication head differs from reviewed or repaired implementation",
       );
       state.publication = observed;
+      if (policy.ci === "not-required" && policy.reviewer === "not-required") {
+        state.hosted = {
+          ...observed,
+          status: "completed",
+          findings: [],
+          evidence: `${observed.evidence} Hosted CI and automated review are not required by ${policy.source}.`,
+        };
+      }
     } else if (action === "finish") {
       repaired(state, "hosted", "finish");
-      const final = receipt(input);
+      const final = receipt(input, validatedPolicy(state.deliveryPolicy));
       requireThat(
         final.artifactUrl === state.publication?.artifactUrl &&
           final.reviewer === state.publication.reviewer,

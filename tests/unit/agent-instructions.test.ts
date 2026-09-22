@@ -472,10 +472,16 @@ test("AI repo Finish policy routes personal GitHub and work GitLab separately", 
   const nitroRules = readFileSync("rules/fullscript/nitro-review.md", "utf-8");
 
   assert.match(repoAgents, /GitLab `origin`/);
-  assert.match(repoAgents, /personal.*GitHub `origin`.*Genie/);
+  assert.match(
+    repoAgents,
+    /personal.*GitHub `origin`.*neither hosted CI nor an automated hosted reviewer/,
+  );
   assert.match(repoAgents, /work.*GitLab `origin`.*Nitro/);
   assert.doesNotMatch(repoAgents, /The `github` remote is a mirror/);
-  assert.match(gitRules, /personal.*GitHub `origin`.*Genie/);
+  assert.match(
+    gitRules,
+    /personal.*GitHub `origin`.*neither required hosted CI nor an automated hosted reviewer/,
+  );
   assert.match(gitRules, /work.*GitLab `origin`.*Nitro/);
   assert.match(gitRules, /profile and origin disagree.*resolve/is);
   assert.match(repoAgents, /Nitro/);

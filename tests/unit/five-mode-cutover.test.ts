@@ -103,7 +103,7 @@ test("review routing is owned by Review and Finish without orphaned policy data"
   assert.match(review, /nitro-review-feedback[^\n]*when policy selects Nitro/);
   assert.match(
     finish,
-    /direct user instruction,\nproject policy, workflow-policy profile, remote inference/,
+    /direct instruction, project policy, profile,\nthen remote inference/,
   );
 });
 

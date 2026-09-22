@@ -13,10 +13,11 @@ export type RecordValue = Record<string, unknown>;
 export type ProbeOptions = {
   artifactUrl: string;
   head: string;
-  reviewer: "genie" | "nitro";
-  botLogin: string;
+  ciPolicy: "required" | "not-required";
+  reviewer?: "genie" | "nitro";
+  botLogin?: string;
+  policyEvidence: string;
   classification?: "standard" | "removal-only";
-  noRequiredCiEvidence?: string;
 };
 export type Command = (
   program: string,
@@ -27,7 +28,7 @@ export type ProbeResult = {
   status: "waiting" | "completed" | "awaiting-user" | "failed";
   head: string;
   artifactUrl: string;
-  reviewer: "genie" | "nitro";
+  reviewer?: "genie" | "nitro";
   ready: boolean;
   evidence: string;
   findings: RecordValue[];
@@ -62,14 +63,20 @@ export function probeHosted(
     status: "awaiting-user",
     head: options.head,
     artifactUrl: options.artifactUrl,
-    reviewer: options.reviewer,
+    ...(options.reviewer ? { reviewer: options.reviewer } : {}),
     ready: false,
     evidence: "",
     findings: [],
   };
   try {
-    if (!/^[a-f0-9]{40,64}$/.test(options.head) || !options.botLogin)
-      throw new Error("Explicit full head and policy bot login required");
+    if (
+      !/^[a-f0-9]{40,64}$/.test(options.head) ||
+      !options.policyEvidence.trim() ||
+      (options.reviewer && !options.botLogin)
+    )
+      throw new Error(
+        "Explicit full head, policy evidence, and configured reviewer identity are required",
+      );
     const url = new URL(options.artifactUrl);
     if (
       url.protocol !== "https:" ||
@@ -79,9 +86,9 @@ export function probeHosted(
       url.hash
     )
       throw new Error("Invalid artifact URL");
-    if (options.reviewer === "genie") github(options, url, run, result);
-    else if (options.reviewer === "nitro") gitlab(options, url, run, result);
-    else throw new Error("Unknown reviewer policy");
+    if (options.reviewer === "nitro") gitlab(options, url, run, result);
+    else if (url.hostname === "github.com") github(options, url, run, result);
+    else throw new Error("Unknown provider or reviewer policy");
   } catch (error) {
     result.status = "awaiting-user";
     result.evidence = error instanceof Error ? error.message : String(error);
@@ -103,7 +110,8 @@ function gitlab(
   if (
     !match ||
     url.hostname !== "git.fullscript.io" ||
-    options.botLogin !== "nitro"
+    options.botLogin !== "nitro" ||
+    options.ciPolicy !== "required"
   )
     throw new Error(
       "Nitro requires explicit Fullscript GitLab policy and exact nitro identity",
@@ -314,23 +322,26 @@ function main(): void {
       reviewer: { type: "string" },
       "bot-login": { type: "string" },
       classification: { type: "string" },
-      "no-required-ci-evidence": { type: "string" },
+      "ci-policy": { type: "string" },
+      "policy-evidence": { type: "string" },
     },
     strict: true,
   });
   if (
     !values["artifact-url"] ||
     !values.head ||
-    !["genie", "nitro"].includes(values.reviewer ?? "") ||
-    !values["bot-login"] ||
+    !["required", "not-required"].includes(values["ci-policy"] ?? "") ||
+    !["none", "genie", "nitro"].includes(values.reviewer ?? "") ||
+    !values["policy-evidence"] ||
+    (values.reviewer !== "none" && !values["bot-login"]) ||
     (values.classification &&
       !["standard", "removal-only"].includes(values.classification))
   )
     throw new Error(
-      "Required: --artifact-url URL --head SHA --reviewer genie|nitro --bot-login POLICY_LOGIN [--classification standard|removal-only] [--no-required-ci-evidence POLICY_DISPOSITION]",
+      "Required: --artifact-url URL --head SHA --ci-policy required|not-required --reviewer none|genie|nitro --policy-evidence SOURCE [--bot-login POLICY_LOGIN] [--classification standard|removal-only]",
     );
   process.stdout.write(
-    `${JSON.stringify(probeHosted({ artifactUrl: values["artifact-url"], head: values.head, reviewer: values.reviewer as ProbeOptions["reviewer"], botLogin: values["bot-login"], classification: values.classification as ProbeOptions["classification"], noRequiredCiEvidence: values["no-required-ci-evidence"] }))}\n`,
+    `${JSON.stringify(probeHosted({ artifactUrl: values["artifact-url"], head: values.head, ciPolicy: values["ci-policy"] as ProbeOptions["ciPolicy"], ...(values.reviewer === "none" ? {} : { reviewer: values.reviewer as ProbeOptions["reviewer"] }), ...(values["bot-login"] ? { botLogin: values["bot-login"] } : {}), policyEvidence: values["policy-evidence"], classification: values.classification as ProbeOptions["classification"] }))}\n`,
   );
 }
 if (

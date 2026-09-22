@@ -69,8 +69,10 @@ review.
 ## Publish and follow hosted feedback
 
 Finish uses Change Request Create to publish the hook-clean implementation as
-a Ready PR or MR and requests the configured Genie or Nitro review. This managed
-Pi/Paseo Ready-publication contract takes precedence over generic Standard draft
+a Ready PR or MR. It requests and monitors only hosted gates that the resolved
+repository policy requires. A not-required gate is not passed or waived, and an
+absent reviewer is never fabricated or polled. This managed Pi/Paseo
+Ready-publication contract takes precedence over generic Standard draft
 publication rules. Respect
 the provider-specific review request mechanism. Publication never authorizes
 merge, deployment or cleanup.
@@ -121,29 +123,33 @@ contract; omit optional fields unless needed.
 | Action | Input fields and owner |
 | --- | --- |
 | `init` | Plan: `cwd`; optional `configPath`, `timeoutSeconds`, and `additionalLenses` keyed by planning/implementation. |
+| `policy` | Plan: `deliveryPolicy` with provider/repository identity, independent CI and reviewer status, source, and source fingerprint. Unknown policy blocks handoff. |
 | `review` | Plan or Execute: `phase`, `artifactPath`, and implementation `head`. The artifact includes the exact diff/base or complete plan and original evidence references. Dispatches once and collects. |
 | `collect` | Owning mode: `phase`; retrieves the existing sessions without starting replacements. |
 | `triage` | Plan or Execute: `phase`, `decisions` containing each finding's `id`, `action` (fix/dismiss/question) and `reason`; for each degraded reviewer, `assessments` with its `role` and complete per-lens `outcomes` using the review outcome shape. |
 | `waiver` | Owning mode: `phase`, exact current `target`, exact `requestedAction`, nonempty `failedGates`, and `reason`. Records failed evidence without granting the action itself. |
 | `handoff` | Plan: `briefPath`, `planResolution`; creates the fresh Sol session and records its identity. |
 | `repair` | Execute: `phase` (implementation/hosted), `stage` (start/complete); completion includes `head` and named `verification`. |
-| `publication` | Finish: observed `artifactUrl`, `head`, `reviewer` (genie/nitro), `ready: true`, and `evidence`. |
+| `publication` | Finish: observed `artifactUrl`, `head`, optional policy-required `reviewer`, `ready: true`, `evidence`, and the unchanged resolved policy. |
 | `monitor` | Finish: `probeCommand` argv array; optional `deadlineMs` and `pollMs`. |
 | `finish` | Finish: current observed publication fields and final evidence; does not merge. |
+| `continuation` | Owning mode: explicit `batchId`, authorization source, purpose, allowed phases, and expected current head. Archives prior evidence and opens one bounded batch. |
 | `status` | No input required. Inspect persisted phase, reports and unresolved gaps. |
 
-For monitoring, use the installed Finish probe as `probeCommand`: Node followed
-by `~/.agents/skills/finish/scripts/paseo-hosted-probe.ts`, `--artifact-url`,
-the URL, `--head`, the full SHA, `--reviewer`, the configured reviewer, and
-`--bot-login`, its verified policy identity. Expand paths before building argv;
-no shell interpolation is involved. Probe output is raw evidence for semantic
-triage. Never convert a missing bot completion or absent CI policy into a pass.
+For monitoring, use the installed Finish probe with the resolved `--ci-policy`,
+`--reviewer` (`none`, `genie`, or `nitro`), and `--policy-evidence`; include
+`--bot-login` only for a configured reviewer. Expand paths before building argv;
+no shell interpolation is involved. An empty required-check response remains
+failed evidence. When both gates are not required, skip monitoring after exact
+open Ready artifact readback.
 
-For GitHub repositories that intentionally have no required CI, pass
-`--no-required-ci-evidence` with the project-policy source or explicit user disposition.
-An empty check list alone does not establish that policy. This exception applies
-only to an empty required check set; it cannot excuse failed, pending or unknown
-CI, or missing reviewer completion.
+For legacy recovery, the task owner inspects immutable authorization evidence,
+sole writer ownership, live artifact URL/head/base/Ready state, and a copy of the
+old state. Preview and test the `continuation` input against that isolated copy,
+then apply the identical transition to the original under the runner lock only
+when identities still match. Never hand-edit or replace state. A moved head,
+mismatched artifact, unsupported format, or uncertain ownership stops recovery;
+bookkeeping reconciliation neither launches reviewers nor grants terminal authority.
 
 The runner stores review artifacts, lens definitions and handoff content in
 private read-only snapshots beside its state. Launch prompts carry snapshot paths
