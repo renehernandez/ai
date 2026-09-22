@@ -93,10 +93,10 @@ test("RED authority: absent CI does not create a publication policy", () => {
     workflow,
     /empty required-check response remains\s+failed evidence/,
   );
-  assert.match(
-    read("skills/finish/scripts/paseo-github-feedback.ts"),
-    /Skipped required CI needs policy disposition/,
-  );
+  const github = read("skills/finish/scripts/paseo-github-feedback.ts");
+  assert.doesNotMatch(github, /"pr",\s*"checks"|--required/);
+  assert.match(github, /Required CI policy has no commit check evidence/);
+  assert.match(github, /unknown GitHub check result needs policy disposition/);
 });
 
 test("RED authority: Linear provider routing does not force the CLI or block an available integration", () => {
