@@ -332,7 +332,7 @@ test("top-level sync installs JSON configs with the selected profile", () => {
     tracked.runtime.configs = {
       pi: {
         target: "~/.pi/agent/settings.json",
-        managedPaths: [{ path: ["defaultModel"], value: "gpt-5.6-sol" }],
+        managedPaths: [{ path: ["defaultModel"], value: "gpt-6-sol" }],
       },
       paseo: {
         target: "~/.paseo/config.json",
@@ -381,7 +381,7 @@ test("top-level sync installs JSON configs with the selected profile", () => {
       assert.equal(
         JSON.parse(readFileSync(join(home, ".pi/agent/settings.json"), "utf-8"))
           .defaultModel,
-        "gpt-5.6-sol",
+        "gpt-6-sol",
       );
       assert.equal(
         JSON.parse(readFileSync(join(home, ".paseo/config.json"), "utf-8"))

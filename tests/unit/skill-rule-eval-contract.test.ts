@@ -61,6 +61,30 @@ test("GREEN skill-rule-evals: Show Me participates in managed skill coverage", (
   assert.ok(managedSkills.includes("show-me"));
 });
 
+test("RED skill-rule-evals: the retired Sol model is absent from managed configuration", () => {
+  assert.doesNotMatch(read("ax.config.json"), /gpt-5\.6-sol/u);
+});
+
+test("GREEN skill-rule-evals: Sol uses GPT-6 with medium effort across managed declarations", () => {
+  const config = JSON.parse(read("ax.config.json")) as typeof axConfig;
+  const profiles = config.runtime.configs.paseo.managedPaths.find(
+    (entry) => entry.path.join(".") === "daemon.agentProfiles",
+  );
+  const provider = config.runtime.configs.paseo.managedPaths.find(
+    (entry) => entry.path.join(".") === "agents.providers.ax-implementer",
+  );
+  const sol = profiles?.value.find((entry) => entry.id === "ax-implementer");
+
+  assert.equal(sol?.model, "openai-codex/gpt-6-sol");
+  assert.equal(sol?.thinkingOptionId, "medium");
+  assert.equal(provider?.value.command[4], "gpt-6-sol");
+  assert.equal(provider?.value.command[5], "medium");
+  assert.equal(provider?.value.models[0].id, "openai-codex/gpt-6-sol");
+  assert.deepEqual(provider?.value.models[0].thinkingOptions, [
+    { id: "medium", label: "Medium" },
+  ]);
+});
+
 test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", () => {
   const deepseek = axConfig.runtime.configs.paseo.managedPaths.find(
     (entry) => entry.path.join(".") === "agents.providers.ax-review-deepseek",
