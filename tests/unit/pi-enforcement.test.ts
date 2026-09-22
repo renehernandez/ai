@@ -56,14 +56,14 @@ test("managed arguments preserve Paseo extensions and enforce the fixed route", 
   const implementation = launchArguments([
     "implementer",
     "openai-codex",
-    "gpt-5.6-sol",
+    "gpt-6-sol",
     "medium",
     "--mode",
     "rpc",
   ]);
   assert.ok(implementation.args.includes("npm:pi-mcp-adapter@2.34.0"));
   for (const tail of [
-    ["--model", "gpt-5.6-sol"],
+    ["--model", "gpt-6-sol"],
     ["--thinking=high"],
     ["--provider", "anthropic"],
     ["--tools", "bash"],
@@ -249,7 +249,7 @@ test("Paseo MCP config reaches the pinned adapter only for nonreview roles", () 
       const result = launchArguments([
         role,
         "openai-codex",
-        "gpt-5.6-sol",
+        "gpt-6-sol",
         "medium",
         "--mode",
         "rpc",
@@ -265,7 +265,7 @@ test("Paseo MCP config reaches the pinned adapter only for nonreview roles", () 
         launchArguments([
           role,
           "openai-codex",
-          "gpt-5.6-sol",
+          "gpt-6-sol",
           "medium",
           "--mode",
           "rpc",
