@@ -130,7 +130,7 @@ contract; omit optional fields unless needed.
 | `waiver` | Owning mode: `phase`, exact current `target`, exact `requestedAction`, nonempty `failedGates`, and `reason`. Records failed evidence without granting the action itself. |
 | `handoff` | Plan: `briefPath`, `planResolution`; creates the fresh Sol session and records its identity. |
 | `repair` | Execute: `phase` (implementation/hosted), `stage` (start/complete); completion includes `head` and named `verification`. |
-| `publication` | Finish: observed `artifactUrl`, `head`, optional policy-required `reviewer`, `ready: true`, `evidence`, and the unchanged resolved policy. |
+| `publication` | Finish: observed `artifactUrl`, `head`, exact `targetBase` SHA, optional policy-required `reviewer`, `ready: true`, `evidence`, and the unchanged policy-source fingerprint. |
 | `monitor` | Finish: `probeCommand` argv array; optional `deadlineMs` and `pollMs`. |
 | `finish` | Finish: current observed publication fields and final evidence; does not merge. |
 | `continuation` | Owning mode: explicit `batchId`, authorization source, purpose, allowed phases, and expected current head. Archives prior evidence and opens one bounded batch. |

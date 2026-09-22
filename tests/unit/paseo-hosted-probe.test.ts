@@ -145,7 +145,7 @@ test("GREEN pi-paseo-hosted: all CI and reviewer policy combinations stay indepe
 });
 
 test("RED pi-paseo-hosted: required CI rejects empty or malformed command evidence", () => {
-  for (const checks of [[], ""])
+  for (const checks of [[], "", [{ name: "unit", bucket: "skipping" }]])
     assert.equal(
       probeHosted(options, github({ checks })).status,
       "awaiting-user",

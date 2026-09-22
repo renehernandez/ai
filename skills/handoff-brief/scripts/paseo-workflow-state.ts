@@ -134,13 +134,11 @@ export type Workflow = {
     purpose: string;
     allowedPhases: (Phase | "hosted")[];
     expectedHead: string;
+    artifactUrl?: string;
   };
   history?: {
     batchId: string;
-    authorizationSource: string;
-    purpose: string;
-    allowedPhases: (Phase | "hosted")[];
-    expectedHead: string;
+    authorization?: Workflow["currentAuthorization"];
     artifactUrl?: string;
     rounds: Workflow["rounds"];
     handoff?: Workflow["handoff"];
@@ -609,7 +607,10 @@ export async function transition(path: string, action: string, input: Input) {
         input.authorizationSource ===
           state.currentAuthorization?.authorizationSource &&
         input.purpose === state.currentAuthorization?.purpose &&
-        input.expectedHead === state.currentAuthorization?.expectedHead
+        input.expectedHead === state.currentAuthorization?.expectedHead &&
+        input.artifactUrl === state.currentAuthorization?.artifactUrl &&
+        JSON.stringify(input.allowedPhases) ===
+          JSON.stringify(state.currentAuthorization?.allowedPhases)
       )
         return state;
       requireThat(
@@ -644,10 +645,9 @@ export async function transition(path: string, action: string, input: Input) {
       );
       state.history.push({
         batchId: state.batchId ?? "legacy-initial",
-        authorizationSource: input.authorizationSource,
-        purpose: input.purpose,
-        allowedPhases: input.allowedPhases,
-        expectedHead: input.expectedHead,
+        authorization:
+          state.currentAuthorization &&
+          structuredClone(state.currentAuthorization),
         artifactUrl: state.publication?.artifactUrl,
         rounds: structuredClone(state.rounds),
         handoff: state.handoff && structuredClone(state.handoff),
@@ -665,6 +665,7 @@ export async function transition(path: string, action: string, input: Input) {
         purpose: input.purpose,
         allowedPhases: input.allowedPhases,
         expectedHead: input.expectedHead,
+        ...(input.artifactUrl ? { artifactUrl: input.artifactUrl } : {}),
       };
       if (input.allowedPhases.includes("planning")) {
         state.rounds = {};
@@ -811,6 +812,11 @@ export async function transition(path: string, action: string, input: Input) {
     } else if (action === "publication") {
       repaired(state, "implementation", "publication");
       requireThat(!state.publication, "Publication already recorded");
+      requireThat(
+        nonempty(input.targetBase) &&
+          /^[a-f0-9]{40,64}$/.test(input.targetBase),
+        "Publication requires the exact target-base SHA",
+      );
       const policy = validatedPolicy(state.deliveryPolicy);
       requireThat(
         policy.ci !== "unknown" && policy.reviewer !== "unknown",

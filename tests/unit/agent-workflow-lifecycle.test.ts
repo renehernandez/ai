@@ -25,6 +25,10 @@ test("GREEN authority: managed Pi workflow keeps Ready publication separate from
     read("rules/git-and-review.md"),
     /work.*GitLab `origin` with Nitro/,
   );
+  assert.match(
+    read("skills/handoff-brief/scripts/paseo-workflow-state.ts"),
+    /Publication requires the exact target-base SHA/,
+  );
 });
 
 test("GREEN authority: managed Pi workflow degrades reviewer outages and scopes waivers without granting terminal actions", () => {
@@ -88,6 +92,10 @@ test("RED authority: absent CI does not create a publication policy", () => {
   assert.match(
     workflow,
     /empty required-check response remains\s+failed evidence/,
+  );
+  assert.match(
+    read("skills/finish/scripts/paseo-github-feedback.ts"),
+    /Skipped required CI needs policy disposition/,
   );
 });
 

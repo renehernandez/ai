@@ -90,6 +90,10 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
   assert.ok(
     axConfig.runtime.skillSymlinkTargets.includes("~/.pi/agent/skills"),
   );
+  assert.match(
+    read("skills/handoff-brief/scripts/paseo-workflow-state.ts"),
+    /Publication requires the exact target-base SHA/,
+  );
 });
 
 test("RED skill-rule-evals: ambiguous reviewer envelopes remain rejected", () => {
@@ -165,6 +169,10 @@ test("RED skill-rule-evals: missing CI does not introduce an ungoverned waiver s
   assert.match(
     read("skills/handoff-brief/references/paseo-workflow.md"),
     /empty required-check response remains\s+failed evidence/,
+  );
+  assert.match(
+    read("skills/finish/scripts/paseo-github-feedback.ts"),
+    /Skipped required CI needs policy disposition/,
   );
 });
 

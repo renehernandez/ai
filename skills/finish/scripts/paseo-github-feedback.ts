@@ -140,12 +140,12 @@ export function github(
     options,
     result,
   );
+  if (checks.some((check) => check.bucket === "skipping"))
+    throw new Error("Skipped required CI needs policy disposition");
   if (
     checks.some(
       (check) =>
-        !["pass", "fail", "pending", "skipping", "cancel"].includes(
-          String(check.bucket),
-        ),
+        !["pass", "fail", "pending", "cancel"].includes(String(check.bucket)),
     )
   )
     throw new Error("Unknown required CI state");
