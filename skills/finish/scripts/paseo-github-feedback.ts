@@ -54,73 +54,83 @@ export function github(
     options,
     result,
   );
-  const bot = api(`users/${encodeURIComponent(options.botLogin)}`);
-  if (
-    bot.login !== options.botLogin ||
-    bot.type !== "Bot" ||
-    !Number.isSafeInteger(bot.id) ||
-    Number(bot.id) < 1
-  )
-    throw new Error("Policy reviewer is not a verified GitHub Bot identity");
-  const reviews = pages(`${endpoint}/pulls/${number}/reviews?per_page=100`);
-  const comments = pages(`${endpoint}/issues/${number}/comments?per_page=100`);
-  const inline = pages(`${endpoint}/pulls/${number}/comments?per_page=100`);
-  const threads = githubThreads(owner, repo, Number(number), url.hostname, run);
-  const checks = array(
-    JSON.parse(
-      run("gh", [
-        "pr",
-        "checks",
-        options.artifactUrl,
-        "--required",
-        "--json",
-        "name,bucket,state,link",
-      ]),
-    ),
-  );
-  const botItems = [...reviews, ...comments, ...inline].filter(
-    (entry) => object(entry.user).login === options.botLogin,
-  );
-  if (
-    botItems.some(
-      (entry) =>
-        object(entry.user).id !== bot.id || typeof entry.body !== "string",
+  let completion = options.reviewer === undefined;
+  let reviews: RecordValue[] = [];
+  let comments: RecordValue[] = [];
+  let inline: RecordValue[] = [];
+  let threads: RecordValue[] = [];
+  if (options.reviewer === "genie") {
+    const bot = api(`users/${encodeURIComponent(options.botLogin ?? "")}`);
+    if (
+      bot.login !== options.botLogin ||
+      bot.type !== "Bot" ||
+      !Number.isSafeInteger(bot.id) ||
+      Number(bot.id) < 1
     )
-  )
-    throw new Error("Incomplete or mismatched bot evidence");
-  result.findings = botItems.map((entry) => ({
-    ...entry,
-    kind: "review-feedback",
-    semanticTriageRequired: true,
-  }));
-  result.findings.push(
-    ...threads
-      .filter((thread) =>
-        array(thread.comments).some(
-          (entry) => object(entry.author).login === options.botLogin,
-        ),
+      throw new Error("Policy reviewer is not a verified GitHub Bot identity");
+    reviews = pages(`${endpoint}/pulls/${number}/reviews?per_page=100`);
+    comments = pages(`${endpoint}/issues/${number}/comments?per_page=100`);
+    inline = pages(`${endpoint}/pulls/${number}/comments?per_page=100`);
+    threads = githubThreads(owner, repo, Number(number), url.hostname, run);
+    const botItems = [...reviews, ...comments, ...inline].filter(
+      (entry) => object(entry.user).login === options.botLogin,
+    );
+    if (
+      botItems.some(
+        (entry) =>
+          object(entry.user).id !== bot.id || typeof entry.body !== "string",
       )
-      .map((thread) => ({
-        kind: "review-thread",
-        ...thread,
-        semanticTriageRequired: true,
-      })),
-  );
+    )
+      throw new Error("Incomplete or mismatched bot evidence");
+    result.findings = botItems.map((entry) => ({
+      ...entry,
+      kind: "review-feedback",
+      semanticTriageRequired: true,
+    }));
+    result.findings.push(
+      ...threads
+        .filter((thread) =>
+          array(thread.comments).some(
+            (entry) => object(entry.author).login === options.botLogin,
+          ),
+        )
+        .map((thread) => ({
+          kind: "review-thread",
+          ...thread,
+          semanticTriageRequired: true,
+        })),
+    );
+    completion = reviews.some(
+      (review) =>
+        object(review.user).id === bot.id &&
+        review.commit_id === options.head &&
+        Number.isFinite(Date.parse(String(review.submitted_at))) &&
+        review.state === "COMMENTED" &&
+        typeof review.body === "string" &&
+        /<!-- genie-run:[^\s<>]+ -->/.test(review.body) &&
+        review.body.includes("## Genie review\n") &&
+        review.body.includes(`Reviewed \`${options.head}\` ·`),
+    );
+  }
+  let checks: RecordValue[] = [];
+  if (options.ciPolicy === "required") {
+    const output = run("gh", [
+      "pr",
+      "checks",
+      options.artifactUrl,
+      "--required",
+      "--json",
+      "name,bucket,state,link",
+    ]);
+    if (!output.trim()) throw new Error("Empty required CI command output");
+    checks = array(JSON.parse(output));
+    if (checks.length === 0)
+      throw new Error("Required CI policy has no configured required checks");
+  }
   result.findings.push(
     ...checks
       .filter((check) => ["fail", "cancel"].includes(String(check.bucket)))
       .map((check) => ({ kind: "ci", ...check })),
-  );
-  const completion = reviews.some(
-    (review) =>
-      object(review.user).id === bot.id &&
-      review.commit_id === options.head &&
-      Number.isFinite(Date.parse(String(review.submitted_at))) &&
-      review.state === "COMMENTED" &&
-      typeof review.body === "string" &&
-      /<!-- genie-run:[^\s<>]+ -->/.test(review.body) &&
-      review.body.includes("## Genie review\n") &&
-      review.body.includes(`Reviewed \`${options.head}\` ·`),
   );
   const final = api(`${endpoint}/pulls/${number}`);
   assertArtifact(
@@ -130,37 +140,27 @@ export function github(
     options,
     result,
   );
+  if (checks.some((check) => check.bucket === "skipping"))
+    throw new Error("Skipped required CI needs policy disposition");
   if (
     checks.some(
       (check) =>
-        !["pass", "fail", "pending", "skipping", "cancel"].includes(
-          String(check.bucket),
-        ),
+        !["pass", "fail", "pending", "cancel"].includes(String(check.bucket)),
     )
   )
     throw new Error("Unknown required CI state");
   result.status =
-    checks.length === 0 && !options.noRequiredCiEvidence?.trim()
-      ? "awaiting-user"
-      : !completion || checks.some((check) => check.bucket === "pending")
-        ? "waiting"
-        : "completed";
+    !completion || checks.some((check) => check.bucket === "pending")
+      ? "waiting"
+      : "completed";
   result.evidence = JSON.stringify({
     head: options.head,
-    bot: options.botLogin,
+    policyEvidence: options.policyEvidence,
+    ciPolicy: options.ciPolicy,
+    reviewer: options.reviewer ?? "not-required",
+    bot: options.botLogin ?? null,
     completionReceived: completion,
     requiredCi: checks,
-    ...(checks.length === 0
-      ? {
-          noRequiredCiEvidence: options.noRequiredCiEvidence?.trim() || null,
-          ...(result.status === "awaiting-user"
-            ? {
-                blocker:
-                  "Empty required CI set needs explicit policy or user disposition",
-              }
-            : {}),
-        }
-      : {}),
     reviews,
     comments,
     inline,

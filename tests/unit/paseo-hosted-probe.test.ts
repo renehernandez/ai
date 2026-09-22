@@ -12,8 +12,10 @@ const head = "a".repeat(40);
 const options: ProbeOptions = {
   artifactUrl: "https://github.com/owner/repo/pull/1",
   head,
+  ciPolicy: "required",
   reviewer: "genie",
   botLogin: "configured-genie[bot]",
+  policyEvidence: "fixture policy",
 };
 const bot = { login: options.botLogin, type: "Bot", id: 22 };
 
@@ -125,69 +127,29 @@ test("RED pi-paseo-hosted: stale bot review and pending required CI cannot compl
   );
 });
 
-test("RED pi-paseo-hosted: an empty required CI set needs explicit nonblank disposition", () => {
-  for (const noRequiredCiEvidence of [undefined, "", "  \n "]) {
-    const result = probeHosted(
-      { ...options, noRequiredCiEvidence },
-      github({ checks: [] }),
+test("GREEN pi-paseo-hosted: all CI and reviewer policy combinations stay independent", () => {
+  for (const ciPolicy of ["required", "not-required"] as const)
+    for (const reviewer of ["genie", undefined] as const) {
+      const result = probeHosted(
+        {
+          ...options,
+          ciPolicy,
+          reviewer,
+          botLogin: reviewer ? options.botLogin : undefined,
+        },
+        github(),
+      );
+      assert.equal(result.status, "completed");
+      assert.equal(JSON.parse(result.evidence).ciPolicy, ciPolicy);
+    }
+});
+
+test("RED pi-paseo-hosted: required CI rejects empty or malformed command evidence", () => {
+  for (const checks of [[], "", [{ name: "unit", bucket: "skipping" }]])
+    assert.equal(
+      probeHosted(options, github({ checks })).status,
+      "awaiting-user",
     );
-    assert.equal(result.status, "awaiting-user");
-    assert.match(result.evidence, /Empty required CI set/);
-  }
-});
-
-test("GREEN pi-paseo-hosted: explicit no-CI disposition is retained for an empty required set", () => {
-  const noRequiredCiEvidence =
-    "Project policy explicitly requires no hosted CI for this artifact";
-  const result = probeHosted(
-    { ...options, noRequiredCiEvidence },
-    github({ checks: [] }),
-  );
-  assert.equal(result.status, "completed");
-  assert.equal(
-    JSON.parse(result.evidence).noRequiredCiEvidence,
-    noRequiredCiEvidence,
-  );
-  assert.equal(
-    probeHosted(
-      { ...options, noRequiredCiEvidence },
-      github({ checks: [], completion: false }),
-    ).status,
-    "waiting",
-  );
-});
-
-test("RED pi-paseo-hosted: no-CI disposition cannot hide failures, pending CI, or unavailable evidence", () => {
-  const disposition = {
-    ...options,
-    noRequiredCiEvidence: "Explicit project no-CI disposition",
-  };
-  const failed = probeHosted(
-    disposition,
-    github({ checks: [{ name: "unit", bucket: "fail" }] }),
-  );
-  // Completed denotes collection for repair, never successful CI.
-  assert.equal(failed.status, "completed");
-  assert.ok(
-    failed.findings.some(
-      (finding) => JSON.parse(String(finding.evidence)).kind === "ci",
-    ),
-  );
-  assert.equal(JSON.parse(failed.evidence).requiredCi[0].bucket, "fail");
-  assert.equal(JSON.parse(failed.evidence).noRequiredCiEvidence, undefined);
-  assert.equal(
-    probeHosted(disposition, github({ pending: true })).status,
-    "waiting",
-  );
-  assert.equal(
-    probeHosted(disposition, github({ checks: [{ bucket: "unknown" }] }))
-      .status,
-    "awaiting-user",
-  );
-  assert.equal(
-    probeHosted(disposition, github({ checks: "" })).status,
-    "awaiting-user",
-  );
 });
 
 test("partial GraphQL, changed source, and unverified bot fail closed", () => {
@@ -218,8 +180,10 @@ test("Nitro delegates chronology to canonical evidence validator and retrieves a
   const nitro: ProbeOptions = {
     artifactUrl: "https://git.fullscript.io/team/repo/-/merge_requests/1",
     head,
+    ciPolicy: "required",
     reviewer: "nitro",
     botLogin: "nitro",
+    policyEvidence: "Fullscript work policy",
   };
   const run: Command = (program, args, input) => {
     if (program !== "glab") {
@@ -274,8 +238,10 @@ test("rejects truncated GitLab pagination", () => {
   const nitro: ProbeOptions = {
     artifactUrl: "https://git.fullscript.io/team/repo/-/merge_requests/1",
     head,
+    ciPolicy: "required",
     reviewer: "nitro",
     botLogin: "nitro",
+    policyEvidence: "Fullscript work policy",
   };
   const result = probeHosted(nitro, (program, args, input) =>
     args.includes("--parse-page")

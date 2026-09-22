@@ -171,7 +171,7 @@ limits, and require separately scoped acceptance for terminal actions.
 
 ## Repository Finish policy
 
-- The selected `personal` profile uses GitHub `origin` with Genie.
+- The selected `personal` profile uses GitHub `origin`; this repository currently requires neither hosted CI nor an automated hosted reviewer on that route.
 - The selected `work` profile uses GitLab `origin` with Nitro.
   Resolve routing through [AI repository delivery](rules/git-and-review.md#ai-repository-delivery)
   and verify the actual origin before publication. A single or root MR targets
@@ -180,8 +180,7 @@ limits, and require separately scoped acceptance for terminal actions.
   publish directly to it without explicit user authorization.
 - When a remote has several push URLs, publish only to the selected provider URL
   or a provider-specific remote; never publish to every destination implicitly.
-- Finish inspects CI or explicit no-pipeline state and the selected hosted review.
-  For the work profile's Fullscript GitLab route, apply
+- Finish inspects only hosted gates required by resolved repository policy; a not-required gate is not passed or waived. For the work profile's Fullscript GitLab route, apply
   [the Fullscript Nitro rule](rules/fullscript/nitro-review.md) as the canonical
   owner for source-head request timing, size routing, feedback closure, and
   human escalation.

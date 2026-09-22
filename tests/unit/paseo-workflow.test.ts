@@ -19,7 +19,18 @@ import {
   type Workflow,
 } from "../../skills/handoff-brief/scripts/paseo-workflow.ts";
 
-async function fixture() {
+const policySourceFingerprint = "a".repeat(64);
+const targetBase = "b".repeat(40);
+
+async function fixture(
+  gates: {
+    ci: "required" | "not-required" | "unknown";
+    reviewer: "required" | "not-required" | "unknown";
+  } = {
+    ci: "required",
+    reviewer: "required",
+  },
+) {
   const dir = await mkdtemp(join(tmpdir(), "paseo-workflow-"));
   const path = join(dir, "state.json");
   const configPath = join(dir, "config.json");
@@ -53,6 +64,19 @@ async function fixture() {
   };
   await writeFile(configPath, JSON.stringify(config));
   await initialize(path, { cwd: dir, configPath });
+  await transition(path, "policy", {
+    deliveryPolicy: {
+      provider: "github",
+      repository: "owner/repo",
+      ci: gates.ci,
+      reviewer: gates.reviewer,
+      ...(gates.reviewer === "required"
+        ? { reviewerKind: "genie" as const }
+        : {}),
+      source: "fixture policy",
+      sourceFingerprint: policySourceFingerprint,
+    },
+  });
   const artifactPath = join(dir, "artifact.md");
   await writeFile(
     artifactPath,
@@ -156,9 +180,11 @@ test("GREEN pi-paseo-workflow: deliberate handoff reaches Ready once without spa
   const receipt = {
     artifactUrl: "https://github.com/owner/repo/pull/1",
     head: "first",
+    targetBase,
     reviewer: "genie",
     ready: true,
     evidence: "Finish inspected provider head and Ready state.",
+    policySourceFingerprint,
   };
   await transition(f.path, "publication", receipt);
   await monitor(f.path, { probeCommand: ["finish-probe"] }, async () =>
@@ -209,6 +235,97 @@ test("GREEN pi-paseo-workflow: deliberate handoff reaches Ready once without spa
   );
 });
 
+test("GREEN pi-paseo-workflow: no hosted gates publishes without a fabricated reviewer", async () => {
+  const f = await fixture({ ci: "not-required", reviewer: "not-required" });
+  await f.review("planning");
+  await handoff(
+    f.path,
+    { briefPath: f.artifactPath, planResolution: "Settled." },
+    f.transport,
+  );
+  await f.review("implementation");
+  const publication = {
+    artifactUrl: "https://github.com/owner/repo/pull/2",
+    head: "first",
+    ready: true as const,
+    evidence: "Observed open Ready PR at exact head.",
+    policySourceFingerprint,
+  };
+  await assert.rejects(
+    transition(f.path, "publication", publication),
+    /exact target-base SHA/,
+  );
+  const published = await transition(f.path, "publication", {
+    ...publication,
+    targetBase,
+  });
+  assert.equal(published.publication?.reviewer, undefined);
+  assert.equal(published.hosted?.status, "completed");
+});
+
+test("RED pi-paseo-workflow: unknown policy blocks handoff", async () => {
+  const f = await fixture({ ci: "unknown", reviewer: "not-required" });
+  await f.review("planning");
+  await assert.rejects(
+    handoff(
+      f.path,
+      { briefPath: f.artifactPath, planResolution: "Settled." },
+      f.transport,
+    ),
+    /Resolved delivery policy/,
+  );
+  await assert.rejects(
+    dispatchReview(
+      f.path,
+      { phase: "planning", artifactPath: f.artifactPath },
+      f.transport,
+    ),
+    /already dispatched/,
+  );
+});
+
+test("GREEN pi-paseo-workflow: authorized continuation preserves prior evidence", async () => {
+  const f = await fixture();
+  await f.review("planning");
+  await handoff(
+    f.path,
+    { briefPath: f.artifactPath, planResolution: "Settled." },
+    f.transport,
+  );
+  await f.review("implementation");
+  const continuation = {
+    batchId: "follow-up-1",
+    authorizationSource: "User requested one follow-up implementation batch.",
+    purpose: "Repair the current task only.",
+    allowedPhases: ["implementation" as const],
+    expectedHead: "first",
+  };
+  await transition(f.path, "continuation", continuation);
+  await transition(f.path, "continuation", continuation);
+  const state = await f.read();
+  assert.equal(state.history?.length, 1);
+  assert.equal(state.history?.[0].rounds.implementation?.head, "first");
+  assert.equal(state.history?.[0].authorization, undefined);
+  assert.equal(state.rounds.implementation, undefined);
+  await assert.rejects(
+    transition(f.path, "continuation", {
+      ...continuation,
+      allowedPhases: ["hosted"],
+    }),
+    /explicit bounded authorization/,
+  );
+  await assert.rejects(
+    transition(f.path, "continuation", {
+      batchId: "follow-up-2",
+      authorizationSource: "User",
+      purpose: "Retry",
+      allowedPhases: ["implementation"],
+      expectedHead: "stale",
+    }),
+    /Bookkeeping mismatch/,
+  );
+});
+
 test("RED pi-paseo-workflow: repeated phase cannot dispatch another review", async () => {
   const f = await fixture();
   const originalArtifact = await readFile(f.artifactPath, "utf8");
@@ -229,7 +346,7 @@ test("RED pi-paseo-workflow: repeated phase cannot dispatch another review", asy
       { phase: "planning", artifactPath: f.artifactPath },
       f.transport,
     ),
-    /already dispatched/,
+    /already dispatched; no automatic reruns/,
   );
   assert.deepEqual((await f.read()).rounds.planning?.artifact, reserved);
   assert.equal(await readFile(reserved.path, "utf8"), originalArtifact);
@@ -542,9 +659,11 @@ test("one hosted repair batch is permitted and final receipt must match repaired
   const receipt = {
     artifactUrl: "https://github.com/owner/repo/pull/1",
     head: "first",
+    targetBase,
     reviewer: "genie",
     ready: true,
     evidence: "Observed source.",
+    policySourceFingerprint,
   };
   await transition(f.path, "publication", receipt);
   await monitor(f.path, { probeCommand: ["probe"] }, async () =>
@@ -594,9 +713,11 @@ test("monitor quietly expires and does not infer success from missing hosted fee
   const receipt = {
     artifactUrl: "https://github.com/owner/repo/pull/1",
     head: "first",
+    targetBase,
     reviewer: "genie",
     ready: true,
     evidence: "Observed source.",
+    policySourceFingerprint,
   };
   await transition(f.path, "publication", receipt);
   let time = 0;
@@ -652,9 +773,11 @@ test("failed, awaiting-user, and missing hosted evidence expose exact waivable g
     const receipt = {
       artifactUrl: "https://github.com/owner/repo/pull/1",
       head: "first",
+      targetBase,
       reviewer: "genie" as const,
       ready: true as const,
       evidence: "Observed source.",
+      policySourceFingerprint,
     };
     await transition(f.path, "publication", receipt);
     if (status !== "missing") {
@@ -737,9 +860,11 @@ test("implementation questions block publication and applicable fixes consume on
   const receipt = {
     artifactUrl: "https://github.com/owner/repo/pull/1",
     head: "first",
+    targetBase,
     reviewer: "genie" as const,
     ready: true as const,
     evidence: "Observed Ready.",
+    policySourceFingerprint,
   };
   await assert.rejects(
     transition(f.path, "publication", receipt),

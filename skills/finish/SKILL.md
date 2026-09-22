@@ -36,11 +36,11 @@ commits, PR/MR titles or descriptions, issue bodies, or historical messages.
 
 ## Publish and Follow Through
 
-Resolve provider and reviewer policy in this order: direct user instruction,
-project policy, workflow-policy profile, remote inference. Ambiguity blocks
-provider mutation.
+Resolve CI and reviewer policy by direct instruction, project policy, profile,
+then remote inference. Never request or poll a not-required reviewer; verify
+Ready artifact identity.
 
-Under Standard delivery, after a native hook-clean commit:
+After a Standard hook-clean commit:
 
 1. Publish the exact source head as a draft PR/MR, or preserve an existing MR's
    current draft or ready state.

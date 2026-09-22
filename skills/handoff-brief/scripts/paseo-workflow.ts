@@ -128,6 +128,11 @@ export async function dispatchReview(
       phase === "planning" || state.handoff?.status === "running",
       "Implementation review requires a fresh implementation handoff",
     );
+    requireThat(
+      !state.currentAuthorization ||
+        state.currentAuthorization.allowedPhases.includes(phase),
+      `Active continuation does not authorize ${phase} review`,
+    );
     const snapshots = await createSnapshots(path, {
       "artifact.md": artifact,
       "lenses.json": JSON.stringify(state.lenses[phase]),
@@ -303,6 +308,12 @@ export async function handoff(
   const snapshots = await locked(path, async (state) => {
     requireThat(!state.finished, "Workflow already finished");
     settled(state, "planning", "handoff");
+    requireThat(
+      state.deliveryPolicy &&
+        state.deliveryPolicy.ci !== "unknown" &&
+        state.deliveryPolicy.reviewer !== "unknown",
+      "Resolved delivery policy is required before handoff",
+    );
     requireThat(!state.handoff, "Implementation handoff already dispatched");
     const snapshots = await createSnapshots(path, {
       "brief.md": brief,
@@ -357,14 +368,19 @@ export async function monitor(
       pollMs <= 60_000,
     "Monitor deadline must be <=1h and polling <=60s",
   );
-  const publication = await locked(path, (state) => {
+  const { publication, policy } = await locked(path, (state) => {
     requireThat(!state.finished, "Workflow already finished");
     requireThat(
       state.publication && !state.hosted,
       "Monitor requires publication and may run only once",
     );
+    requireThat(
+      state.deliveryPolicy?.ci === "required" ||
+        state.deliveryPolicy?.reviewer === "required",
+      "Hosted monitor is not required by delivery policy",
+    );
     state.hosted = { ...state.publication, status: "waiting", findings: [] };
-    return state.publication;
+    return { publication: state.publication, policy: state.deliveryPolicy };
   });
   const deadline = now() + deadlineMs;
   while (now() < deadline) {
@@ -372,7 +388,7 @@ export async function monitor(
       const output = JSON.parse(
         await probe(input.probeCommand, Math.min(30_000, deadline - now())),
       );
-      receipt({ ...output, ready: true });
+      receipt({ ...output, ready: true }, policy);
       requireThat(
         output.artifactUrl === publication.artifactUrl &&
           output.head === publication.head &&
