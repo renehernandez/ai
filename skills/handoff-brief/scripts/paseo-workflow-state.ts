@@ -17,9 +17,9 @@ export type Phase = "planning" | "implementation";
 export type Role =
   | "planner"
   | "implementer"
-  | "review-glm"
-  | "review-deepseek"
-  | "review-astra";
+  | "review-correctness"
+  | "review-architecture"
+  | "review-contract";
 export type Lens = { id: string; objective: string; [key: string]: unknown };
 export type Route = { provider: string; model: string; thinking: string };
 export type Outcome = {
@@ -109,6 +109,7 @@ export type ManagedConfig = {
 };
 export type Workflow = {
   version: 1;
+  reviewMode?: "sol-focused-v1";
   cwd: string;
   workspace?: WorkspaceBinding;
   workspaceRegistration?: {
@@ -126,6 +127,10 @@ export type Workflow = {
         fingerprint: string;
         artifact: Snapshot;
         lenses: Snapshot;
+        lensAssignments: Record<
+          string,
+          { lensIds: string[]; snapshot: Snapshot }
+        >;
         head?: string;
         reviews: Record<string, Review>;
       }
@@ -191,14 +196,60 @@ export type Transport = (args: string[], timeoutMs: number) => Promise<string>;
 export const roles: Role[] = [
   "planner",
   "implementer",
-  "review-glm",
-  "review-deepseek",
-  "review-astra",
+  "review-correctness",
+  "review-architecture",
+  "review-contract",
 ];
 export const reviewRoles: Record<Phase, Role[]> = {
-  planning: ["review-glm", "review-deepseek"],
-  implementation: ["review-glm", "review-deepseek", "review-astra"],
+  planning: ["review-correctness", "review-architecture", "review-contract"],
+  implementation: [
+    "review-correctness",
+    "review-architecture",
+    "review-contract",
+  ],
 };
+const lensOwners: Record<Phase, Partial<Record<string, Role>>> = {
+  planning: {
+    "implementation-readiness": "review-correctness",
+    "edge-cases-and-risk": "review-correctness",
+    "code-simplifier": "review-architecture",
+    "refactoring-opportunities": "review-architecture",
+    "delivery-shape": "review-contract",
+  },
+  implementation: {
+    "diff-review": "review-correctness",
+    "code-simplifier": "review-architecture",
+    "code-quality-review": "review-architecture",
+    deslop: "review-architecture",
+    scrutinize: "review-contract",
+  },
+};
+export function assignReviewLenses(phase: Phase, lenses: Lens[]) {
+  const groups = Object.fromEntries(
+    reviewRoles[phase].map((role) => [role, [] as Lens[]]),
+  ) as Record<string, Lens[]>;
+  for (const lens of lenses)
+    groups[lensOwners[phase][lens.id] ?? "review-contract"].push(lens);
+  const assigned = Object.values(groups).flat();
+  requireThat(
+    reviewRoles[phase].every((role) => groups[role].length > 0) &&
+      assigned.length === lenses.length &&
+      new Set(assigned.map((lens) => lens.id)).size === lenses.length,
+    "Focused review assignments must cover every lens exactly once",
+  );
+  return groups;
+}
+export function requireCurrentReviewMode(state: Workflow) {
+  requireThat(
+    state.reviewMode === "sol-focused-v1",
+    "Legacy workflow state is read-only and cannot continue under the focused Sol review roster",
+  );
+}
+function assignedLenses(state: Workflow, phase: Phase, role: string) {
+  const ids = roundOf(state, phase).lensAssignments[role]?.lensIds;
+  requireThat(ids, `Missing focused lens assignment for ${role}`);
+  return state.lenses[phase].filter((lens) => ids.includes(lens.id));
+}
 export function requireThat(value: unknown, message: string): asserts value {
   if (!value) throw new Error(message);
 }
@@ -361,6 +412,7 @@ export async function initialize(
   );
   const state: Workflow = {
     version: 1,
+    reviewMode: "sol-focused-v1",
     cwd: resolve(input.cwd),
     routes: routesFromConfig(config),
     lenses: lensesByPhase,
@@ -448,6 +500,14 @@ function reviewGates(
       const assessment = candidateAssessments.find(
         (item) => item.role === role,
       );
+      requireThat(
+        !assessment ||
+          validOutcomes(
+            assessment.outcomes,
+            assignedLenses(state, phase, role),
+          ),
+        `${role} fallback assessment differs from its focused lens assignment`,
+      );
       return [
         `${role}:review-evidence`,
         ...(assessment ? outcomeGates(role, assessment.outcomes) : []),
@@ -506,7 +566,7 @@ export function settled(
         assessments.some(
           (item) =>
             item.role === role &&
-            validOutcomes(item.outcomes, state.lenses[phase]),
+            validOutcomes(item.outcomes, assignedLenses(state, phase, role)),
         ) || waiverFor(state, phase, requestedAction, gate),
         `${role} degraded evidence needs a complete per-lens owner fallback assessment or exact scoped waiver`,
       );
@@ -624,6 +684,7 @@ export function receipt(
 }
 export async function transition(path: string, action: string, input: Input) {
   return locked(path, (state) => {
+    requireCurrentReviewMode(state);
     if (action !== "continuation")
       requireThat(!state.finished, "Workflow already finished");
     if (action === "policy") {
@@ -742,7 +803,10 @@ export async function transition(path: string, action: string, input: Input) {
             assessments.every(
               (item) =>
                 degradedRoles.includes(item.role) &&
-                validOutcomes(item.outcomes, state.lenses[phase]),
+                validOutcomes(
+                  item.outcomes,
+                  assignedLenses(state, phase, item.role),
+                ),
             ) &&
             degradedRoles.every(
               (role) =>

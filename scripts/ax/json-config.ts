@@ -30,7 +30,11 @@ export function resolveJsonPaths(
       )
     )
       throw new Error(`managed_config_path_invalid: ${name}`);
-    if (entry.expandHome !== undefined && typeof entry.expandHome !== "boolean")
+    if (
+      (entry.expandHome !== undefined &&
+        typeof entry.expandHome !== "boolean") ||
+      (entry.merge !== undefined && entry.merge !== "append-unique")
+    )
       throw new Error(`managed_config_paths_invalid: ${name}`);
     const value = jsonValue(entry.value, home, entry.expandHome === true);
     if (
@@ -42,7 +46,7 @@ export function resolveJsonPaths(
       throw new Error(
         `managed_config_path_overlap: ${name}.${entry.path.join(".")}`,
       );
-    leaves.push({ path: [...entry.path], value });
+    leaves.push({ path: [...entry.path], value, merge: entry.merge });
   }
   return leaves;
 }
@@ -92,7 +96,20 @@ export function updateJsonDocument(
         );
       parent = parent[part] as Record<string, unknown>;
     }
-    parent[leaf.path[leaf.path.length - 1]] = structuredClone(leaf.value);
+    const key = leaf.path[leaf.path.length - 1];
+    if (leaf.merge === "append-unique") {
+      const current = parent[key];
+      if (current !== undefined && !Array.isArray(current))
+        throw new Error(`managed_config_array_invalid: ${leaf.path.join(".")}`);
+      const values = Array.isArray(current) ? [...current] : [];
+      if (
+        !values.some(
+          (value) => JSON.stringify(value) === JSON.stringify(leaf.value),
+        )
+      )
+        values.push(structuredClone(leaf.value));
+      parent[key] = values;
+    } else parent[key] = structuredClone(leaf.value);
   }
   return `${JSON.stringify(result, null, 2)}\n`;
 }

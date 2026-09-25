@@ -4,6 +4,9 @@ import { evaluateCommand } from "../block-delete-outside-cwd.ts";
 export const roles = [
   "planner",
   "implementer",
+  "review-correctness",
+  "review-architecture",
+  "review-contract",
   "review-glm",
   "review-deepseek",
   "review-astra",
