@@ -114,7 +114,9 @@ test("GREEN pi-paseo-config: JSON sync preserves unowned configuration and crede
   const paseo = join(input.home, ".paseo/config.json");
   const auth = join(input.home, ".pi/agent/auth.json");
   const piSettings = join(input.home, ".pi/agent/settings.json");
-  write(piSettings, { packages: ["npm:unowned-extension@1.0.0"] });
+  write(piSettings, {
+    packages: ["npm:unowned-extension@1.0.0", "npm:pi-claude-bridge@0.7.0"],
+  });
   chmodSync(piSettings, 0o600);
   write(paseo, {
     agents: {

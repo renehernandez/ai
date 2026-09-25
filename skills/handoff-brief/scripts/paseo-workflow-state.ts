@@ -228,8 +228,16 @@ export function assignReviewLenses(phase: Phase, lenses: Lens[]) {
   const groups = Object.fromEntries(
     reviewRoles[phase].map((role) => [role, [] as Lens[]]),
   ) as Record<string, Lens[]>;
-  for (const lens of lenses)
-    groups[lensOwners[phase][lens.id] ?? "review-contract"].push(lens);
+  for (const lens of lenses) {
+    const owner =
+      lensOwners[phase][lens.id] ??
+      (/security|production/u.test(lens.id)
+        ? "review-correctness"
+        : /migration|data/u.test(lens.id)
+          ? "review-architecture"
+          : "review-contract");
+    groups[owner].push(lens);
+  }
   const assigned = Object.values(groups).flat();
   requireThat(
     reviewRoles[phase].every((role) => groups[role].length > 0) &&

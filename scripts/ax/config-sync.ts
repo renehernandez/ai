@@ -13,6 +13,7 @@ import { basename, dirname, join, relative, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import {
   isScalar,
+  mergedArrayContains,
   parseJsonDocument,
   resolveJsonPaths,
   updateJsonDocument,
@@ -356,7 +357,7 @@ function compareLeaves(
     } else if (
       leaf.merge === "append-unique"
         ? !Array.isArray(observed.value) ||
-          !observed.value.some((value) => isDeepStrictEqual(value, leaf.value))
+          !mergedArrayContains(observed.value, leaf.value)
         : !isDeepStrictEqual(observed.value, leaf.value)
     ) {
       drift.push({

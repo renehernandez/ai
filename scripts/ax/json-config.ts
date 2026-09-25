@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import type {
   ManagedConfigDeclaration,
   ManagedConfigScalar,
@@ -81,6 +82,22 @@ function jsonValue(
   return result;
 }
 
+function mergeIdentity(value: unknown): unknown {
+  if (typeof value !== "string" || !value.startsWith("npm:")) return value;
+  const versionAt = value.lastIndexOf("@");
+  return versionAt > value.lastIndexOf("/") ? value.slice(0, versionAt) : value;
+}
+
+export function mergedArrayContains(
+  values: unknown[],
+  expected: ManagedJsonValue,
+) {
+  const matches = values.filter((value) =>
+    isDeepStrictEqual(mergeIdentity(value), mergeIdentity(expected)),
+  );
+  return matches.length === 1 && isDeepStrictEqual(matches[0], expected);
+}
+
 export function updateJsonDocument(
   parsed: Record<string, unknown>,
   leaves: ManagedLeaf[],
@@ -102,13 +119,13 @@ export function updateJsonDocument(
       if (current !== undefined && !Array.isArray(current))
         throw new Error(`managed_config_array_invalid: ${leaf.path.join(".")}`);
       const values = Array.isArray(current) ? [...current] : [];
-      if (
-        !values.some(
-          (value) => JSON.stringify(value) === JSON.stringify(leaf.value),
-        )
-      )
-        values.push(structuredClone(leaf.value));
-      parent[key] = values;
+      if (!mergedArrayContains(values, leaf.value)) {
+        const identity = mergeIdentity(leaf.value);
+        parent[key] = values.filter(
+          (value) => !isDeepStrictEqual(mergeIdentity(value), identity),
+        );
+        (parent[key] as unknown[]).push(structuredClone(leaf.value));
+      } else parent[key] = values;
     } else parent[key] = structuredClone(leaf.value);
   }
   return `${JSON.stringify(result, null, 2)}\n`;

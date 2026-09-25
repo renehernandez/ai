@@ -70,13 +70,19 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
     { id: "implementation-readiness", objective: "ready" },
     { id: "code-simplifier", objective: "simple" },
     { id: "delivery-shape", objective: "shape" },
+    { id: "security-review", objective: "secure" },
+    { id: "migration-data", objective: "migrate" },
+    { id: "docs-alignment-review", objective: "document" },
   ]);
   assert.deepEqual(Object.keys(groups), [
     "review-correctness",
     "review-architecture",
     "review-contract",
   ]);
-  assert.equal(Object.values(groups).flat().length, 3);
+  assert.equal(Object.values(groups).flat().length, 6);
+  assert.equal(groups["review-correctness"].at(-1)?.id, "security-review");
+  assert.equal(groups["review-architecture"].at(-1)?.id, "migration-data");
+  assert.equal(groups["review-contract"].at(-1)?.id, "docs-alignment-review");
   const deepseek = axConfig.runtime.configs.paseo.managedPaths.find(
     (entry) => entry.path.join(".") === "agents.providers.ax-review-deepseek",
   );

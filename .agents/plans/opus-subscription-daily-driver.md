@@ -2,27 +2,23 @@
 
 ## Objective
 
-Make Claude Opus 5.5, authenticated through an eligible Claude subscription,
-the default Pi/Paseo planner and implementer. Use only Sol for automatic plan
+Make Claude Opus 5.5, authenticated through an eligible Claude subscription, the default Pi/Paseo planner and implementer. Use only Sol for automatic plan
 and implementation reviews, in three parallel focus groups. Keep Astra as an
 explicitly selectable alternative planner. Preserve the existing bounded
 workflow, exact-workspace handoffs, tool restrictions, and publication policy.
 
 ## Accepted scope and defaults
 
-- Use `pi-claude-bridge` as the candidate subscription provider, not Pi's direct
-  Anthropic authentication or an API gateway. Pin a verified released version;
+- Use `pi-claude-bridge` as the candidate subscription provider, not Pi's direct Anthropic authentication or an API gateway. Pin a verified released version;
   do not float to latest at launch. Its upstream documentation currently
   identifies version 0.8.0 and requires Pi 0.86.1 or newer.
-- Pin the actual Opus 5.5 model identifier after catalog and response-identity
-  verification. Do not use the moving `opus` alias or silently substitute an
+- Pin the actual Opus 5.5 model identifier after catalog and response-identity verification. Do not use the moving `opus` alias or silently substitute an
   older model when 5.5 is unavailable.
 - Default Opus planning and implementation to medium effort, subject to proof
   of the provider's actual mapping. Keep Astra's existing low-effort planner
   route and Sol's existing configured model at medium effort; this change
   does not independently upgrade either OpenAI model.
-- Both review phases use three fresh, read-only Sol sessions: correctness and
-  risk; architecture and simplification; verification and contract alignment.
+- Both review phases use three fresh, read-only Sol sessions: correctness and risk; architecture and simplification; verification and contract alignment.
   GLM, DeepSeek, and Astra cease to be automatic reviewers. They are not
   replacement candidates when Sol fails.
 - Review focus is a partition of the complete phase-specific lens catalog,
@@ -54,8 +50,7 @@ identify sessions independently even though all use the same model, and
 validate complete aggregate coverage. Do not introduce another orchestrator,
 recursive delegation, or the bridge's optional AskClaude delegation tool.
 
-The deliberate deviation is replacing repeated whole-artifact, different-model
-reviews with one parallel, focused Sol round. Each session may inspect the
+The deliberate deviation is replacing repeated whole-artifact, different-model reviews with one parallel, focused Sol round. Each session may inspect the
 whole artifact for context but is accountable for its assigned lenses. Preserve
 an independently recorded `code-simplifier` outcome in the architecture group.
 
@@ -66,8 +61,7 @@ roster throughout general instructions or retire unrelated provider access.
 
 ## Subscription and enforcement boundary
 
-Use existing first-party Claude subscription authentication through Claude
-Code/Agent SDK. Never copy credentials into tracked config, infer paid-plan
+Use existing first-party Claude subscription authentication through Claude Code/Agent SDK. Never copy credentials into tracked config, infer paid-plan
 eligibility, enable paid credits, or silently fall back to direct API billing.
 Before a real inference proof, verify subscription authentication and that paid
 extra usage is disabled; require operator confirmation when that state cannot
@@ -75,13 +69,11 @@ be established safely. Account-side billing controls, not zero cost metadata,
 are the authority for preventing additional charges.
 
 Reject or isolate API-key, auth-token, gateway, and alternate-cloud environment
-settings that could redirect the bridge away from the subscription route. Keep
-AskClaude disabled and enforce the managed tool allowlist regardless of local
+settings that could redirect the bridge away from the subscription route. Keep AskClaude disabled and enforce the managed tool allowlist regardless of local
 bridge overrides. Do not permit project settings to enable native tool execution,
 extra paid context, automatic delegation, or a different backend.
 
-Start conservatively at 200K context for Opus 5.5. Expanding context is deferred
-until the exact subscription tier and SDK behavior are verified. Quota exhaustion,
+Start conservatively at 200K context for Opus 5.5. Expanding context is deferred until the exact subscription tier and SDK behavior are verified. Quota exhaustion,
 missing subscription auth, unsupported model/effort, and bridge startup failure
 must surface as errors without another provider or paid fallback.
 
@@ -95,9 +87,7 @@ Plan; a fork, alternate bridge, or weakened policy requires a new decision.
 
 ## Focused review contract
 
-For planning, assign implementation readiness and edge cases/risk to correctness;
-code simplification and refactoring to architecture; delivery shape and acceptance
-coverage to contract alignment. For implementation, assign diff correctness and
+For planning, assign implementation readiness and edge cases/risk to correctness; code simplification and refactoring to architecture; delivery shape and acceptance coverage to contract alignment. For implementation, assign diff correctness and
 adversarial scrutiny to correctness; quality, simplification, and deslop to
 architecture; verification evidence and requirements/docs alignment to contract
 alignment. Define new lens entries only where the current catalog cannot express
@@ -109,17 +99,14 @@ Reject missing groups, incomplete reports, missing assigned lenses, unassigned
 required lenses, duplicate or drifted assignments, and stale artifact identities.
 Deduplicate findings only after preserving each independent report.
 
-A timeout, unavailable model, or malformed report remains degraded evidence.
-The owning planner or implementer performs the full missing assigned-lens
+A timeout, unavailable model, or malformed report remains degraded evidence. The owning planner or implementer performs the full missing assigned-lens
 assessment inline, records its findings, and resolves them before advancing.
 Do not spawn replacements or rerun reviewers after the repair batch. A true
 launch-identity or orchestration failure remains a hard stop.
 
 ## State compatibility and rollout
 
-New workflows snapshot the new routes, review groups, and lens assignments.
-Existing workflow states must not be reinterpreted as Sol-reviewed or silently
-launch the replacement roster. Preserve old reports, snapshots, and identities.
+New workflows snapshot the new routes, review groups, and lens assignments. Existing workflow states must not be reinterpreted as Sol-reviewed or silently launch the replacement roster. Preserve old reports, snapshots, and identities.
 Support read-only inspection of legacy state; an incompatible continuation must
 stop with an explicit explanation instead of mutating its evidence. No automatic
 migration, session recreation, or live in-flight model switch is in scope.
@@ -146,8 +133,7 @@ succeeds. A blocked bridge milestone returns to Plan without substituting anothe
 provider or relaxing controls; do not spend the rest of the change budget on an
 unusable default.
 
-One atomic plan plus one coherent implementation PR; no planning-only PR and no
-OpenSpec or disposable POC. The change connects provider availability, enforced
+One atomic plan plus one coherent implementation PR; no planning-only PR and no OpenSpec or disposable POC. The change connects provider availability, enforced
 launch, focused dispatch, evidence validation, and their shared instructions.
 Shipping only the defaults would select an unavailable or unenforced provider;
 shipping only the new roster would leave evidence validation inconsistent.

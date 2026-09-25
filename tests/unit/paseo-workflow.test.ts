@@ -196,7 +196,7 @@ function fallbackAssessment(
   };
 }
 
-test("GREEN pi-paseo-workflow: deliberate handoff reaches Ready once without spawning review loops", async () => {
+test("GREEN pi-paseo-workflow: deliberate focused handoff reaches Ready once without review loops", async () => {
   const f = await fixture();
   await f.review("planning");
   await handoff(
