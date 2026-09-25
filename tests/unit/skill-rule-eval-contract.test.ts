@@ -36,6 +36,10 @@ import {
   bindWorkspace,
   parseReview,
 } from "../../skills/handoff-brief/scripts/paseo-workflow.ts";
+import {
+  assignReviewLenses,
+  requireCurrentReviewMode,
+} from "../../skills/handoff-brief/scripts/paseo-workflow-state.ts";
 import { routeWorkDisposition } from "../../skills/plan/scripts/plan-contract.ts";
 
 const managedSkills = (
@@ -62,6 +66,23 @@ test("GREEN skill-rule-evals: Show Me participates in managed skill coverage", (
 });
 
 test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", () => {
+  const groups = assignReviewLenses("planning", [
+    { id: "implementation-readiness", objective: "ready" },
+    { id: "code-simplifier", objective: "simple" },
+    { id: "delivery-shape", objective: "shape" },
+    { id: "security-review", objective: "secure" },
+    { id: "migration-data", objective: "migrate" },
+    { id: "docs-alignment-review", objective: "document" },
+  ]);
+  assert.deepEqual(Object.keys(groups), [
+    "review-correctness",
+    "review-architecture",
+    "review-contract",
+  ]);
+  assert.equal(Object.values(groups).flat().length, 6);
+  assert.equal(groups["review-correctness"].at(-1)?.id, "security-review");
+  assert.equal(groups["review-architecture"].at(-1)?.id, "migration-data");
+  assert.equal(groups["review-contract"].at(-1)?.id, "docs-alignment-review");
   const deepseek = axConfig.runtime.configs.paseo.managedPaths.find(
     (entry) => entry.path.join(".") === "agents.providers.ax-review-deepseek",
   );
@@ -100,6 +121,10 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
 });
 
 test("RED skill-rule-evals: Paseo workspace binding rejects a wrong directory", async () => {
+  assert.throws(
+    () => requireCurrentReviewMode({ version: 1 } as never),
+    /Legacy workflow state is read-only/u,
+  );
   const directory = mkdtempSync(join(tmpdir(), "paseo-binding-red-"));
   const statePath = join(directory, "state.json");
   writeFileSync(statePath, JSON.stringify({ version: 1, cwd: directory }));

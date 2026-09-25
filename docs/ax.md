@@ -151,6 +151,7 @@ package download does not consume the wrapper's 60-second startup deadline:
 
 ```bash
 pi install npm:pi-mcp-adapter@2.34.0
+pi install npm:pi-claude-bridge@0.8.0
 ```
 
 If startup times out, inspect the package installation before requesting a new
@@ -164,11 +165,12 @@ pnpm ax validate
 paseo reload
 ```
 
-Use `work` instead of `personal` for work instructions. Both profiles initially
-use ChatGPT for OpenAI and Cloudflare AI Gateway for open-weight models.
-Paseo applies provider/profile changes to new sessions; existing sessions keep
-their launch configuration. Read its reload result before assuming changes
-were applied.
+Use `work` instead of `personal` for work instructions. Both profiles default
+planning and implementation to exact-model Opus 5.5 through the pinned Claude
+subscription bridge. Astra remains a selectable planning alternative. Three
+focused Sol sessions provide automatic reviews. Paseo applies provider/profile
+changes to new sessions; existing sessions keep their launch configuration.
+Read its reload result before assuming changes were applied.
 
 Both profiles enable Paseo's hosted relay at `relay.paseo.sh:443`, with TLS for
 the daemon and public client connection. AX owns the five `daemon.relay` leaves:
@@ -183,20 +185,25 @@ deployment overrides before expecting the file to control relay behavior.
 Then use Paseo Desktop's **Pair a device** or `paseo daemon pair` to pair your
 device. Keep the pairing link private; it is not repository configuration.
 
-Select **Astra · Plan** in Paseo for brainstorming, research and planning.
-The [Pi workflow](../skills/handoff-brief/references/paseo-workflow.md) hands the
-accepted brief to a fresh Sol session and runs the fixed reviewers. You do not
-choose a model each time a reviewer or implementation worker starts.
+Select **Opus 5.5 · Plan** for the default planning route or **Astra · Plan**
+for the explicit alternative. The [Pi workflow](../skills/handoff-brief/references/paseo-workflow.md)
+hands the accepted brief to a fresh Opus implementer and runs correctness,
+architecture, and contract-alignment Sol reviews. You do not choose a model each
+time a reviewer or implementation worker starts.
 
 Managed launches require Node 26, Pi on PATH, and the synchronized mandatory
-adapter. Nonreview roles explicitly load the pinned MCP adapter; its first
-launch can require package download. Reviewers only receive read/search tools.
+adapter. Nonreview roles explicitly load the pinned MCP adapter, and Opus roles also
+load the pinned bridge despite disabled extension discovery; a first launch can
+require package download. Bridge authentication remains in the operator's
+Claude profile. AX does not manage credentials, enable paid extra usage, or
+permit API-key, gateway, Bedrock, Vertex, or Foundry environment redirects.
+Reviewers only receive read/search tools.
 Direct unmanaged `pi` launches do not acquire the managed wrapper's guarantees.
 
-AX corrects GLM 5.3's bundled output/context limits and enables its supported
-reasoning-effort control. A successful config validation does not prove model
-availability: the workflow rejects provider errors, empty/truncated review
-output and missing reviewer evidence.
+A successful config validation does not prove model availability or subscription
+eligibility: the workflow rejects authentication, quota, provider, model-identity,
+empty/truncated review-output, and missing-reviewer-evidence failures without a
+billing or model fallback.
 
 ## Synchronize repo-local OpenSpec
 

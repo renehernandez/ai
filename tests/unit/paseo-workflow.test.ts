@@ -41,9 +41,9 @@ async function fixture(
   const roles = [
     "planner",
     "implementer",
-    "review-glm",
-    "review-deepseek",
-    "review-astra",
+    "review-correctness",
+    "review-architecture",
+    "review-contract",
   ];
   const config = {
     agents: {
@@ -144,7 +144,9 @@ async function fixture(
     const phase = session.prompt.includes("this planning")
       ? "planning"
       : "implementation";
-    return `AX_REVIEW_BEGIN${JSON.stringify({ fingerprint: state.rounds[phase]?.fingerprint, outcomes: Object.fromEntries(state.lenses[phase].map((lens) => [lens.id, { status: "passed", evidence: "Inspected exact fixture behavior; no scoped issue.", findings: [] }])) })}AX_REVIEW_END`;
+    const role = session.provider.replace(/^ax-/, "");
+    const assigned = state.rounds[phase]?.lensAssignments[role]?.lensIds ?? [];
+    return `AX_REVIEW_BEGIN${JSON.stringify({ fingerprint: state.rounds[phase]?.fingerprint, outcomes: Object.fromEntries(assigned.map((id) => [id, { status: "passed", evidence: "Inspected exact fixture behavior; no scoped issue.", findings: [] }])) })}AX_REVIEW_END`;
   };
   const read = async () => JSON.parse(await readFile(path, "utf8")) as Workflow;
   const review = async (phase: "planning" | "implementation") => {
@@ -173,24 +175,28 @@ async function fixture(
 function fallbackAssessment(
   state: Workflow,
   phase: "planning" | "implementation",
-  role: "review-glm" | "review-deepseek" | "review-astra",
+  role: "review-correctness" | "review-architecture" | "review-contract",
 ) {
   return {
     role,
     outcomes: Object.fromEntries(
-      state.lenses[phase].map((lens) => [
-        lens.id,
-        {
-          status: "passed" as const,
-          evidence: `Owner inspected ${lens.id} against the exact target.`,
-          findings: [],
-        },
-      ]),
+      state.lenses[phase]
+        .filter((lens) =>
+          state.rounds[phase]?.lensAssignments[role].lensIds.includes(lens.id),
+        )
+        .map((lens) => [
+          lens.id,
+          {
+            status: "passed" as const,
+            evidence: `Owner inspected ${lens.id} against the exact target.`,
+            findings: [],
+          },
+        ]),
     ),
   };
 }
 
-test("GREEN pi-paseo-workflow: deliberate handoff reaches Ready once without spawning review loops", async () => {
+test("GREEN pi-paseo-workflow: deliberate focused handoff reaches Ready once without review loops", async () => {
   const f = await fixture();
   await f.review("planning");
   await handoff(
@@ -203,6 +209,22 @@ test("GREEN pi-paseo-workflow: deliberate handoff reaches Ready once without spa
   );
   await f.review("implementation");
   const reviewed = await f.read();
+  for (const phase of ["planning", "implementation"] as const) {
+    const round = reviewed.rounds[phase];
+    assert.ok(round);
+    const assigned = Object.values(round.lensAssignments).flatMap(
+      (group) => group.lensIds,
+    );
+    assert.deepEqual(
+      [...assigned].sort(),
+      reviewed.lenses[phase].map((lens) => lens.id).sort(),
+    );
+    assert.ok(
+      round.lensAssignments["review-architecture"].lensIds.includes(
+        "code-simplifier",
+      ),
+    );
+  }
   await writeFile(f.artifactPath, "Original edited after review and handoff.");
   const receipt = {
     artifactUrl: "https://github.com/owner/repo/pull/1",
@@ -233,8 +255,8 @@ test("GREEN pi-paseo-workflow: deliberate handoff reaches Ready once without spa
   );
   assert.deepEqual(finished.handoff?.brief, reviewed.handoff?.brief);
   assert.equal((await f.read()).finished, receipt.evidence);
-  assert.equal(f.calls.filter((args) => args[0] === "run").length, 6);
-  assert.equal(new Set(f.sessions.keys()).size, 6);
+  assert.equal(f.calls.filter((args) => args[0] === "run").length, 7);
+  assert.equal(new Set(f.sessions.keys()).size, 7);
   assert.ok(
     f.calls
       .filter((args) => args[0] === "run")
@@ -432,6 +454,23 @@ test("workspace binding rejects mismatches and ambiguity, and registers once", a
   );
 });
 
+test("legacy mixed-model workflow state remains inspectable but cannot continue", async () => {
+  const f = await fixture();
+  const legacy = await f.read();
+  delete legacy.reviewMode;
+  await writeFile(f.path, JSON.stringify(legacy));
+  assert.equal(
+    (JSON.parse(await readFile(f.path, "utf8")) as Workflow).version,
+    1,
+  );
+  await assert.rejects(
+    transition(f.path, "policy", {
+      deliveryPolicy: legacy.deliveryPolicy,
+    }),
+    /Legacy workflow state is read-only/,
+  );
+});
+
 test("RED pi-paseo-workflow: repeated phase cannot dispatch another review", async () => {
   const f = await fixture();
   const originalArtifact = await readFile(f.artifactPath, "utf8");
@@ -456,7 +495,7 @@ test("RED pi-paseo-workflow: repeated phase cannot dispatch another review", asy
   );
   assert.deepEqual((await f.read()).rounds.planning?.artifact, reserved);
   assert.equal(await readFile(reserved.path, "utf8"), originalArtifact);
-  assert.equal(f.calls.filter((args) => args[0] === "run").length, 2);
+  assert.equal(f.calls.filter((args) => args[0] === "run").length, 3);
 });
 
 test("parallel phase callers reserve each reviewer only once", async () => {
@@ -471,7 +510,7 @@ test("parallel phase callers reserve each reviewer only once", async () => {
     ),
   );
   assert.equal(results.filter((item) => item.status === "rejected").length, 1);
-  assert.equal(f.calls.filter((args) => args[0] === "run").length, 2);
+  assert.equal(f.calls.filter((args) => args[0] === "run").length, 3);
   assert.ok(
     Object.values((await f.read()).rounds.planning?.reviews ?? {}).every(
       (review) => review.status === "running",
@@ -499,8 +538,9 @@ test("reviewer launch and response failures become degraded evidence without ret
     phase: "planning",
     decisions: [],
     assessments: [
-      fallbackAssessment(degraded, "planning", "review-glm"),
-      fallbackAssessment(degraded, "planning", "review-deepseek"),
+      fallbackAssessment(degraded, "planning", "review-correctness"),
+      fallbackAssessment(degraded, "planning", "review-architecture"),
+      fallbackAssessment(degraded, "planning", "review-contract"),
     ],
   });
   await handoff(
@@ -535,9 +575,9 @@ test("reviewer launch and response failures become degraded evidence without ret
   const incomplete = fallbackAssessment(
     await g.read(),
     "planning",
-    "review-glm",
+    "review-correctness",
   );
-  delete incomplete.outcomes["code-simplifier"];
+  delete incomplete.outcomes["implementation-readiness"];
   await assert.rejects(
     transition(g.path, "triage", {
       phase: "planning",
@@ -561,19 +601,18 @@ test("scoped waivers preserve failed evidence, bind the current target, and do n
     const report = JSON.parse(
       output.replace("AX_REVIEW_BEGIN", "").replace("AX_REVIEW_END", ""),
     );
-    report.outcomes["edge-cases-and-risk"] = {
-      status: "blocked",
-      evidence: "A material risk remains unresolved.",
-      findings: [],
-    };
+    if (report.outcomes["edge-cases-and-risk"])
+      report.outcomes["edge-cases-and-risk"] = {
+        status: "blocked",
+        evidence: "A material risk remains unresolved.",
+        findings: [],
+      };
     return `AX_REVIEW_BEGIN${JSON.stringify(report)}AX_REVIEW_END`;
   });
   const state = await f.read();
   const target = state.rounds.planning?.fingerprint;
   assert.ok(target);
-  const blocked = ["review-glm", "review-deepseek"].map(
-    (role) => `${role}:edge-cases-and-risk:blocked`,
-  );
+  const blocked = ["review-correctness:edge-cases-and-risk:blocked"];
   await transition(f.path, "triage", {
     phase: "planning",
     decisions: blocked.map((id) => ({
@@ -617,7 +656,7 @@ test("scoped waivers preserve failed evidence, bind the current target, and do n
   const waived = await f.read();
   assert.deepEqual(waived.waivers?.[0]?.failedGates, blocked);
   assert.equal(
-    waived.rounds.planning?.reviews["review-glm"].outcomes?.[
+    waived.rounds.planning?.reviews["review-correctness"].outcomes?.[
       "edge-cases-and-risk"
     ].status,
     "blocked",
@@ -1093,29 +1132,30 @@ test("implementation questions block publication and applicable fixes consume on
       const report = JSON.parse(
         output.replace("AX_REVIEW_BEGIN", "").replace("AX_REVIEW_END", ""),
       );
-      report.outcomes["code-simplifier"] = {
-        status: "finding",
-        evidence:
-          "A duplicated branch can be removed without changing behavior.",
-        findings: [
-          {
-            id: "duplicate-branch",
-            evidence: "Both branches return the same value.",
-          },
-          { id: "extract-helper", evidence: "Consider extracting a helper." },
-        ],
-      };
+      if (report.outcomes["code-simplifier"])
+        report.outcomes["code-simplifier"] = {
+          status: "finding",
+          evidence:
+            "A duplicated branch can be removed without changing behavior.",
+          findings: [
+            {
+              id: "duplicate-branch",
+              evidence: "Both branches return the same value.",
+            },
+            {
+              id: "extract-helper",
+              evidence: "Consider extracting a helper.",
+            },
+          ],
+        };
       return `AX_REVIEW_BEGIN${JSON.stringify(report)}AX_REVIEW_END`;
     },
   );
-  const decisions = ["review-glm", "review-deepseek", "review-astra"].flatMap(
-    (role) =>
-      ["duplicate-branch", "extract-helper"].map((findingId) => ({
-        id: `${role}:code-simplifier:${findingId}`,
-        action: "question" as const,
-        reason: "Need user decision on behavior boundary.",
-      })),
-  );
+  const decisions = ["duplicate-branch", "extract-helper"].map((findingId) => ({
+    id: `review-architecture:code-simplifier:${findingId}`,
+    action: "question" as const,
+    reason: "Need user decision on behavior boundary.",
+  }));
   await transition(f.path, "triage", { phase: "implementation", decisions });
   const receipt = {
     artifactUrl: "https://github.com/owner/repo/pull/1",
@@ -1186,33 +1226,33 @@ test("terminal gate disposition rejects an A-to-B stale waiver and consumes an e
       const report = JSON.parse(
         output.replace("AX_REVIEW_BEGIN", "").replace("AX_REVIEW_END", ""),
       );
-      report.outcomes["diff-review"] = {
-        status: "finding",
-        evidence: "One repair and one user-owned risk decision remain.",
-        findings: [
-          { id: "repair", evidence: "The implementation needs a repair." },
-          {
-            id: "risk",
-            evidence: "Deployment requires explicit risk acceptance.",
-          },
-        ],
-      };
+      if (report.outcomes["diff-review"])
+        report.outcomes["diff-review"] = {
+          status: "finding",
+          evidence: "One repair and one user-owned risk decision remain.",
+          findings: [
+            { id: "repair", evidence: "The implementation needs a repair." },
+            {
+              id: "risk",
+              evidence: "Deployment requires explicit risk acceptance.",
+            },
+          ],
+        };
       return `AX_REVIEW_BEGIN${JSON.stringify(report)}AX_REVIEW_END`;
     },
   );
-  const roles = ["review-glm", "review-deepseek", "review-astra"];
-  const decisions = roles.flatMap((role) => [
+  const decisions = [
     {
-      id: `${role}:diff-review:repair`,
+      id: "review-correctness:diff-review:repair",
       action: "fix" as const,
       reason: "Repair in the one authorized batch.",
     },
     {
-      id: `${role}:diff-review:risk`,
+      id: "review-correctness:diff-review:risk",
       action: "question" as const,
       reason: "Only the user can accept this deployment risk.",
     },
-  ]);
+  ];
   const riskGates = decisions
     .filter((decision) => decision.action === "question")
     .map((decision) => decision.id);
@@ -1336,7 +1376,7 @@ test("large plan, implementation and handoff use private snapshots with bounded 
   await verify(handed.brief, brief);
   await verify(handed.planResolution, planResolution);
   await review("implementation");
-  assert.equal(f.calls.filter((args) => args[0] === "run").length, 6);
+  assert.equal(f.calls.filter((args) => args[0] === "run").length, 7);
   await assert.rejects(
     handoff(f.path, { briefPath: f.artifactPath, planResolution }, transport),
     /already dispatched/,

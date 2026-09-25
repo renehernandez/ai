@@ -1,6 +1,7 @@
 // charter-contracts: pi-paseo-config
 import assert from "node:assert/strict";
 import {
+  chmodSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -43,11 +44,20 @@ function options(root: string) {
             managedPaths: [
               { path: ["defaultProvider"], value: "openai-codex" },
               {
+                path: ["packages"],
+                value: "npm:pi-claude-bridge@0.8.0",
+                merge: "append-unique" as const,
+              },
+              {
                 path: ["extensions"],
                 value: ["~/.agents/hooks/pi/index.ts"],
                 expandHome: true,
               },
             ],
+          },
+          piClaudeBridge: {
+            target: "~/.pi/agent/claude-bridge.json",
+            managedPaths: [{ path: ["askClaude", "enabled"], value: false }],
           },
           piModels: {
             target: "~/.pi/agent/models.json",
@@ -103,6 +113,11 @@ test("GREEN pi-paseo-config: JSON sync preserves unowned configuration and crede
   const input = options(root);
   const paseo = join(input.home, ".paseo/config.json");
   const auth = join(input.home, ".pi/agent/auth.json");
+  const piSettings = join(input.home, ".pi/agent/settings.json");
+  write(piSettings, {
+    packages: ["npm:unowned-extension@1.0.0", "npm:pi-claude-bridge@0.7.0"],
+  });
+  chmodSync(piSettings, 0o600);
   write(paseo, {
     agents: {
       providers: {
@@ -136,6 +151,19 @@ test("GREEN pi-paseo-config: JSON sync preserves unowned configuration and crede
       "workers-ai/@cf/zai-org/glm-5.3"
     ].maxTokens,
     16384,
+  );
+  const pi = JSON.parse(
+    readFileSync(join(input.home, ".pi/agent/settings.json"), "utf-8"),
+  );
+  assert.deepEqual(pi.packages, [
+    "npm:unowned-extension@1.0.0",
+    "npm:pi-claude-bridge@0.8.0",
+  ]);
+  assert.equal(
+    JSON.parse(
+      readFileSync(join(input.home, ".pi/agent/claude-bridge.json"), "utf-8"),
+    ).askClaude.enabled,
+    false,
   );
   assert.equal(
     lstatSync(join(input.home, ".pi/agent/settings.json")).mode & 0o777,

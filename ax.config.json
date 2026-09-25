@@ -67,12 +67,35 @@
       "pi": {
         "target": "~/.pi/agent/settings.json",
         "managedPaths": [
-          { "path": ["defaultProvider"], "value": "openai-codex" },
-          { "path": ["defaultModel"], "value": "gpt-6-astra" },
-          { "path": ["defaultThinkingLevel"], "value": "low" },
+          { "path": ["defaultProvider"], "value": "claude-bridge" },
+          { "path": ["defaultModel"], "value": "claude-opus-5-5" },
+          { "path": ["defaultThinkingLevel"], "value": "medium" },
+          {
+            "path": ["packages"],
+            "value": "npm:pi-claude-bridge@0.8.0",
+            "merge": "append-unique"
+          },
           { "path": ["retry", "enabled"], "value": false },
           { "path": ["retry", "provider", "maxRetries"], "value": 0 },
           { "path": ["retry", "provider", "timeoutMs"], "value": 300000 }
+        ]
+      },
+      "piClaudeBridge": {
+        "target": "~/.pi/agent/claude-bridge.json",
+        "managedPaths": [
+          { "path": ["askClaude", "enabled"], "value": false },
+          { "path": ["askClaude", "allowFullMode"], "value": false },
+          { "path": ["provider", "plan"], "value": "pro" },
+          {
+            "path": ["provider", "longContextExtraUsage"],
+            "value": false
+          },
+          {
+            "path": ["provider", "forceTwoHundredK"],
+            "value": ["claude-opus-5-5"]
+          },
+          { "path": ["provider", "strictMcpConfig"], "value": true },
+          { "path": ["provider", "autoMemoryEnabled"], "value": false }
         ]
       },
       "piModels": {
@@ -189,43 +212,82 @@
             "value": [
               {
                 "id": "ax-planner",
-                "name": "Astra · Plan",
+                "name": "Opus 5.5 · Plan",
                 "provider": "ax-planner",
+                "model": "claude-bridge/claude-opus-5-5",
+                "thinkingOptionId": "medium"
+              },
+              {
+                "id": "ax-planner-astra",
+                "name": "Astra · Plan",
+                "provider": "ax-planner-astra",
                 "model": "openai-codex/gpt-6-astra",
                 "thinkingOptionId": "low"
               },
               {
                 "id": "ax-implementer",
-                "name": "Sol · Implement",
+                "name": "Opus 5.5 · Implement",
                 "provider": "ax-implementer",
+                "model": "claude-bridge/claude-opus-5-5",
+                "thinkingOptionId": "medium"
+              },
+              {
+                "id": "ax-review-correctness",
+                "name": "Sol · Correctness Review",
+                "provider": "ax-review-correctness",
                 "model": "openai-codex/gpt-5.6-sol",
                 "thinkingOptionId": "medium"
               },
               {
-                "id": "ax-review-glm",
-                "name": "GLM · Review",
-                "provider": "ax-review-glm",
-                "model": "cloudflare-ai-gateway/workers-ai/@cf/zai-org/glm-5.3",
-                "thinkingOptionId": "low"
-              },
-              {
-                "id": "ax-review-deepseek",
-                "name": "DeepSeek · Review",
-                "provider": "ax-review-deepseek",
-                "model": "cloudflare-ai-gateway/workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731",
+                "id": "ax-review-architecture",
+                "name": "Sol · Architecture Review",
+                "provider": "ax-review-architecture",
+                "model": "openai-codex/gpt-5.6-sol",
                 "thinkingOptionId": "medium"
               },
               {
-                "id": "ax-review-astra",
-                "name": "Astra · Review",
-                "provider": "ax-review-astra",
-                "model": "openai-codex/gpt-6-astra",
-                "thinkingOptionId": "low"
+                "id": "ax-review-contract",
+                "name": "Sol · Contract Review",
+                "provider": "ax-review-contract",
+                "model": "openai-codex/gpt-5.6-sol",
+                "thinkingOptionId": "medium"
               }
             ]
           },
           {
             "path": ["agents", "providers", "ax-planner"],
+            "expandHome": true,
+            "value": {
+              "extends": "pi",
+              "label": "Opus 5.5 · Plan",
+              "command": [
+                "node",
+                "~/.agents/hooks/pi/launch.ts",
+                "planner",
+                "claude-bridge",
+                "claude-opus-5-5",
+                "medium"
+              ],
+              "models": [
+                {
+                  "id": "claude-bridge/claude-opus-5-5",
+                  "label": "Claude Opus 5.5",
+                  "isDefault": true,
+                  "thinkingOptions": [{ "id": "medium", "label": "Medium" }]
+                }
+              ],
+              "paseoTools": {
+                "enabled": true,
+                "disabledTools": [
+                  "create_agent",
+                  "update_agent",
+                  "respond_to_permission"
+                ]
+              }
+            }
+          },
+          {
+            "path": ["agents", "providers", "ax-planner-astra"],
             "expandHome": true,
             "value": {
               "extends": "pi",
@@ -261,19 +323,19 @@
             "expandHome": true,
             "value": {
               "extends": "pi",
-              "label": "Sol · Implement",
+              "label": "Opus 5.5 · Implement",
               "command": [
                 "node",
                 "~/.agents/hooks/pi/launch.ts",
                 "implementer",
-                "openai-codex",
-                "gpt-5.6-sol",
+                "claude-bridge",
+                "claude-opus-5-5",
                 "medium"
               ],
               "models": [
                 {
-                  "id": "openai-codex/gpt-5.6-sol",
-                  "label": "Sol",
+                  "id": "claude-bridge/claude-opus-5-5",
+                  "label": "Claude Opus 5.5",
                   "isDefault": true,
                   "thinkingOptions": [{ "id": "medium", "label": "Medium" }]
                 }
@@ -289,25 +351,75 @@
             }
           },
           {
-            "path": ["agents", "providers", "ax-review-glm"],
+            "path": ["agents", "providers", "ax-review-correctness"],
             "expandHome": true,
             "value": {
               "extends": "pi",
-              "label": "GLM · Review",
+              "label": "Sol · Correctness Review",
               "command": [
                 "node",
                 "~/.agents/hooks/pi/launch.ts",
-                "review-glm",
-                "cloudflare-ai-gateway",
-                "workers-ai/@cf/zai-org/glm-5.3",
-                "low"
+                "review-correctness",
+                "openai-codex",
+                "gpt-5.6-sol",
+                "medium"
               ],
               "models": [
                 {
-                  "id": "cloudflare-ai-gateway/workers-ai/@cf/zai-org/glm-5.3",
-                  "label": "GLM 5.3",
+                  "id": "openai-codex/gpt-5.6-sol",
+                  "label": "Sol",
                   "isDefault": true,
-                  "thinkingOptions": [{ "id": "low", "label": "Low" }]
+                  "thinkingOptions": [{ "id": "medium", "label": "Medium" }]
+                }
+              ],
+              "paseoTools": { "enabled": false }
+            }
+          },
+          {
+            "path": ["agents", "providers", "ax-review-architecture"],
+            "expandHome": true,
+            "value": {
+              "extends": "pi",
+              "label": "Sol · Architecture Review",
+              "command": [
+                "node",
+                "~/.agents/hooks/pi/launch.ts",
+                "review-architecture",
+                "openai-codex",
+                "gpt-5.6-sol",
+                "medium"
+              ],
+              "models": [
+                {
+                  "id": "openai-codex/gpt-5.6-sol",
+                  "label": "Sol",
+                  "isDefault": true,
+                  "thinkingOptions": [{ "id": "medium", "label": "Medium" }]
+                }
+              ],
+              "paseoTools": { "enabled": false }
+            }
+          },
+          {
+            "path": ["agents", "providers", "ax-review-contract"],
+            "expandHome": true,
+            "value": {
+              "extends": "pi",
+              "label": "Sol · Contract Review",
+              "command": [
+                "node",
+                "~/.agents/hooks/pi/launch.ts",
+                "review-contract",
+                "openai-codex",
+                "gpt-5.6-sol",
+                "medium"
+              ],
+              "models": [
+                {
+                  "id": "openai-codex/gpt-5.6-sol",
+                  "label": "Sol",
+                  "isDefault": true,
+                  "thinkingOptions": [{ "id": "medium", "label": "Medium" }]
                 }
               ],
               "paseoTools": { "enabled": false }
@@ -318,7 +430,7 @@
             "expandHome": true,
             "value": {
               "extends": "pi",
-              "label": "DeepSeek · Review",
+              "label": "DeepSeek · Available",
               "command": [
                 "node",
                 "~/.agents/hooks/pi/launch.ts",
@@ -333,31 +445,6 @@
                   "label": "DeepSeek V4 Flash",
                   "isDefault": true,
                   "thinkingOptions": [{ "id": "medium", "label": "Medium" }]
-                }
-              ],
-              "paseoTools": { "enabled": false }
-            }
-          },
-          {
-            "path": ["agents", "providers", "ax-review-astra"],
-            "expandHome": true,
-            "value": {
-              "extends": "pi",
-              "label": "Astra · Review",
-              "command": [
-                "node",
-                "~/.agents/hooks/pi/launch.ts",
-                "review-astra",
-                "openai-codex",
-                "gpt-6-astra",
-                "low"
-              ],
-              "models": [
-                {
-                  "id": "openai-codex/gpt-6-astra",
-                  "label": "Astra",
-                  "isDefault": true,
-                  "thinkingOptions": [{ "id": "low", "label": "Low" }]
                 }
               ],
               "paseoTools": { "enabled": false }

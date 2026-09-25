@@ -13,6 +13,7 @@ import { basename, dirname, join, relative, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import {
   isScalar,
+  mergedArrayContains,
   parseJsonDocument,
   resolveJsonPaths,
   updateJsonDocument,
@@ -48,6 +49,7 @@ export type ManagedConfigDeclaration = {
     path: string[];
     value: ManagedJsonValue;
     expandHome?: boolean;
+    merge?: "append-unique";
   }>;
 };
 
@@ -97,10 +99,11 @@ export type ManagedConfigOptions = {
 export type ManagedLeaf = {
   path: string[];
   value: ManagedJsonValue;
+  merge?: "append-unique";
 };
 
 type ResolvedToolConfig = {
-  name: "codex" | "pi" | "piModels" | "paseo";
+  name: "codex" | "pi" | "piModels" | "piClaudeBridge" | "paseo";
   target: string;
   home: string;
   leaves: ManagedLeaf[];
@@ -126,6 +129,7 @@ const CONFIG_TARGETS = {
   codex: CODEX_TARGET,
   pi: "~/.pi/agent/settings.json",
   piModels: "~/.pi/agent/models.json",
+  piClaudeBridge: "~/.pi/agent/claude-bridge.json",
   paseo: "~/.paseo/config.json",
 } as const;
 
@@ -350,7 +354,12 @@ function compareLeaves(
         expected: leaf.value,
         reason: "missing",
       });
-    } else if (!isDeepStrictEqual(observed.value, leaf.value)) {
+    } else if (
+      leaf.merge === "append-unique"
+        ? !Array.isArray(observed.value) ||
+          !mergedArrayContains(observed.value, leaf.value)
+        : !isDeepStrictEqual(observed.value, leaf.value)
+    ) {
       drift.push({
         path: leaf.path.join("."),
         expected: leaf.value,

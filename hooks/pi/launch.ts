@@ -13,6 +13,26 @@ import {
 
 const directory = dirname(fileURLToPath(import.meta.url));
 const mcpPackage = "npm:pi-mcp-adapter@2.34.0";
+const claudeBridgePackage = "npm:pi-claude-bridge@0.8.0";
+const alternateBillingEnvironment = [
+  "ANTHROPIC_API_KEY",
+  "ANTHROPIC_AUTH_TOKEN",
+  "ANTHROPIC_OAUTH_TOKEN",
+  "ANTHROPIC_BASE_URL",
+  "CLAUDE_CODE_USE_BEDROCK",
+  "CLAUDE_CODE_USE_VERTEX",
+  "CLAUDE_CODE_USE_FOUNDRY",
+];
+
+export function launchEnvironment(
+  provider: string,
+  source: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const env = { ...source };
+  if (provider === "claude-bridge")
+    for (const name of alternateBillingEnvironment) delete env[name];
+  return env;
+}
 
 export function launchArguments(argv: string[]): {
   contract: Contract;
@@ -83,6 +103,7 @@ export function launchArguments(argv: string[]): {
     thinking,
     "--no-extensions",
   );
+  if (provider === "claude-bridge") args.push("-e", claudeBridgePackage);
   if (!role.startsWith("review-")) args.push("-e", mcpPackage);
   args.push(
     "-e",
@@ -126,7 +147,7 @@ export function launch(argv: string[]): void {
     throw new Error("Mandatory Pi workflow is empty");
   const child = spawn("pi", args, {
     env: {
-      ...process.env,
+      ...launchEnvironment(contract.provider),
       AX_PI_CONTRACT: JSON.stringify(contract),
       AX_PI_WORKFLOW_FILE: workflow,
     },

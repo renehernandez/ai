@@ -1,43 +1,70 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { launchArguments, launchEnvironment } from "../../hooks/pi/launch.ts";
 
 const config = JSON.parse(readFileSync("ax.config.json", "utf8"));
 
-test("DeepSeek reviewer pins V4 Flash with a bounded output and medium reasoning effort", () => {
-  const entries = config.runtime.configs.paseo.managedPaths;
-  const reviewer = entries.find(
-    (entry) => entry.path.join(".") === "agents.providers.ax-review-deepseek",
+test("Opus is the subscription-backed default and Sol owns three focused reviews", () => {
+  const pi = Object.fromEntries(
+    config.runtime.configs.pi.managedPaths.map((entry) => [
+      entry.path.join("."),
+      entry.value,
+    ]),
   );
-  assert.ok(reviewer);
+  assert.equal(pi.defaultProvider, "claude-bridge");
+  assert.equal(pi.defaultModel, "claude-opus-5-5");
+  assert.equal(pi.defaultThinkingLevel, "medium");
+  assert.equal(pi.packages, "npm:pi-claude-bridge@0.8.0");
+  const bridge = config.runtime.configs.piClaudeBridge.managedPaths;
   assert.equal(
-    reviewer.value.command[4],
-    "workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731",
-  );
-  assert.equal(reviewer.value.command[5], "medium");
-  const overrides = config.runtime.configs.piModels.managedPaths.filter(
-    (entry) =>
-      entry.path.includes("workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731"),
-  );
-  assert.equal(
-    overrides.find((entry) => entry.path.at(-1) === "maxTokens")?.value,
-    32768,
+    bridge.find((entry) => entry.path.join(".") === "askClaude.enabled")?.value,
+    false,
   );
   assert.equal(
-    overrides.find((entry) => entry.path.at(-1) === "supportsReasoningEffort")
-      ?.value,
-    true,
+    bridge.find(
+      (entry) => entry.path.join(".") === "provider.longContextExtraUsage",
+    )?.value,
+    false,
   );
-  const workflow = readFileSync(
-    "skills/handoff-brief/scripts/paseo-workflow-state.ts",
-    "utf8",
+  const profiles = config.runtime.configs.paseo.managedPaths.find(
+    (entry) => entry.path.join(".") === "daemon.agentProfiles",
+  ).value;
+  assert.equal(
+    profiles.filter((profile) => profile.name.includes("Review")).length,
+    3,
   );
-  assert.match(workflow, /planning: \["review-glm", "review-deepseek"\]/);
-  assert.match(
-    workflow,
-    /implementation: \["review-glm", "review-deepseek", "review-astra"\]/,
+  assert.ok(
+    profiles
+      .filter((profile) => profile.name.includes("Review"))
+      .every(
+        (profile) =>
+          profile.model === "openai-codex/gpt-5.6-sol" &&
+          profile.thinkingOptionId === "medium",
+      ),
   );
-  assert.doesNotMatch(JSON.stringify(config), /kimi-k3|deepseek-v4-pro/);
+  assert.ok(profiles.some((profile) => profile.id === "ax-planner-astra"));
+
+  const launch = launchArguments([
+    "implementer",
+    "claude-bridge",
+    "claude-opus-5-5",
+    "medium",
+    "--mode",
+    "rpc",
+  ]);
+  assert.ok(launch.args.includes("npm:pi-claude-bridge@0.8.0"));
+  assert.ok(launch.args.includes("--no-extensions"));
+  const env = launchEnvironment("claude-bridge", {
+    ANTHROPIC_API_KEY: "secret",
+    ANTHROPIC_BASE_URL: "https://gateway.example",
+    CLAUDE_CODE_USE_BEDROCK: "1",
+    SAFE: "kept",
+  });
+  assert.equal(env.SAFE, "kept");
+  assert.equal(env.ANTHROPIC_API_KEY, undefined);
+  assert.equal(env.ANTHROPIC_BASE_URL, undefined);
+  assert.equal(env.CLAUDE_CODE_USE_BEDROCK, undefined);
 });
 
 test("Paseo hosted relay is explicit and keeps pairing identity machine-local", () => {
@@ -65,7 +92,7 @@ test("Pi and Paseo roles are configured without a model selection step", () => {
   const providers = entries.filter(
     (entry) => entry.path.slice(0, 2).join(".") === "agents.providers",
   );
-  assert.equal(providers.length, 5);
+  assert.equal(providers.length, 7);
   for (const entry of providers) {
     const provider = entry.value;
     assert.equal(provider.extends, "pi");

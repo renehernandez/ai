@@ -7,7 +7,7 @@ import {
   renderHookRegistrationDocument,
 } from "../../scripts/ax/hook-registration.ts";
 
-test("RED hook-registration: MCP configuration is not a hook registration target", () => {
+test("RED hook-registration: MCP and Pi runtime configuration are not hook targets", () => {
   assert.throws(
     () =>
       assertRegistrationTargetSafe({
@@ -19,7 +19,7 @@ test("RED hook-registration: MCP configuration is not a hook registration target
   );
 });
 
-test("GREEN hook-registration: force-push guard targets both agent harnesses", () => {
+test("GREEN hook-registration: rendered force-push guard targets both agent harnesses", () => {
   const document = renderHookRegistrationDocument({
     path: "/tmp/nonexistent-force-push-hook-settings.json",
     declaration: {

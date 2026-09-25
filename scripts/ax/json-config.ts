@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import type {
   ManagedConfigDeclaration,
   ManagedConfigScalar,
@@ -30,7 +31,11 @@ export function resolveJsonPaths(
       )
     )
       throw new Error(`managed_config_path_invalid: ${name}`);
-    if (entry.expandHome !== undefined && typeof entry.expandHome !== "boolean")
+    if (
+      (entry.expandHome !== undefined &&
+        typeof entry.expandHome !== "boolean") ||
+      (entry.merge !== undefined && entry.merge !== "append-unique")
+    )
       throw new Error(`managed_config_paths_invalid: ${name}`);
     const value = jsonValue(entry.value, home, entry.expandHome === true);
     if (
@@ -42,7 +47,7 @@ export function resolveJsonPaths(
       throw new Error(
         `managed_config_path_overlap: ${name}.${entry.path.join(".")}`,
       );
-    leaves.push({ path: [...entry.path], value });
+    leaves.push({ path: [...entry.path], value, merge: entry.merge });
   }
   return leaves;
 }
@@ -77,6 +82,22 @@ function jsonValue(
   return result;
 }
 
+function mergeIdentity(value: unknown): unknown {
+  if (typeof value !== "string" || !value.startsWith("npm:")) return value;
+  const versionAt = value.lastIndexOf("@");
+  return versionAt > value.lastIndexOf("/") ? value.slice(0, versionAt) : value;
+}
+
+export function mergedArrayContains(
+  values: unknown[],
+  expected: ManagedJsonValue,
+) {
+  const matches = values.filter((value) =>
+    isDeepStrictEqual(mergeIdentity(value), mergeIdentity(expected)),
+  );
+  return matches.length === 1 && isDeepStrictEqual(matches[0], expected);
+}
+
 export function updateJsonDocument(
   parsed: Record<string, unknown>,
   leaves: ManagedLeaf[],
@@ -92,7 +113,20 @@ export function updateJsonDocument(
         );
       parent = parent[part] as Record<string, unknown>;
     }
-    parent[leaf.path[leaf.path.length - 1]] = structuredClone(leaf.value);
+    const key = leaf.path[leaf.path.length - 1];
+    if (leaf.merge === "append-unique") {
+      const current = parent[key];
+      if (current !== undefined && !Array.isArray(current))
+        throw new Error(`managed_config_array_invalid: ${leaf.path.join(".")}`);
+      const values = Array.isArray(current) ? [...current] : [];
+      if (!mergedArrayContains(values, leaf.value)) {
+        const identity = mergeIdentity(leaf.value);
+        parent[key] = values.filter(
+          (value) => !isDeepStrictEqual(mergeIdentity(value), identity),
+        );
+        (parent[key] as unknown[]).push(structuredClone(leaf.value));
+      } else parent[key] = values;
+    } else parent[key] = structuredClone(leaf.value);
   }
   return `${JSON.stringify(result, null, 2)}\n`;
 }

@@ -12,14 +12,24 @@ user authority.
 Use the configured planner for brainstorming, research and the initial plan.
 Role model and effort come from the managed Paseo provider command. Never ask
 the user to select a worker model, override it, or substitute another model.
-Unavailable reviewer models and incomplete reviewer responses are degraded evidence, never passing reviews. The owning Astra or Sol session records a complete inline fallback assessment against the same lenses before advancing. Uncertain implementer launch, missing session identity, corrupt state, snapshot failure, or ownership-transfer failure remains a hard blocker.
+Unavailable reviewer models and incomplete reviewer responses are degraded evidence, never passing reviews. The owning lifecycle session records a complete
+inline fallback assessment for that review group's assigned lenses before
+advancing. Uncertain implementer launch, missing session identity, corrupt state,
+snapshot failure, or ownership-transfer failure remains a hard blocker.
 
-The planning owner starts one planning review round. GLM and DeepSeek each
-review the whole plan against every applicable lens from the Review catalog.
-Keep their independent reports, including a distinct code-simplifier result.
-Deduplicate findings and evaluate whether each applies. Incorporate relevant
-findings; ask the user when a material judgment is uncertain. Do not start a
-second review round after repairs.
+The planning owner starts one planning review round with three fresh Sol
+sessions: correctness and risk, architecture and simplification, and contract
+alignment. Each session reads the whole plan but reports only its immutable lens
+assignment. Keep all three reports and the architecture group's distinct
+code-simplifier outcome. Deduplicate findings only after preserving each report.
+Do not start a second review round after repairs.
+
+Opus planner and implementer routes use the pinned subscription bridge and exact
+model identity. They do not accept API-key, auth-token, gateway, Bedrock, Vertex,
+or Foundry environment redirects, paid long-context fallback, AskClaude
+delegation, or model fallback. Authentication and account billing controls remain
+operator-owned. Quota, authentication, and model-availability failures stop the
+workflow instead of changing provider or model.
 
 ## Hand off to implementation
 
@@ -31,7 +41,7 @@ Keep the brief and workflow state task-local. Preserve the plan's durable
 content in the repository; do not commit private review receipts.
 
 When implementation is accepted, the Plan owner uses the handoff runner to
-start a new Paseo-managed Sol session with that brief. The runner resolves one
+start a new Paseo-managed Opus implementer session with that brief. The runner resolves one
 unique Paseo workspace whose directory exactly matches the canonical workflow
 cwd, or performs an explicitly requested local registration for that directory.
 It passes the verified workspace identity on every launch; ambient caller
@@ -49,30 +59,33 @@ user conversation; it does not keep writing the implementation worktree. Do
 not fork accumulated conversation or reuse a previous worker session for the
 handoff.
 
-Sol follows Execute, implements the accepted work and runs the project-native
-verification. Reviewers only read the frozen artifact. Independent concurrent
-tasks use separate singly owned worktrees.
+The implementation owner follows Execute, implements the accepted work, and
+runs project-native verification. Reviewers only read the frozen artifact.
+Independent concurrent tasks use separate singly owned worktrees.
 
 ## Review implementation once
 
-Run one parallel round with GLM, DeepSeek and Astra. Each covers the complete
-applicable review checklist, including simplification, quality, correctness,
-deslop and scrutiny. Add security, migration/data, production and documentation
-lenses when the change requires them. Thermonuclear review is quality-review
-depth, not an extra worker. Do not spawn a worker per lens.
+Run one parallel round with three fresh Sol sessions. Correctness covers diff
+correctness and risk; architecture covers quality, simplification, and deslop;
+contract alignment scrutinizes verification, requirements, and documentation.
+Assign conditional security and production risk to correctness,
+structural migration/data concerns to architecture, and evidence or documentation
+concerns to contract alignment. Every required lens is assigned exactly once.
+Thermonuclear review is quality-review depth, not an extra worker.
 
 Bind reports to the inspected source and base. Require a complete nonempty
 report from every model when available. A reviewer timeout, provider error,
 malformed report, truncated response, or unavailable reviewer records degraded
-evidence; it never becomes a pass and never triggers replacement dispatch. Sol
-must assess every required lens inline, record one structured outcome per lens,
+evidence; it never becomes a pass and never triggers replacement dispatch. The
+implementation owner must assess every missing assigned lens inline and record
+one structured outcome per lens,
 and resolve every fallback finding before advancing. Incomplete lens coverage
 is rejected. A valid `blocked` outcome remains unresolved until repaired, answered,
 or covered by an exact scoped user waiver. Never treat an exit code alone as
 review evidence.
 
-Sol evaluates the combined findings, applies relevant repairs and runs the
-affected verification. Record rejected findings with reasons. Escalate material
+The implementation owner evaluates the combined findings, applies relevant
+repairs, and runs the affected verification. Record rejected findings with reasons. Escalate material
 uncertainty to the user. This is one local repair batch; do not automatically
 rerun reviewers after it. Identify the reviewed, degraded, waived, and subsequent
 repair heads accurately instead of claiming repairs received another independent
@@ -95,8 +108,8 @@ failure, required user input or deadline; the default deadline is 30 minutes.
 Report missing reviewer evidence explicitly. A completed review is evidence to
 triage, not an automatic assertion that all findings are valid or resolved.
 
-Sol evaluates one hosted findings batch, fixes applicable issues, verifies and
-pushes through native hooks. Keep the artifact Ready. Report current CI and
+The implementation owner evaluates one hosted findings batch, fixes applicable
+issues, verifies, and pushes through native hooks. Keep the artifact Ready. Report current CI and
 any later automated feedback, but do not start another repair batch. Stop with
 the open PR/MR URL, reviewed and current heads, repairs, rejected findings and
 remaining gaps. A second repair batch requires a new user instruction.
@@ -140,7 +153,7 @@ contract; omit optional fields unless needed.
 | `collect` | Owning mode: `phase`; retrieves the existing sessions without starting replacements. |
 | `triage` | Plan or Execute: `phase`, `decisions` containing each finding's `id`, `action` (fix/dismiss/question) and `reason`; for each degraded reviewer, `assessments` with its `role` and complete per-lens `outcomes` using the review outcome shape. |
 | `waiver` | Owning mode: `phase`, exact current `target`, exact `requestedAction`, nonempty `failedGates`, and `reason`. Records failed evidence without granting the action itself. |
-| `handoff` | Plan: `briefPath`, `planResolution`; creates the fresh Sol session and records its identity. Accepts the same optional workspace fields as `review`. |
+| `handoff` | Plan: `briefPath`, `planResolution`; creates the fresh configured implementation session and records its identity. Accepts the same optional workspace fields as `review`. |
 | `retry-handoff` | Plan: exact `previousAgentId`, immutable authorization source, target `branch` and `head`, exact porcelain `dirtyStatus`, and `noWritesEvidence`; optional explicit workspace registration fields. Recovers only an inactive known wrong-cwd implementation handoff with unused implementation/review phases. |
 | `repair` | Execute: `phase` (implementation/hosted), `stage` (start/complete); completion includes `head` and named `verification`. |
 | `publication` | Finish: observed `artifactUrl`, `head`, exact `targetBase` SHA, optional policy-required `reviewer`, `ready: true`, `evidence`, and the unchanged policy-source fingerprint. |
@@ -175,6 +188,11 @@ runner lock only when identities still match. Never hand-edit or replace state.
 A moved head, mismatched artifact, unsupported format, or uncertain ownership
 stops recovery; bookkeeping reconciliation neither launches reviewers nor
 grants terminal authority.
+
+New runner states identify the focused Sol roster and store one immutable lens
+snapshot per review group. States created by the former mixed-model roster remain
+readable through `status`, but continuation under the new roster stops explicitly;
+they are never reinterpreted as Sol evidence.
 
 The runner stores review artifacts, lens definitions and handoff content in
 private read-only snapshots beside its state. Launch prompts carry snapshot paths
