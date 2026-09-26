@@ -66,7 +66,12 @@ already have no shell.
 - The segment check reuses the shared tokenizer without changing what
   `tokenize` returns, so the Claude and Codex force-push and deletion hooks keep
   their behavior.
-- Quoted operators and redirections such as `2>&1` stay allowed.
+- Quoted operators and redirections such as `2>&1` stay allowed as arguments.
+  A nested shell payload is checked like the outer command: `sh -c 'a && b'`,
+  `bash -lc 'a; b'`, and `env -S` split strings are denied when the payload has
+  more than one segment, following the Paseo check's existing recursion into
+  shell `-c` and `env -S`. A dynamic payload that cannot be inspected is
+  denied.
 - Paseo, force-push, and deletion policies run first and keep their denial
   messages.
 - The denial names the rule and says to issue one command per call.
@@ -122,7 +127,8 @@ Behavior tests with the fake Paseo transport and policy unit tests prove:
    with those files as evidence.
 6. **Compound denial.** For `planner` and `implementer`, `a && b`, `a; b`,
    `a | b`, `a &`, `echo $(b)`, and newline-separated commands are denied with
-   the shell-discipline message. Quoted operators, `2>&1`, and every
+   the shell-discipline message, as are `sh -c 'a && b'` and
+   `bash -lc 'a; b'`. `sh -c 'git status'`, quoted operators, `2>&1`, and every
    currently allowed policy case stay allowed. Existing Paseo-policy denials
    keep their messages.
 7. **Assignment text.** Implementer and repair assignments require the envelope,
