@@ -26,6 +26,7 @@ import {
   tickPrompt,
   transition,
   type Workflow,
+  type WorktreeReader,
 } from "../../skills/handoff-brief/scripts/paseo-workflow.ts";
 import { locked } from "../../skills/handoff-brief/scripts/paseo-workflow-state.ts";
 
@@ -33,6 +34,26 @@ const policySourceFingerprint = "a".repeat(64);
 const targetBase = "b".repeat(40);
 const orchestrator = { agentId: "orchestrator-0001" };
 const startupReply = "Ready. Awaiting a verified follow-up assignment.";
+const hex = (digit: number) => String(digit).repeat(40);
+const heads = {
+  first: hex(1),
+  second: hex(2),
+  repaired: hex(3),
+  headA: hex(4),
+  headB: hex(5),
+  other: hex(6),
+  unreported: hex(7),
+};
+const reportEnvelope = (report: Record<string, unknown>) =>
+  `AX_REPORT_BEGIN${JSON.stringify(report)}AX_REPORT_END`;
+const implementerReport = (head: string) => ({
+  branch: "feature",
+  head,
+  commits: [`${head} Implement the fixture`],
+  verification: ["Fixture unit tests pass."],
+  deviations: [],
+  risks: [],
+});
 
 async function fixture(
   gates: {
@@ -108,7 +129,17 @@ async function fixture(
     }
   >();
   const heartbeats = new Map<string, { agentId: string; prompt: string }>();
-  let reportedHead = "first";
+  let reportedHead = heads.first;
+  let implementerReply: string | undefined;
+  const tree: { branch: string; head?: string; uncommitted: string[] } = {
+    branch: "feature",
+    uncommitted: [],
+  };
+  const worktree: WorktreeReader = async () => ({
+    branch: tree.branch,
+    head: tree.head ?? reportedHead,
+    uncommitted: tree.uncommitted,
+  });
   let heartbeatIds = 0;
   let maxHeartbeats = 0;
   const transport: Transport = async (args, _timeout, env) => {
@@ -168,7 +199,10 @@ async function fixture(
       });
     if (session.prompt.startsWith("Start inertly")) return startupReply;
     if (session.provider === "ax-implementer")
-      return `Implemented and committed through native hooks. Head: ${reportedHead}.`;
+      return (
+        implementerReply ??
+        `Implemented and committed through native hooks. Head: ${reportedHead}.\n${reportEnvelope(implementerReport(reportedHead))}`
+      );
     const state = JSON.parse(await readFile(path, "utf8")) as Workflow;
     const phase = session.prompt.includes("this planning")
       ? "planning"
@@ -182,12 +216,12 @@ async function fixture(
     via: Transport = transport,
     probe?: Transport,
     now?: () => number,
-  ) => tick(path, orchestrator, via, probe, now);
+  ) => tick(path, orchestrator, via, probe, now, worktree);
   const review = async (phase: "planning" | "implementation") => {
     await step();
     await dispatchReview(
       path,
-      { phase, artifactPath, head: "first" },
+      { phase, artifactPath, head: heads.first },
       transport,
     );
     await step();
@@ -226,6 +260,10 @@ async function fixture(
     reportHead: (head: string) => {
       reportedHead = head;
     },
+    replyWith: (text: string) => {
+      implementerReply = text;
+    },
+    tree,
     heartbeats,
     maxHeartbeats: () => maxHeartbeats,
     transport,
@@ -239,7 +277,7 @@ async function fixture(
 
 const hostedReceipt = {
   artifactUrl: "https://github.com/owner/repo/pull/1",
-  head: "first",
+  head: heads.first,
   targetBase,
   reviewer: "genie" as const,
   ready: true as const,
@@ -388,7 +426,7 @@ test("GREEN pi-paseo-workflow: no hosted gates publishes without a fabricated re
   await f.review("implementation");
   const publication = {
     artifactUrl: "https://github.com/owner/repo/pull/2",
-    head: "first",
+    head: heads.first,
     ready: true as const,
     evidence: "Observed open Ready PR at exact head.",
     policySourceFingerprint,
@@ -440,13 +478,13 @@ test("GREEN pi-paseo-workflow: authorized continuation preserves prior evidence"
     authorizationSource: "User requested one follow-up implementation batch.",
     purpose: "Repair the current task only.",
     allowedPhases: ["implementation" as const],
-    expectedHead: "first",
+    expectedHead: heads.first,
   };
   await transition(f.path, "continuation", continuation);
   await transition(f.path, "continuation", continuation);
   const state = await f.read();
   assert.equal(state.history?.length, 1);
-  assert.equal(state.history?.[0].rounds.implementation?.head, "first");
+  assert.equal(state.history?.[0].rounds.implementation?.head, heads.first);
   assert.equal(state.history?.[0].authorization, undefined);
   assert.equal(state.rounds.implementation, undefined);
   await assert.rejects(
@@ -1114,7 +1152,7 @@ test("one hosted repair batch is permitted and final receipt must match repaired
     phase: "hosted",
     decisions: [{ id: "finding-1", action: "fix", reason: "Reproduced." }],
   });
-  await f.repair("hosted", "second", "Unit regression passes.");
+  await f.repair("hosted", heads.second, "Unit regression passes.");
   await assert.rejects(
     dispatchRepair(
       f.path,
@@ -1129,10 +1167,10 @@ test("one hosted repair batch is permitted and final receipt must match repaired
   );
   await transition(f.path, "finish", {
     ...hostedReceipt,
-    head: "second",
+    head: heads.second,
     evidence: "Second head observed Ready; hosted review only covered first.",
   });
-  assert.equal((await f.read()).publication?.head, "second");
+  assert.equal((await f.read()).publication?.head, heads.second);
   await assert.rejects(
     dispatchRepair(
       f.path,
@@ -1195,7 +1233,7 @@ test("hosted ticks probe once each and expire without inferring success", async 
   assert.equal((await f.step()).result, "awaiting-user");
   await transition(f.path, "waiver", {
     phase: "hosted",
-    target: "first",
+    target: heads.first,
     requestedAction: "finish",
     failedGates: ["hosted:timed-out"],
     reason: "Finish despite this exact timed-out hosted gate.",
@@ -1203,7 +1241,7 @@ test("hosted ticks probe once each and expire without inferring success", async 
   const waived = await f.read();
   assert.equal(waived.hosted?.status, "timed-out");
   assert.doesNotThrow(() =>
-    assertActionGateDisposition(waived, "hosted", "finish", "first"),
+    assertActionGateDisposition(waived, "hosted", "finish", heads.first),
   );
 });
 
@@ -1230,7 +1268,7 @@ test("failed, awaiting-user, and waiting hosted evidence expose exact waivable g
     });
     await transition(f.path, "waiver", {
       phase: "hosted",
-      target: "first",
+      target: heads.first,
       requestedAction: "finish",
       failedGates: [gate],
       reason: "Finish despite this exact hosted gate.",
@@ -1238,7 +1276,7 @@ test("failed, awaiting-user, and waiting hosted evidence expose exact waivable g
     const waived = await f.read();
     assert.equal(waived.hosted?.status, status);
     assert.doesNotThrow(() =>
-      assertActionGateDisposition(waived, "hosted", "finish", "first"),
+      assertActionGateDisposition(waived, "hosted", "finish", heads.first),
     );
   }
 });
@@ -1249,7 +1287,11 @@ test("implementation questions block publication and applicable fixes consume on
   await f.accept("No findings.");
   await dispatchReview(
     f.path,
-    { phase: "implementation", artifactPath: f.artifactPath, head: "first" },
+    {
+      phase: "implementation",
+      artifactPath: f.artifactPath,
+      head: heads.first,
+    },
     f.transport,
   );
   await f.step(
@@ -1295,7 +1337,7 @@ test("implementation questions block publication and applicable fixes consume on
     transition(f.path, "repair", { phase: "implementation", stage: "start" }),
     /fresh implementer dispatch/,
   );
-  await f.repair("implementation", "repaired");
+  await f.repair("implementation", heads.repaired);
   await assert.rejects(
     dispatchRepair(
       f.path,
@@ -1308,18 +1350,22 @@ test("implementation questions block publication and applicable fixes consume on
     transition(f.path, "publication", receipt),
     /head differs/,
   );
-  await transition(f.path, "publication", { ...receipt, head: "repaired" });
-  assert.equal((await f.read()).publication?.head, "repaired");
+  await transition(f.path, "publication", { ...receipt, head: heads.repaired });
+  assert.equal((await f.read()).publication?.head, heads.repaired);
 });
 
 test("terminal gate disposition rejects an A-to-B stale waiver and consumes an exact-current deployment waiver", async () => {
   const f = await fixture();
   await f.review("planning");
-  f.reportHead("head-a");
+  f.reportHead(heads.headA);
   await f.accept("No planning findings.");
   await dispatchReview(
     f.path,
-    { phase: "implementation", artifactPath: f.artifactPath, head: "head-a" },
+    {
+      phase: "implementation",
+      artifactPath: f.artifactPath,
+      head: heads.headA,
+    },
     f.transport,
   );
   await f.step(
@@ -1357,7 +1403,7 @@ test("terminal gate disposition rejects an A-to-B stale waiver and consumes an e
   });
   await transition(f.path, "waiver", {
     phase: "implementation",
-    target: "head-a",
+    target: heads.headA,
     requestedAction: "deployment",
     failedGates: actionGates,
     reason: "Deploy head A despite the named repair and risk gates.",
@@ -1368,19 +1414,19 @@ test("terminal gate disposition rejects an A-to-B stale waiver and consumes an e
       headA,
       "implementation",
       "deployment",
-      "head-a",
+      heads.headA,
     ),
   );
   await transition(f.path, "waiver", {
     phase: "implementation",
-    target: "head-a",
+    target: heads.headA,
     requestedAction: "publication",
     failedGates: riskGates,
     reason: "Permit the one repair batch despite the user-owned risk gates.",
   });
   await f.repair(
     "implementation",
-    "head-b",
+    heads.headB,
     "Focused behavior regression passes.",
   );
   const repaired = await f.read();
@@ -1390,13 +1436,13 @@ test("terminal gate disposition rejects an A-to-B stale waiver and consumes an e
         repaired,
         "implementation",
         "deployment",
-        "head-b",
+        heads.headB,
       ),
     /user input/,
   );
   await transition(f.path, "waiver", {
     phase: "implementation",
-    target: "head-b",
+    target: heads.headB,
     requestedAction: "deployment",
     failedGates: actionGates,
     reason: "Deploy repaired head B despite the same named gates.",
@@ -1407,7 +1453,7 @@ test("terminal gate disposition rejects an A-to-B stale waiver and consumes an e
       waived,
       "implementation",
       "deployment",
-      "head-b",
+      heads.headB,
     ),
   );
 });
@@ -1441,7 +1487,7 @@ test("large plan, implementation and handoff use private snapshots with bounded 
     await writeFile(f.artifactPath, content);
     await dispatchReview(
       f.path,
-      { phase, artifactPath: f.artifactPath, head: "first" },
+      { phase, artifactPath: f.artifactPath, head: heads.first },
       transport,
     );
     const round = (await f.read()).rounds[phase];
@@ -1487,14 +1533,18 @@ test("GREEN pi-paseo-workflow: ticks carry an unattended run from implementation
   const armed = await syncHeartbeat(f.path, orchestrator, f.transport);
   assert.ok(armed);
   const reported = await f.step();
-  assert.deepEqual(reported.recorded, ["handoff: complete"]);
+  assert.deepEqual(reported.recorded, [`handoff: complete at ${heads.first}`]);
   assert.equal(reported.result, "changed");
   assert.equal(reported.result === "changed" && reported.next.action, "review");
   assert.equal(reported.heartbeat, undefined);
   assert.ok((await f.read()).handoff?.report);
   await dispatchReview(
     f.path,
-    { phase: "implementation", artifactPath: f.artifactPath, head: "first" },
+    {
+      phase: "implementation",
+      artifactPath: f.artifactPath,
+      head: heads.first,
+    },
     f.transport,
   );
   await syncHeartbeat(f.path, orchestrator, f.transport);
@@ -1751,7 +1801,11 @@ test("GREEN pi-paseo-workflow: a repair batch launches one new verified implemen
   await f.accept();
   await dispatchReview(
     f.path,
-    { phase: "implementation", artifactPath: f.artifactPath, head: "first" },
+    {
+      phase: "implementation",
+      artifactPath: f.artifactPath,
+      head: heads.first,
+    },
     f.transport,
   );
   await f.step(
@@ -1796,17 +1850,25 @@ test("GREEN pi-paseo-workflow: a repair batch launches one new verified implemen
     await readFile(session.assignment?.path ?? "", "utf8"),
     /repair brief snapshot[\s\S]*do not dispatch reviewers, start workers, push, publish, or merge/,
   );
+  for (const assignment of [session.assignment, before.handoff?.assignment]) {
+    const text = await readFile(assignment?.path ?? "", "utf8");
+    assert.match(text, /one shell command per tool call/);
+    assert.match(text, /never issue git mutations as parallel tool calls/);
+    assert.match(text, /AX_REPORT_BEGIN[\s\S]*"head"[\s\S]*AX_REPORT_END/);
+  }
   await assert.rejects(
     transition(f.path, "repair", {
       phase: "implementation",
       stage: "complete",
-      head: "repaired",
+      head: heads.repaired,
       verification: "Focused regression passes.",
     }),
     /started batch/,
   );
   const reported = await f.step();
-  assert.deepEqual(reported.recorded, ["implementation-repair: complete"]);
+  assert.deepEqual(reported.recorded, [
+    `implementation-repair: complete at ${heads.first}`,
+  ]);
   assert.equal(reported.result === "changed" && reported.next.action, "repair");
 });
 
@@ -1882,14 +1944,22 @@ test("RED pi-paseo-workflow: review and repair heads must match the implementer 
   await assert.rejects(
     dispatchReview(
       f.path,
-      { phase: "implementation", artifactPath: f.artifactPath, head: "other" },
+      {
+        phase: "implementation",
+        artifactPath: f.artifactPath,
+        head: heads.other,
+      },
       f.transport,
     ),
-    /names the reviewed head/,
+    /verified report head equals the reviewed head/,
   );
   await dispatchReview(
     f.path,
-    { phase: "implementation", artifactPath: f.artifactPath, head: "first" },
+    {
+      phase: "implementation",
+      artifactPath: f.artifactPath,
+      head: heads.first,
+    },
     f.transport,
   );
   await f.step(
@@ -1909,7 +1979,7 @@ test("RED pi-paseo-workflow: review and repair heads must match the implementer 
       },
     ],
   });
-  f.reportHead("repaired");
+  f.reportHead(heads.repaired);
   await dispatchRepair(
     f.path,
     { phase: "implementation", briefPath: f.repairBrief },
@@ -1923,9 +1993,12 @@ test("RED pi-paseo-workflow: review and repair heads must match the implementer 
       head,
       verification: "Focused regression passes.",
     });
-  await assert.rejects(complete("unreported"), /named in the reported repair/);
-  await complete("repaired");
-  assert.equal((await f.read()).repairs.implementation?.head, "repaired");
+  await assert.rejects(
+    complete(heads.unreported),
+    /verified head from the repair report/,
+  );
+  await complete(heads.repaired);
+  assert.equal((await f.read()).repairs.implementation?.head, heads.repaired);
 });
 
 test("GREEN pi-paseo-workflow: inspection errors degrade reviewers and keep implementers in flight", async () => {
@@ -1966,5 +2039,170 @@ test("GREEN pi-paseo-workflow: inspection errors degrade reviewers and keep impl
     /handoff: inspect failed: .*daemon unavailable/,
   );
   assert.equal((await g.read()).handoff?.status, "running");
-  assert.equal((await g.step()).recorded[0], "handoff: complete");
+  assert.equal(
+    (await g.step()).recorded[0],
+    `handoff: complete at ${heads.first}`,
+  );
+});
+
+test("GREEN pi-paseo-workflow: runner actions print one compact line and status stays the full read", async () => {
+  const f = await fixture();
+  const env = {
+    AX_PI_CONTRACT: JSON.stringify({ role: "planner" }),
+    PASEO_AGENT_ID: orchestrator.agentId,
+  };
+  const orderInput = join(f.dir, "order.json");
+  await writeFile(
+    orderInput,
+    JSON.stringify({
+      op: "add",
+      id: "visibility",
+      constraint: "Keep the repository private.",
+      authorizationSource: "User message in this task",
+    }),
+  );
+  const ordered = await captureStdout(() =>
+    main([f.path, "order", orderInput], env),
+  );
+  assert.equal(ordered.trimEnd().split("\n").length, 1);
+  assert.deepEqual(JSON.parse(ordered), {
+    action: "order",
+    recorded: ["standingOrders"],
+    ids: { order: "visibility" },
+    result: "changed",
+    next: { action: "review", detail: "Dispatch the planning review round" },
+  });
+  await dispatchReview(
+    f.path,
+    { phase: "planning", artifactPath: f.artifactPath },
+    f.transport,
+  );
+  await f.step();
+  const triageInput = join(f.dir, "triage.json");
+  await writeFile(
+    triageInput,
+    JSON.stringify({ phase: "planning", decisions: [] }),
+  );
+  const triaged = await captureStdout(() =>
+    main([f.path, "triage", triageInput], env),
+  );
+  assert.equal(triaged.trimEnd().split("\n").length, 1);
+  assert.deepEqual(JSON.parse(triaged), {
+    action: "triage",
+    recorded: ["decisions", "assessments"],
+    ids: {},
+    result: "awaiting-user",
+    gate: "Plan acceptance is required before implementation handoff",
+  });
+  assert.doesNotMatch(triaged, /code-simplifier|outcomes|lenses/);
+  const ticked = await captureStdout(() => main([f.path, "tick"], env));
+  assert.equal(JSON.parse(ticked).action, "tick");
+  const status = JSON.parse(
+    await captureStdout(() => main([f.path, "status"], env)),
+  );
+  assert.ok(status.lenses.planning.length > 0);
+  assert.ok(status.rounds.planning.reviews["review-architecture"].outcomes);
+});
+
+test("RED pi-paseo-workflow: only the worktree-verified envelope head binds review, never a prose SHA", async () => {
+  const f = await fixture();
+  await f.review("planning");
+  f.replyWith(
+    `Started from ${heads.second}; committed ${heads.first}.\n${reportEnvelope(implementerReport(heads.first))}`,
+  );
+  await f.accept();
+  assert.deepEqual((await f.read()).handoff?.report, {
+    ...implementerReport(heads.first),
+    uncommitted: [],
+  });
+  for (const head of [heads.second, heads.first.slice(0, 7)])
+    await assert.rejects(
+      dispatchReview(
+        f.path,
+        { phase: "implementation", artifactPath: f.artifactPath, head },
+        f.transport,
+      ),
+      /verified report head equals the reviewed head/,
+    );
+  await dispatchReview(
+    f.path,
+    {
+      phase: "implementation",
+      artifactPath: f.artifactPath,
+      head: heads.first,
+    },
+    f.transport,
+  );
+  assert.equal((await f.read()).rounds.implementation?.head, heads.first);
+});
+
+test("RED pi-paseo-workflow: missing, duplicate, malformed, or mismatched reports fail the session for the user", async () => {
+  type Fixture = Awaited<ReturnType<typeof fixture>>;
+  const valid = reportEnvelope(implementerReport(heads.first));
+  const cases: [string, (f: Fixture) => void, RegExp][] = [
+    [
+      "missing",
+      (f) => f.replyWith(`Committed ${heads.first}.`),
+      /Missing or ambiguous final implementer report envelope/,
+    ],
+    [
+      "duplicate",
+      (f) => f.replyWith(`${valid}\n${valid}`),
+      /Missing or ambiguous/,
+    ],
+    [
+      "malformed",
+      (f) => f.replyWith("AX_REPORT_BEGIN{not-json}AX_REPORT_END"),
+      /JSON/,
+    ],
+    [
+      "short head",
+      (f) =>
+        f.replyWith(reportEnvelope(implementerReport(heads.first.slice(0, 7)))),
+      /Malformed implementer report/,
+    ],
+    [
+      "head mismatch",
+      (f) => {
+        f.tree.head = heads.second;
+      },
+      /differs from worktree/,
+    ],
+    [
+      "branch mismatch",
+      (f) => {
+        f.tree.branch = "main";
+      },
+      /differs from worktree/,
+    ],
+  ];
+  for (const [name, arrange, error] of cases) {
+    const f = await fixture();
+    await f.review("planning");
+    arrange(f);
+    await handoff(
+      f.path,
+      { briefPath: f.artifactPath, planResolution: "Settled." },
+      f.transport,
+    );
+    const failed = await f.step();
+    assert.deepEqual(failed.recorded, ["handoff: failed"], name);
+    assert.equal(failed.result, "awaiting-user", name);
+    const state = await f.read();
+    assert.equal(state.handoff?.report, undefined, name);
+    assert.match(state.handoff?.error ?? "", error, name);
+  }
+});
+
+test("GREEN pi-paseo-workflow: a matching report records uncommitted files as evidence", async () => {
+  const f = await fixture();
+  await f.review("planning");
+  f.tree.uncommitted = [" M notes.md", "?? scratch.txt"];
+  await f.accept();
+  const handed = (await f.read()).handoff;
+  assert.equal(handed?.status, "complete");
+  assert.deepEqual(handed?.report?.uncommitted, [
+    " M notes.md",
+    "?? scratch.txt",
+  ]);
 });

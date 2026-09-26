@@ -9,6 +9,7 @@ import {
   createSnapshots,
   type DeliveryPolicy,
   type Hosted,
+  type ImplementerReport,
   inFlight,
   initialize,
   type Lens,
@@ -23,7 +24,7 @@ import {
   type Review,
   type Role,
   receipt,
-  reportNames,
+  reportsHead,
   requireCurrentReviewMode,
   requireOrchestration,
   requireThat,
@@ -66,6 +67,28 @@ const digest = (text: string) =>
   createHash("sha256").update(text).digest("hex");
 const runner = fileURLToPath(import.meta.url);
 const heartbeatLifetimeMs = 24 * 60 * 60_000;
+
+export type Worktree = { branch: string; head: string; uncommitted: string[] };
+export type WorktreeReader = (cwd: string) => Promise<Worktree>;
+// Reads the workflow worktree's Git identity, ignoring any caller Git environment redirects.
+export const readWorktree: WorktreeReader = async (cwd) => {
+  const env = { ...process.env };
+  delete env.GIT_DIR;
+  delete env.GIT_WORK_TREE;
+  delete env.GIT_INDEX_FILE;
+  const git = async (args: string[]) =>
+    (await execute("git", ["-C", cwd, ...args], { timeout: 30_000, env }))
+      .stdout;
+  return {
+    branch: (await git(["rev-parse", "--abbrev-ref", "HEAD"])).trim(),
+    head: (await git(["rev-parse", "HEAD"])).trim(),
+    uncommitted: (await git(["status", "--porcelain=v1"]))
+      .trimEnd()
+      .split("\n")
+      .filter(nonempty)
+      .sort(),
+  };
+};
 
 async function inspectSession(agentId: string, transport: Transport) {
   return JSON.parse(await transport(["inspect", "--json", agentId], 30_000));
@@ -388,8 +411,8 @@ export async function dispatchReview(
     requireThat(
       phase === "planning" ||
         (state.handoff?.status === "complete" &&
-          reportNames(state.handoff, input.head)),
-      "Implementation review requires a reported fresh implementation handoff that names the reviewed head",
+          reportsHead(state.handoff, input.head)),
+      "Implementation review requires a completed implementation handoff whose verified report head equals the reviewed head",
     );
     requireThat(
       !state.currentAuthorization ||
@@ -441,13 +464,10 @@ export async function dispatchReview(
   );
 }
 
-export function parseReview(
-  text: string,
-  fingerprint: string,
-  lenses: Lens[],
-): Record<string, Outcome> {
-  const beginMarker = "AX_REVIEW_BEGIN";
-  const endMarker = "AX_REVIEW_END";
+// Extracts the single `${marker}_BEGIN` ... `${marker}_END` JSON envelope; surrounding prose is ignored.
+function envelope(text: string, marker: string, label: string) {
+  const beginMarker = `${marker}_BEGIN`;
+  const endMarker = `${marker}_END`;
   const begin = text.indexOf(beginMarker);
   const end = text.indexOf(endMarker);
   requireThat(
@@ -455,9 +475,48 @@ export function parseReview(
       begin === text.lastIndexOf(beginMarker) &&
       end > begin &&
       end === text.lastIndexOf(endMarker),
-    "Missing or ambiguous final review envelope",
+    `Missing or ambiguous final ${label} envelope`,
   );
-  const report = JSON.parse(text.slice(begin + beginMarker.length, end));
+  return JSON.parse(text.slice(begin + beginMarker.length, end));
+}
+
+export function parseReport(
+  text: string,
+): Omit<ImplementerReport, "uncommitted"> {
+  const report = envelope(text, "AX_REPORT", "implementer report");
+  const lists = ["commits", "verification", "deviations", "risks"] as const;
+  requireThat(
+    nonempty(report?.branch) &&
+      /^[a-f0-9]{40,64}$/.test(report.head) &&
+      lists.every(
+        (key) => Array.isArray(report[key]) && report[key].every(nonempty),
+      ),
+    "Malformed implementer report: branch, full head, and commits, verification, deviations, and risks string lists are required",
+  );
+  const { branch, head, commits, verification, deviations, risks } = report;
+  return { branch, head, commits, verification, deviations, risks };
+}
+
+async function verifiedReport(
+  text: string,
+  cwd: string,
+  worktree: WorktreeReader,
+): Promise<ImplementerReport> {
+  const report = parseReport(text);
+  const observed = await worktree(cwd);
+  requireThat(
+    report.branch === observed.branch && report.head === observed.head,
+    `Implementer report ${report.branch}@${report.head} differs from worktree ${observed.branch}@${observed.head}`,
+  );
+  return { ...report, uncommitted: observed.uncommitted };
+}
+
+export function parseReview(
+  text: string,
+  fingerprint: string,
+  lenses: Lens[],
+): Record<string, Outcome> {
+  const report = envelope(text, "AX_REVIEW", "review");
   requireThat(
     report.fingerprint === fingerprint,
     "Review target fingerprint mismatch",
@@ -670,7 +729,7 @@ export async function handoff(
 }
 
 function implementerAssignment(opening: string, snapshots: string) {
-  return `${opening} First read the complete immutable ${snapshots}, including subsequent chunks for large files. Stop if any snapshot is unavailable or unreadable; never substitute a changed original. Implement, run the named verification, and commit through native hooks. End with a report of branch, head, commits, verification, deviations, and open risks, then stop. The planner orchestrator owns review dispatch, triage, publication, hosted follow-through, and any later repair; do not dispatch reviewers, start workers, push, publish, or merge.`;
+  return `${opening} First read the complete immutable ${snapshots}, including subsequent chunks for large files. Stop if any snapshot is unavailable or unreadable; never substitute a changed original. Implement, run the named verification, and commit through native hooks. Issue one shell command per tool call, and never issue git mutations as parallel tool calls. End with a prose report of branch, head, commits, verification, deviations, and open risks, followed by exactly one final AX_REPORT_BEGIN JSON {"branch":"current branch","head":"full 40-character HEAD SHA","commits":["sha subject"],"verification":["command and result"],"deviations":[],"risks":[]} AX_REPORT_END envelope, then stop. The runner verifies branch and head against the worktree; a missing, malformed, or mismatched envelope stops the workflow for the user. The planner orchestrator owns review dispatch, triage, publication, hosted follow-through, and any later repair; do not dispatch reviewers, start workers, push, publish, or merge.`;
 }
 
 function recoverableHandoff(state: Workflow, previousAgentId: string) {
@@ -745,26 +804,11 @@ export async function retryMisroutedHandoff(
       !actual.PendingPermissions?.length,
     "Original handoff is not an inactive verified misroute",
   );
-  const gitEnv = { ...process.env };
-  delete gitEnv.GIT_DIR;
-  delete gitEnv.GIT_WORK_TREE;
-  delete gitEnv.GIT_INDEX_FILE;
-  const git = async (args: string[]) =>
-    (
-      await execute("git", ["-C", state.cwd, ...args], {
-        timeout: 30_000,
-        env: gitEnv,
-      })
-    ).stdout.trim();
-  const branch = await git(["rev-parse", "--abbrev-ref", "HEAD"]);
-  const head = await git(["rev-parse", "HEAD"]);
-  const dirtyOutput = (
-    await execute("git", ["-C", state.cwd, "status", "--porcelain=v1"], {
-      timeout: 30_000,
-      env: gitEnv,
-    })
-  ).stdout.trimEnd();
-  const dirtyStatus = dirtyOutput.split("\n").filter(nonempty).sort();
+  const {
+    branch,
+    head,
+    uncommitted: dirtyStatus,
+  } = await readWorktree(state.cwd);
   requireThat(
     branch === input.branch &&
       head === input.head &&
@@ -1151,6 +1195,7 @@ export async function tick(
   transport: Transport = paseo,
   probe: Transport = readProbe,
   now = Date.now,
+  worktree: WorktreeReader = readWorktree,
 ) {
   const state = JSON.parse(await readFile(path, "utf8")) as Workflow;
   requireOrchestration(state);
@@ -1199,10 +1244,16 @@ export async function tick(
             locate,
             actual,
             transport,
-            async (report) => ({ report }),
+            async (text) => ({
+              report: await verifiedReport(text, state.cwd, worktree),
+            }),
           );
-      if (done)
-        recorded.push(`${name}: ${locate(await readState(path)).status}`);
+      if (done) {
+        const { status, report } = locate(await readState(path));
+        recorded.push(
+          `${name}: ${status}${report ? ` at ${report.head}` : ""}`,
+        );
+      }
     }),
   );
   if (await probeHosted(path, probe, now))
@@ -1229,6 +1280,62 @@ export function requirePlannerCaller(env: NodeJS.ProcessEnv) {
   );
 }
 
+// One line per action: changed state fields, new identities, and the next step; `status` stays the only full-state read.
+function compactResult(
+  action: string,
+  before: Workflow | undefined,
+  after: Workflow,
+  heartbeat: Workflow["heartbeat"],
+) {
+  const keys = new Set([
+    ...Object.keys(before ?? {}),
+    ...Object.keys(after),
+  ]) as Set<keyof Workflow>;
+  const recorded = [...keys].filter(
+    (key) =>
+      key !== "heartbeat" &&
+      JSON.stringify(before?.[key]) !== JSON.stringify(after[key]),
+  );
+  const previous = new Map(
+    (before ? workers(before) : []).map(({ name, worker }) => [
+      name,
+      worker.agentId,
+    ]),
+  );
+  const agents = Object.fromEntries(
+    workers(after)
+      .filter(
+        ({ name, worker }) =>
+          worker.agentId && worker.agentId !== previous.get(name),
+      )
+      .map(({ name, worker }) => [name, worker.agentId]),
+  );
+  const rounds = Object.fromEntries(
+    (["planning", "implementation"] as Phase[]).flatMap((phase) => {
+      const fingerprint = after.rounds[phase]?.fingerprint;
+      return fingerprint && fingerprint !== before?.rounds[phase]?.fingerprint
+        ? [[phase, fingerprint]]
+        : [];
+    }),
+  );
+  const order =
+    after.standingOrders?.length !== before?.standingOrders?.length
+      ? after.standingOrders?.at(-1)?.id
+      : undefined;
+  return {
+    action,
+    recorded,
+    ids: {
+      ...(Object.keys(agents).length ? { agents } : {}),
+      ...(Object.keys(rounds).length ? { rounds } : {}),
+      ...(after.batchId !== before?.batchId ? { batch: after.batchId } : {}),
+      ...(order ? { order } : {}),
+    },
+    ...(after.orchestration ? nextStep(after) : {}),
+    heartbeat,
+  };
+}
+
 export async function main(args: string[], env = process.env) {
   const [path, action, inputPath] = args;
   requireThat(
@@ -1250,9 +1357,12 @@ export async function main(args: string[], env = process.env) {
   if (orchestrated) requirePlannerCaller(env);
   const caller = { agentId: env.PASEO_AGENT_ID };
   if (action === "tick") {
-    process.stdout.write(`${JSON.stringify(await tick(path, caller))}\n`);
+    process.stdout.write(
+      `${JSON.stringify({ action, ...(await tick(path, caller)) })}\n`,
+    );
     return;
   }
+  const before = action === "init" ? undefined : await readState(path);
   if (action === "init") await initialize(path, input);
   else if (action === "review") await dispatchReview(path, input);
   else if (action === "collect") await collectReviews(path, input);
@@ -1262,8 +1372,12 @@ export async function main(args: string[], env = process.env) {
   else if (action === "repair" && orchestrated && input.stage === "start")
     await dispatchRepair(path, input);
   else await transition(path, action, input);
-  if (orchestrated) await syncHeartbeat(path, caller);
-  process.stdout.write(await readFile(path, "utf8"));
+  const heartbeat = orchestrated
+    ? await syncHeartbeat(path, caller)
+    : undefined;
+  process.stdout.write(
+    `${JSON.stringify(compactResult(action, before, await readState(path), heartbeat))}\n`,
+  );
 }
 if (
   process.argv[1] &&

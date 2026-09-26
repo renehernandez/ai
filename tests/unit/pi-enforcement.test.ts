@@ -192,6 +192,68 @@ test("managed roles cannot dispatch Paseo sessions outside the runner but keep r
     );
 });
 
+test("write roles are denied compound shell commands, including nested shell payloads", () => {
+  for (const command of [
+    "git add a && git commit -m b",
+    "git status || true",
+    "git status; git diff",
+    "git log | head",
+    "sleep 5 &",
+    "echo $(git rev-parse HEAD)",
+    'echo "$(git rev-parse HEAD)"',
+    "echo `git rev-parse HEAD`",
+    "(cd /tmp)",
+    "git status\ngit diff",
+    "git commit -F - <<EOF\nsubject\nEOF",
+    "sh -c 'a && b'",
+    "bash -lc 'a; b'",
+    "env -S 'git status; git diff'",
+    'sh -c "$SCRIPT"',
+  ]) {
+    for (const role of ["planner", "implementer"])
+      assert.match(
+        toolDenial(role, "bash", { command }, process.cwd()) ?? "",
+        /^Shell discipline .*one command per tool call/u,
+        command,
+      );
+  }
+  for (const command of [
+    "git status",
+    "sh -c 'git status'",
+    "echo 'a && b; c | d'",
+    'grep -n "a;b" notes.md',
+    "pnpm run test:unit 2>&1",
+    "git status &>/dev/null",
+    "git status\n",
+    'echo "$HOME"',
+    "find . -name '*.ts' -exec true {} \\;",
+  ])
+    for (const role of ["planner", "implementer"])
+      assert.equal(
+        toolDenial(role, "bash", { command }, process.cwd()),
+        undefined,
+        command,
+      );
+  assert.match(
+    toolDenial(
+      "implementer",
+      "bash",
+      { command: "git status && git push --force" },
+      process.cwd(),
+    ) ?? "",
+    /^Force-push policy/u,
+  );
+  assert.match(
+    toolDenial(
+      "implementer",
+      "bash",
+      { command: "git status && rm /tmp/outside" },
+      process.cwd(),
+    ) ?? "",
+    /^Deletion policy/u,
+  );
+});
+
 function fixture(): { root: string; launcher: string; env: NodeJS.ProcessEnv } {
   const root = mkdtempSync(join(tmpdir(), "pi-enforcement-"));
   cpSync(resolve("hooks"), join(root, "hooks"), { recursive: true });

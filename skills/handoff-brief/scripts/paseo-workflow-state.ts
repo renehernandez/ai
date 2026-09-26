@@ -27,6 +27,16 @@ export type Outcome = {
   evidence: string;
   findings: { id: string; evidence: string }[];
 };
+// An implementer's parsed final envelope; branch and head equal the worktree when the tick recorded it.
+export type ImplementerReport = {
+  branch: string;
+  head: string;
+  commits: string[];
+  verification: string[];
+  deviations: string[];
+  risks: string[];
+  uncommitted: string[];
+};
 export type LaunchInspection = {
   cwd: string;
   provider: string;
@@ -43,7 +53,7 @@ export type Review = {
   startupReplySha256?: string;
   releasedAt?: string;
   outcomes?: Record<string, Outcome>;
-  report?: string;
+  report?: ImplementerReport;
   error?: string;
 };
 export type StandingOrderChange = {
@@ -298,13 +308,9 @@ export function requireOrchestration(state: Workflow) {
     "Workflow state predates planner orchestration; it stays readable through status, but tick and orchestrator dispatch refuse it",
   );
 }
-// Binds a caller-supplied head to the implementer's recorded report, which names at least its short SHA.
-export function reportNames(worker: Review | undefined, head: unknown) {
-  return (
-    nonempty(head) &&
-    nonempty(worker?.report) &&
-    worker.report.includes(head.slice(0, 7))
-  );
+// Binds a caller-supplied head to the worktree-verified head in the implementer's structured report.
+export function reportsHead(worker: Review | undefined, head: unknown) {
+  return nonempty(head) && worker?.report?.head === head;
 }
 export function effectiveOrders(state: Workflow) {
   const orders = new Map<string, string>();
@@ -433,7 +439,7 @@ export function nextStep(state: Workflow): Step {
     );
   if (state.handoff.status === "failed")
     return awaiting(
-      "Implementation launch failed; inspect Paseo state before human-directed recovery",
+      "Implementation handoff failed; inspect Paseo state and the saved error before human-directed recovery",
     );
   if (!state.rounds.implementation)
     return changed(
@@ -1150,10 +1156,10 @@ export async function transition(path: string, action: string, input: Input) {
             state.repairs[phase]?.status === "started" &&
             (!state.orchestration ||
               (state.repairs[phase]?.session?.status === "complete" &&
-                reportNames(state.repairs[phase]?.session, input.head))) &&
+                reportsHead(state.repairs[phase]?.session, input.head))) &&
             nonempty(input.head) &&
             nonempty(input.verification),
-          "Repair completion requires a started batch, the exact head named in the reported repair, and named verification",
+          "Repair completion requires a started batch, the exact verified head from the repair report, and named verification",
         );
         Object.assign(state.repairs[phase], {
           status: "complete",
