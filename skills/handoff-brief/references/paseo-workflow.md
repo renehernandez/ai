@@ -28,12 +28,13 @@ following the reviewer envelope precedent. Prose may precede it:
 
 ```text
 AX_REPORT_BEGIN
-{"branch":"...","head":"<full 40-character SHA>","commits":["..."],
+{"branch":"...","head":"<full object ID>","commits":["..."],
  "verification":["..."],"deviations":[],"risks":[]}
 AX_REPORT_END
 ```
 
-The four lists hold nonempty strings and may be empty. When a tick records the
+`head` is the full object ID: 40 hex characters, or 64 in SHA-256
+repositories. Any other length is malformed. The four lists hold nonempty strings and may be empty. When a tick records the
 completion, the runner compares `branch` and `head` with the workflow worktree
 through `git rev-parse`. It records the parsed report with the worktree's
 uncommitted files as evidence; uncommitted files do not fail the report. A
@@ -223,8 +224,10 @@ The Pi shell policy denies direct `paseo run`, `send`, `stop`, `delete`,
 `inspect`, `logs`, and `wait` stay available. Runner actions other than
 `status` refuse a caller whose managed role contract is not `planner`.
 
-For the `planner` and `implementer` roles, the Pi shell policy also enforces
-the one-command rule in `rules/command-and-tools.md`. It denies any command with
+For agent shell calls in the `planner` and `implementer` roles, the Pi shell
+policy also enforces the one-command rule in `rules/command-and-tools.md`. A
+person's own `!` commands in those sessions skip this check but keep the Paseo,
+force-push, and deletion policies. It denies any agent command with
 more than one shell segment: `&&`, `||`, `;`, pipes, background `&`, subshells,
 command substitution, and newline-separated commands. Payloads of `sh -c`,
 `bash -lc`, and `env -S` get the same check, and a dynamic payload that cannot

@@ -7,7 +7,7 @@ import {
   renderHookRegistrationDocument,
 } from "../../scripts/ax/hook-registration.ts";
 
-test("RED hook-registration: MCP and Pi runtime configuration, including the in-process Paseo dispatch and shell-discipline policies, are not hook targets", () => {
+test("RED hook-registration: MCP and Pi runtime configuration, including the in-process Paseo dispatch and agent shell-discipline policies, are not hook targets", () => {
   assert.throws(
     () =>
       assertRegistrationTargetSafe({

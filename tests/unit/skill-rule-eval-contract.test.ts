@@ -34,6 +34,7 @@ import {
 import { read } from "../../scripts/charter-validator-reader.ts";
 import {
   bindWorkspace,
+  parseReport,
   parseReview,
 } from "../../skills/handoff-brief/scripts/paseo-workflow.ts";
 import {
@@ -60,6 +61,9 @@ const verifiedReport = {
   risks: [],
   uncommitted: [],
 };
+
+const reportWithHead = (head: string) =>
+  `AX_REPORT_BEGIN${JSON.stringify({ ...verifiedReport, head })}AX_REPORT_END`;
 
 const cloudflareSkills = (
   axConfig.blocks.cloudflare as {
@@ -164,6 +168,8 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
     ),
     true,
   );
+  for (const head of [verifiedReport.head, "a".repeat(64)])
+    assert.equal(parseReport(reportWithHead(head)).head, head);
   assert.match(
     read("skills/handoff-brief/references/paseo-workflow.md"),
     /planner is the orchestrator/,
@@ -190,6 +196,11 @@ test("RED skill-rule-evals: Paseo workspace binding rejects a wrong directory", 
     assert.equal(
       reportsHead({ status: "complete", report: verifiedReport }, head),
       false,
+    );
+  for (const head of [`${verifiedReport.head}a`, "a".repeat(63)])
+    assert.throws(
+      () => parseReport(reportWithHead(head)),
+      /Malformed implementer report/u,
     );
   assert.equal(
     reportsHead(

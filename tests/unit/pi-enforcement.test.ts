@@ -227,6 +227,8 @@ test("write roles are denied compound shell commands, including nested shell pay
     "git status\n",
     'echo "$HOME"',
     "find . -name '*.ts' -exec true {} \\;",
+    "printf '%s' '$(literal)'",
+    "echo '`literal`'",
   ])
     for (const role of ["planner", "implementer"])
       assert.equal(
@@ -252,6 +254,60 @@ test("write roles are denied compound shell commands, including nested shell pay
     ) ?? "",
     /^Deletion policy/u,
   );
+});
+
+test("compound denial applies to agent shell calls, not a person's own commands", () => {
+  const f = fixture();
+  const savedContract = process.env.AX_PI_CONTRACT;
+  const savedWorkflow = process.env.AX_PI_WORKFLOW_FILE;
+  try {
+    const implementer = parseContract({
+      ...contract,
+      role: "implementer",
+      model: "gpt-5.6-sol",
+      thinking: "medium",
+    });
+    process.env.AX_PI_CONTRACT = JSON.stringify(implementer);
+    process.env.AX_PI_WORKFLOW_FILE = join(
+      f.root,
+      "skills/handoff-brief/references/paseo-workflow.md",
+    );
+    const handlers = new Map<string, (...args: unknown[]) => unknown>();
+    enforcement({
+      on: (name, handler) =>
+        handlers.set(name, handler as (...args: unknown[]) => unknown),
+      getThinkingLevel: () => "medium",
+      getAllTools: () => [],
+      setActiveTools: () => {},
+    });
+    const ctx = {
+      cwd: f.root,
+      model: { provider: implementer.provider, id: implementer.model },
+    };
+    const compound = "git status && git diff";
+    assert.equal(
+      handlers.get("user_bash")?.({ command: compound }, ctx),
+      undefined,
+    );
+    const agent = handlers.get("tool_call")?.(
+      { toolName: "bash", input: { command: compound } },
+      ctx,
+    ) as { block: boolean; reason: string };
+    assert.equal(agent.block, true);
+    assert.match(agent.reason, /^Shell discipline/u);
+    const dispatch = handlers.get("user_bash")?.(
+      { command: "paseo run task" },
+      ctx,
+    ) as { result: { output: string; exitCode: number } };
+    assert.equal(dispatch.result.exitCode, 1);
+    assert.match(dispatch.result.output, /^Paseo policy/u);
+  } finally {
+    if (savedContract === undefined) delete process.env.AX_PI_CONTRACT;
+    else process.env.AX_PI_CONTRACT = savedContract;
+    if (savedWorkflow === undefined) delete process.env.AX_PI_WORKFLOW_FILE;
+    else process.env.AX_PI_WORKFLOW_FILE = savedWorkflow;
+    rmSync(f.root, { recursive: true, force: true });
+  }
 });
 
 function fixture(): { root: string; launcher: string; env: NodeJS.ProcessEnv } {

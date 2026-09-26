@@ -34,8 +34,10 @@ record repair completion without reading `status`.
 
 Implementer and repair assignments require a final machine-readable envelope,
 following the reviewer `AX_REVIEW_BEGIN`/`AX_REVIEW_END` precedent. The envelope
-holds one JSON object with `branch`, the full 40-character `head`, `commits`,
-`verification`, `deviations`, and `risks`. The prose report may precede it.
+holds one JSON object with `branch`, `head`, `commits`, `verification`,
+`deviations`, and `risks`. `head` is the full object ID: 40 hex characters, or
+64 in SHA-256 repositories; any other length is malformed. The prose report may
+precede it.
 
 When a tick records the completion, the runner:
 
@@ -57,8 +59,10 @@ fail that check; nothing migrates them.
 
 ### Compound shell commands denied for write roles
 
-The Pi shell policy denies any command with more than one shell segment for the
-`planner` and `implementer` roles. That covers `&&`, `||`, `;`, pipes,
+The Pi shell policy denies any agent shell call with more than one shell
+segment for the `planner` and `implementer` roles. A person's own `!` commands
+in those sessions skip this check and keep the Paseo, force-push, and deletion
+checks. That covers `&&`, `||`, `;`, pipes,
 background `&`, subshells and command substitution, and newline-separated
 commands. It enforces the existing rule rather than adding one. Reviewers
 already have no shell.

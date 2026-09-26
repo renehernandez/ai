@@ -487,7 +487,7 @@ export function parseReport(
   const lists = ["commits", "verification", "deviations", "risks"] as const;
   requireThat(
     nonempty(report?.branch) &&
-      /^[a-f0-9]{40,64}$/.test(report.head) &&
+      /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(report.head) &&
       lists.every(
         (key) => Array.isArray(report[key]) && report[key].every(nonempty),
       ),
@@ -729,7 +729,7 @@ export async function handoff(
 }
 
 function implementerAssignment(opening: string, snapshots: string) {
-  return `${opening} First read the complete immutable ${snapshots}, including subsequent chunks for large files. Stop if any snapshot is unavailable or unreadable; never substitute a changed original. Implement, run the named verification, and commit through native hooks. Issue one shell command per tool call, and never issue git mutations as parallel tool calls. End with a prose report of branch, head, commits, verification, deviations, and open risks, followed by exactly one final AX_REPORT_BEGIN JSON {"branch":"current branch","head":"full 40-character HEAD SHA","commits":["sha subject"],"verification":["command and result"],"deviations":[],"risks":[]} AX_REPORT_END envelope, then stop. The runner verifies branch and head against the worktree; a missing, malformed, or mismatched envelope stops the workflow for the user. The planner orchestrator owns review dispatch, triage, publication, hosted follow-through, and any later repair; do not dispatch reviewers, start workers, push, publish, or merge.`;
+  return `${opening} First read the complete immutable ${snapshots}, including subsequent chunks for large files. Stop if any snapshot is unavailable or unreadable; never substitute a changed original. Implement, run the named verification, and commit through native hooks. Issue one shell command per tool call, and never issue git mutations as parallel tool calls. End with a prose report of branch, head, commits, verification, deviations, and open risks, followed by exactly one final AX_REPORT_BEGIN JSON {"branch":"current branch","head":"full HEAD object ID: 40 hex characters, or 64 in SHA-256 repositories","commits":["sha subject"],"verification":["command and result"],"deviations":[],"risks":[]} AX_REPORT_END envelope, then stop. The runner verifies branch and head against the worktree; a missing, malformed, or mismatched envelope stops the workflow for the user. The planner orchestrator owns review dispatch, triage, publication, hosted follow-through, and any later repair; do not dispatch reviewers, start workers, push, publish, or merge.`;
 }
 
 function recoverableHandoff(state: Workflow, previousAgentId: string) {

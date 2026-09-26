@@ -2162,6 +2162,19 @@ test("RED pi-paseo-workflow: missing, duplicate, malformed, or mismatched report
       /Malformed implementer report/,
     ],
     [
+      "41-character head",
+      (f) => f.replyWith(reportEnvelope(implementerReport(`${heads.first}a`))),
+      /Malformed implementer report/,
+    ],
+    [
+      "63-character head",
+      (f) =>
+        f.replyWith(
+          reportEnvelope(implementerReport(`${heads.first}${"a".repeat(23)}`)),
+        ),
+      /Malformed implementer report/,
+    ],
+    [
       "head mismatch",
       (f) => {
         f.tree.head = heads.second;

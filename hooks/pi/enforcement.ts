@@ -72,6 +72,7 @@ export default function enforcement(pi: Pi): void {
       "bash",
       { command: event.command },
       ctx.cwd,
+      "user",
     );
     if (reason)
       return {
