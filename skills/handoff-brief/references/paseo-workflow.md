@@ -7,17 +7,32 @@ draft-until-merge and repeated-review guidance in these sessions. Explore, Plan,
 Execute, Review and Finish retain their authority. Merge requires separate
 user authority.
 
+## Roles
+
+The planner is the orchestrator. The session the user talks to carries accepted
+work from Plan through Finish: it owns the planning artifact, every worker
+dispatch, triage, gate decisions, Finish provider actions, and the user
+conversation. It never edits implementation files and never dispatches outside
+the runner.
+
+Workers are fresh sessions that keep no context between assignments. An
+implementer assignment ends at its report: it implements one accepted handoff
+or one repair batch, verifies, commits through native hooks, reports branch,
+head, commits, verification, deviations and open risks, then stops. It does not
+dispatch reviewers, start workers, push, publish, or merge. Reviewers read one
+exact artifact for their assigned lenses and do nothing else.
+
 ## Work without model selection
 
 Use the configured planner for brainstorming, research and the initial plan.
 Role model and effort come from the managed Paseo provider command. Never ask
 the user to select a worker model, override it, or substitute another model.
-Unavailable reviewer models and incomplete reviewer responses are degraded evidence, never passing reviews. The owning lifecycle session records a complete
+Unavailable reviewer models and incomplete reviewer responses are degraded evidence, never passing reviews. The orchestrator records a complete
 inline fallback assessment for that review group's assigned lenses before
 advancing. Uncertain implementer launch, missing session identity, corrupt state,
 snapshot failure, or ownership-transfer failure remains a hard blocker.
 
-The planning owner starts one planning review round with three fresh Sol
+The orchestrator starts one planning review round with three fresh Sol
 sessions: correctness and risk, architecture and simplification, and contract
 alignment. Each session reads the whole plan but reports only its immutable lens
 assignment. Keep all three reports and the architecture group's distinct
@@ -40,8 +55,8 @@ head, dirty files, unresolved risks, publication host and automated reviewer.
 Keep the brief and workflow state task-local. Preserve the plan's durable
 content in the repository; do not commit private review receipts.
 
-When implementation is accepted, the Plan owner uses the handoff runner to
-start a new Paseo-managed Opus implementer session with that brief. The runner resolves one
+When implementation is accepted, the orchestrator uses the runner to start a
+new Paseo-managed Opus implementer session with that brief. The runner resolves one
 unique Paseo workspace whose directory exactly matches the canonical workflow
 cwd, or performs an explicitly requested local registration for that directory.
 It passes the verified workspace identity on every launch; ambient caller
@@ -54,18 +69,59 @@ provider, model, effort, archive state, and pending permissions. Only after
 that verification does it send the immutable task assignment and transfer
 write ownership. A missing, ambiguous, moved, or archived workspace, wrong cwd
 or route, unknown identity, or uncertain assignment response blocks release
-without an automatic replacement. The planning session remains available for
-user conversation; it does not keep writing the implementation worktree. Do
-not fork accumulated conversation or reuse a previous worker session for the
-handoff.
+without an automatic replacement. Dispatch returns after that verified release;
+it does not wait for the worker. The orchestrator never writes the
+implementation worktree. Do not fork accumulated conversation or reuse a
+previous worker session. Independent concurrent tasks use separate singly owned
+worktrees.
 
-The implementation owner follows Execute, implements the accepted work, and
-runs project-native verification. Reviewers only read the frozen artifact.
-Independent concurrent tasks use separate singly owned worktrees.
+## Advance with ticks
+
+For orchestrated workflows, `tick` is the only way to record worker completions
+and advance. It inspects every in-flight worker and any pending hosted gate
+without blocking, records each completion once, and never dispatches. A
+reviewer still busy past the configured timeout is stopped and recorded as
+degraded evidence. The tick returns one compact result:
+
+- `unchanged`: work is still in flight and nothing needs you;
+- `changed`: nothing is in flight and the result names the next ready step;
+- `awaiting-user`: an existing user gate is open;
+- `finished`: the workflow is finished.
+
+Take the named step in the same turn; a dispatch needs a brief or artifact that
+only the orchestrator writes. When the result is `unchanged`, end the turn with
+no user-visible message. Report to the user only on a completed phase, a new
+blocker, an open gate, or finish.
+
+While any worker or hosted gate is in flight, the runner keeps exactly one Paseo
+heartbeat on the orchestrator's own session, the caller's `PASEO_AGENT_ID`. It
+fires every 5 minutes with the fixed tick prompt. Each dispatch or tick with
+work in flight renews its 24-hour lifetime, so expiry only ends a loop whose
+orchestrator stopped ticking; `status` reports an expired loop and the next
+dispatch or tick re-arms it. The runner deletes the heartbeat when nothing is
+in flight, at `awaiting-user`, and at finish.
+
+Ticks run under the state lock and are idempotent. A heartbeat that fires while
+the orchestrator is mid-turn waits for the turn to end, and Paseo may drop
+extra fires from that turn; the next fire or tick picks up any missed change. A
+tick cannot duplicate a dispatch or a recorded completion.
+
+## Standing orders
+
+The runner keeps a standing-orders register. Each order has a stable ID, one
+constraint, and its authorization source, such as a reviewer roster limit,
+direct-to-default-branch delivery, repository visibility, or forbidden paths.
+When the user states, restates, or replaces a constraint, record it with
+`order` before acting: `add` a new ID, `amend` an active ID, or `retire` it.
+Every worker assignment snapshot and every tick prompt carries the effective
+standing orders verbatim. Amended and retired versions stay in history but never
+reach a worker. Project-specific delivery adaptations belong in the register,
+not in pasted prompts.
 
 ## Review implementation once
 
-Run one parallel round with three fresh Sol sessions. Correctness covers diff
+After a tick records the implementer's report, dispatch one parallel round with
+three fresh Sol sessions against the reported head. Correctness covers diff
 correctness and risk; architecture covers quality, simplification, and deslop;
 contract alignment scrutinizes verification, requirements, and documentation.
 Assign conditional security and production risk to correctness,
@@ -77,49 +133,64 @@ Bind reports to the inspected source and base. Require a complete nonempty
 report from every model when available. A reviewer timeout, provider error,
 malformed report, truncated response, or unavailable reviewer records degraded
 evidence; it never becomes a pass and never triggers replacement dispatch. The
-implementation owner must assess every missing assigned lens inline and record
+orchestrator must assess every missing assigned lens inline and record
 one structured outcome per lens,
 and resolve every fallback finding before advancing. Incomplete lens coverage
 is rejected. A valid `blocked` outcome remains unresolved until repaired, answered,
 or covered by an exact scoped user waiver. Never treat an exit code alone as
 review evidence.
 
-The implementation owner evaluates the combined findings, applies relevant
-repairs, and runs the affected verification. Record rejected findings with reasons. Escalate material
-uncertainty to the user. This is one local repair batch; do not automatically
-rerun reviewers after it. Identify the reviewed, degraded, waived, and subsequent
+The orchestrator evaluates the combined findings and records rejected findings
+with reasons. Applicable fixes go to one fresh implementer session with a repair
+brief the orchestrator writes from the triaged findings; never send a repair to
+an earlier session. This is one local repair batch; do not automatically rerun
+reviewers after it. Identify the reviewed, degraded, waived, and subsequent
 repair heads accurately instead of claiming repairs received another independent
 review.
 
 ## Publish and follow hosted feedback
 
-Finish uses Change Request Create to publish the hook-clean implementation as
-a Ready PR or MR. It requests and monitors only hosted gates that the resolved
-repository policy requires. A not-required gate is not passed or waived, and an
-absent reviewer is never fabricated or polled. This managed Pi/Paseo
-Ready-publication contract takes precedence over generic Standard draft
-publication rules. Respect
-the provider-specific review request mechanism. Publication never authorizes
-merge, deployment or cleanup.
+The orchestrator uses Finish and Change Request Create to publish the
+hook-clean implementation as a Ready PR or MR. It requests and monitors only
+hosted gates that the resolved repository policy requires. A not-required gate
+is not passed or waived, and an absent reviewer is never fabricated or polled.
+This managed Pi/Paseo Ready-publication contract takes precedence over generic
+Standard draft publication rules. Respect the provider-specific review request
+mechanism. Publication never authorizes merge, deployment or cleanup.
 
-The finite monitor collects required CI and the complete configured review for
-the published head. Poll quietly while nothing changes. Stop on completion,
-failure, required user input or deadline; the default deadline is 30 minutes.
-Report missing reviewer evidence explicitly. A completed review is evidence to
-triage, not an automatic assertion that all findings are valid or resolved.
+Publication records the Finish probe and a deadline, 30 minutes by default. Each
+tick then probes once until completion, failure, required user input or the
+deadline. Report missing reviewer evidence explicitly. A completed review is
+evidence to triage, not an automatic assertion that all findings are valid or
+resolved.
 
-The implementation owner evaluates one hosted findings batch, fixes applicable
-issues, verifies, and pushes through native hooks. Keep the artifact Ready. Report current CI and
-any later automated feedback, but do not start another repair batch. Stop with
-the open PR/MR URL, reviewed and current heads, repairs, rejected findings and
-remaining gaps. A second repair batch requires a new user instruction.
+The orchestrator triages one hosted findings batch. Applicable fixes go to one
+fresh implementer repair session; after its report, Finish verifies and pushes
+the repaired head through native hooks and keeps the artifact Ready. Report
+current CI and any later automated feedback, but do not start another repair
+batch. Stop with the open PR/MR URL, reviewed and current heads, repairs,
+rejected findings and remaining gaps. A second repair batch requires a new user
+instruction.
+
+## User gates
+
+This workflow adds no new autonomy and no new gates. Stop for the user only
+when existing authority rules require it: plan acceptance; findings that change
+the plan's contract, or material questions; merge, deployment, cleanup, and any
+action outside the accepted proposal; and human-only credential steps. Ordinary
+findings, repairs, reviewer outages, and CI diagnosis continue without a prompt.
 
 ## Enforced boundary
 
-Paseo owns session creation and visibility. Use the finite handoff runner for
-workflow launches; do not call generic create-agent tools, recursive delegation
-or another orchestration package. Its state records each phase dispatch before
-launch and prevents automatic duplicate rounds or repairs.
+Paseo owns session creation and visibility. Use the runner for every workflow
+launch; do not call generic create-agent tools, recursive delegation or another
+orchestration package. Its state records each phase dispatch before launch and
+prevents automatic duplicate rounds or repairs.
+
+The Pi shell policy denies direct `paseo run`, `send`, `stop`, `delete`,
+`archive`, `heartbeat`, and `schedule` commands for every managed role; `ls`,
+`inspect`, `logs`, and `wait` stay available. Runner actions other than
+`status` refuse a caller whose managed role contract is not `planner`.
 
 The managed Pi wrapper fixes role/model/effort and waits for the mandatory
 adapter before forwarding the first prompt. The adapter enforces role identity
@@ -132,9 +203,9 @@ These controls govern managed launches and tools. They are not an operating
 system sandbox, and direct unmanaged Pi sessions do not acquire these guarantees.
 Do not change live runtime configuration to work around a failed control.
 
-## Runner interface for lifecycle owners
+## Runner interface for the orchestrator
 
-Drive the runner from the owning session; the user does not operate these
+Drive the runner from the orchestrator session; the user does not operate these
 transitions manually. Use Node 26 and private files outside the repository for
 state and input. The installed Review skill supplies the canonical lens catalog.
 
@@ -145,31 +216,31 @@ node ~/.agents/skills/handoff-brief/scripts/paseo-workflow.ts STATE ACTION INPUT
 Each input is one JSON object. The following table is the readable input
 contract; omit optional fields unless needed.
 
-| Action | Input fields and owner |
+| Action | Input fields |
 | --- | --- |
-| `init` | Plan: `cwd`; optional `configPath`, `timeoutSeconds`, and `additionalLenses` keyed by planning/implementation. |
-| `policy` | Plan: `deliveryPolicy` with provider/repository identity, independent CI and reviewer status, source, and source fingerprint. Unknown policy blocks handoff. |
-| `review` | Plan or Execute: `phase`, `artifactPath`, and implementation `head`. The artifact includes the exact diff/base or complete plan and original evidence references. Dispatches once and collects. Optional `workspaceId`; when no exact workspace exists, explicit `registerWorkspace: true` and optional `projectId` register the canonical cwd locally. |
-| `collect` | Owning mode: `phase`; retrieves the existing sessions without starting replacements. |
-| `triage` | Plan or Execute: `phase`, `decisions` containing each finding's `id`, `action` (fix/dismiss/question) and `reason`; for each degraded reviewer, `assessments` with its `role` and complete per-lens `outcomes` using the review outcome shape. |
-| `waiver` | Owning mode: `phase`, exact current `target`, exact `requestedAction`, nonempty `failedGates`, and `reason`. Records failed evidence without granting the action itself. |
-| `handoff` | Plan: `briefPath`, `planResolution`; creates the fresh configured implementation session and records its identity. Accepts the same optional workspace fields as `review`. |
-| `retry-handoff` | Plan: exact `previousAgentId`, immutable authorization source, target `branch` and `head`, exact porcelain `dirtyStatus`, and `noWritesEvidence`; optional explicit workspace registration fields. Recovers only an inactive known wrong-cwd implementation handoff with unused implementation/review phases. |
-| `repair` | Execute: `phase` (implementation/hosted), `stage` (start/complete); completion includes `head` and named `verification`. |
-| `publication` | Finish: observed `artifactUrl`, `head`, exact `targetBase` SHA, optional policy-required `reviewer`, `ready: true`, `evidence`, and the unchanged policy-source fingerprint. |
-| `monitor` | Finish: `probeCommand` argv array; optional `deadlineMs` and `pollMs`. |
-| `finish` | Finish: current observed publication fields and final evidence; does not merge. |
-| `continuation` | Owning mode: explicit `batchId`, authorization source, purpose, allowed phases, and expected current head. Archives prior evidence and opens one bounded batch. |
-| `status` | No input required. Inspect persisted phase, reports and unresolved gaps. |
+| `init` | `cwd`; optional `configPath`, `timeoutSeconds`, and `additionalLenses` keyed by planning/implementation. |
+| `policy` | `deliveryPolicy` with provider/repository identity, independent CI and reviewer status, source, and source fingerprint. Unknown policy blocks handoff. |
+| `order` | `op` (add/amend/retire), stable `id`, `constraint` except on retire, and `authorizationSource`. |
+| `review` | `phase`, `artifactPath`, and implementation `head`. The artifact includes the exact diff/base or complete plan and original evidence references. Dispatches once and returns. Optional `workspaceId`; when no exact workspace exists, explicit `registerWorkspace: true` and optional `projectId` register the canonical cwd locally. |
+| `tick` | No input. Records completions and one hosted probe, renews or deletes the heartbeat, and returns the compact result. |
+| `triage` | `phase`, `decisions` containing each finding's `id`, `action` (fix/dismiss/question) and `reason`; for each degraded reviewer, `assessments` with its `role` and complete per-lens `outcomes` using the review outcome shape. |
+| `waiver` | `phase`, exact current `target`, exact `requestedAction`, nonempty `failedGates`, and `reason`. Records failed evidence without granting the action itself. |
+| `handoff` | `briefPath`, `planResolution`; launches the fresh implementer and returns. Accepts the same optional workspace fields as `review`. |
+| `retry-handoff` | Exact `previousAgentId`, immutable authorization source, target `branch` and `head`, exact porcelain `dirtyStatus`, and `noWritesEvidence`; optional explicit workspace registration fields. Recovers only an inactive known wrong-cwd implementation handoff with unused implementation/review phases. |
+| `repair` | `phase` (implementation/hosted) and `stage`. `start` needs `briefPath` and launches one fresh implementer; `complete` needs the reported `head` and named `verification` after a tick records the report. |
+| `publication` | Observed `artifactUrl`, `head`, exact `targetBase` SHA, optional policy-required `reviewer`, `ready: true`, `evidence`, and the unchanged policy-source fingerprint. When a hosted gate is required, also the Finish `probeCommand` argv and optional `deadlineMs`. |
+| `finish` | Current observed publication fields and final evidence; does not merge. |
+| `continuation` | Explicit `batchId`, authorization source, purpose, allowed phases, and expected current head. Archives prior evidence and opens one bounded batch. |
+| `status` | No input required; any role may read it. Inspect persisted phase, reports, unresolved gaps, and an expired heartbeat loop. |
 
-For monitoring, use the installed Finish probe with the resolved `--ci-policy`,
+For hosted probes, use the installed Finish probe with the resolved `--ci-policy`,
 `--reviewer` (`none`, `genie`, or `nitro`), and `--policy-evidence`; include
 `--bot-login` only for a configured reviewer. Expand paths before building argv;
 no shell interpolation is involved. An empty required-check response remains
-failed evidence. When both gates are not required, skip monitoring after exact
-open Ready artifact readback.
+failed evidence. When both gates are not required, publication records them as
+not required after exact open Ready artifact readback.
 
-For a known legacy wrong-cwd implementation handoff, `retry-handoff` verifies
+For a known wrong-cwd implementation handoff, `retry-handoff` verifies
 the original exact session is idle, unarchived, route-matched, and outside the
 accepted cwd. It verifies both immutable snapshots plus the target branch, head,
 and dirty inventory, and requires explicit no-write evidence. The runner then
@@ -180,7 +251,7 @@ or unknown old session, used implementation phase, target drift, missing
 snapshot, uncertain registration, or reserved replacement stops recovery; do
 not hand-edit state, stop/archive the old session, or create another attempt.
 
-For other legacy recovery, the task owner inspects immutable authorization
+For other recovery, the orchestrator inspects immutable authorization
 evidence, sole writer ownership, live artifact URL/head/base/Ready state, and a
 copy of the old state. Preview and test the `continuation` input against that
 isolated copy, then apply the identical transition to the original under the
@@ -189,10 +260,13 @@ A moved head, mismatched artifact, unsupported format, or uncertain ownership
 stops recovery; bookkeeping reconciliation neither launches reviewers nor
 grants terminal authority.
 
-New runner states identify the focused Sol roster and store one immutable lens
-snapshot per review group. States created by the former mixed-model roster remain
-readable through `status`, but continuation under the new roster stops explicitly;
-they are never reinterpreted as Sol evidence.
+New runner states carry the planner orchestration marker, identify the focused
+Sol roster, and store one immutable lens snapshot per review group. States
+created before orchestration remain readable through `status` and keep their
+recorded `collect`, `monitor`, and transition actions, but `tick` and every
+dispatch refuse them explicitly; `collect` and `monitor` refuse orchestrated
+states. States created by the former mixed-model roster remain read-only and are
+never reinterpreted as Sol evidence.
 
 The runner stores review artifacts, lens definitions and handoff content in
 private read-only snapshots beside its state. Launch prompts carry snapshot paths
@@ -213,4 +287,4 @@ target with the current artifact or head. A waiver preserves failed evidence,
 does not grant its requested terminal action, and never permits force-push,
 credential disclosure, hook bypass, destructive action without authority, or a
 provider/OS-denied operation. After hosted repair, inspect
-and report later feedback through Finish without restarting the repair monitor.
+and report later feedback through Finish without restarting hosted probes.

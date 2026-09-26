@@ -7,12 +7,21 @@ import {
   renderHookRegistrationDocument,
 } from "../../scripts/ax/hook-registration.ts";
 
-test("RED hook-registration: MCP and Pi runtime configuration are not hook targets", () => {
+test("RED hook-registration: MCP and Pi runtime configuration, including the in-process Paseo dispatch policy, are not hook targets", () => {
   assert.throws(
     () =>
       assertRegistrationTargetSafe({
         path: "/tmp/isolated-home/.pi/agent/mcp.json",
         target: "codex",
+        home: "/tmp/isolated-home",
+      }),
+    /hook_registration_target_invalid/u,
+  );
+  assert.throws(
+    () =>
+      assertRegistrationTargetSafe({
+        path: "/tmp/isolated-home/.pi/agent/extensions/paseo-policy.json",
+        target: "claude",
         home: "/tmp/isolated-home",
       }),
     /hook_registration_target_invalid/u,

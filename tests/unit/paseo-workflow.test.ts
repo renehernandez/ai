@@ -10,14 +10,20 @@ import {
   assertActionGateDisposition,
   bindWorkspace,
   collectReviews,
+  dispatchRepair,
   dispatchReview,
   handoff,
   initialize,
+  loopStatus,
+  main,
   monitor,
   parseReview,
   retryMisroutedHandoff,
   routesFromConfig,
+  syncHeartbeat,
   type Transport,
+  tick,
+  tickPrompt,
   transition,
   type Workflow,
 } from "../../skills/handoff-brief/scripts/paseo-workflow.ts";
@@ -25,6 +31,7 @@ import { locked } from "../../skills/handoff-brief/scripts/paseo-workflow-state.
 
 const policySourceFingerprint = "a".repeat(64);
 const targetBase = "b".repeat(40);
+const orchestrator = { agentId: "orchestrator-0001" };
 
 async function fixture(
   gates: {
@@ -96,10 +103,26 @@ async function fixture(
       thinking: string;
       cwd: string;
       prompt: string;
+      status: string;
     }
   >();
-  const transport: Transport = async (args) => {
+  const heartbeats = new Map<string, { agentId: string; prompt: string }>();
+  let heartbeatIds = 0;
+  let maxHeartbeats = 0;
+  const transport: Transport = async (args, _timeout, env) => {
     calls.push(args);
+    if (args[0] === "heartbeat" && args[1] === "create") {
+      const agentId = env?.PASEO_AGENT_ID ?? "";
+      const id = `heartbeat-${++heartbeatIds}`;
+      heartbeats.set(id, { agentId, prompt: args[args.length - 1] });
+      maxHeartbeats = Math.max(maxHeartbeats, heartbeats.size);
+      return JSON.stringify({ id, target: `agent:${agentId.slice(0, 7)}` });
+    }
+    if (args[0] === "heartbeat" && args[1] === "delete") {
+      if (!heartbeats.delete(args[2]))
+        throw new Error(`Schedule not found: ${args[2]}`);
+      return JSON.stringify({ id: args[2], status: "deleted" });
+    }
     if (args[0] === "workspace" && args[1] === "ls")
       return JSON.stringify([{ workspaceId, cwd: dir }]);
     if (args[0] === "run") {
@@ -112,6 +135,7 @@ async function fixture(
         thinking: flag("--thinking"),
         cwd: flag("--cwd"),
         prompt: args[args.length - 1],
+        status: "idle",
       });
       return JSON.stringify({ agentId });
     }
@@ -135,7 +159,7 @@ async function fixture(
         Provider: session.provider,
         Model: session.model,
         Thinking: session.thinking,
-        Status: "idle",
+        Status: session.status,
         Cwd: session.cwd,
         Archived: false,
         PendingPermissions: [],
@@ -149,14 +173,40 @@ async function fixture(
     return `AX_REVIEW_BEGIN${JSON.stringify({ fingerprint: state.rounds[phase]?.fingerprint, outcomes: Object.fromEntries(assigned.map((id) => [id, { status: "passed", evidence: "Inspected exact fixture behavior; no scoped issue.", findings: [] }])) })}AX_REVIEW_END`;
   };
   const read = async () => JSON.parse(await readFile(path, "utf8")) as Workflow;
+  const step = (
+    via: Transport = transport,
+    probe?: Transport,
+    now?: () => number,
+  ) => tick(path, orchestrator, via, probe, now);
   const review = async (phase: "planning" | "implementation") => {
+    await step();
     await dispatchReview(
       path,
       { phase, artifactPath, head: "first" },
       transport,
     );
-    await collectReviews(path, { phase }, transport);
+    await step();
     await transition(path, "triage", { phase, decisions: [] });
+  };
+  const accept = async (planResolution = "Settled.") => {
+    await handoff(path, { briefPath: artifactPath, planResolution }, transport);
+    await step();
+  };
+  const repairBrief = join(dir, "repair-brief.md");
+  await writeFile(repairBrief, "Repair the triaged findings only.");
+  const repair = async (
+    phase: "implementation" | "hosted",
+    head: string,
+    verification = "Focused regression passes.",
+  ) => {
+    await dispatchRepair(path, { phase, briefPath: repairBrief }, transport);
+    await step();
+    await transition(path, "repair", {
+      phase,
+      stage: "complete",
+      head,
+      verification,
+    });
   };
   return {
     path,
@@ -164,11 +214,52 @@ async function fixture(
     config,
     configPath,
     artifactPath,
+    repairBrief,
     calls,
     sessions,
+    heartbeats,
+    maxHeartbeats: () => maxHeartbeats,
     transport,
     read,
+    step,
     review,
+    accept,
+    repair,
+  };
+}
+
+const hostedReceipt = {
+  artifactUrl: "https://github.com/owner/repo/pull/1",
+  head: "first",
+  targetBase,
+  reviewer: "genie" as const,
+  ready: true as const,
+  evidence: "Observed source.",
+  policySourceFingerprint,
+  probeCommand: ["finish-probe"],
+};
+const probeReturning =
+  (status: string, findings: { id: string; evidence: string }[] = []) =>
+  async () =>
+    JSON.stringify({ ...hostedReceipt, status, findings });
+
+function withReviewOutcome(
+  transport: Transport,
+  lens: string,
+  outcome: {
+    status: string;
+    evidence: string;
+    findings: { id: string; evidence: string }[];
+  },
+): Transport {
+  return async (args, timeout, env) => {
+    const output = await transport(args, timeout, env);
+    if (args[0] !== "logs") return output;
+    const report = JSON.parse(
+      output.replace("AX_REVIEW_BEGIN", "").replace("AX_REVIEW_END", ""),
+    );
+    if (report.outcomes[lens]) report.outcomes[lens] = outcome;
+    return `AX_REVIEW_BEGIN${JSON.stringify(report)}AX_REVIEW_END`;
   };
 }
 
@@ -227,19 +318,14 @@ test("GREEN pi-paseo-workflow: deliberate focused handoff reaches Ready once wit
   }
   await writeFile(f.artifactPath, "Original edited after review and handoff.");
   const receipt = {
-    artifactUrl: "https://github.com/owner/repo/pull/1",
-    head: "first",
-    targetBase,
-    reviewer: "genie",
-    ready: true,
+    ...hostedReceipt,
     evidence: "Finish inspected provider head and Ready state.",
-    policySourceFingerprint,
   };
   await transition(f.path, "publication", receipt);
-  await monitor(f.path, { probeCommand: ["finish-probe"] }, async () =>
-    JSON.stringify({ ...receipt, status: "completed", findings: [] }),
-  );
-  await transition(f.path, "triage", { phase: "hosted", decisions: [] });
+  const probed = await f.step(f.transport, probeReturning("completed"));
+  assert.deepEqual(probed.recorded, ["hosted: completed"]);
+  assert.equal(probed.result, "changed");
+  assert.equal(probed.result === "changed" && probed.next.action, "finish");
   const finished = await transition(f.path, "finish", receipt);
   assert.equal(
     finished.finished,
@@ -262,10 +348,8 @@ test("GREEN pi-paseo-workflow: deliberate focused handoff reaches Ready once wit
       .filter((args) => args[0] === "run")
       .every((args) => !args.includes("--output-schema")),
   );
-  await assert.rejects(
-    collectReviews(f.path, { phase: "planning" }, f.transport),
-    /already finished/,
-  );
+  assert.equal((await f.step()).result, "finished");
+  assert.equal(f.heartbeats.size, 0);
   await assert.rejects(
     dispatchReview(
       f.path,
@@ -471,6 +555,72 @@ test("legacy mixed-model workflow state remains inspectable but cannot continue"
   );
 });
 
+async function captureStdout(run: () => Promise<void>) {
+  const write = process.stdout.write;
+  let output = "";
+  process.stdout.write = ((chunk: string) => {
+    output += chunk;
+    return true;
+  }) as typeof process.stdout.write;
+  try {
+    await run();
+  } finally {
+    process.stdout.write = write;
+  }
+  return output;
+}
+
+test("GREEN pi-paseo-workflow: pre-orchestration state stays readable while tick is the only orchestrated advancement path", async () => {
+  const f = await fixture();
+  await dispatchReview(
+    f.path,
+    { phase: "planning", artifactPath: f.artifactPath },
+    f.transport,
+  );
+  await assert.rejects(
+    collectReviews(f.path, { phase: "planning" }, f.transport),
+    /only through tick/,
+  );
+  const legacy = await f.read();
+  delete legacy.orchestration;
+  await writeFile(f.path, JSON.stringify(legacy));
+  const status = await captureStdout(() =>
+    main([f.path, "status"], { AX_PI_CONTRACT: '{"role":"implementer"}' }),
+  );
+  assert.equal(
+    JSON.parse(status).rounds.planning.fingerprint,
+    legacy.rounds.planning?.fingerprint,
+  );
+  await assert.rejects(f.step(), /predates planner orchestration/);
+  await assert.rejects(
+    handoff(
+      f.path,
+      { briefPath: f.artifactPath, planResolution: "Settled." },
+      f.transport,
+    ),
+    /predates planner orchestration/,
+  );
+  await collectReviews(f.path, { phase: "planning" }, f.transport);
+  assert.ok(
+    Object.values((await f.read()).rounds.planning?.reviews ?? {}).every(
+      (review) => review.status === "complete",
+    ),
+  );
+
+  const g = await fixture({ ci: "required", reviewer: "not-required" });
+  await g.review("planning");
+  await g.accept();
+  await g.review("implementation");
+  await transition(g.path, "publication", {
+    ...hostedReceipt,
+    reviewer: undefined,
+  });
+  await assert.rejects(
+    monitor(g.path, { probeCommand: ["finish-probe"] }),
+    /only through tick/,
+  );
+});
+
 test("RED pi-paseo-workflow: repeated phase cannot dispatch another review", async () => {
   const f = await fixture();
   const originalArtifact = await readFile(f.artifactPath, "utf8");
@@ -523,9 +673,9 @@ test("reviewer launch and response failures become degraded evidence without ret
   await dispatchReview(
     f.path,
     { phase: "planning", artifactPath: f.artifactPath },
-    async (args, timeout) => {
+    async (args, timeout, env) => {
       if (args[0] === "run") throw new Error("lost response");
-      return f.transport(args, timeout);
+      return f.transport(args, timeout, env);
     },
   );
   assert.ok(
@@ -556,8 +706,8 @@ test("reviewer launch and response failures become degraded evidence without ret
     { phase: "planning", artifactPath: g.artifactPath },
     g.transport,
   );
-  await collectReviews(g.path, { phase: "planning" }, async (args, timeout) =>
-    args[0] === "logs" ? "" : g.transport(args, timeout),
+  await g.step(async (args, timeout, env) =>
+    args[0] === "logs" ? "" : g.transport(args, timeout, env),
   );
   assert.ok(
     Object.values((await g.read()).rounds.planning?.reviews ?? {}).every(
@@ -595,20 +745,13 @@ test("scoped waivers preserve failed evidence, bind the current target, and do n
     { phase: "planning", artifactPath: f.artifactPath },
     f.transport,
   );
-  await collectReviews(f.path, { phase: "planning" }, async (args, timeout) => {
-    const output = await f.transport(args, timeout);
-    if (args[0] !== "logs") return output;
-    const report = JSON.parse(
-      output.replace("AX_REVIEW_BEGIN", "").replace("AX_REVIEW_END", ""),
-    );
-    if (report.outcomes["edge-cases-and-risk"])
-      report.outcomes["edge-cases-and-risk"] = {
-        status: "blocked",
-        evidence: "A material risk remains unresolved.",
-        findings: [],
-      };
-    return `AX_REVIEW_BEGIN${JSON.stringify(report)}AX_REVIEW_END`;
-  });
+  await f.step(
+    withReviewOutcome(f.transport, "edge-cases-and-risk", {
+      status: "blocked",
+      evidence: "A material risk remains unresolved.",
+      findings: [],
+    }),
+  );
   const state = await f.read();
   const target = state.rounds.planning?.fingerprint;
   assert.ok(target);
@@ -671,12 +814,12 @@ test("uncertain implementer launch remains a hard blocker without retry", async 
     handoff(
       f.path,
       { briefPath: f.artifactPath, planResolution: "Planning is settled." },
-      async (args, timeout) => {
+      async (args, timeout, env) => {
         if (args[0] === "run") {
           attempts++;
           throw new Error("lost implementer launch response");
         }
-        return f.transport(args, timeout);
+        return f.transport(args, timeout, env);
       },
     ),
     /lost implementer launch response/,
@@ -692,9 +835,9 @@ test("uncertain assignment release preserves the known identity and blocks retry
     handoff(
       f.path,
       { briefPath: f.artifactPath, planResolution: "Planning is settled." },
-      async (args, timeout) => {
+      async (args, timeout, env) => {
         if (args[0] === "send") throw new Error("lost send response");
-        return f.transport(args, timeout);
+        return f.transport(args, timeout, env);
       },
     ),
     /lost send response/,
@@ -719,8 +862,8 @@ test("wrong-cwd inert launch never receives the task assignment", async () => {
     handoff(
       f.path,
       { briefPath: f.artifactPath, planResolution: "Planning is settled." },
-      async (args, timeout) => {
-        const output = await f.transport(args, timeout);
+      async (args, timeout, env) => {
+        const output = await f.transport(args, timeout, env);
         return args[0] === "inspect"
           ? JSON.stringify({ ...JSON.parse(output), Cwd: "/wrong/worktree" })
           : output;
@@ -762,8 +905,8 @@ test("authorized known-misroute recovery archives history and launches once", as
     handoff(
       f.path,
       { briefPath: f.artifactPath, planResolution: "Planning is settled." },
-      async (args, timeout) => {
-        const output = await f.transport(args, timeout);
+      async (args, timeout, env) => {
+        const output = await f.transport(args, timeout, env);
         return args[0] === "inspect"
           ? JSON.stringify({ ...JSON.parse(output), Cwd: "/wrong/worktree" })
           : output;
@@ -789,8 +932,8 @@ test("authorized known-misroute recovery archives history and launches once", as
     noWritesEvidence:
       "The original session stopped after cwd verification and made no writes.",
   };
-  const recoveryTransport: Transport = async (args, timeout) => {
-    const output = await f.transport(args, timeout);
+  const recoveryTransport: Transport = async (args, timeout, env) => {
+    const output = await f.transport(args, timeout, env);
     return args[0] === "inspect" && args[args.length - 1] === previousAgentId
       ? JSON.stringify({ ...JSON.parse(output), Cwd: "/wrong/worktree" })
       : output;
@@ -842,8 +985,8 @@ test("actual session model mismatch records degraded evidence", async () => {
     { phase: "planning", artifactPath: f.artifactPath },
     f.transport,
   );
-  await collectReviews(f.path, { phase: "planning" }, async (args, timeout) => {
-    const output = await f.transport(args, timeout);
+  await f.step(async (args, timeout, env) => {
+    const output = await f.transport(args, timeout, env);
     return args[0] === "inspect"
       ? JSON.stringify({ ...JSON.parse(output), Model: "other" })
       : output;
@@ -949,92 +1092,87 @@ test("review reports reject duplicate findings and contradictory pass outcomes",
 test("one hosted repair batch is permitted and final receipt must match repaired head", async () => {
   const f = await fixture();
   await f.review("planning");
-  await handoff(
-    f.path,
-    { briefPath: f.artifactPath, planResolution: "No findings." },
-    f.transport,
-  );
+  await f.accept("No findings.");
   await f.review("implementation");
-  const receipt = {
-    artifactUrl: "https://github.com/owner/repo/pull/1",
-    head: "first",
-    targetBase,
-    reviewer: "genie",
-    ready: true,
-    evidence: "Observed source.",
-    policySourceFingerprint,
-  };
-  await transition(f.path, "publication", receipt);
-  await monitor(f.path, { probeCommand: ["probe"] }, async () =>
-    JSON.stringify({
-      ...receipt,
-      status: "completed",
-      findings: [{ id: "finding-1", evidence: "Concrete defect." }],
-    }),
+  await transition(f.path, "publication", hostedReceipt);
+  await f.step(
+    f.transport,
+    probeReturning("completed", [
+      { id: "finding-1", evidence: "Concrete defect." },
+    ]),
   );
   await transition(f.path, "triage", {
     phase: "hosted",
     decisions: [{ id: "finding-1", action: "fix", reason: "Reproduced." }],
   });
-  await transition(f.path, "repair", { phase: "hosted", stage: "start" });
-  await transition(f.path, "repair", {
-    phase: "hosted",
-    stage: "complete",
-    head: "second",
-    verification: "Unit regression passes.",
-  });
+  await f.repair("hosted", "second", "Unit regression passes.");
   await assert.rejects(
-    transition(f.path, "repair", { phase: "hosted", stage: "start" }),
+    dispatchRepair(
+      f.path,
+      { phase: "hosted", briefPath: f.repairBrief },
+      f.transport,
+    ),
     /Only one/,
   );
-  await assert.rejects(transition(f.path, "finish", receipt), /head differs/);
+  await assert.rejects(
+    transition(f.path, "finish", hostedReceipt),
+    /head differs/,
+  );
   await transition(f.path, "finish", {
-    ...receipt,
+    ...hostedReceipt,
     head: "second",
     evidence: "Second head observed Ready; hosted review only covered first.",
   });
   assert.equal((await f.read()).publication?.head, "second");
   await assert.rejects(
-    monitor(f.path, { probeCommand: ["probe"] }),
+    dispatchRepair(
+      f.path,
+      { phase: "implementation", briefPath: f.repairBrief },
+      f.transport,
+    ),
     /already finished/,
   );
 });
 
-test("monitor quietly expires and does not infer success from missing hosted feedback", async () => {
+test("hosted ticks probe once each and expire without inferring success", async () => {
   const f = await fixture();
   await f.review("planning");
-  await handoff(
-    f.path,
-    { briefPath: f.artifactPath, planResolution: "No findings." },
-    f.transport,
-  );
+  await f.accept("No findings.");
   await f.review("implementation");
-  const receipt = {
-    artifactUrl: "https://github.com/owner/repo/pull/1",
-    head: "first",
-    targetBase,
-    reviewer: "genie",
-    ready: true,
-    evidence: "Observed source.",
-    policySourceFingerprint,
-  };
-  await transition(f.path, "publication", receipt);
-  let time = 0;
-  let probes = 0;
-  await monitor(
-    f.path,
-    { probeCommand: ["probe"], deadlineMs: 20, pollMs: 10 },
-    async () => {
-      probes++;
-      return JSON.stringify({ ...receipt, status: "waiting", findings: [] });
-    },
-    async (ms) => {
-      time += ms;
-    },
-    () => time,
+  await assert.rejects(
+    transition(f.path, "publication", {
+      ...hostedReceipt,
+      probeCommand: undefined,
+    }),
+    /read-only probe argv/,
   );
-  assert.equal((await f.read()).hosted?.status, "timed-out");
+  await transition(f.path, "publication", {
+    ...hostedReceipt,
+    deadlineMs: 60_000,
+  });
+  let probes = 0;
+  const waiting: Transport = async () => {
+    probes++;
+    return JSON.stringify({
+      ...hostedReceipt,
+      status: "waiting",
+      findings: [],
+    });
+  };
+  for (let index = 0; index < 2; index++)
+    assert.equal((await f.step(f.transport, waiting)).result, "unchanged");
   assert.equal(probes, 2);
+  assert.equal(f.heartbeats.size, 1);
+  const expired = await f.step(
+    f.transport,
+    waiting,
+    () => Date.now() + 120_000,
+  );
+  assert.equal(probes, 2);
+  assert.deepEqual(expired.recorded, ["hosted: timed-out"]);
+  assert.equal(expired.result === "changed" && expired.next.action, "triage");
+  assert.equal(f.heartbeats.size, 0);
+  assert.equal((await f.read()).hosted?.status, "timed-out");
   await transition(f.path, "triage", {
     phase: "hosted",
     decisions: [
@@ -1045,6 +1183,7 @@ test("monitor quietly expires and does not infer success from missing hosted fee
       },
     ],
   });
+  assert.equal((await f.step()).result, "awaiting-user");
   await transition(f.path, "waiver", {
     phase: "hosted",
     target: "first",
@@ -1059,30 +1198,15 @@ test("monitor quietly expires and does not infer success from missing hosted fee
   );
 });
 
-test("failed, awaiting-user, and missing hosted evidence expose exact waivable gates without passing", async () => {
-  for (const status of ["failed", "awaiting-user", "missing"] as const) {
+test("failed, awaiting-user, and waiting hosted evidence expose exact waivable gates without passing", async () => {
+  for (const status of ["failed", "awaiting-user", "waiting"] as const) {
     const f = await fixture();
     await f.review("planning");
-    await handoff(
-      f.path,
-      { briefPath: f.artifactPath, planResolution: "No findings." },
-      f.transport,
-    );
+    await f.accept("No findings.");
     await f.review("implementation");
-    const receipt = {
-      artifactUrl: "https://github.com/owner/repo/pull/1",
-      head: "first",
-      targetBase,
-      reviewer: "genie" as const,
-      ready: true as const,
-      evidence: "Observed source.",
-      policySourceFingerprint,
-    };
-    await transition(f.path, "publication", receipt);
-    if (status !== "missing") {
-      await monitor(f.path, { probeCommand: ["probe"] }, async () =>
-        JSON.stringify({ ...receipt, status, findings: [] }),
-      );
+    await transition(f.path, "publication", hostedReceipt);
+    if (status !== "waiting") {
+      await f.step(f.transport, probeReturning(status));
     }
     const gate = `hosted:${status}`;
     await transition(f.path, "triage", {
@@ -1103,7 +1227,7 @@ test("failed, awaiting-user, and missing hosted evidence expose exact waivable g
       reason: "Finish despite this exact hosted gate.",
     });
     const waived = await f.read();
-    assert.equal(waived.hosted?.status ?? "missing", status);
+    assert.equal(waived.hosted?.status, status);
     assert.doesNotThrow(() =>
       assertActionGateDisposition(waived, "hosted", "finish", "first"),
     );
@@ -1113,43 +1237,27 @@ test("failed, awaiting-user, and missing hosted evidence expose exact waivable g
 test("implementation questions block publication and applicable fixes consume one verified repair batch", async () => {
   const f = await fixture();
   await f.review("planning");
-  await handoff(
-    f.path,
-    { briefPath: f.artifactPath, planResolution: "No findings." },
-    f.transport,
-  );
+  await f.accept("No findings.");
   await dispatchReview(
     f.path,
     { phase: "implementation", artifactPath: f.artifactPath, head: "first" },
     f.transport,
   );
-  await collectReviews(
-    f.path,
-    { phase: "implementation" },
-    async (args, timeout) => {
-      const output = await f.transport(args, timeout);
-      if (args[0] !== "logs") return output;
-      const report = JSON.parse(
-        output.replace("AX_REVIEW_BEGIN", "").replace("AX_REVIEW_END", ""),
-      );
-      if (report.outcomes["code-simplifier"])
-        report.outcomes["code-simplifier"] = {
-          status: "finding",
-          evidence:
-            "A duplicated branch can be removed without changing behavior.",
-          findings: [
-            {
-              id: "duplicate-branch",
-              evidence: "Both branches return the same value.",
-            },
-            {
-              id: "extract-helper",
-              evidence: "Consider extracting a helper.",
-            },
-          ],
-        };
-      return `AX_REVIEW_BEGIN${JSON.stringify(report)}AX_REVIEW_END`;
-    },
+  await f.step(
+    withReviewOutcome(f.transport, "code-simplifier", {
+      status: "finding",
+      evidence: "A duplicated branch can be removed without changing behavior.",
+      findings: [
+        {
+          id: "duplicate-branch",
+          evidence: "Both branches return the same value.",
+        },
+        {
+          id: "extract-helper",
+          evidence: "Consider extracting a helper.",
+        },
+      ],
+    }),
   );
   const decisions = ["duplicate-branch", "extract-helper"].map((findingId) => ({
     id: `review-architecture:code-simplifier:${findingId}`,
@@ -1157,15 +1265,7 @@ test("implementation questions block publication and applicable fixes consume on
     reason: "Need user decision on behavior boundary.",
   }));
   await transition(f.path, "triage", { phase: "implementation", decisions });
-  const receipt = {
-    artifactUrl: "https://github.com/owner/repo/pull/1",
-    head: "first",
-    targetBase,
-    reviewer: "genie" as const,
-    ready: true as const,
-    evidence: "Observed Ready.",
-    policySourceFingerprint,
-  };
+  const receipt = { ...hostedReceipt, evidence: "Observed Ready." };
   await assert.rejects(
     transition(f.path, "publication", receipt),
     /user input/,
@@ -1182,18 +1282,17 @@ test("implementation questions block publication and applicable fixes consume on
     transition(f.path, "publication", receipt),
     /completed verification/,
   );
-  await transition(f.path, "repair", {
-    phase: "implementation",
-    stage: "start",
-  });
-  await transition(f.path, "repair", {
-    phase: "implementation",
-    stage: "complete",
-    head: "repaired",
-    verification: "Focused unit regression passes.",
-  });
   await assert.rejects(
     transition(f.path, "repair", { phase: "implementation", stage: "start" }),
+    /fresh implementer dispatch/,
+  );
+  await f.repair("implementation", "repaired");
+  await assert.rejects(
+    dispatchRepair(
+      f.path,
+      { phase: "implementation", briefPath: f.repairBrief },
+      f.transport,
+    ),
     /Only one/,
   );
   await assert.rejects(
@@ -1207,39 +1306,24 @@ test("implementation questions block publication and applicable fixes consume on
 test("terminal gate disposition rejects an A-to-B stale waiver and consumes an exact-current deployment waiver", async () => {
   const f = await fixture();
   await f.review("planning");
-  await handoff(
-    f.path,
-    { briefPath: f.artifactPath, planResolution: "No planning findings." },
-    f.transport,
-  );
+  await f.accept("No planning findings.");
   await dispatchReview(
     f.path,
     { phase: "implementation", artifactPath: f.artifactPath, head: "head-a" },
     f.transport,
   );
-  await collectReviews(
-    f.path,
-    { phase: "implementation" },
-    async (args, timeout) => {
-      const output = await f.transport(args, timeout);
-      if (args[0] !== "logs") return output;
-      const report = JSON.parse(
-        output.replace("AX_REVIEW_BEGIN", "").replace("AX_REVIEW_END", ""),
-      );
-      if (report.outcomes["diff-review"])
-        report.outcomes["diff-review"] = {
-          status: "finding",
-          evidence: "One repair and one user-owned risk decision remain.",
-          findings: [
-            { id: "repair", evidence: "The implementation needs a repair." },
-            {
-              id: "risk",
-              evidence: "Deployment requires explicit risk acceptance.",
-            },
-          ],
-        };
-      return `AX_REVIEW_BEGIN${JSON.stringify(report)}AX_REVIEW_END`;
-    },
+  await f.step(
+    withReviewOutcome(f.transport, "diff-review", {
+      status: "finding",
+      evidence: "One repair and one user-owned risk decision remain.",
+      findings: [
+        { id: "repair", evidence: "The implementation needs a repair." },
+        {
+          id: "risk",
+          evidence: "Deployment requires explicit risk acceptance.",
+        },
+      ],
+    }),
   );
   const decisions = [
     {
@@ -1284,16 +1368,11 @@ test("terminal gate disposition rejects an A-to-B stale waiver and consumes an e
     failedGates: riskGates,
     reason: "Permit the one repair batch despite the user-owned risk gates.",
   });
-  await transition(f.path, "repair", {
-    phase: "implementation",
-    stage: "start",
-  });
-  await transition(f.path, "repair", {
-    phase: "implementation",
-    stage: "complete",
-    head: "head-b",
-    verification: "Focused behavior regression passes.",
-  });
+  await f.repair(
+    "implementation",
+    "head-b",
+    "Focused behavior regression passes.",
+  );
   const repaired = await f.read();
   assert.throws(
     () =>
@@ -1327,13 +1406,13 @@ test("large plan, implementation and handoff use private snapshots with bounded 
   const f = await fixture();
   const large = "Source evidence.\n".repeat(20_000);
   assert.ok(Buffer.byteLength(large) > 200 * 1024);
-  const transport: Transport = async (args, timeout) => {
+  const transport: Transport = async (args, timeout, env) => {
     if (args[0] === "run") {
       assert.ok(Buffer.byteLength(args.join("\0")) < 8 * 1024);
       assert.ok(!args.join("\0").includes(large));
       await writeFile(f.artifactPath, "Original changed after reservation.");
     }
-    return f.transport(args, timeout);
+    return f.transport(args, timeout, env);
   };
   const verify = async (
     snapshot: { path: string; sha256: string },
@@ -1359,7 +1438,7 @@ test("large plan, implementation and handoff use private snapshots with bounded 
     assert.ok(round);
     await verify(round.artifact, content);
     await verify(round.lenses, JSON.stringify((await f.read()).lenses[phase]));
-    await collectReviews(f.path, { phase }, transport);
+    await f.step(transport);
     await transition(f.path, "triage", { phase, decisions: [] });
   };
   await review("planning");
@@ -1375,10 +1454,356 @@ test("large plan, implementation and handoff use private snapshots with bounded 
   assert.ok(handed);
   await verify(handed.brief, brief);
   await verify(handed.planResolution, planResolution);
+  await f.step(transport);
   await review("implementation");
   assert.equal(f.calls.filter((args) => args[0] === "run").length, 7);
   await assert.rejects(
     handoff(f.path, { briefPath: f.artifactPath, planResolution }, transport),
     /already dispatched/,
+  );
+});
+
+const runs = (f: { calls: string[][] }) =>
+  f.calls.filter((args) => args[0] === "run").length;
+
+test("GREEN pi-paseo-workflow: ticks carry an unattended run from implementation report to triage", async () => {
+  const f = await fixture();
+  await f.review("planning");
+  await handoff(
+    f.path,
+    { briefPath: f.artifactPath, planResolution: "Settled." },
+    f.transport,
+  );
+  const armed = await syncHeartbeat(f.path, orchestrator, f.transport);
+  assert.ok(armed);
+  const reported = await f.step();
+  assert.deepEqual(reported.recorded, ["handoff: complete"]);
+  assert.equal(reported.result, "changed");
+  assert.equal(reported.result === "changed" && reported.next.action, "review");
+  assert.equal(reported.heartbeat, undefined);
+  assert.ok((await f.read()).handoff?.report);
+  await dispatchReview(
+    f.path,
+    { phase: "implementation", artifactPath: f.artifactPath, head: "first" },
+    f.transport,
+  );
+  await syncHeartbeat(f.path, orchestrator, f.transport);
+  const launches = runs(f);
+  const reviewed = await f.step();
+  assert.equal(reviewed.recorded.length, 3);
+  assert.equal(reviewed.result === "changed" && reviewed.next.action, "triage");
+  assert.equal(runs(f), launches);
+  assert.equal(f.heartbeats.size, 0);
+});
+
+test("GREEN pi-paseo-workflow: a tick with busy workers is quiet and never dispatches", async () => {
+  const f = await fixture();
+  await dispatchReview(
+    f.path,
+    { phase: "planning", artifactPath: f.artifactPath },
+    f.transport,
+  );
+  for (const session of f.sessions.values()) session.status = "running";
+  const launches = runs(f);
+  const quiet = await f.step();
+  assert.deepEqual(quiet, {
+    result: "unchanged",
+    inFlight: [
+      "planning:review-correctness",
+      "planning:review-architecture",
+      "planning:review-contract",
+    ],
+    recorded: [],
+    heartbeat: (await f.read()).heartbeat,
+  });
+  assert.equal(runs(f), launches);
+  assert.match(
+    tickPrompt(f.path, await f.read()),
+    /When the result is `unchanged`, end the turn with no user-visible message/,
+  );
+});
+
+test("GREEN pi-paseo-workflow: one caller heartbeat is armed, renewed, re-armed after expiry, and deleted when nothing is in flight", async () => {
+  const f = await fixture();
+  await dispatchReview(
+    f.path,
+    { phase: "planning", artifactPath: f.artifactPath },
+    f.transport,
+  );
+  for (const session of f.sessions.values()) session.status = "running";
+  const first = await syncHeartbeat(f.path, orchestrator, f.transport);
+  assert.equal(first?.agentId, orchestrator.agentId);
+  assert.equal([...f.heartbeats.values()][0].agentId, orchestrator.agentId);
+  await Promise.all([f.step(), f.step(), f.step()]);
+  assert.equal(f.heartbeats.size, 1);
+  assert.equal(f.maxHeartbeats(), 1);
+  const renewed = (await f.read()).heartbeat;
+  assert.ok(renewed && renewed.id !== first?.id);
+  assert.ok(
+    Date.parse(renewed.expiresAt) >= Date.parse(first?.expiresAt ?? ""),
+  );
+  const later = () => Date.now() + 25 * 60 * 60_000;
+  assert.equal(loopStatus(await f.read(), later), "expired");
+  f.heartbeats.clear();
+  const rearmed = await f.step();
+  assert.equal(rearmed.result, "unchanged");
+  assert.equal(f.heartbeats.size, 1);
+  assert.equal(loopStatus(await f.read()), "armed");
+  await assert.rejects(
+    syncHeartbeat(f.path, {}, f.transport),
+    /PASEO_AGENT_ID/,
+  );
+  for (const session of f.sessions.values()) session.status = "idle";
+  await f.step();
+  assert.equal(f.heartbeats.size, 0);
+  assert.equal((await f.read()).heartbeat, undefined);
+  assert.equal(loopStatus(await f.read()), "idle");
+});
+
+test("RED pi-paseo-workflow: managed workers cannot run orchestrator actions", async () => {
+  const f = await fixture();
+  const input = join(f.dir, "review-input.json");
+  await writeFile(
+    input,
+    JSON.stringify({ phase: "planning", artifactPath: f.artifactPath }),
+  );
+  for (const role of ["implementer", "review-correctness", "unknown"])
+    await assert.rejects(
+      main([f.path, "review", input], {
+        AX_PI_CONTRACT: JSON.stringify({ role }),
+        PASEO_AGENT_ID: "worker",
+      }),
+      /cannot run orchestrator actions/,
+    );
+  await assert.rejects(
+    main([f.path, "tick"], {
+      AX_PI_CONTRACT: "not json",
+      PASEO_AGENT_ID: "worker",
+    }),
+    /cannot run orchestrator actions/,
+  );
+  assert.equal((await f.read()).rounds.planning, undefined);
+  assert.equal(f.calls.length, 0);
+  const status = await captureStdout(() =>
+    main([f.path, "status"], {
+      AX_PI_CONTRACT: JSON.stringify({ role: "implementer" }),
+    }),
+  );
+  assert.equal(JSON.parse(status).orchestration, "planner-v1");
+});
+
+test("GREEN pi-paseo-workflow: assignments and tick prompts carry only the effective standing orders", async () => {
+  const f = await fixture();
+  const order = (input: Record<string, string>) =>
+    transition(f.path, "order", {
+      authorizationSource: "User message in this task",
+      ...input,
+    });
+  await order({
+    op: "add",
+    id: "visibility",
+    constraint: "Keep the repository private.",
+  });
+  await order({
+    op: "add",
+    id: "delivery",
+    constraint: "Publish to the feature branch only.",
+  });
+  await assert.rejects(
+    order({ op: "add", id: "visibility", constraint: "Duplicate." }),
+    /Standing order changes/,
+  );
+  await dispatchReview(
+    f.path,
+    { phase: "planning", artifactPath: f.artifactPath },
+    f.transport,
+  );
+  const planning = await f.read();
+  const assignment = await readFile(
+    planning.rounds.planning?.reviews["review-contract"].assignment?.path ?? "",
+    "utf8",
+  );
+  assert.match(assignment, /- visibility: Keep the repository private\./);
+  assert.match(assignment, /- delivery: Publish to the feature branch only\./);
+  assert.match(
+    tickPrompt(f.path, planning),
+    /- visibility: Keep the repository private\./,
+  );
+  await f.step();
+  await transition(f.path, "triage", { phase: "planning", decisions: [] });
+  await order({
+    op: "amend",
+    id: "visibility",
+    constraint: "Repository visibility may be public after review.",
+  });
+  await order({ op: "retire", id: "delivery" });
+  await assert.rejects(
+    order({ op: "retire", id: "delivery" }),
+    /Standing order changes/,
+  );
+  await f.accept();
+  const handed = await f.read();
+  const brief = await readFile(handed.handoff?.assignment?.path ?? "", "utf8");
+  assert.match(brief, /- visibility: Repository visibility may be public/);
+  assert.doesNotMatch(brief, /Keep the repository private/);
+  assert.doesNotMatch(brief, /feature branch only/);
+  assert.doesNotMatch(tickPrompt(f.path, handed), /feature branch only/);
+  assert.deepEqual(
+    handed.standingOrders?.map((change) => `${change.op}:${change.id}`),
+    ["add:visibility", "add:delivery", "amend:visibility", "retire:delivery"],
+  );
+});
+
+test("GREEN pi-paseo-workflow: contract questions and hosted user gates return awaiting-user and delete the heartbeat", async () => {
+  const f = await fixture();
+  await dispatchReview(
+    f.path,
+    { phase: "planning", artifactPath: f.artifactPath },
+    f.transport,
+  );
+  await f.step(
+    withReviewOutcome(f.transport, "implementation-readiness", {
+      status: "finding",
+      evidence: "The plan leaves the dispatch owner undecided.",
+      findings: [{ id: "owner", evidence: "Two owners are named." }],
+    }),
+  );
+  await transition(f.path, "triage", {
+    phase: "planning",
+    decisions: [
+      {
+        id: "review-correctness:implementation-readiness:owner",
+        action: "question",
+        reason: "Changes the plan contract.",
+      },
+    ],
+  });
+  const gated = await f.step();
+  assert.equal(gated.result, "awaiting-user");
+  assert.match(
+    gated.result === "awaiting-user" ? gated.gate : "",
+    /planning findings/,
+  );
+
+  const g = await fixture();
+  await g.review("planning");
+  await g.accept();
+  await g.review("implementation");
+  await transition(g.path, "publication", hostedReceipt);
+  await g.step(g.transport, probeReturning("waiting"));
+  assert.equal(g.heartbeats.size, 1);
+  const hosted = await g.step(g.transport, probeReturning("awaiting-user"));
+  assert.equal(hosted.result, "awaiting-user");
+  assert.equal(g.heartbeats.size, 0);
+  assert.equal((await g.read()).heartbeat, undefined);
+});
+
+test("GREEN pi-paseo-workflow: a repair batch launches one new verified implementer session", async () => {
+  const f = await fixture();
+  await f.review("planning");
+  await f.accept();
+  await dispatchReview(
+    f.path,
+    { phase: "implementation", artifactPath: f.artifactPath, head: "first" },
+    f.transport,
+  );
+  await f.step(
+    withReviewOutcome(f.transport, "diff-review", {
+      status: "finding",
+      evidence: "A regression needs repair.",
+      findings: [{ id: "regression", evidence: "The guard is inverted." }],
+    }),
+  );
+  await transition(f.path, "triage", {
+    phase: "implementation",
+    decisions: [
+      {
+        id: "review-correctness:diff-review:regression",
+        action: "fix",
+        reason: "Reproduced.",
+      },
+    ],
+  });
+  const next = await f.step();
+  assert.equal(next.result === "changed" && next.next.action, "repair");
+  const before = await f.read();
+  const launches = runs(f);
+  await dispatchRepair(
+    f.path,
+    { phase: "implementation", briefPath: f.repairBrief },
+    f.transport,
+  );
+  const repairing = await f.read();
+  const session = repairing.repairs.implementation?.session;
+  assert.equal(runs(f), launches + 1);
+  assert.equal(session?.launchStatus, "released");
+  assert.ok(session?.agentId);
+  assert.notEqual(session.agentId, before.handoff?.agentId);
+  assert.equal(
+    f.calls.filter(
+      (args) => args[0] === "send" && args[1] === before.handoff?.agentId,
+    ).length,
+    1,
+  );
+  assert.match(
+    await readFile(session.assignment?.path ?? "", "utf8"),
+    /repair brief snapshot[\s\S]*do not dispatch reviewers, start workers, push, publish, or merge/,
+  );
+  await assert.rejects(
+    transition(f.path, "repair", {
+      phase: "implementation",
+      stage: "complete",
+      head: "repaired",
+      verification: "Focused regression passes.",
+    }),
+    /started batch/,
+  );
+  const reported = await f.step();
+  assert.deepEqual(reported.recorded, ["implementation-repair: complete"]);
+  assert.equal(reported.result === "changed" && reported.next.action, "repair");
+});
+
+test("RED pi-paseo-workflow: ticks never start another review round or repair batch and time out busy reviewers as degraded evidence", async () => {
+  const f = await fixture();
+  await dispatchReview(
+    f.path,
+    { phase: "planning", artifactPath: f.artifactPath },
+    f.transport,
+  );
+  for (const session of f.sessions.values()) session.status = "running";
+  const launches = runs(f);
+  const timedOut = await f.step(
+    f.transport,
+    undefined,
+    () => Date.now() + 601_000,
+  );
+  assert.equal(timedOut.recorded.length, 3);
+  assert.equal(timedOut.result === "changed" && timedOut.next.action, "triage");
+  assert.equal(runs(f), launches);
+  assert.equal(f.calls.filter((args) => args[0] === "stop").length, 3);
+  const degraded = await f.read();
+  assert.ok(
+    Object.values(degraded.rounds.planning?.reviews ?? {}).every(
+      (review) =>
+        review.status === "degraded" && /timeout/.test(review.error ?? ""),
+    ),
+  );
+  await assert.rejects(
+    handoff(
+      f.path,
+      { briefPath: f.artifactPath, planResolution: "No fallback." },
+      f.transport,
+    ),
+    /fallback assessment/,
+  );
+  await f.step();
+  assert.equal(runs(f), launches);
+  await assert.rejects(
+    dispatchReview(
+      f.path,
+      { phase: "planning", artifactPath: f.artifactPath },
+      f.transport,
+    ),
+    /no automatic reruns/,
   );
 });

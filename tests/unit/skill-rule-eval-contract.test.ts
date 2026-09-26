@@ -38,7 +38,9 @@ import {
 } from "../../skills/handoff-brief/scripts/paseo-workflow.ts";
 import {
   assignReviewLenses,
+  effectiveOrders,
   requireCurrentReviewMode,
+  requireOrchestration,
 } from "../../skills/handoff-brief/scripts/paseo-workflow-state.ts";
 import { routeWorkDisposition } from "../../skills/plan/scripts/plan-contract.ts";
 
@@ -118,12 +120,50 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
     read("skills/handoff-brief/scripts/paseo-workflow-state.ts"),
     /Publication requires the exact target-base SHA/,
   );
+  assert.deepEqual(
+    effectiveOrders({
+      standingOrders: [
+        {
+          id: "roster",
+          op: "add",
+          constraint: "Sol only.",
+          authorizationSource: "user",
+        },
+        {
+          id: "push",
+          op: "add",
+          constraint: "Push main.",
+          authorizationSource: "user",
+        },
+        {
+          id: "roster",
+          op: "amend",
+          constraint: "Sol and Opus.",
+          authorizationSource: "user",
+        },
+        { id: "push", op: "retire", authorizationSource: "user" },
+      ],
+    } as never),
+    [{ id: "roster", constraint: "Sol and Opus." }],
+  );
+  assert.match(
+    read("skills/handoff-brief/references/paseo-workflow.md"),
+    /planner is the orchestrator/,
+  );
 });
 
 test("RED skill-rule-evals: Paseo workspace binding rejects a wrong directory", async () => {
   assert.throws(
     () => requireCurrentReviewMode({ version: 1 } as never),
     /Legacy workflow state is read-only/u,
+  );
+  assert.throws(
+    () =>
+      requireOrchestration({
+        version: 1,
+        reviewMode: "sol-focused-v1",
+      } as never),
+    /predates planner orchestration/u,
   );
   const directory = mkdtempSync(join(tmpdir(), "paseo-binding-red-"));
   const statePath = join(directory, "state.json");
