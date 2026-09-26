@@ -40,9 +40,29 @@ export type Review = {
   launchStatus?: "identity-recorded" | "verified" | "released" | "blocked";
   inspection?: LaunchInspection;
   assignment?: Snapshot;
+  startupReplySha256?: string;
+  releasedAt?: string;
   outcomes?: Record<string, Outcome>;
+  report?: string;
   error?: string;
 };
+export type StandingOrderChange = {
+  id: string;
+  op: "add" | "amend" | "retire";
+  constraint?: string;
+  authorizationSource: string;
+};
+export type Heartbeat = {
+  id: string;
+  agentId: string;
+  expiresAt: string;
+  promptSha256: string;
+};
+export type Step =
+  | { result: "unchanged"; inFlight: string[] }
+  | { result: "changed"; next: { action: string; detail: string } }
+  | { result: "awaiting-user"; gate: string }
+  | { result: "finished" };
 export type Snapshot = { path: string; sha256: string };
 export type WorkspaceBinding = { id: string; cwd: string };
 export type Decision = {
@@ -98,6 +118,11 @@ export type Input = Partial<Receipt> &
     allowedPhases?: (Phase | "hosted")[];
     expectedHead?: string;
     policySourceFingerprint?: string;
+    probeCommand?: string[];
+    deadlineMs?: number;
+    op?: StandingOrderChange["op"];
+    id?: string;
+    constraint?: string;
   };
 export type ManagedConfig = {
   agents?: {
@@ -110,6 +135,10 @@ export type ManagedConfig = {
 export type Workflow = {
   version: 1;
   reviewMode?: "sol-focused-v1";
+  orchestration?: "planner-v1";
+  standingOrders?: StandingOrderChange[];
+  heartbeat?: Heartbeat;
+  hostedMonitor?: { probeCommand: string[]; deadline: string };
   cwd: string;
   workspace?: WorkspaceBinding;
   workspaceRegistration?: {
@@ -143,7 +172,12 @@ export type Workflow = {
   repairs: Partial<
     Record<
       "implementation" | "hosted",
-      { status: "started" | "complete"; head?: string; verification?: string }
+      {
+        status: "started" | "complete";
+        head?: string;
+        verification?: string;
+        session?: Review & { brief: Snapshot };
+      }
     >
   >;
   deliveryPolicy?: DeliveryPolicy;
@@ -192,7 +226,11 @@ export type Workflow = {
     };
   }[];
 };
-export type Transport = (args: string[], timeoutMs: number) => Promise<string>;
+export type Transport = (
+  args: string[],
+  timeoutMs: number,
+  env?: Record<string, string>,
+) => Promise<string>;
 export const roles: Role[] = [
   "planner",
   "implementer",
@@ -251,6 +289,180 @@ export function requireCurrentReviewMode(state: Workflow) {
   requireThat(
     state.reviewMode === "sol-focused-v1",
     "Legacy workflow state is read-only and cannot continue under the focused Sol review roster",
+  );
+}
+export function requireOrchestration(state: Workflow) {
+  requireCurrentReviewMode(state);
+  requireThat(
+    state.orchestration === "planner-v1",
+    "Workflow state predates planner orchestration; it stays readable through status, but tick and orchestrator dispatch refuse it",
+  );
+}
+// Binds a caller-supplied head to the implementer's recorded report, which names at least its short SHA.
+export function reportNames(worker: Review | undefined, head: unknown) {
+  return (
+    nonempty(head) &&
+    nonempty(worker?.report) &&
+    worker.report.includes(head.slice(0, 7))
+  );
+}
+export function effectiveOrders(state: Workflow) {
+  const orders = new Map<string, string>();
+  for (const change of state.standingOrders ?? []) {
+    if (change.op === "retire") orders.delete(change.id);
+    else orders.set(change.id, change.constraint ?? "");
+  }
+  return [...orders].map(([id, constraint]) => ({ id, constraint }));
+}
+export function ordersBlock(state: Workflow) {
+  const orders = effectiveOrders(state);
+  return orders.length
+    ? `Standing orders (effective set; follow each verbatim):\n${orders.map((order) => `- ${order.id}: ${order.constraint}`).join("\n")}`
+    : "Standing orders: none recorded.";
+}
+export type Worker = {
+  name: string;
+  role: Role;
+  phase?: Phase;
+  worker: Review;
+};
+export function workers(state: Workflow): Worker[] {
+  const entries: Worker[] = [];
+  if (state.handoff)
+    entries.push({
+      name: "handoff",
+      role: "implementer",
+      worker: state.handoff,
+    });
+  for (const phase of ["planning", "implementation"] as Phase[])
+    for (const role of reviewRoles[phase]) {
+      const review = state.rounds[phase]?.reviews[role];
+      if (review)
+        entries.push({ name: `${phase}:${role}`, role, phase, worker: review });
+    }
+  for (const phase of ["implementation", "hosted"] as const) {
+    const session = state.repairs[phase]?.session;
+    if (session)
+      entries.push({
+        name: `${phase}-repair`,
+        role: "implementer",
+        worker: session,
+      });
+  }
+  return entries;
+}
+export function inFlight(state: Workflow) {
+  return [
+    ...workers(state)
+      .filter(
+        ({ worker }) =>
+          worker.status === "reserved" || worker.status === "running",
+      )
+      .map(({ name }) => name),
+    ...(state.hostedMonitor && state.hosted?.status === "waiting"
+      ? ["hosted"]
+      : []),
+  ];
+}
+function openQuestions(
+  state: Workflow,
+  phase: Phase | "hosted",
+  requestedAction: string,
+) {
+  return (state.decisions[phase] ?? []).filter(
+    (decision) =>
+      decision.action === "question" &&
+      !waiverFor(state, phase, requestedAction, decision.id),
+  );
+}
+function pendingFixes(
+  state: Workflow,
+  phase: "implementation" | "hosted",
+  requestedAction: string,
+) {
+  return (state.decisions[phase] ?? []).some(
+    (decision) =>
+      decision.action === "fix" &&
+      !waiverFor(state, phase, requestedAction, decision.id),
+  );
+}
+export function nextStep(state: Workflow): Step {
+  if (state.finished) return { result: "finished" };
+  const pending = inFlight(state);
+  if (pending.length) return { result: "unchanged", inFlight: pending };
+  const changed = (action: string, detail: string): Step => ({
+    result: "changed",
+    next: { action, detail },
+  });
+  const awaiting = (gate: string): Step => ({ result: "awaiting-user", gate });
+  const reviewed = (phase: Phase, requestedAction: string) => {
+    if (!state.decisions[phase])
+      return changed("triage", `Triage the ${phase} review round`);
+    if (openQuestions(state, phase, requestedAction).length)
+      return awaiting(
+        `${phase} findings need user input or an exact scoped waiver`,
+      );
+  };
+  const repair = (
+    phase: "implementation" | "hosted",
+    requestedAction: string,
+  ) => {
+    const current = state.repairs[phase];
+    if (!current && pendingFixes(state, phase, requestedAction))
+      return changed(
+        "repair",
+        `Dispatch one fresh ${phase} repair batch with an orchestrator-written brief`,
+      );
+    if (current?.session?.status === "failed")
+      return awaiting(
+        `${phase} repair session failed; inspect Paseo state before human-directed recovery`,
+      );
+    if (current?.status === "started")
+      return changed(
+        "repair",
+        `Record ${phase} repair completion with the reported head and verification`,
+      );
+  };
+  if (!state.rounds.planning)
+    return changed("review", "Dispatch the planning review round");
+  const planning = reviewed("planning", "handoff");
+  if (planning) return planning;
+  if (!state.handoff)
+    return awaiting(
+      "Plan acceptance is required before implementation handoff",
+    );
+  if (state.handoff.status === "failed")
+    return awaiting(
+      "Implementation launch failed; inspect Paseo state before human-directed recovery",
+    );
+  if (!state.rounds.implementation)
+    return changed(
+      "review",
+      "Dispatch the implementation review round against the reported head",
+    );
+  const implementation =
+    reviewed("implementation", "publication") ??
+    repair("implementation", "publication");
+  if (implementation) return implementation;
+  if (!state.publication)
+    return changed(
+      "publication",
+      "Publish Ready through Finish and record the observed publication",
+    );
+  if (state.hosted?.status === "awaiting-user")
+    return awaiting("The hosted gate requires user input");
+  if (!state.decisions.hosted && reviewGates(state, "hosted").length)
+    return changed("triage", "Triage the hosted feedback batch");
+  if (openQuestions(state, "hosted", "finish").length)
+    return awaiting(
+      "hosted findings need user input or an exact scoped waiver",
+    );
+  return (
+    repair("hosted", "finish") ??
+    changed(
+      "finish",
+      "Record the observed final Ready state through Finish; merge needs separate user authority",
+    )
   );
 }
 function assignedLenses(state: Workflow, phase: Phase, role: string) {
@@ -421,6 +633,8 @@ export async function initialize(
   const state: Workflow = {
     version: 1,
     reviewMode: "sol-focused-v1",
+    orchestration: "planner-v1",
+    standingOrders: [],
     cwd: resolve(input.cwd),
     routes: routesFromConfig(config),
     lenses: lensesByPhase,
@@ -787,7 +1001,30 @@ export async function transition(path: string, action: string, input: Input) {
       )
         delete state.publication;
       delete state.hosted;
+      delete state.hostedMonitor;
       delete state.finished;
+    } else if (action === "order") {
+      requireOrchestration(state);
+      const { id, op, constraint, authorizationSource } = input;
+      const known = (state.standingOrders ?? []).some(
+        (change) => change.id === id,
+      );
+      const active = effectiveOrders(state).some((order) => order.id === id);
+      requireThat(
+        nonempty(id) &&
+          nonempty(authorizationSource) &&
+          (op === "add" || op === "amend" || op === "retire") &&
+          (op === "retire" ? constraint === undefined : nonempty(constraint)) &&
+          (op === "add" ? !known : active),
+        "Standing order changes need op add (unused id), amend or retire (active id), a constraint except on retire, and an authorization source",
+      );
+      state.standingOrders ??= [];
+      state.standingOrders.push({
+        id,
+        op,
+        ...(constraint ? { constraint } : {}),
+        authorizationSource,
+      });
     } else if (action === "triage") {
       const phase = input.phase === "hosted" ? "hosted" : phaseOf(input.phase);
       requireThat(
@@ -898,6 +1135,10 @@ export async function transition(path: string, action: string, input: Input) {
       );
       if (input.stage === "start") {
         requireThat(
+          !state.orchestration,
+          "Orchestrated repairs start through the runner's fresh implementer dispatch",
+        );
+        requireThat(
           !state.repairs[phase] &&
             decisions.some((decision) => decision.action === "fix"),
           "Only one applicable repair batch is allowed",
@@ -907,15 +1148,18 @@ export async function transition(path: string, action: string, input: Input) {
         requireThat(
           input.stage === "complete" &&
             state.repairs[phase]?.status === "started" &&
+            (!state.orchestration ||
+              (state.repairs[phase]?.session?.status === "complete" &&
+                reportNames(state.repairs[phase]?.session, input.head))) &&
             nonempty(input.head) &&
             nonempty(input.verification),
-          "Repair completion requires a started batch, exact head and named verification",
+          "Repair completion requires a started batch, the exact head named in the reported repair, and named verification",
         );
-        state.repairs[phase] = {
+        Object.assign(state.repairs[phase], {
           status: "complete",
           head: input.head,
           verification: input.verification,
-        };
+        });
       }
     } else if (action === "publication") {
       repaired(state, "implementation", "publication");
@@ -941,8 +1185,27 @@ export async function transition(path: string, action: string, input: Input) {
             state.rounds.implementation?.head),
         "Publication head differs from reviewed or repaired implementation",
       );
+      const unmonitored =
+        policy.ci === "not-required" && policy.reviewer === "not-required";
+      if (state.orchestration && !unmonitored) {
+        const deadlineMs = input.deadlineMs ?? 30 * 60_000;
+        requireThat(
+          Array.isArray(input.probeCommand) &&
+            input.probeCommand.length > 0 &&
+            input.probeCommand.every(nonempty) &&
+            Number.isInteger(deadlineMs) &&
+            deadlineMs > 0 &&
+            deadlineMs <= 3_600_000,
+          "Orchestrated publication needs the Finish-owned read-only probe argv and a deadline of at most 1h",
+        );
+        state.hostedMonitor = {
+          probeCommand: input.probeCommand,
+          deadline: new Date(Date.now() + deadlineMs).toISOString(),
+        };
+        state.hosted = { ...observed, status: "waiting", findings: [] };
+      }
       state.publication = observed;
-      if (policy.ci === "not-required" && policy.reviewer === "not-required") {
+      if (unmonitored) {
         state.hosted = {
           ...observed,
           status: "completed",

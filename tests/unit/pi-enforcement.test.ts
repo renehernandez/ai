@@ -152,6 +152,46 @@ test("runtime model and thinking drift and unsupported reviewer tools are denied
   );
 });
 
+test("managed roles cannot dispatch Paseo sessions outside the runner but keep read-only Paseo commands", () => {
+  for (const command of [
+    "paseo run --background --json --provider ax-implementer task",
+    "paseo send agent-1 --prompt-file brief.md --no-wait",
+    "paseo --json stop agent-1",
+    "paseo --host localhost:1 delete agent-1",
+    "paseo agent archive agent-1",
+    "git status && paseo heartbeat create --cron '*/5 * * * *' tick",
+    "env PASEO_AGENT_ID=other paseo schedule ls",
+    'bash -c "paseo run task"',
+    "/Applications/Paseo.app/Contents/Resources/bin/paseo send a b",
+    "paseo $ACTION agent-1",
+    "P=paseo; $P run task",
+    '"$PASEO_BIN" send agent-1 follow-up',
+  ]) {
+    for (const role of ["planner", "implementer"])
+      assert.match(
+        toolDenial(role, "bash", { command }, process.cwd()) ?? "",
+        /Paseo policy/u,
+        command,
+      );
+  }
+  for (const command of [
+    "paseo --help",
+    "paseo ls --json",
+    "paseo inspect --json agent-1",
+    "paseo logs --filter assistant_message --tail 1 agent-1",
+    "paseo wait --json --timeout 60 agent-1",
+    'grep -n "paseo run" skills/handoff-brief/references/paseo-workflow.md',
+    "echo 'paseo send agent-1; paseo run task'",
+    "node ~/.agents/skills/handoff-brief/scripts/paseo-workflow.ts state.json review input.json",
+    '"$EDITOR" notes.md',
+  ])
+    assert.equal(
+      toolDenial("planner", "bash", { command }, process.cwd()),
+      undefined,
+      command,
+    );
+});
+
 function fixture(): { root: string; launcher: string; env: NodeJS.ProcessEnv } {
   const root = mkdtempSync(join(tmpdir(), "pi-enforcement-"));
   cpSync(resolve("hooks"), join(root, "hooks"), { recursive: true });

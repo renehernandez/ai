@@ -1,5 +1,13 @@
 import { findForcePush } from "../block-agent-force-push.ts";
 import { evaluateCommand } from "../block-delete-outside-cwd.ts";
+import {
+  basename,
+  isShellCommandFlag,
+  SHELLS,
+  type ShellWord,
+  tokenize,
+  unwrap,
+} from "../shell-command.ts";
 
 export const roles = [
   "planner",
@@ -45,10 +53,67 @@ export function allowedTools(role: string): string[] {
   return role.startsWith("review-") ? readTools : writeTools;
 }
 
+const paseoValueOptions = new Set(["-o", "--format", "--host", "--home"]);
+const paseoRunnerCommands = new Set([
+  "run",
+  "send",
+  "stop",
+  "delete",
+  "archive",
+  "heartbeat",
+  "schedule",
+]);
+
+function paseoSubcommand(words: ShellWord[], start: number) {
+  let index = start;
+  while (index < words.length) {
+    const word = words[index];
+    if (word.dynamic || !word.value.startsWith("-")) return { word, index };
+    index += paseoValueOptions.has(word.value) ? 2 : 1;
+  }
+}
+
+function paseoDispatch(words: ShellWord[]): string | undefined {
+  const { words: unwrapped, splitCommand } = unwrap(words);
+  if (splitCommand)
+    return splitCommand.dynamic
+      ? "<dynamic split command>"
+      : findPaseoDispatch(splitCommand.value);
+  if (unwrapped.length === 0) return undefined;
+  // A variable executable such as `$P run` could conceal the Paseo CLI.
+  const next = unwrapped[1]?.value ?? "";
+  if (unwrapped[0].dynamic && paseoRunnerCommands.has(next)) return next;
+  const executable = basename(unwrapped[0].value);
+  if (SHELLS.has(executable)) {
+    const flag = unwrapped.findIndex((word) => isShellCommandFlag(word.value));
+    const nested = flag >= 0 ? unwrapped[flag + 1] : undefined;
+    return nested ? findPaseoDispatch(nested.value) : undefined;
+  }
+  if (executable !== "paseo") return undefined;
+  let found = paseoSubcommand(unwrapped, 1);
+  if (found?.word.value === "agent" && !found.word.dynamic)
+    found = paseoSubcommand(unwrapped, found.index + 1);
+  if (found?.word.dynamic) return found.word.value || "<dynamic subcommand>";
+  return found && paseoRunnerCommands.has(found.word.value)
+    ? found.word.value
+    : undefined;
+}
+
+export function findPaseoDispatch(command: string): string | undefined {
+  for (const words of tokenize(command)) {
+    const match = paseoDispatch(words);
+    if (match) return match;
+  }
+  return undefined;
+}
+
 export function shellDenial(command: unknown, cwd: string): string | undefined {
   if (typeof command !== "string") return "Shell command must be a string";
   const force = findForcePush(command);
   if (force) return `Force-push policy: ${force.detail}`;
+  const paseo = findPaseoDispatch(command);
+  if (paseo)
+    return `Paseo policy: \`paseo ${paseo}\` dispatches or changes session lifecycle; managed roles use the Paseo workflow runner, and read-only ls, inspect, logs, and wait remain available`;
   const deletion = evaluateCommand(command, cwd);
   if (deletion) return `Deletion policy: ${deletion.detail}`;
 }

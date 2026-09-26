@@ -31,6 +31,35 @@ test("GREEN authority: managed Pi workflow keeps Ready publication separate from
   );
 });
 
+test("GREEN authority: the managed planner orchestrates through runner ticks and workers stop at their report", () => {
+  const workflow = read("skills/handoff-brief/references/paseo-workflow.md");
+  assert.match(workflow, /planner\s+is\s+the\s+orchestrator/i);
+  assert.match(
+    workflow,
+    /implementer\s+assignment\s+ends\s+at\s+its\s+report/i,
+  );
+  assert.match(workflow, /fresh\s+implementer\s+session/i);
+  assert.match(workflow, /`tick`\s+is\s+the\s+only\s+way\s+to\s+record/i);
+  assert.match(workflow, /`unchanged`[\s\S]*no\s+user-visible\s+message/);
+  assert.match(workflow, /effective\s+standing\s+orders/i);
+  assert.match(workflow, /denies\s+direct\s+`paseo run`/);
+  assert.match(workflow, /refuse[\s\S]*not\s+`planner`/);
+  assert.match(workflow, /no\s+new\s+autonomy\s+and\s+no\s+new\s+gates/i);
+});
+
+test("RED authority: the managed implementer no longer owns review, publication, or hosted repair", () => {
+  const workflow = read("skills/handoff-brief/references/paseo-workflow.md");
+  assert.doesNotMatch(
+    workflow,
+    /implementation owner (?:evaluates|must assess|follows Execute)/i,
+  );
+  assert.doesNotMatch(workflow, /planning session remains available/i);
+  assert.doesNotMatch(
+    read("skills/handoff-brief/scripts/paseo-workflow.ts"),
+    /Ready publication through Finish, one hosted feedback repair batch/,
+  );
+});
+
 test("GREEN authority: managed Pi workflow degrades reviewer outages and scopes waivers without granting terminal actions", () => {
   const workflow = read("skills/handoff-brief/references/paseo-workflow.md");
   const implementation = read("rules/investigation-and-implementation.md");

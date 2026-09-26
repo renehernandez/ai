@@ -186,10 +186,12 @@ Then use Paseo Desktop's **Pair a device** or `paseo daemon pair` to pair your
 device. Keep the pairing link private; it is not repository configuration.
 
 Select **Opus 5.5 · Plan** for the default planning route or **Astra · Plan**
-for the explicit alternative. The [Pi workflow](../skills/handoff-brief/references/paseo-workflow.md)
-hands the accepted brief to a fresh Opus implementer and runs correctness,
-architecture, and contract-alignment Sol reviews. You do not choose a model each
-time a reviewer or implementation worker starts.
+for the explicit alternative. In the [Pi workflow](../skills/handoff-brief/references/paseo-workflow.md),
+the planner you talk to orchestrates the run: it hands the accepted brief to a
+fresh Opus implementer, runs correctness, architecture, and contract-alignment
+Sol reviews, publishes, and follows hosted feedback. A Paseo heartbeat wakes it
+while work is in flight, so you do not need to ask for status. You do not
+choose a model each time a reviewer or implementation worker starts.
 
 Managed launches require Node 26, Pi on PATH, and the synchronized mandatory
 adapter. Nonreview roles explicitly load the pinned MCP adapter, and Opus roles also

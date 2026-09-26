@@ -7,17 +7,25 @@ import { promisify } from "node:util";
 import {
   assignReviewLenses,
   createSnapshots,
+  type DeliveryPolicy,
+  type Hosted,
+  inFlight,
   initialize,
   type Lens,
   locked,
+  nextStep,
   nonempty,
   type Outcome,
+  ordersBlock,
   type Phase,
   phaseOf,
+  type Receipt,
   type Review,
   type Role,
   receipt,
+  reportNames,
   requireCurrentReviewMode,
+  requireOrchestration,
   requireThat,
   reviewRoles,
   roundOf,
@@ -26,6 +34,7 @@ import {
   transition,
   type Workflow,
   type WorkspaceBinding,
+  workers,
 } from "./paseo-workflow-state.ts";
 
 export {
@@ -38,11 +47,54 @@ export {
 } from "./paseo-workflow-state.ts";
 
 const execute = promisify(execFile);
-export const paseo: Transport = async (args, timeout) =>
-  (await execute("paseo", args, { timeout, maxBuffer: 8 * 1024 * 1024 }))
-    .stdout;
+export const paseo: Transport = async (args, timeout, env) =>
+  (
+    await execute("paseo", args, {
+      timeout,
+      maxBuffer: 8 * 1024 * 1024,
+      ...(env ? { env: { ...process.env, ...env } } : {}),
+    })
+  ).stdout;
+const readProbe: Transport = async (args, timeout) =>
+  (
+    await execute(args[0], args.slice(1), {
+      timeout,
+      maxBuffer: 8 * 1024 * 1024,
+    })
+  ).stdout;
 const digest = (text: string) =>
   createHash("sha256").update(text).digest("hex");
+const runner = fileURLToPath(import.meta.url);
+const heartbeatLifetimeMs = 24 * 60 * 60_000;
+
+async function inspectSession(agentId: string, transport: Transport) {
+  return JSON.parse(await transport(["inspect", "--json", agentId], 30_000));
+}
+function lastReply(agentId: string, transport: Transport) {
+  return transport(
+    ["logs", "--filter", "assistant_message", "--tail", "1", agentId],
+    30_000,
+  );
+}
+function requireRoute(
+  state: Workflow,
+  role: Role,
+  agentId: string,
+  actual: Record<string, unknown> & { PendingPermissions?: unknown[] },
+) {
+  const route = state.routes[role];
+  requireThat(
+    actual.Id === agentId &&
+      actual.Cwd === state.cwd &&
+      actual.Provider === route.provider &&
+      actual.Model === route.model &&
+      actual.Thinking === route.thinking &&
+      actual.Status === "idle" &&
+      !actual.Archived &&
+      !actual.PendingPermissions?.length,
+    "Session cwd, identity, route, effort or status differs from its verified route",
+  );
+}
 
 type WorkspaceOptions = {
   workspaceId?: string;
@@ -208,9 +260,11 @@ async function launch(
 ) {
   let state = JSON.parse(await readFile(path, "utf8")) as Workflow;
   const reviewerFailure = role.startsWith("review-");
-  const assignment = (await createSnapshots(path, { "assignment.md": prompt }))[
-    "assignment.md"
-  ];
+  const assignment = (
+    await createSnapshots(path, {
+      "assignment.md": `${prompt}\n\n${ordersBlock(state)}`,
+    })
+  )["assignment.md"];
   await locked(path, (current) => {
     locate(current).assignment = assignment;
   });
@@ -230,15 +284,10 @@ async function launch(
         !target.agentId,
         "Launch reservation already has an identity",
       );
-      const existing = [
-        current.handoff,
-        ...Object.values(current.rounds).flatMap((round) =>
-          Object.values(round.reviews),
-        ),
-      ];
       requireThat(
-        !existing.some(
-          (review) => review !== target && review?.agentId === response.agentId,
+        !workers(current).some(
+          ({ worker }) =>
+            worker !== target && worker.agentId === response.agentId,
         ),
         "Paseo reused a recorded session identity",
       );
@@ -257,24 +306,13 @@ async function launch(
       waiting.status === "idle" && waiting.agentId === response.agentId,
       `Inert startup did not become idle: ${waiting.status}`,
     );
-    const actual = JSON.parse(
-      await transport(["inspect", "--json", response.agentId], 30_000),
-    );
-    const route = state.routes[role];
-    requireThat(
-      actual.Id === response.agentId &&
-        actual.Cwd === state.cwd &&
-        actual.Provider === route.provider &&
-        actual.Model === route.model &&
-        actual.Thinking === route.thinking &&
-        actual.Status === "idle" &&
-        !actual.Archived &&
-        !actual.PendingPermissions?.length,
-      "Session cwd, identity, route, effort or status differs from the verified launch",
-    );
+    const actual = await inspectSession(response.agentId, transport);
+    requireRoute(state, role, response.agentId, actual);
+    const startupReply = await lastReply(response.agentId, transport);
     await locked(path, (current) => {
       Object.assign(locate(current), {
         launchStatus: "verified",
+        startupReplySha256: digest(startupReply),
         inspection: {
           cwd: actual.Cwd,
           provider: actual.Provider,
@@ -305,6 +343,7 @@ async function launch(
       Object.assign(locate(current), {
         status: "running",
         launchStatus: "released",
+        releasedAt: new Date().toISOString(),
       });
     });
   } catch (error) {
@@ -328,6 +367,7 @@ export async function dispatchReview(
   transport = paseo,
 ) {
   const phase = phaseOf(input.phase);
+  requireOrchestration(JSON.parse(await readFile(path, "utf8")) as Workflow);
   await bindWorkspace(path, input, transport);
   const artifact = await readFile(input.artifactPath, "utf8");
   requireThat(
@@ -339,15 +379,17 @@ export async function dispatchReview(
     "Implementation review requires its exact head",
   );
   const state = await locked(path, async (state) => {
-    requireCurrentReviewMode(state);
+    requireOrchestration(state);
     requireThat(!state.finished, "Workflow already finished");
     requireThat(
       !state.rounds[phase],
       `${phase} review already dispatched; no automatic reruns`,
     );
     requireThat(
-      phase === "planning" || state.handoff?.status === "running",
-      "Implementation review requires a fresh implementation handoff",
+      phase === "planning" ||
+        (state.handoff?.status === "complete" &&
+          reportNames(state.handoff, input.head)),
+      "Implementation review requires a reported fresh implementation handoff that names the reviewed head",
     );
     requireThat(
       !state.currentAuthorization ||
@@ -446,6 +488,85 @@ export function parseReview(
   }
   return report.outcomes;
 }
+async function stopQuietly(agentId: string | undefined, transport: Transport) {
+  if (!agentId) return;
+  try {
+    await transport(["stop", agentId], 30_000);
+  } catch {
+    /* The failed worker remains blocked even if stopping is unavailable. */
+  }
+}
+// Records one finished worker exactly once; a concurrent recorder finds it no longer running.
+async function recordCompletion(
+  path: string,
+  state: Workflow,
+  role: Role,
+  locate: (state: Workflow) => Review,
+  actual: Record<string, unknown>,
+  transport: Transport,
+  interpret: (report: string) => Promise<Partial<Review>>,
+) {
+  const worker = locate(state);
+  let result: Partial<Review>;
+  try {
+    requireThat(worker.agentId, "Running worker has no session ID");
+    requireRoute(state, role, worker.agentId, actual);
+    const report = await lastReply(worker.agentId, transport);
+    // An idle worker still showing its inert startup reply has not begun the queued assignment.
+    if (digest(report) === worker.startupReplySha256) return false;
+    result = { status: "complete", ...(await interpret(report)) };
+  } catch (error) {
+    if (role.startsWith("review-"))
+      await stopQuietly(worker.agentId, transport);
+    result = {
+      status: role.startsWith("review-") ? "degraded" : "failed",
+      error: String(error),
+    };
+  }
+  return locked(path, (current) => {
+    const target = locate(current);
+    if (target.status !== "running") return false;
+    Object.assign(target, result);
+    return true;
+  });
+}
+function recordReview(
+  path: string,
+  state: Workflow,
+  phase: Phase,
+  role: Role,
+  actual: Record<string, unknown>,
+  transport: Transport,
+) {
+  const round = roundOf(state, phase);
+  return recordCompletion(
+    path,
+    state,
+    role,
+    (current) => roundOf(current, phase).reviews[role],
+    actual,
+    transport,
+    async (response) => {
+      const assignment = round.lensAssignments[role];
+      requireThat(assignment, `Missing focused lens assignment for ${role}`);
+      const assignmentContent = await readFile(
+        assignment.snapshot.path,
+        "utf8",
+      );
+      requireThat(
+        digest(assignmentContent) === assignment.snapshot.sha256,
+        `Focused lens snapshot changed for ${role}`,
+      );
+      return {
+        outcomes: parseReview(
+          response,
+          round.fingerprint,
+          JSON.parse(assignmentContent),
+        ),
+      };
+    },
+  );
+}
 export async function collectReviews(
   path: string,
   input: { phase: Phase },
@@ -454,6 +575,10 @@ export async function collectReviews(
   const phase = phaseOf(input.phase);
   const state = JSON.parse(await readFile(path, "utf8")) as Workflow;
   requireCurrentReviewMode(state);
+  requireThat(
+    !state.orchestration,
+    "Orchestrated workflows record completions only through tick",
+  );
   requireThat(!state.finished, "Workflow already finished");
   const round = state.rounds[phase];
   requireThat(round, "Review has not been dispatched");
@@ -461,6 +586,7 @@ export async function collectReviews(
     reviewRoles[phase].map(async (role) => {
       const review = round.reviews[role];
       if (review.status !== "running") return;
+      let actual: Record<string, unknown>;
       try {
         requireThat(review.agentId, "Running reviewer has no session ID");
         const waiting = JSON.parse(
@@ -479,68 +605,18 @@ export async function collectReviews(
           waiting.status === "idle" && waiting.agentId === review.agentId,
           `Reviewer did not finish successfully: ${waiting.status}`,
         );
-        const actual = JSON.parse(
-          await transport(["inspect", "--json", review.agentId], 30_000),
-        );
-        const route = state.routes[role];
-        requireThat(
-          actual.Id === review.agentId &&
-            actual.Cwd === state.cwd &&
-            actual.Provider === route.provider &&
-            actual.Model === route.model &&
-            actual.Thinking === route.thinking &&
-            actual.Status === "idle" &&
-            !actual.Archived &&
-            !actual.PendingPermissions?.length,
-          "Reviewer session identity, model, effort or status differs from its route",
-        );
-        const response = await transport(
-          [
-            "logs",
-            "--filter",
-            "assistant_message",
-            "--tail",
-            "1",
-            review.agentId,
-          ],
-          30_000,
-        );
-        const assignment = round.lensAssignments[role];
-        requireThat(assignment, `Missing focused lens assignment for ${role}`);
-        const assignmentContent = await readFile(
-          assignment.snapshot.path,
-          "utf8",
-        );
-        requireThat(
-          digest(assignmentContent) === assignment.snapshot.sha256,
-          `Focused lens snapshot changed for ${role}`,
-        );
-        const outcomes = parseReview(
-          response,
-          round.fingerprint,
-          JSON.parse(assignmentContent),
-        );
-        await locked(path, (state) => {
-          Object.assign(roundOf(state, phase).reviews[role], {
-            status: "complete",
-            outcomes,
-          });
-        });
+        actual = await inspectSession(review.agentId, transport);
       } catch (error) {
-        if (review.agentId) {
-          try {
-            await transport(["stop", review.agentId], 30_000);
-          } catch {
-            /* The failed review remains blocked even if stopping is unavailable. */
-          }
-        }
+        await stopQuietly(review.agentId, transport);
         await locked(path, (state) => {
           Object.assign(roundOf(state, phase).reviews[role], {
             status: "degraded",
             error: String(error),
           });
         });
+        return;
       }
+      await recordReview(path, state, phase, role, actual, transport);
     }),
   );
 }
@@ -553,9 +629,7 @@ export async function handoff(
   } & WorkspaceOptions,
   transport = paseo,
 ) {
-  requireCurrentReviewMode(
-    JSON.parse(await readFile(path, "utf8")) as Workflow,
-  );
+  requireOrchestration(JSON.parse(await readFile(path, "utf8")) as Workflow);
   await bindWorkspace(path, input, transport);
   const brief = await readFile(input.briefPath, "utf8");
   requireThat(
@@ -586,13 +660,17 @@ export async function handoff(
   await launch(
     path,
     "implementer",
-    `Implement the accepted handoff in this fresh session. First read the complete immutable brief and plan-resolution snapshots, including subsequent chunks for large files. Stop if either is unavailable or unreadable; never substitute a changed original. Follow the Pi/Paseo finite workflow: one implementation review round, triage and applicable repair batch, Ready publication through Finish, one hosted feedback repair batch, then stop open and Ready. Do not merge. Workflow state: ${resolve(path)}\nPlan resolution snapshot: ${JSON.stringify(snapshots["plan-resolution.md"])}\nImplementation brief snapshot: ${JSON.stringify(snapshots["brief.md"])}`,
+    `${implementerAssignment("Implement the accepted handoff in this fresh session.", "brief and plan-resolution snapshots")} Workflow state: ${resolve(path)}\nPlan resolution snapshot: ${JSON.stringify(snapshots["plan-resolution.md"])}\nImplementation brief snapshot: ${JSON.stringify(snapshots["brief.md"])}`,
     (state) => {
       requireThat(state.handoff, "Missing handoff reservation");
       return state.handoff;
     },
     transport,
   );
+}
+
+function implementerAssignment(opening: string, snapshots: string) {
+  return `${opening} First read the complete immutable ${snapshots}, including subsequent chunks for large files. Stop if any snapshot is unavailable or unreadable; never substitute a changed original. Implement, run the named verification, and commit through native hooks. End with a report of branch, head, commits, verification, deviations, and open risks, then stop. The planner orchestrator owns review dispatch, triage, publication, hosted follow-through, and any later repair; do not dispatch reviewers, start workers, push, publish, or merge.`;
 }
 
 function recoverableHandoff(state: Workflow, previousAgentId: string) {
@@ -631,7 +709,7 @@ export async function retryMisroutedHandoff(
     "Misroute recovery requires exact authorization, identity, Git target, dirty inventory, and no-write evidence",
   );
   let state = JSON.parse(await readFile(path, "utf8")) as Workflow;
-  requireCurrentReviewMode(state);
+  requireOrchestration(state);
   if (
     state.handoffRecovery?.previousAgentId === input.previousAgentId &&
     state.handoffRecovery.status === "complete"
@@ -752,7 +830,7 @@ export async function retryMisroutedHandoff(
   await launch(
     path,
     "implementer",
-    `Resume the accepted implementation in a fresh, verified session. First read the complete immutable brief and plan-resolution snapshots, including subsequent chunks for large files. Stop if either is unavailable or unreadable; never substitute a changed original. Workflow state: ${resolve(path)}\nPlan resolution snapshot: ${JSON.stringify(state.handoff?.planResolution)}\nImplementation brief snapshot: ${JSON.stringify(state.handoff?.brief)}`,
+    `${implementerAssignment("Resume the accepted implementation in a fresh, verified session.", "brief and plan-resolution snapshots")} Workflow state: ${resolve(path)}\nPlan resolution snapshot: ${JSON.stringify(state.handoff?.planResolution)}\nImplementation brief snapshot: ${JSON.stringify(state.handoff?.brief)}`,
     (current) => {
       requireThat(current.handoff, "Missing recovery handoff reservation");
       return current.handoff;
@@ -773,16 +851,97 @@ export async function retryMisroutedHandoff(
   });
 }
 
+export async function dispatchRepair(
+  path: string,
+  input: { phase: "implementation" | "hosted"; briefPath: string },
+  transport: Transport = paseo,
+) {
+  requireThat(
+    input.phase === "implementation" || input.phase === "hosted",
+    "Invalid repair phase",
+  );
+  const phase = input.phase;
+  requireOrchestration(JSON.parse(await readFile(path, "utf8")) as Workflow);
+  const brief = await readFile(input.briefPath, "utf8");
+  requireThat(
+    nonempty(brief),
+    "A nonempty orchestrator repair brief is required",
+  );
+  const snapshot = await locked(path, async (state) => {
+    requireThat(!state.finished, "Workflow already finished");
+    requireThat(
+      !state.currentAuthorization ||
+        state.currentAuthorization.allowedPhases.includes(phase),
+      `Active continuation does not authorize ${phase} repair`,
+    );
+    const decisions = settled(
+      state,
+      phase,
+      phase === "implementation" ? "publication" : "finish",
+    );
+    requireThat(
+      !state.repairs[phase] &&
+        decisions.some((decision) => decision.action === "fix"),
+      "Only one applicable repair batch is allowed",
+    );
+    const snapshot = (await createSnapshots(path, { "brief.md": brief }))[
+      "brief.md"
+    ];
+    state.repairs[phase] = {
+      status: "started",
+      session: { status: "reserved", brief: snapshot },
+    };
+    return snapshot;
+  });
+  await launch(
+    path,
+    "implementer",
+    `${implementerAssignment(`Apply the one ${phase} repair batch in this fresh session.`, "repair brief snapshot")} Workflow state: ${resolve(path)}\nRepair brief snapshot: ${JSON.stringify(snapshot)}`,
+    (state) => {
+      const session = state.repairs[phase]?.session;
+      requireThat(session, "Missing repair reservation");
+      return session;
+    },
+    transport,
+  );
+}
+
+function hostedOutput(
+  output: Hosted,
+  publication: Receipt,
+  policy: DeliveryPolicy | undefined,
+) {
+  receipt({ ...output, ready: true }, policy);
+  requireThat(
+    output.artifactUrl === publication.artifactUrl &&
+      output.head === publication.head &&
+      output.reviewer === publication.reviewer,
+    "Hosted evidence does not match published head",
+  );
+  requireThat(
+    typeof output.ready === "boolean" &&
+      (output.ready || ["awaiting-user", "failed"].includes(output.status)),
+    "Hosted completion requires observed Ready state",
+  );
+  requireThat(
+    ["waiting", "completed", "awaiting-user", "failed"].includes(
+      output.status,
+    ) &&
+      Array.isArray(output.findings) &&
+      output.findings.every(
+        (finding) => nonempty(finding.id) && nonempty(finding.evidence),
+      ) &&
+      new Set(output.findings.map((finding) => finding.id)).size ===
+        output.findings.length,
+    "Invalid hosted probe output",
+  );
+  return output;
+}
+
 export async function monitor(
   path: string,
   input: { probeCommand: string[]; deadlineMs?: number; pollMs?: number },
-  probe: Transport = async (args, timeout) =>
-    (
-      await execute(args[0], args.slice(1), {
-        timeout,
-        maxBuffer: 8 * 1024 * 1024,
-      })
-    ).stdout,
+  probe: Transport = readProbe,
   sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms)),
   now = Date.now,
 ) {
@@ -805,6 +964,10 @@ export async function monitor(
   );
   const { publication, policy } = await locked(path, (state) => {
     requireCurrentReviewMode(state);
+    requireThat(
+      !state.orchestration,
+      "Orchestrated workflows probe hosted gates only through tick",
+    );
     requireThat(!state.finished, "Workflow already finished");
     requireThat(
       state.publication && !state.hosted,
@@ -821,33 +984,12 @@ export async function monitor(
   const deadline = now() + deadlineMs;
   while (now() < deadline) {
     try {
-      const output = JSON.parse(
-        await probe(input.probeCommand, Math.min(30_000, deadline - now())),
-      );
-      receipt({ ...output, ready: true }, policy);
-      requireThat(
-        output.artifactUrl === publication.artifactUrl &&
-          output.head === publication.head &&
-          output.reviewer === publication.reviewer,
-        "Hosted evidence does not match published head",
-      );
-      requireThat(
-        typeof output.ready === "boolean" &&
-          (output.ready || ["awaiting-user", "failed"].includes(output.status)),
-        "Hosted completion requires observed Ready state",
-      );
-      requireThat(
-        ["waiting", "completed", "awaiting-user", "failed"].includes(
-          output.status,
-        ) &&
-          Array.isArray(output.findings) &&
-          output.findings.every(
-            (finding: { id: string; evidence: string }) =>
-              nonempty(finding.id) && nonempty(finding.evidence),
-          ) &&
-          new Set(output.findings.map((finding: { id: string }) => finding.id))
-            .size === output.findings.length,
-        "Invalid hosted probe output",
+      const output = hostedOutput(
+        JSON.parse(
+          await probe(input.probeCommand, Math.min(30_000, deadline - now())),
+        ),
+        publication,
+        policy,
       );
       await locked(path, (state) => {
         state.hosted = output;
@@ -878,22 +1020,249 @@ export async function monitor(
   });
 }
 
-export async function main(args: string[]) {
+export function tickPrompt(path: string, state: Workflow) {
+  return `AX orchestration tick. Run \`node ${runner} ${resolve(path)} tick\` and take the next step it names in this turn. When the result is \`unchanged\`, end the turn with no user-visible message. Report to the user only on a completed phase, a new blocker, an open gate, or finish.\n\n${ordersBlock(state)}`;
+}
+
+async function deleteHeartbeat(
+  heartbeat: NonNullable<Workflow["heartbeat"]>,
+  transport: Transport,
+) {
+  try {
+    await transport(["heartbeat", "delete", heartbeat.id, "--json"], 30_000, {
+      PASEO_AGENT_ID: heartbeat.agentId,
+    });
+  } catch (error) {
+    // An expired or already deleted heartbeat is the desired end state.
+    if (!/not found/i.test(String(error))) throw error;
+  }
+}
+
+// Keeps one heartbeat on the caller while work is in flight, renewing it before half its lifetime passes.
+export async function syncHeartbeat(
+  path: string,
+  input: { agentId?: string },
+  transport: Transport = paseo,
+  now = Date.now,
+) {
+  return locked(path, async (state) => {
+    const current = state.heartbeat;
+    if (state.finished || !inFlight(state).length) {
+      if (current) await deleteHeartbeat(current, transport);
+      delete state.heartbeat;
+      return undefined;
+    }
+    const agentId = input.agentId;
+    requireThat(
+      nonempty(agentId),
+      "Arming the orchestrator heartbeat requires the caller's PASEO_AGENT_ID",
+    );
+    const prompt = tickPrompt(path, state);
+    if (
+      current?.agentId === agentId &&
+      current.promptSha256 === digest(prompt) &&
+      Date.parse(current.expiresAt) - now() > heartbeatLifetimeMs / 2
+    )
+      return current;
+    const created = JSON.parse(
+      await transport(
+        [
+          "heartbeat",
+          "create",
+          "--cron",
+          "*/5 * * * *",
+          "--expires-in",
+          "24h",
+          "--name",
+          "ax-orchestrator-tick",
+          "--json",
+          prompt,
+        ],
+        30_000,
+        { PASEO_AGENT_ID: agentId },
+      ),
+    );
+    const target = String(created.target ?? "").replace(/^agent:/, "");
+    requireThat(
+      nonempty(created.id) && nonempty(target) && agentId.startsWith(target),
+      "Paseo heartbeat does not target the calling orchestrator session",
+    );
+    state.heartbeat = {
+      id: created.id,
+      agentId,
+      expiresAt: new Date(now() + heartbeatLifetimeMs).toISOString(),
+      promptSha256: digest(prompt),
+    };
+    // The replacement already exists; a stale predecessor expires on its own and extra ticks are idempotent.
+    if (current) await deleteHeartbeat(current, transport).catch(() => {});
+    return state.heartbeat;
+  });
+}
+
+export function loopStatus(state: Workflow, now = Date.now) {
+  if (!state.heartbeat) return inFlight(state).length ? "unarmed" : "idle";
+  return Date.parse(state.heartbeat.expiresAt) <= now() ? "expired" : "armed";
+}
+
+async function probeHosted(path: string, probe: Transport, now: () => number) {
+  const state = JSON.parse(await readFile(path, "utf8")) as Workflow;
+  const { hostedMonitor, publication } = state;
+  if (!hostedMonitor || !publication || state.hosted?.status !== "waiting")
+    return false;
+  const remaining = Date.parse(hostedMonitor.deadline) - now();
+  let hosted: Hosted;
+  if (remaining <= 0)
+    hosted = {
+      ...publication,
+      status: "timed-out",
+      findings: [],
+      evidence: "Hosted monitor deadline elapsed; no pass inferred",
+    };
+  else {
+    try {
+      hosted = hostedOutput(
+        JSON.parse(
+          await probe(hostedMonitor.probeCommand, Math.min(30_000, remaining)),
+        ),
+        publication,
+        state.deliveryPolicy,
+      );
+    } catch (error) {
+      hosted = {
+        ...publication,
+        ready: null,
+        status: "failed",
+        findings: [],
+        evidence: String(error),
+      };
+    }
+  }
+  return locked(path, (current) => {
+    if (current.hosted?.status !== "waiting") return false;
+    current.hosted = hosted;
+    return hosted.status !== "waiting";
+  });
+}
+
+// Records finished workers and one hosted probe without blocking or dispatching, then names the next step.
+export async function tick(
+  path: string,
+  input: { agentId?: string },
+  transport: Transport = paseo,
+  probe: Transport = readProbe,
+  now = Date.now,
+) {
+  const state = JSON.parse(await readFile(path, "utf8")) as Workflow;
+  requireOrchestration(state);
+  const recorded: string[] = [];
+  await Promise.all(
+    workers(state).map(async ({ name, role, phase, worker }) => {
+      if (worker.status !== "running" || !worker.agentId) return;
+      const locate = (current: Workflow) => {
+        const entry = workers(current).find((item) => item.name === name);
+        requireThat(entry, `Missing recorded worker ${name}`);
+        return entry.worker;
+      };
+      const degrade = async (error: string) => {
+        await stopQuietly(worker.agentId, transport);
+        const degraded = await locked(path, (current) => {
+          const target = locate(current);
+          if (target.status !== "running") return false;
+          Object.assign(target, { status: "degraded", error });
+          return true;
+        });
+        if (degraded) recorded.push(`${name}: degraded`);
+      };
+      let actual: Record<string, unknown>;
+      try {
+        actual = await inspectSession(worker.agentId, transport);
+      } catch (error) {
+        // Reviewers degrade as collect did; an implementer stays in flight so a transient error cannot fail it.
+        if (phase) await degrade(String(error));
+        else recorded.push(`${name}: inspect failed: ${String(error)}`);
+        return;
+      }
+      if (actual.Status === "running" || actual.Status === "initializing") {
+        const elapsed = now() - Date.parse(worker.releasedAt ?? "");
+        if (phase && elapsed > state.timeoutSeconds * 1000)
+          await degrade(
+            `Reviewer exceeded the ${state.timeoutSeconds}s timeout`,
+          );
+        return;
+      }
+      const done = phase
+        ? await recordReview(path, state, phase, role, actual, transport)
+        : await recordCompletion(
+            path,
+            state,
+            role,
+            locate,
+            actual,
+            transport,
+            async (report) => ({ report }),
+          );
+      if (done)
+        recorded.push(`${name}: ${locate(await readState(path)).status}`);
+    }),
+  );
+  if (await probeHosted(path, probe, now))
+    recorded.push(`hosted: ${(await readState(path)).hosted?.status}`);
+  const heartbeat = await syncHeartbeat(path, input, transport, now);
+  return { ...nextStep(await readState(path)), recorded, heartbeat };
+}
+
+async function readState(path: string) {
+  return JSON.parse(await readFile(path, "utf8")) as Workflow;
+}
+
+export function requirePlannerCaller(env: NodeJS.ProcessEnv) {
+  if (env.AX_PI_CONTRACT === undefined) return;
+  let role: unknown;
+  try {
+    role = JSON.parse(env.AX_PI_CONTRACT)?.role;
+  } catch {
+    role = undefined;
+  }
+  requireThat(
+    role === "planner",
+    `Managed role ${String(role ?? "unknown")} cannot run orchestrator actions; workers may only read status`,
+  );
+}
+
+export async function main(args: string[], env = process.env) {
   const [path, action, inputPath] = args;
   requireThat(
     path && action,
     "Usage: paseo-workflow.ts STATE ACTION [INPUT.json]",
   );
   const input = inputPath ? JSON.parse(await readFile(inputPath, "utf8")) : {};
+  const orchestrated =
+    action === "init" || (await readState(path)).orchestration !== undefined;
+  if (action === "status") {
+    const state = await readState(path);
+    if (state.orchestration && loopStatus(state) === "expired")
+      process.stderr.write(
+        `Orchestrator heartbeat expired at ${state.heartbeat?.expiresAt}; the next dispatch or tick re-arms it.\n`,
+      );
+    process.stdout.write(`${JSON.stringify(state, null, 2)}\n`);
+    return;
+  }
+  if (orchestrated) requirePlannerCaller(env);
+  const caller = { agentId: env.PASEO_AGENT_ID };
+  if (action === "tick") {
+    process.stdout.write(`${JSON.stringify(await tick(path, caller))}\n`);
+    return;
+  }
   if (action === "init") await initialize(path, input);
-  else if (action === "review") {
-    await dispatchReview(path, input);
-    await collectReviews(path, input);
-  } else if (action === "collect") await collectReviews(path, input);
+  else if (action === "review") await dispatchReview(path, input);
+  else if (action === "collect") await collectReviews(path, input);
   else if (action === "handoff") await handoff(path, input);
   else if (action === "retry-handoff") await retryMisroutedHandoff(path, input);
   else if (action === "monitor") await monitor(path, input);
-  else if (action !== "status") await transition(path, action, input);
+  else if (action === "repair" && orchestrated && input.stage === "start")
+    await dispatchRepair(path, input);
+  else await transition(path, action, input);
+  if (orchestrated) await syncHeartbeat(path, caller);
   process.stdout.write(await readFile(path, "utf8"));
 }
 if (
