@@ -74,10 +74,21 @@ export function commandFromPayload(
 }
 
 export function tokenize(command: string): ShellWord[][] {
+  return scan(command).commands;
+}
+
+// True when the command has more than one shell segment: a control operator,
+// background `&`, subshell, command substitution, or a newline between commands.
+export function isCompoundCommand(command: string): boolean {
+  return scan(command.trim()).compound;
+}
+
+function scan(command: string): { commands: ShellWord[][]; compound: boolean } {
   const commands: ShellWord[][] = [];
   let words: ShellWord[] = [];
   let value = "";
   let dynamic = false;
+  let compound = false;
   let quote: "single" | "double" | undefined;
 
   const pushWord = (): void => {
@@ -116,9 +127,13 @@ export function tokenize(command: string): ShellWord[][] {
       continue;
     }
     if (character === "$" || character === "`") dynamic = true;
+    if (character === "`" || (character === "$" && command[index + 1] === "("))
+      compound = true;
     if (!quote && /\s/u.test(character)) {
-      if (character === "\n") pushCommand();
-      else pushWord();
+      if (character === "\n") {
+        compound = true;
+        pushCommand();
+      } else pushWord();
       continue;
     }
     if (!quote && "<>".includes(character)) {
@@ -132,6 +147,8 @@ export function tokenize(command: string): ShellWord[][] {
       continue;
     }
     if (!quote && ";|&()".includes(character)) {
+      // `&>` is a redirection; tokenize still splits there, but it is not a second command.
+      if (character !== "&" || command[index + 1] !== ">") compound = true;
       pushCommand();
       continue;
     }
@@ -139,7 +156,7 @@ export function tokenize(command: string): ShellWord[][] {
   }
   if (quote) dynamic = true;
   pushCommand();
-  return commands;
+  return { commands, compound };
 }
 
 export function basename(command: string): string {

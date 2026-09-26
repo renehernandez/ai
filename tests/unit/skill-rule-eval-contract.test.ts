@@ -34,12 +34,13 @@ import {
 import { read } from "../../scripts/charter-validator-reader.ts";
 import {
   bindWorkspace,
+  parseReport,
   parseReview,
 } from "../../skills/handoff-brief/scripts/paseo-workflow.ts";
 import {
   assignReviewLenses,
   effectiveOrders,
-  reportNames,
+  reportsHead,
   requireCurrentReviewMode,
   requireOrchestration,
 } from "../../skills/handoff-brief/scripts/paseo-workflow-state.ts";
@@ -50,6 +51,19 @@ const managedSkills = (
     skills: Array<{ names: string[] }>;
   }
 ).skills.flatMap(({ names }) => names);
+
+const verifiedReport = {
+  branch: "feature",
+  head: "68593b1531b5ad5a30e9e5c686571e11b13c63f0",
+  commits: ["68593b1 feat(paseo): make the managed planner the orchestrator"],
+  verification: ["pnpm run test:unit passed"],
+  deviations: [],
+  risks: [],
+  uncommitted: [],
+};
+
+const reportWithHead = (head: string) =>
+  `AX_REPORT_BEGIN${JSON.stringify({ ...verifiedReport, head })}AX_REPORT_END`;
 
 const cloudflareSkills = (
   axConfig.blocks.cloudflare as {
@@ -148,12 +162,14 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
     [{ id: "roster", constraint: "Sol and Opus." }],
   );
   assert.equal(
-    reportNames(
-      { status: "complete", report: "Committed. Head: 68593b1." },
-      "68593b1531b5ad5a30e9e5c686571e11b13c63f0",
+    reportsHead(
+      { status: "complete", report: verifiedReport },
+      verifiedReport.head,
     ),
     true,
   );
+  for (const head of [verifiedReport.head, "a".repeat(64)])
+    assert.equal(parseReport(reportWithHead(head)).head, head);
   assert.match(
     read("skills/handoff-brief/references/paseo-workflow.md"),
     /planner is the orchestrator/,
@@ -173,10 +189,26 @@ test("RED skill-rule-evals: Paseo workspace binding rejects a wrong directory", 
       } as never),
     /predates planner orchestration/u,
   );
+  for (const head of [
+    verifiedReport.head.slice(0, 7),
+    "f00dbabe00000000000000000000000000000000",
+  ])
+    assert.equal(
+      reportsHead({ status: "complete", report: verifiedReport }, head),
+      false,
+    );
+  for (const head of [`${verifiedReport.head}a`, "a".repeat(63)])
+    assert.throws(
+      () => parseReport(reportWithHead(head)),
+      /Malformed implementer report/u,
+    );
   assert.equal(
-    reportNames(
-      { status: "complete", report: "Committed. Head: 68593b1." },
-      "f00dbabe00000000000000000000000000000000",
+    reportsHead(
+      {
+        status: "complete",
+        report: `Committed. Head: ${verifiedReport.head}.`,
+      } as never,
+      verifiedReport.head,
     ),
     false,
   );

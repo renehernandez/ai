@@ -18,9 +18,30 @@ the runner.
 Workers are fresh sessions that keep no context between assignments. An
 implementer assignment ends at its report: it implements one accepted handoff
 or one repair batch, verifies, commits through native hooks, reports branch,
-head, commits, verification, deviations and open risks, then stops. It does not
-dispatch reviewers, start workers, push, publish, or merge. Reviewers read one
-exact artifact for their assigned lenses and do nothing else.
+head, commits, verification, deviations and open risks, then stops. It issues
+one shell command per tool call and never issues git mutations as parallel tool
+calls. It does not dispatch reviewers, start workers, push, publish, or merge.
+Reviewers read one exact artifact for their assigned lenses and do nothing else.
+
+The implementer's report ends with exactly one machine-readable envelope,
+following the reviewer envelope precedent. Prose may precede it:
+
+```text
+AX_REPORT_BEGIN
+{"branch":"...","head":"<full object ID>","commits":["..."],
+ "verification":["..."],"deviations":[],"risks":[]}
+AX_REPORT_END
+```
+
+`head` is the full object ID: 40 hex characters, or 64 in SHA-256
+repositories. Any other length is malformed. The four lists hold nonempty strings and may be empty. When a tick records the
+completion, the runner compares `branch` and `head` with the workflow worktree
+through `git rev-parse`. It records the parsed report with the worktree's
+uncommitted files as evidence; uncommitted files do not fail the report. A
+missing, duplicate, or malformed envelope, or a branch or head that differs from
+the worktree, marks the session failed, and the next step becomes
+`awaiting-user` for human-directed recovery. The runner never guesses a head and
+never retries a malformed report.
 
 ## Work without model selection
 
@@ -88,6 +109,10 @@ degraded evidence. The tick returns one compact result:
 - `awaiting-user`: an existing user gate is open;
 - `finished`: the workflow is finished.
 
+A tick that records an implementer or repair completion names the verified
+head in its entry, such as `handoff: complete at <head>`, so the next dispatch
+or repair completion needs no `status` read.
+
 Take the named step in the same turn; a dispatch needs a brief or artifact that
 only the orchestrator writes. When the result is `unchanged`, end the turn with
 no user-visible message. Report to the user only on a completed phase, a new
@@ -123,9 +148,11 @@ not in pasted prompts.
 ## Review implementation once
 
 After a tick records the implementer's report, dispatch one parallel round with
-three fresh Sol sessions against the reported head. The runner requires the
-reviewed head, and a completed repair's head, to appear in the implementer's
-report. A worker whose last reply is still its inert startup reply has not begun
+three fresh Sol sessions against the reported head. The reviewed head, and a
+completed repair's head, must equal the verified head recorded from the
+implementer's report envelope exactly; a short SHA or a SHA named only in prose
+never binds. States recorded before the envelope hold only free-text reports
+and fail this check. A worker whose last reply is still its inert startup reply has not begun
 the assignment and stays in flight. Correctness covers diff
 correctness and risk; architecture covers quality, simplification, and deslop;
 contract alignment scrutinizes verification, requirements, and documentation.
@@ -197,6 +224,19 @@ The Pi shell policy denies direct `paseo run`, `send`, `stop`, `delete`,
 `inspect`, `logs`, and `wait` stay available. Runner actions other than
 `status` refuse a caller whose managed role contract is not `planner`.
 
+For agent shell calls in the `planner` and `implementer` roles, the Pi shell
+policy also enforces the one-command rule in `rules/command-and-tools.md`. A
+person's own `!` commands in those sessions skip this check but keep the Paseo,
+force-push, and deletion policies. It denies any agent command with
+more than one shell segment: `&&`, `||`, `;`, pipes, background `&`, subshells,
+command substitution, and newline-separated commands. Payloads of `sh -c`,
+`bash -lc`, and `env -S` get the same check, and a dynamic payload that cannot
+be inspected is denied. Quoted operators and redirections such as `2>&1` stay
+allowed. The Paseo, force-push, and deletion policies run first and keep their
+messages. Heredocs are split at each newline and denied, so commit with `-m` or
+`-F <file>`. The policy cannot see parallel tool calls; the assignment rule
+against parallel git mutations covers them.
+
 The managed Pi wrapper fixes role/model/effort and waits for the mandatory
 adapter before forwarding the first prompt. The adapter enforces role identity
 and tool policy during work. Reviewers can only read, search and list files.
@@ -221,6 +261,13 @@ node ~/.agents/skills/handoff-brief/scripts/paseo-workflow.ts STATE ACTION INPUT
 Each input is one JSON object. The following table is the readable input
 contract; omit optional fields unless needed.
 
+Every action except `status` prints one compact JSON line: the `action`, the
+state fields it `recorded`, any new `ids` (worker agents, review round
+fingerprints, continuation batch, standing order), and the `nextStep` result.
+A `tick` line lists its recorded completions instead. The line omits the lens
+catalog and review outcomes. Errors go to stderr with a nonzero exit. `status`
+is the only full-state read.
+
 | Action | Input fields |
 | --- | --- |
 | `init` | `cwd`; optional `configPath`, `timeoutSeconds`, and `additionalLenses` keyed by planning/implementation. |
@@ -232,11 +279,11 @@ contract; omit optional fields unless needed.
 | `waiver` | `phase`, exact current `target`, exact `requestedAction`, nonempty `failedGates`, and `reason`. Records failed evidence without granting the action itself. |
 | `handoff` | `briefPath`, `planResolution`; launches the fresh implementer and returns. Accepts the same optional workspace fields as `review`. |
 | `retry-handoff` | Exact `previousAgentId`, immutable authorization source, target `branch` and `head`, exact porcelain `dirtyStatus`, and `noWritesEvidence`; optional explicit workspace registration fields. Recovers only an inactive known wrong-cwd implementation handoff with unused implementation/review phases. |
-| `repair` | `phase` (implementation/hosted) and `stage`. `start` needs `briefPath` and launches one fresh implementer; `complete` needs the reported `head` and named `verification` after a tick records the report. |
+| `repair` | `phase` (implementation/hosted) and `stage`. `start` needs `briefPath` and launches one fresh implementer; `complete` needs the exact verified `head` from the tick-recorded repair report and named `verification`. |
 | `publication` | Observed `artifactUrl`, `head`, exact `targetBase` SHA, optional policy-required `reviewer`, `ready: true`, `evidence`, and the unchanged policy-source fingerprint. When a hosted gate is required, also the Finish `probeCommand` argv and optional `deadlineMs`. |
 | `finish` | Current observed publication fields and final evidence; does not merge. |
 | `continuation` | Explicit `batchId`, authorization source, purpose, allowed phases, and expected current head. Archives prior evidence and opens one bounded batch. |
-| `status` | No input required; any role may read it. Inspect persisted phase, reports, unresolved gaps, and an expired heartbeat loop. |
+| `status` | No input required; any role may read it. Prints the full state, the only full-state read. Inspect persisted phase, reports, unresolved gaps, and an expired heartbeat loop. |
 
 For hosted probes, use the installed Finish probe with the resolved `--ci-policy`,
 `--reviewer` (`none`, `genie`, or `nitro`), and `--policy-evidence`; include

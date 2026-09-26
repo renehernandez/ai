@@ -192,6 +192,124 @@ test("managed roles cannot dispatch Paseo sessions outside the runner but keep r
     );
 });
 
+test("write roles are denied compound shell commands, including nested shell payloads", () => {
+  for (const command of [
+    "git add a && git commit -m b",
+    "git status || true",
+    "git status; git diff",
+    "git log | head",
+    "sleep 5 &",
+    "echo $(git rev-parse HEAD)",
+    'echo "$(git rev-parse HEAD)"',
+    "echo `git rev-parse HEAD`",
+    "(cd /tmp)",
+    "git status\ngit diff",
+    "git commit -F - <<EOF\nsubject\nEOF",
+    "sh -c 'a && b'",
+    "bash -lc 'a; b'",
+    "env -S 'git status; git diff'",
+    'sh -c "$SCRIPT"',
+  ]) {
+    for (const role of ["planner", "implementer"])
+      assert.match(
+        toolDenial(role, "bash", { command }, process.cwd()) ?? "",
+        /^Shell discipline .*one command per tool call/u,
+        command,
+      );
+  }
+  for (const command of [
+    "git status",
+    "sh -c 'git status'",
+    "echo 'a && b; c | d'",
+    'grep -n "a;b" notes.md',
+    "pnpm run test:unit 2>&1",
+    "git status &>/dev/null",
+    "git status\n",
+    'echo "$HOME"',
+    "find . -name '*.ts' -exec true {} \\;",
+    "printf '%s' '$(literal)'",
+    "echo '`literal`'",
+  ])
+    for (const role of ["planner", "implementer"])
+      assert.equal(
+        toolDenial(role, "bash", { command }, process.cwd()),
+        undefined,
+        command,
+      );
+  assert.match(
+    toolDenial(
+      "implementer",
+      "bash",
+      { command: "git status && git push --force" },
+      process.cwd(),
+    ) ?? "",
+    /^Force-push policy/u,
+  );
+  assert.match(
+    toolDenial(
+      "implementer",
+      "bash",
+      { command: "git status && rm /tmp/outside" },
+      process.cwd(),
+    ) ?? "",
+    /^Deletion policy/u,
+  );
+});
+
+test("compound denial applies to agent shell calls, not a person's own commands", () => {
+  const f = fixture();
+  const savedContract = process.env.AX_PI_CONTRACT;
+  const savedWorkflow = process.env.AX_PI_WORKFLOW_FILE;
+  try {
+    const implementer = parseContract({
+      ...contract,
+      role: "implementer",
+      model: "gpt-5.6-sol",
+      thinking: "medium",
+    });
+    process.env.AX_PI_CONTRACT = JSON.stringify(implementer);
+    process.env.AX_PI_WORKFLOW_FILE = join(
+      f.root,
+      "skills/handoff-brief/references/paseo-workflow.md",
+    );
+    const handlers = new Map<string, (...args: unknown[]) => unknown>();
+    enforcement({
+      on: (name, handler) =>
+        handlers.set(name, handler as (...args: unknown[]) => unknown),
+      getThinkingLevel: () => "medium",
+      getAllTools: () => [],
+      setActiveTools: () => {},
+    });
+    const ctx = {
+      cwd: f.root,
+      model: { provider: implementer.provider, id: implementer.model },
+    };
+    const compound = "git status && git diff";
+    assert.equal(
+      handlers.get("user_bash")?.({ command: compound }, ctx),
+      undefined,
+    );
+    const agent = handlers.get("tool_call")?.(
+      { toolName: "bash", input: { command: compound } },
+      ctx,
+    ) as { block: boolean; reason: string };
+    assert.equal(agent.block, true);
+    assert.match(agent.reason, /^Shell discipline/u);
+    const dispatch = handlers.get("user_bash")?.(
+      { command: "paseo run task" },
+      ctx,
+    ) as { result: { output: string; exitCode: number } };
+    assert.equal(dispatch.result.exitCode, 1);
+    assert.match(dispatch.result.output, /^Paseo policy/u);
+  } finally {
+    if (savedContract === undefined) delete process.env.AX_PI_CONTRACT;
+    else process.env.AX_PI_CONTRACT = savedContract;
+    if (savedWorkflow === undefined) delete process.env.AX_PI_WORKFLOW_FILE;
+    else process.env.AX_PI_WORKFLOW_FILE = savedWorkflow;
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
 function fixture(): { root: string; launcher: string; env: NodeJS.ProcessEnv } {
   const root = mkdtempSync(join(tmpdir(), "pi-enforcement-"));
   cpSync(resolve("hooks"), join(root, "hooks"), { recursive: true });

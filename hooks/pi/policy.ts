@@ -2,6 +2,7 @@ import { findForcePush } from "../block-agent-force-push.ts";
 import { evaluateCommand } from "../block-delete-outside-cwd.ts";
 import {
   basename,
+  isCompoundCommand,
   isShellCommandFlag,
   SHELLS,
   type ShellWord,
@@ -107,7 +108,31 @@ export function findPaseoDispatch(command: string): string | undefined {
   return undefined;
 }
 
-export function shellDenial(command: unknown, cwd: string): string | undefined {
+// Nested shell `-c` and `env -S` payloads are checked like the outer command; an uninspectable one counts as compound.
+function compoundPayload(words: ShellWord[]): boolean {
+  const { words: unwrapped, splitCommand } = unwrap(words);
+  if (splitCommand)
+    return splitCommand.dynamic || findCompoundCommand(splitCommand.value);
+  if (!SHELLS.has(basename(unwrapped[0]?.value ?? ""))) return false;
+  const flag = unwrapped.findIndex((word) => isShellCommandFlag(word.value));
+  const nested = flag >= 0 ? unwrapped[flag + 1] : undefined;
+  return (
+    nested !== undefined &&
+    (nested.dynamic || findCompoundCommand(nested.value))
+  );
+}
+
+export function findCompoundCommand(command: string): boolean {
+  return isCompoundCommand(command) || tokenize(command).some(compoundPayload);
+}
+
+const compoundRoles = new Set(["planner", "implementer"]);
+
+export function shellDenial(
+  command: unknown,
+  cwd: string,
+  denyCompound: boolean,
+): string | undefined {
   if (typeof command !== "string") return "Shell command must be a string";
   const force = findForcePush(command);
   if (force) return `Force-push policy: ${force.detail}`;
@@ -116,6 +141,8 @@ export function shellDenial(command: unknown, cwd: string): string | undefined {
     return `Paseo policy: \`paseo ${paseo}\` dispatches or changes session lifecycle; managed roles use the Paseo workflow runner, and read-only ls, inspect, logs, and wait remain available`;
   const deletion = evaluateCommand(command, cwd);
   if (deletion) return `Deletion policy: ${deletion.detail}`;
+  if (denyCompound && findCompoundCommand(command))
+    return "Shell discipline (rules/command-and-tools.md): compound commands are denied; issue one command per tool call without `&&`, `||`, `;`, pipes, background `&`, subshells, command substitution, or newline-separated commands";
 }
 
 export function toolDenial(
@@ -123,10 +150,17 @@ export function toolDenial(
   name: string,
   input: Record<string, unknown>,
   cwd: string,
+  // Shell discipline governs agent tool calls; a person's own `!` commands skip only the compound check.
+  origin: "agent" | "user" = "agent",
 ): string | undefined {
   if (!allowedTools(role).includes(name))
     return `Tool ${name} is unavailable for fixed role ${role}`;
-  if (name === "bash") return shellDenial(input.command, cwd);
+  if (name === "bash")
+    return shellDenial(
+      input.command,
+      cwd,
+      origin === "agent" && compoundRoles.has(role),
+    );
   if (name === "mcp") {
     if (input.action !== undefined)
       return "MCP configuration and authentication actions require explicit operator handling";
