@@ -39,6 +39,7 @@ import {
 import {
   assignReviewLenses,
   effectiveOrders,
+  reportNames,
   requireCurrentReviewMode,
   requireOrchestration,
 } from "../../skills/handoff-brief/scripts/paseo-workflow-state.ts";
@@ -146,6 +147,13 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
     } as never),
     [{ id: "roster", constraint: "Sol and Opus." }],
   );
+  assert.equal(
+    reportNames(
+      { status: "complete", report: "Committed. Head: 68593b1." },
+      "68593b1531b5ad5a30e9e5c686571e11b13c63f0",
+    ),
+    true,
+  );
   assert.match(
     read("skills/handoff-brief/references/paseo-workflow.md"),
     /planner is the orchestrator/,
@@ -164,6 +172,13 @@ test("RED skill-rule-evals: Paseo workspace binding rejects a wrong directory", 
         reviewMode: "sol-focused-v1",
       } as never),
     /predates planner orchestration/u,
+  );
+  assert.equal(
+    reportNames(
+      { status: "complete", report: "Committed. Head: 68593b1." },
+      "f00dbabe00000000000000000000000000000000",
+    ),
+    false,
   );
   const directory = mkdtempSync(join(tmpdir(), "paseo-binding-red-"));
   const statePath = join(directory, "state.json");

@@ -40,6 +40,7 @@ export type Review = {
   launchStatus?: "identity-recorded" | "verified" | "released" | "blocked";
   inspection?: LaunchInspection;
   assignment?: Snapshot;
+  startupReplySha256?: string;
   releasedAt?: string;
   outcomes?: Record<string, Outcome>;
   report?: string;
@@ -51,7 +52,12 @@ export type StandingOrderChange = {
   constraint?: string;
   authorizationSource: string;
 };
-export type Heartbeat = { id: string; agentId: string; expiresAt: string };
+export type Heartbeat = {
+  id: string;
+  agentId: string;
+  expiresAt: string;
+  promptSha256: string;
+};
 export type Step =
   | { result: "unchanged"; inFlight: string[] }
   | { result: "changed"; next: { action: string; detail: string } }
@@ -290,6 +296,14 @@ export function requireOrchestration(state: Workflow) {
   requireThat(
     state.orchestration === "planner-v1",
     "Workflow state predates planner orchestration; it stays readable through status, but tick and orchestrator dispatch refuse it",
+  );
+}
+// Binds a caller-supplied head to the implementer's recorded report, which names at least its short SHA.
+export function reportNames(worker: Review | undefined, head: unknown) {
+  return (
+    nonempty(head) &&
+    nonempty(worker?.report) &&
+    worker.report.includes(head.slice(0, 7))
   );
 }
 export function effectiveOrders(state: Workflow) {
@@ -1135,10 +1149,11 @@ export async function transition(path: string, action: string, input: Input) {
           input.stage === "complete" &&
             state.repairs[phase]?.status === "started" &&
             (!state.orchestration ||
-              state.repairs[phase]?.session?.status === "complete") &&
+              (state.repairs[phase]?.session?.status === "complete" &&
+                reportNames(state.repairs[phase]?.session, input.head))) &&
             nonempty(input.head) &&
             nonempty(input.verification),
-          "Repair completion requires a started batch, exact head and named verification",
+          "Repair completion requires a started batch, the exact head named in the reported repair, and named verification",
         );
         Object.assign(state.repairs[phase], {
           status: "complete",

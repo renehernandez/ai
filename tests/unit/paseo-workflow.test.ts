@@ -32,6 +32,7 @@ import { locked } from "../../skills/handoff-brief/scripts/paseo-workflow-state.
 const policySourceFingerprint = "a".repeat(64);
 const targetBase = "b".repeat(40);
 const orchestrator = { agentId: "orchestrator-0001" };
+const startupReply = "Ready. Awaiting a verified follow-up assignment.";
 
 async function fixture(
   gates: {
@@ -107,6 +108,7 @@ async function fixture(
     }
   >();
   const heartbeats = new Map<string, { agentId: string; prompt: string }>();
+  let reportedHead = "first";
   let heartbeatIds = 0;
   let maxHeartbeats = 0;
   const transport: Transport = async (args, _timeout, env) => {
@@ -164,6 +166,9 @@ async function fixture(
         Archived: false,
         PendingPermissions: [],
       });
+    if (session.prompt.startsWith("Start inertly")) return startupReply;
+    if (session.provider === "ax-implementer")
+      return `Implemented and committed through native hooks. Head: ${reportedHead}.`;
     const state = JSON.parse(await readFile(path, "utf8")) as Workflow;
     const phase = session.prompt.includes("this planning")
       ? "planning"
@@ -199,6 +204,7 @@ async function fixture(
     head: string,
     verification = "Focused regression passes.",
   ) => {
+    reportedHead = head;
     await dispatchRepair(path, { phase, briefPath: repairBrief }, transport);
     await step();
     await transition(path, "repair", {
@@ -217,6 +223,9 @@ async function fixture(
     repairBrief,
     calls,
     sessions,
+    reportHead: (head: string) => {
+      reportedHead = head;
+    },
     heartbeats,
     maxHeartbeats: () => maxHeartbeats,
     transport,
@@ -1306,6 +1315,7 @@ test("implementation questions block publication and applicable fixes consume on
 test("terminal gate disposition rejects an A-to-B stale waiver and consumes an exact-current deployment waiver", async () => {
   const f = await fixture();
   await f.review("planning");
+  f.reportHead("head-a");
   await f.accept("No planning findings.");
   await dispatchReview(
     f.path,
@@ -1525,9 +1535,10 @@ test("GREEN pi-paseo-workflow: a tick with busy workers is quiet and never dispa
 
 test("GREEN pi-paseo-workflow: one caller heartbeat is armed, renewed, re-armed after expiry, and deleted when nothing is in flight", async () => {
   const f = await fixture();
-  await dispatchReview(
+  await f.review("planning");
+  await handoff(
     f.path,
-    { phase: "planning", artifactPath: f.artifactPath },
+    { briefPath: f.artifactPath, planResolution: "Settled." },
     f.transport,
   );
   for (const session of f.sessions.values()) session.status = "running";
@@ -1537,22 +1548,58 @@ test("GREEN pi-paseo-workflow: one caller heartbeat is armed, renewed, re-armed 
   await Promise.all([f.step(), f.step(), f.step()]);
   assert.equal(f.heartbeats.size, 1);
   assert.equal(f.maxHeartbeats(), 1);
-  const renewed = (await f.read()).heartbeat;
-  assert.ok(renewed && renewed.id !== first?.id);
-  assert.ok(
-    Date.parse(renewed.expiresAt) >= Date.parse(first?.expiresAt ?? ""),
+  assert.equal((await f.read()).heartbeat?.id, first?.id);
+
+  const halfway = () => Date.now() + 13 * 60 * 60_000;
+  const renewed = await syncHeartbeat(
+    f.path,
+    orchestrator,
+    f.transport,
+    halfway,
   );
-  const later = () => Date.now() + 25 * 60 * 60_000;
+  assert.ok(renewed && renewed.id !== first?.id);
+  assert.ok(Date.parse(renewed.expiresAt) > Date.parse(first?.expiresAt ?? ""));
+  assert.deepEqual([...f.heartbeats.keys()], [renewed.id]);
+
+  const later = () => Date.now() + 38 * 60 * 60_000;
+  await assert.rejects(
+    syncHeartbeat(
+      f.path,
+      orchestrator,
+      async (args, timeout, env) => {
+        if (args[1] === "create") throw new Error("daemon unavailable");
+        return f.transport(args, timeout, env);
+      },
+      later,
+    ),
+    /daemon unavailable/,
+  );
+  assert.equal((await f.read()).heartbeat?.id, renewed.id);
+  assert.deepEqual([...f.heartbeats.keys()], [renewed.id]);
+
   assert.equal(loopStatus(await f.read(), later), "expired");
   f.heartbeats.clear();
-  const rearmed = await f.step();
+  const rearmed = await f.step(f.transport, undefined, later);
   assert.equal(rearmed.result, "unchanged");
   assert.equal(f.heartbeats.size, 1);
-  assert.equal(loopStatus(await f.read()), "armed");
+  assert.equal(loopStatus(await f.read(), later), "armed");
   await assert.rejects(
     syncHeartbeat(f.path, {}, f.transport),
     /PASEO_AGENT_ID/,
   );
+  await transition(f.path, "order", {
+    op: "add",
+    id: "visibility",
+    constraint: "Keep the repository private.",
+    authorizationSource: "User message in this task",
+  });
+  const refreshed = await syncHeartbeat(f.path, orchestrator, f.transport);
+  assert.notEqual(refreshed?.id, rearmed.heartbeat?.id);
+  assert.match(
+    f.heartbeats.get(refreshed?.id ?? "")?.prompt ?? "",
+    /Keep the repository private/,
+  );
+  assert.equal(f.heartbeats.size, 1);
   for (const session of f.sessions.values()) session.status = "idle";
   await f.step();
   assert.equal(f.heartbeats.size, 0);
@@ -1806,4 +1853,118 @@ test("RED pi-paseo-workflow: ticks never start another review round or repair ba
     ),
     /no automatic reruns/,
   );
+});
+
+test("RED pi-paseo-workflow: an idle worker that has not begun its assignment stays in flight", async () => {
+  const f = await fixture();
+  await dispatchReview(
+    f.path,
+    { phase: "planning", artifactPath: f.artifactPath },
+    f.transport,
+  );
+  const queued: Transport = async (args, timeout, env) =>
+    args[0] === "logs" ? startupReply : f.transport(args, timeout, env);
+  const waiting = await f.step(queued);
+  assert.equal(waiting.result, "unchanged");
+  assert.deepEqual(waiting.recorded, []);
+  assert.ok(
+    Object.values((await f.read()).rounds.planning?.reviews ?? {}).every(
+      (review) => review.status === "running",
+    ),
+  );
+  assert.equal((await f.step()).recorded.length, 3);
+});
+
+test("RED pi-paseo-workflow: review and repair heads must match the implementer report", async () => {
+  const f = await fixture();
+  await f.review("planning");
+  await f.accept();
+  await assert.rejects(
+    dispatchReview(
+      f.path,
+      { phase: "implementation", artifactPath: f.artifactPath, head: "other" },
+      f.transport,
+    ),
+    /names the reviewed head/,
+  );
+  await dispatchReview(
+    f.path,
+    { phase: "implementation", artifactPath: f.artifactPath, head: "first" },
+    f.transport,
+  );
+  await f.step(
+    withReviewOutcome(f.transport, "diff-review", {
+      status: "finding",
+      evidence: "A regression needs repair.",
+      findings: [{ id: "regression", evidence: "The guard is inverted." }],
+    }),
+  );
+  await transition(f.path, "triage", {
+    phase: "implementation",
+    decisions: [
+      {
+        id: "review-correctness:diff-review:regression",
+        action: "fix",
+        reason: "Reproduced.",
+      },
+    ],
+  });
+  f.reportHead("repaired");
+  await dispatchRepair(
+    f.path,
+    { phase: "implementation", briefPath: f.repairBrief },
+    f.transport,
+  );
+  await f.step();
+  const complete = (head: string) =>
+    transition(f.path, "repair", {
+      phase: "implementation",
+      stage: "complete",
+      head,
+      verification: "Focused regression passes.",
+    });
+  await assert.rejects(complete("unreported"), /named in the reported repair/);
+  await complete("repaired");
+  assert.equal((await f.read()).repairs.implementation?.head, "repaired");
+});
+
+test("GREEN pi-paseo-workflow: inspection errors degrade reviewers and keep implementers in flight", async () => {
+  const f = await fixture();
+  await dispatchReview(
+    f.path,
+    { phase: "planning", artifactPath: f.artifactPath },
+    f.transport,
+  );
+  const unavailable: Transport = async (args, timeout, env) => {
+    if (args[0] === "inspect") throw new Error("daemon unavailable");
+    return f.transport(args, timeout, env);
+  };
+  const degraded = await f.step(unavailable);
+  assert.equal(degraded.recorded.length, 3);
+  assert.ok(
+    Object.values((await f.read()).rounds.planning?.reviews ?? {}).every(
+      (review) =>
+        review.status === "degraded" &&
+        /daemon unavailable/.test(review.error ?? ""),
+    ),
+  );
+
+  const g = await fixture();
+  await g.review("planning");
+  await handoff(
+    g.path,
+    { briefPath: g.artifactPath, planResolution: "Settled." },
+    g.transport,
+  );
+  const flaky = await g.step(async (args, timeout, env) => {
+    if (args[0] === "inspect") throw new Error("daemon unavailable");
+    return g.transport(args, timeout, env);
+  });
+  assert.equal(flaky.result, "unchanged");
+  assert.match(
+    flaky.recorded[0],
+    /handoff: inspect failed: .*daemon unavailable/,
+  );
+  assert.equal((await g.read()).handoff?.status, "running");
+  assert.equal((await g.step()).recorded[0], "handoff: complete");
 });

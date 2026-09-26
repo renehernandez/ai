@@ -96,9 +96,11 @@ blocker, an open gate, or finish.
 While any worker or hosted gate is in flight, the runner keeps exactly one Paseo
 heartbeat on the orchestrator's own session, the caller's `PASEO_AGENT_ID`. It
 fires every 5 minutes with the fixed tick prompt. Each dispatch or tick with
-work in flight renews its 24-hour lifetime, so expiry only ends a loop whose
-orchestrator stopped ticking; `status` reports an expired loop and the next
-dispatch or tick re-arms it. The runner deletes the heartbeat when nothing is
+work in flight keeps at least half of its 24-hour lifetime, and a change to the
+prompt or caller replaces it; the replacement is created before the old
+heartbeat is deleted. Expiry only ends a loop whose orchestrator stopped
+ticking; `status` reports an expired loop and the next dispatch or tick re-arms
+it. The runner deletes the heartbeat when nothing is
 in flight, at `awaiting-user`, and at finish.
 
 Ticks run under the state lock and are idempotent. A heartbeat that fires while
@@ -121,7 +123,10 @@ not in pasted prompts.
 ## Review implementation once
 
 After a tick records the implementer's report, dispatch one parallel round with
-three fresh Sol sessions against the reported head. Correctness covers diff
+three fresh Sol sessions against the reported head. The runner requires the
+reviewed head, and a completed repair's head, to appear in the implementer's
+report. A worker whose last reply is still its inert startup reply has not begun
+the assignment and stays in flight. Correctness covers diff
 correctness and risk; architecture covers quality, simplification, and deslop;
 contract alignment scrutinizes verification, requirements, and documentation.
 Assign conditional security and production risk to correctness,

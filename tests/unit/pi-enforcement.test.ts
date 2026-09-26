@@ -164,6 +164,8 @@ test("managed roles cannot dispatch Paseo sessions outside the runner but keep r
     'bash -c "paseo run task"',
     "/Applications/Paseo.app/Contents/Resources/bin/paseo send a b",
     "paseo $ACTION agent-1",
+    "P=paseo; $P run task",
+    '"$PASEO_BIN" send agent-1 follow-up',
   ]) {
     for (const role of ["planner", "implementer"])
       assert.match(
@@ -181,6 +183,7 @@ test("managed roles cannot dispatch Paseo sessions outside the runner but keep r
     'grep -n "paseo run" skills/handoff-brief/references/paseo-workflow.md',
     "echo 'paseo send agent-1; paseo run task'",
     "node ~/.agents/skills/handoff-brief/scripts/paseo-workflow.ts state.json review input.json",
+    '"$EDITOR" notes.md',
   ])
     assert.equal(
       toolDenial("planner", "bash", { command }, process.cwd()),

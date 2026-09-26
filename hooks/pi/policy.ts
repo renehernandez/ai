@@ -80,6 +80,9 @@ function paseoDispatch(words: ShellWord[]): string | undefined {
       ? "<dynamic split command>"
       : findPaseoDispatch(splitCommand.value);
   if (unwrapped.length === 0) return undefined;
+  // A variable executable such as `$P run` could conceal the Paseo CLI.
+  const next = unwrapped[1]?.value ?? "";
+  if (unwrapped[0].dynamic && paseoRunnerCommands.has(next)) return next;
   const executable = basename(unwrapped[0].value);
   if (SHELLS.has(executable)) {
     const flag = unwrapped.findIndex((word) => isShellCommandFlag(word.value));

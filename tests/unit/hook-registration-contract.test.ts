@@ -26,6 +26,15 @@ test("RED hook-registration: MCP and Pi runtime configuration, including the in-
       }),
     /hook_registration_target_invalid/u,
   );
+  assert.throws(
+    () =>
+      assertRegistrationTargetSafe({
+        path: "/tmp/isolated-home/.pi/agent/hooks.json",
+        target: "codex",
+        home: "/tmp/isolated-home",
+      }),
+    /hook_registration_target_invalid/u,
+  );
 });
 
 test("GREEN hook-registration: rendered force-push guard targets both agent harnesses", () => {

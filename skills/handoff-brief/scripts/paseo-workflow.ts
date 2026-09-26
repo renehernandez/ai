@@ -23,6 +23,7 @@ import {
   type Review,
   type Role,
   receipt,
+  reportNames,
   requireCurrentReviewMode,
   requireOrchestration,
   requireThat,
@@ -68,6 +69,12 @@ const heartbeatLifetimeMs = 24 * 60 * 60_000;
 
 async function inspectSession(agentId: string, transport: Transport) {
   return JSON.parse(await transport(["inspect", "--json", agentId], 30_000));
+}
+function lastReply(agentId: string, transport: Transport) {
+  return transport(
+    ["logs", "--filter", "assistant_message", "--tail", "1", agentId],
+    30_000,
+  );
 }
 function requireRoute(
   state: Workflow,
@@ -301,9 +308,11 @@ async function launch(
     );
     const actual = await inspectSession(response.agentId, transport);
     requireRoute(state, role, response.agentId, actual);
+    const startupReply = await lastReply(response.agentId, transport);
     await locked(path, (current) => {
       Object.assign(locate(current), {
         launchStatus: "verified",
+        startupReplySha256: digest(startupReply),
         inspection: {
           cwd: actual.Cwd,
           provider: actual.Provider,
@@ -377,8 +386,10 @@ export async function dispatchReview(
       `${phase} review already dispatched; no automatic reruns`,
     );
     requireThat(
-      phase === "planning" || state.handoff?.status === "complete",
-      "Implementation review requires a reported fresh implementation handoff",
+      phase === "planning" ||
+        (state.handoff?.status === "complete" &&
+          reportNames(state.handoff, input.head)),
+      "Implementation review requires a reported fresh implementation handoff that names the reviewed head",
     );
     requireThat(
       !state.currentAuthorization ||
@@ -491,6 +502,7 @@ async function recordCompletion(
   state: Workflow,
   role: Role,
   locate: (state: Workflow) => Review,
+  actual: Record<string, unknown>,
   transport: Transport,
   interpret: (report: string) => Promise<Partial<Review>>,
 ) {
@@ -498,16 +510,10 @@ async function recordCompletion(
   let result: Partial<Review>;
   try {
     requireThat(worker.agentId, "Running worker has no session ID");
-    requireRoute(
-      state,
-      role,
-      worker.agentId,
-      await inspectSession(worker.agentId, transport),
-    );
-    const report = await transport(
-      ["logs", "--filter", "assistant_message", "--tail", "1", worker.agentId],
-      30_000,
-    );
+    requireRoute(state, role, worker.agentId, actual);
+    const report = await lastReply(worker.agentId, transport);
+    // An idle worker still showing its inert startup reply has not begun the queued assignment.
+    if (digest(report) === worker.startupReplySha256) return false;
     result = { status: "complete", ...(await interpret(report)) };
   } catch (error) {
     if (role.startsWith("review-"))
@@ -529,6 +535,7 @@ function recordReview(
   state: Workflow,
   phase: Phase,
   role: Role,
+  actual: Record<string, unknown>,
   transport: Transport,
 ) {
   const round = roundOf(state, phase);
@@ -537,6 +544,7 @@ function recordReview(
     state,
     role,
     (current) => roundOf(current, phase).reviews[role],
+    actual,
     transport,
     async (response) => {
       const assignment = round.lensAssignments[role];
@@ -578,6 +586,7 @@ export async function collectReviews(
     reviewRoles[phase].map(async (role) => {
       const review = round.reviews[role];
       if (review.status !== "running") return;
+      let actual: Record<string, unknown>;
       try {
         requireThat(review.agentId, "Running reviewer has no session ID");
         const waiting = JSON.parse(
@@ -596,6 +605,7 @@ export async function collectReviews(
           waiting.status === "idle" && waiting.agentId === review.agentId,
           `Reviewer did not finish successfully: ${waiting.status}`,
         );
+        actual = await inspectSession(review.agentId, transport);
       } catch (error) {
         await stopQuietly(review.agentId, transport);
         await locked(path, (state) => {
@@ -606,7 +616,7 @@ export async function collectReviews(
         });
         return;
       }
-      await recordReview(path, state, phase, role, transport);
+      await recordReview(path, state, phase, role, actual, transport);
     }),
   );
 }
@@ -1028,7 +1038,7 @@ async function deleteHeartbeat(
   }
 }
 
-// Keeps exactly one heartbeat on the caller while work is in flight; each call renews its lifetime.
+// Keeps one heartbeat on the caller while work is in flight, renewing it before half its lifetime passes.
 export async function syncHeartbeat(
   path: string,
   input: { agentId?: string },
@@ -1036,16 +1046,24 @@ export async function syncHeartbeat(
   now = Date.now,
 ) {
   return locked(path, async (state) => {
-    if (state.heartbeat) {
-      await deleteHeartbeat(state.heartbeat, transport);
+    const current = state.heartbeat;
+    if (state.finished || !inFlight(state).length) {
+      if (current) await deleteHeartbeat(current, transport);
       delete state.heartbeat;
+      return undefined;
     }
-    if (state.finished || !inFlight(state).length) return undefined;
     const agentId = input.agentId;
     requireThat(
       nonempty(agentId),
       "Arming the orchestrator heartbeat requires the caller's PASEO_AGENT_ID",
     );
+    const prompt = tickPrompt(path, state);
+    if (
+      current?.agentId === agentId &&
+      current.promptSha256 === digest(prompt) &&
+      Date.parse(current.expiresAt) - now() > heartbeatLifetimeMs / 2
+    )
+      return current;
     const created = JSON.parse(
       await transport(
         [
@@ -1058,7 +1076,7 @@ export async function syncHeartbeat(
           "--name",
           "ax-orchestrator-tick",
           "--json",
-          tickPrompt(path, state),
+          prompt,
         ],
         30_000,
         { PASEO_AGENT_ID: agentId },
@@ -1073,7 +1091,10 @@ export async function syncHeartbeat(
       id: created.id,
       agentId,
       expiresAt: new Date(now() + heartbeatLifetimeMs).toISOString(),
+      promptSha256: digest(prompt),
     };
+    // The replacement already exists; a stale predecessor expires on its own and extra ticks are idempotent.
+    if (current) await deleteHeartbeat(current, transport).catch(() => {});
     return state.heartbeat;
   });
 }
@@ -1142,30 +1163,41 @@ export async function tick(
         requireThat(entry, `Missing recorded worker ${name}`);
         return entry.worker;
       };
-      const actual = await inspectSession(worker.agentId, transport);
-      if (actual.Status === "running" || actual.Status === "initializing") {
-        const elapsed = now() - Date.parse(worker.releasedAt ?? "");
-        if (!phase || !(elapsed > state.timeoutSeconds * 1000)) return;
+      const degrade = async (error: string) => {
         await stopQuietly(worker.agentId, transport);
         const degraded = await locked(path, (current) => {
           const target = locate(current);
           if (target.status !== "running") return false;
-          Object.assign(target, {
-            status: "degraded",
-            error: `Reviewer exceeded the ${state.timeoutSeconds}s timeout`,
-          });
+          Object.assign(target, { status: "degraded", error });
           return true;
         });
         if (degraded) recorded.push(`${name}: degraded`);
+      };
+      let actual: Record<string, unknown>;
+      try {
+        actual = await inspectSession(worker.agentId, transport);
+      } catch (error) {
+        // Reviewers degrade as collect did; an implementer stays in flight so a transient error cannot fail it.
+        if (phase) await degrade(String(error));
+        else recorded.push(`${name}: inspect failed: ${String(error)}`);
+        return;
+      }
+      if (actual.Status === "running" || actual.Status === "initializing") {
+        const elapsed = now() - Date.parse(worker.releasedAt ?? "");
+        if (phase && elapsed > state.timeoutSeconds * 1000)
+          await degrade(
+            `Reviewer exceeded the ${state.timeoutSeconds}s timeout`,
+          );
         return;
       }
       const done = phase
-        ? await recordReview(path, state, phase, role, transport)
+        ? await recordReview(path, state, phase, role, actual, transport)
         : await recordCompletion(
             path,
             state,
             role,
             locate,
+            actual,
             transport,
             async (report) => ({ report }),
           );
