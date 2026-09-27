@@ -12,18 +12,25 @@ test("AI readiness keeps judgment in prose and deterministic verdicts in its scr
   assert.doesNotMatch(skill, /```yaml|## (?:Mistakes|Test Evidence)/);
 });
 
-test("handoff brief preserves continuation identity and evidence", () => {
+test("handoff brief starts a new standard workflow without delivery mechanics", () => {
   const skill = read("handoff-brief");
   for (const field of [
     "Objective:",
-    "Branch / artifact / exact head:",
-    "Verified:",
+    "Verified state:",
+    "Required behavior:",
+    "Acceptance:",
+    "User limits:",
     "Local-only / repo-visible:",
     "Blocked:",
-    "Next:",
+    "Next: Start the standard workflow from this brief.",
   ]) {
     assert.match(skill, new RegExp(`^${field.replaceAll("/", "\\/")}$`, "m"));
   }
+  assert.doesNotMatch(
+    skill,
+    /^(?:Branch \/ artifact \/ exact head|State|Changed|Verified):$/m,
+  );
+  assert.match(skill, /Do not use this skill for worker assignments/);
   assert.doesNotMatch(
     skill,
     /^## (?:Mistakes|Validation Scenarios|Test Evidence)$/m,

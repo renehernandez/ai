@@ -1065,3 +1065,38 @@ test("final readiness requires one current successful Codex and Claude lane", ()
     /eval_readiness_lane_incomplete:codex/,
   );
 });
+
+test("RED skill-rule-evals: a session handoff cannot prescribe the receiver's next delivery step", () => {
+  const handoffRules = read("rules/handoff-and-resume.md");
+  const startup = read("rules/session-startup.md");
+  const workflow = read("skills/handoff-brief/references/paseo-workflow.md");
+
+  assert.deepEqual(simulatedCoverageGap("session-handoff-delivery-script"), [
+    "session-handoff-delivery-script",
+  ]);
+  for (const text of [handoffRules, startup]) {
+    assert.doesNotMatch(
+      text,
+      /Continue from the (?:next concrete|recorded next) action/,
+    );
+  }
+  assert.doesNotMatch(handoffRules, /the next concrete command or action/);
+  assert.doesNotMatch(workflow, /Use Handoff Brief to carry/);
+});
+
+test("GREEN skill-rule-evals: session handoffs start a standard workflow while worker assignments stay exact", () => {
+  const handoffRules = read("rules/handoff-and-resume.md");
+  const startup = read("rules/session-startup.md");
+  const workflow = read("skills/handoff-brief/references/paseo-workflow.md");
+
+  assert.deepEqual(currentManagedSkillCoverageGaps(managedSkills), []);
+  assert.match(handoffRules, /^## Session Handoff$/m);
+  assert.match(handoffRules, /^## Worker Assignment$/m);
+  assert.match(handoffRules, /start the standard workflow from this brief/);
+  assert.match(handoffRules, /Enter Explore/);
+  assert.match(handoffRules, /Brief text never becomes a standing order/);
+  assert.match(handoffRules, /do not stop to ask/);
+  assert.match(startup, /#receiving-a-session-handoff/);
+  assert.match(workflow, /it is a worker assignment, not a session handoff/);
+  assert.match(workflow, /Only the user's statements in this session create/);
+});

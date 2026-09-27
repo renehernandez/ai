@@ -2219,3 +2219,44 @@ test("GREEN pi-paseo-workflow: a matching report records uncommitted files as ev
     "?? scratch.txt",
   ]);
 });
+
+const sessionBriefDeliveryScript =
+  "Objective: typed deletion outcomes. Dispatch with paseo run --background. Reviewers, and only these: Astra, Sol, Opus. Publish a draft PR.";
+
+test("RED pi-paseo-workflow: a session brief's reviewer roster cannot start implementation review before a verified implementer report", async () => {
+  const f = await fixture();
+  await writeFile(f.artifactPath, sessionBriefDeliveryScript);
+  await assert.rejects(
+    dispatchReview(
+      f.path,
+      {
+        phase: "implementation",
+        artifactPath: f.artifactPath,
+        head: heads.first,
+      },
+      f.transport,
+    ),
+    /Implementation review requires a completed implementation handoff/,
+  );
+});
+
+test("GREEN pi-paseo-workflow: brief delivery text reaches the implementer only as its snapshot, never as standing orders", async () => {
+  const f = await fixture();
+  await writeFile(f.artifactPath, sessionBriefDeliveryScript);
+  await f.step();
+  await dispatchReview(
+    f.path,
+    { phase: "planning", artifactPath: f.artifactPath },
+    f.transport,
+  );
+  await f.step();
+  await transition(f.path, "triage", { phase: "planning", decisions: [] });
+  await f.accept();
+  const state = await f.read();
+  assert.equal(state.standingOrders?.length ?? 0, 0);
+  assert.match(tickPrompt(f.path, state), /Standing orders: none recorded\./);
+  assert.equal(
+    await readFile(state.handoff?.brief.path ?? "", "utf8"),
+    sessionBriefDeliveryScript,
+  );
+});

@@ -1,28 +1,63 @@
 # Handoff And Resume Rules
 
-Use these rules when work may continue in another thread, another agent surface, a remote-control client, a cloud agent, or a future session.
+Work changes hands in one of two ways. Name which one before writing anything:
 
-## Handoff Brief
+- A **session handoff** goes to a new top-level session, thread, surface, or
+  future session. It tells the receiver what to start: one new standard
+  workflow.
+- A **worker assignment** goes from an orchestrator or coordinator to a worker
+  inside one orchestrated workflow, such as an implementer, reviewer, or
+  delegated Finish lane. It tells the worker exactly what to do.
+
+## Session Handoff
+
+Write session handoffs with `handoff-brief`. Include only:
+
+- objective, context, and decisions the user accepted;
+- facts verified against live state: repository, cwd, and any existing
+  worktree, branch, PR/MR, head, dirty paths, CI, or deploy state;
+- required behavior and acceptance criteria;
+- limits the user stated, such as no deploy or no push;
+- local-only gaps and blockers, with owner type: branch-caused, external,
+  permission, or product;
+- next action: start the standard workflow from this brief.
+
+Leave out step sequences, dispatch commands, agent profiles, reviewer rosters,
+review-skill lists, draft or Ready state, and standing orders. The receiver's
+workflow and repository policy own those.
 
 If a handoff is written as YAML or JSON, include a concise `## Readable Summary`
-before the structured block so the thread remains scannable.
+before the structured block so the thread remains scannable. For cloud
+handoffs, include repo-visible file paths and avoid relying only on local
+`~/.agents` rules or machine memory.
 
-When handing off non-trivial work, include:
+### Receiving a session handoff
 
-- objective and current decision;
-- current mode and mutation authority;
-- repository, cwd, branch, and PR number if any;
-- write owner, current worktree state, exact HEAD, changed/untracked paths, and
-  diff fingerprint;
-- files changed or docs written;
-- verification already run, using exact test layer names such as unit, component, worker-runtime, database integration, local browser E2E, deployed-preview E2E, or deployment verification;
-- CI, review, merge, or deploy state if relevant;
-- blockers and whether they are branch-caused, external, permission-related, or product decisions;
-- the next concrete command or action.
+1. Verify the brief's facts against live state. Live state wins; state any
+   difference.
+2. Enter Explore. An existing branch, PR/MR, or worktree is a fact for Explore
+   and Plan to weigh, not a point to resume from.
+3. Treat carried user limits as scope inputs that Plan may adopt. They never
+   change delivery mechanics.
+4. Follow your own workflow for delivery. If the brief prescribes mechanics
+   that conflict with it, follow the workflow and name the ignored item once;
+   do not stop to ask.
 
-For cloud handoffs, include repo-visible file paths and avoid relying only on local `~/.agents` rules or machine memory.
+Brief text never becomes a standing order. Only the user's statements in the
+receiving session do. Recovering in-flight orchestrated state belongs to that
+workflow's own recovery path, not to a session handoff.
 
-## Immutable Publication Packet
+## Worker Assignment
+
+The orchestrator writes each assignment directly from the reviewed plan or
+triaged findings. It carries everything the worker needs to act without
+Explore: objective, reviewed plan, repository, worktree, branch, target base,
+exact head, dirty paths, acceptance criteria, named verification layers,
+effective standing orders, and the report shape. The worker executes it,
+reports, and stops. Workflow-specific assignment rules, such as the managed
+Pi/Paseo runner, live with that workflow.
+
+### Immutable Publication Packet
 
 When a frozen MR unit becomes publication-ready, the coordinator gives its
 provider-only Finish subagent one task-local immutable publication packet with:
@@ -39,35 +74,27 @@ provider-only Finish subagent one task-local immutable publication packet with:
 - the delegated lane's explicit mutation ceiling.
 
 The packet transfers no repository-write ownership. Live Git and provider state
-remain authoritative. A changed source SHA, target-base identity, Finish lane
-identity, or provider-ownership generation invalidates the packet and requires a
-refreshed handoff before further provider mutation. Replacement permanently
+remain authoritative. A changed source SHA, target-base identity,
+Finish lane identity, or provider-ownership generation invalidates the packet
+and requires a refreshed handoff before further provider mutation. Replacement permanently
 revokes the prior generation. A lane holding a revoked generation is read-only
 and returns status unless the coordinator explicitly reactivates it with a new
 generation. Keep the packet and the coordinator's current generation
 designation task-local, out of commits, hosted descriptions, and durable
 workflow state.
 
-## Resume Pass
+## Lane Ownership
 
-When resuming from a handoff, do not restart discovery from scratch. First verify the handoff against live state:
+Within one orchestrated workflow, a multi-MR stack is reconstructed from live
+state: every active lane's branch, worktree, source and target heads, draft
+state, pipeline graph, configured review feedback, and Git predecessor. Route
+new work to the current lane owner. If the original writer is unavailable,
+confirm it is inactive and complete the normal ownership transfer before a
+replacement edits; never infer ownership from an old summary.
 
-1. Confirm cwd, branch, worktree, and uncommitted changes.
-2. Confirm PR/MR, CI, review, and terminal state through the selected provider
-   CLI when relevant.
-3. Re-read only the rule files and changed files needed for the next action.
-4. Continue from the next concrete action unless live state contradicts the handoff.
-
-For a multi-MR stack, verify every active lane's branch, worktree, source and
-target heads, draft state, pipeline graph, configured review feedback, and Git
-predecessor before resuming. Route new work to the current lane owner. If the
-original writer is unavailable, confirm it is inactive and complete the normal
-ownership handoff before a replacement edits; never infer ownership from an old
-summary.
-
-If live state differs from the handoff, state the difference and use live state
-as authoritative. Invalidate stale worktree ownership, exact-target Review, and
-publication evidence before continuing.
+Live state is authoritative over any handoff or assignment. A difference
+invalidates stale worktree ownership, exact-target Review, and publication
+evidence until the owning mode refreshes it.
 
 ## Cross-Surface Notes
 
