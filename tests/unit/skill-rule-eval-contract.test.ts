@@ -347,10 +347,10 @@ test("RED skill-rule-evals: missing CI does not introduce an ungoverned waiver s
     read("skills/paseo-orchestration/references/paseo-workflow.md"),
     /empty required-check response remains\s+failed evidence/,
   );
-  assert.match(
-    read("skills/finish/scripts/paseo-github-feedback.ts"),
-    /Skipped required CI needs policy disposition/,
-  );
+  const github = read("skills/finish/scripts/paseo-github-feedback.ts");
+  assert.doesNotMatch(github, /"pr",\s*"checks"|--required/);
+  assert.match(github, /Required CI policy has no commit check evidence/);
+  assert.match(github, /unknown GitHub check result needs policy disposition/);
 });
 
 test("RED skill-rule-evals: plain English does not require a separate skill", () => {
