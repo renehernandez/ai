@@ -150,6 +150,14 @@ export type Workflow = {
   heartbeat?: Heartbeat;
   hostedMonitor?: { probeCommand: string[]; deadline: string };
   cwd: string;
+  // The state file's directory, dedicated to this workflow; cleanup deletes only this recorded folder.
+  scratch?: string;
+  cleanup?: {
+    authorizationSource: string;
+    head: string;
+    reason?: string;
+    startedAt: string;
+  };
   workspace?: WorkspaceBinding;
   workspaceRegistration?: {
     status: "reserved" | "uncertain";
@@ -642,6 +650,7 @@ export async function initialize(
     orchestration: "planner-v1",
     standingOrders: [],
     cwd: resolve(input.cwd),
+    scratch: dirname(resolve(path)),
     routes: routesFromConfig(config),
     lenses: lensesByPhase,
     timeoutSeconds,

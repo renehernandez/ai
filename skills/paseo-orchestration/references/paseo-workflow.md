@@ -211,6 +211,8 @@ when existing authority rules require it: plan acceptance; findings that change
 the plan's contract, or material questions; merge, deployment, cleanup, and any
 action outside the accepted proposal; and human-only credential steps. Ordinary
 findings, repairs, reviewer outages, and CI diagnosis continue without a prompt.
+The runner's `cleanup` action is the mechanism for authorized cleanup, not its
+authority.
 
 ## Enforced boundary
 
@@ -264,13 +266,14 @@ contract; omit optional fields unless needed.
 Every action except `status` prints one compact JSON line: the `action`, the
 state fields it `recorded`, any new `ids` (worker agents, review round
 fingerprints, continuation batch, standing order), and the `nextStep` result.
-A `tick` line lists its recorded completions instead. The line omits the lens
+A `tick` line lists its recorded completions instead, and a `cleanup` line is
+its removal receipt because cleanup deletes the state. The line omits the lens
 catalog and review outcomes. Errors go to stderr with a nonzero exit. `status`
 is the only full-state read.
 
 | Action | Input fields |
 | --- | --- |
-| `init` | `cwd`; optional `configPath`, `timeoutSeconds`, and `additionalLenses` keyed by planning/implementation. |
+| `init` | `cwd`; optional `configPath`, `timeoutSeconds`, and `additionalLenses` keyed by planning/implementation. Put STATE in a new temporary folder dedicated to this workflow; `init` records that folder as its scratch folder. |
 | `policy` | `deliveryPolicy` with provider/repository identity, independent CI and reviewer status, source, and source fingerprint. Unknown policy blocks handoff. |
 | `order` | `op` (add/amend/retire), stable `id`, `constraint` except on retire, and `authorizationSource`. |
 | `review` | `phase`, `artifactPath`, and implementation `head`. The artifact includes the exact diff/base or complete plan and original evidence references. Dispatches once and returns. Optional `workspaceId`; when no exact workspace exists, explicit `registerWorkspace: true` and optional `projectId` register the canonical cwd locally. |
@@ -283,6 +286,7 @@ is the only full-state read.
 | `publication` | Observed `artifactUrl`, `head`, exact `targetBase` SHA, optional policy-required `reviewer`, `ready: true`, `evidence`, and the unchanged policy-source fingerprint. When a hosted gate is required, also the Finish `probeCommand` argv and optional `deadlineMs`. |
 | `finish` | Current observed publication fields and final evidence; does not merge. |
 | `continuation` | Explicit `batchId`, authorization source, purpose, allowed phases, and expected current head. Archives prior evidence and opens one bounded batch. |
+| `cleanup` | `authorizationSource` (the user's cleanup statement, or the ID of the active standing order that carries it), the expected worktree `head`, and a `reason` when the workflow is not finished. Removes only this workflow's recorded targets. |
 | `status` | No input required; any role may read it. Prints the full state, the only full-state read. Inspect persisted phase, reports, unresolved gaps, and an expired heartbeat loop. |
 
 For hosted probes, use the installed Finish probe with the resolved `--ci-policy`,
@@ -302,6 +306,23 @@ workspace launch. Repeating the same completed request is idempotent. An active
 or unknown old session, used implementation phase, target drift, missing
 snapshot, uncertain registration, or reserved replacement stops recovery; do
 not hand-edit state, stop/archive the old session, or create another attempt.
+
+After the user authorizes cleanup, use `cleanup` instead of shell deletion.
+Before removing anything, the runner requires that nothing is in flight,
+deletes any remaining heartbeat, and verifies that the recorded workspace still
+resolves uniquely for the workflow cwd with no running agent in that cwd. The
+orchestrator's own session must therefore live outside the workflow workspace.
+For a Paseo worktree workspace on a linked worktree whose HEAD equals `head`
+with no uncommitted changes, the runner archives the workspace; Paseo's archive
+removes the worktree directory and its Git registration. A main checkout or
+local-checkout workspace is skipped. Last, it deletes the scratch folder
+recorded at `init`, only when its real path is strictly below the system
+temporary directory or `/tmp`, it still holds this state file, and it contains
+no Git metadata or other workflow state. States without that record skip the
+folder. Any failed check refuses the action with nothing removed. A failure
+after removal starts stops without retry and reports each target as removed,
+skipped, or remaining. Cleanup never forces removal and never deletes a
+branch.
 
 For other recovery, the orchestrator inspects immutable authorization
 evidence, sole writer ownership, live artifact URL/head/base/Ready state, and a

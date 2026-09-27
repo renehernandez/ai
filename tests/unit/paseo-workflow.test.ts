@@ -2,13 +2,23 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import {
   assertActionGateDisposition,
   bindWorkspace,
+  cleanup,
   collectReviews,
   dispatchRepair,
   dispatchReview,
@@ -1679,6 +1689,18 @@ test("RED pi-paseo-workflow: managed workers cannot run orchestrator actions", a
     }),
     /cannot run orchestrator actions/,
   );
+  const cleanupInput = join(f.dir, "cleanup-input.json");
+  await writeFile(
+    cleanupInput,
+    JSON.stringify({ authorizationSource: "Worker claim", head: heads.first }),
+  );
+  await assert.rejects(
+    main([f.path, "cleanup", cleanupInput], {
+      AX_PI_CONTRACT: JSON.stringify({ role: "implementer" }),
+      PASEO_AGENT_ID: "worker",
+    }),
+    /cannot run orchestrator actions/,
+  );
   assert.equal((await f.read()).rounds.planning, undefined);
   assert.equal(f.calls.length, 0);
   const status = await captureStdout(() =>
@@ -2259,4 +2281,374 @@ test("GREEN pi-paseo-workflow: brief delivery text reaches the implementer only 
     await readFile(state.handoff?.brief.path ?? "", "utf8"),
     sessionBriefDeliveryScript,
   );
+});
+
+async function cleanupFixture(
+  options: {
+    linked?: boolean;
+    isolation?: "worktree" | "local";
+    scratch?: "temp" | "repository" | "symlink";
+  } = {},
+) {
+  const base = await realpath(await mkdtemp(join(tmpdir(), "paseo-cleanup-")));
+  const gitEnv = {
+    ...process.env,
+    GIT_DIR: undefined,
+    GIT_WORK_TREE: undefined,
+    GIT_INDEX_FILE: undefined,
+  };
+  const git = (cwd: string, args: string[]) =>
+    execFileSync("git", args, {
+      cwd,
+      env: gitEnv,
+      encoding: "utf8",
+      stdio: "pipe",
+    }).trim();
+  const repository = join(base, "repository");
+  const tree = join(base, "tree");
+  await mkdir(repository);
+  git(repository, ["init", "-b", "main"]);
+  git(repository, ["config", "user.email", "fixture@example.test"]);
+  git(repository, ["config", "user.name", "Fixture"]);
+  git(repository, ["commit", "--allow-empty", "-m", "fixture"]);
+  git(repository, ["worktree", "add", "-b", "feature", tree]);
+  const cwd = options.linked === false ? repository : tree;
+  const temp = join(base, "tmp");
+  await mkdir(temp);
+  let scratch = join(temp, "scratch");
+  if (options.scratch === "repository") scratch = join(repository, "scratch");
+  if (options.scratch === "symlink") {
+    await mkdir(join(base, "outside"));
+    await symlink(join(base, "outside"), scratch);
+  } else await mkdir(scratch);
+  const configPath = join(base, "config.json");
+  const roles = [
+    "planner",
+    "implementer",
+    "review-correctness",
+    "review-architecture",
+    "review-contract",
+  ];
+  await writeFile(
+    configPath,
+    JSON.stringify({
+      agents: {
+        providers: Object.fromEntries(
+          roles.map((role) => [
+            `ax-${role}`,
+            {
+              extends: "pi",
+              command: [
+                "node",
+                "/managed/hooks/pi/launch.ts",
+                role,
+                "openai-codex",
+                `model-${role}`,
+                "low",
+              ],
+              models: [{ id: `openai-codex/model-${role}` }],
+            },
+          ]),
+        ),
+      },
+    }),
+  );
+  const path = join(scratch, "state.json");
+  await initialize(path, { cwd, configPath });
+  const workspaceId = "workspace-cleanup";
+  await locked(path, (state) => {
+    state.workspace = { id: workspaceId, cwd };
+    state.finished = "Observed final Ready state.";
+  });
+  const calls: string[][] = [];
+  const workspaces = [
+    { workspaceId, cwd, isolation: options.isolation ?? "worktree" },
+  ];
+  const agents = [
+    { id: "orchestrator", cwd: base, status: "running" },
+    { id: "worker", cwd, status: "idle" },
+  ];
+  const fail: { archive?: boolean; keepTree?: boolean } = {};
+  const transport: Transport = async (args) => {
+    calls.push(args);
+    if (args[0] === "workspace" && args[1] === "ls")
+      return JSON.stringify(workspaces);
+    if (args[0] === "ls") return JSON.stringify(agents);
+    if (args[0] === "heartbeat")
+      return JSON.stringify({ id: args[2], status: "deleted" });
+    assert.deepEqual(args, ["workspace", "archive", workspaceId]);
+    if (fail.archive) throw new Error("daemon unavailable");
+    // Paseo archive removes its worktree directory and Git registration.
+    if (!fail.keepTree) git(repository, ["worktree", "remove", tree]);
+    return "archived";
+  };
+  const head = git(cwd, ["rev-parse", "HEAD"]);
+  const archives = () =>
+    calls.filter((args) => args[0] === "workspace" && args[1] === "archive");
+  const present = (target: string) =>
+    stat(target).then(
+      () => true,
+      () => false,
+    );
+  const run = (overrides: Record<string, unknown> = {}, roots = [temp]) =>
+    cleanup(
+      path,
+      {
+        authorizationSource: "User: clean up this workflow.",
+        head,
+        ...overrides,
+      },
+      transport,
+      roots,
+    );
+  const untouched = async () => {
+    assert.equal(archives().length, 0);
+    assert.ok(await present(tree));
+    assert.ok(await present(path));
+    assert.equal(JSON.parse(await readFile(path, "utf8")).cleanup, undefined);
+  };
+  return {
+    base,
+    repository,
+    tree,
+    scratch,
+    path,
+    git,
+    calls,
+    workspaces,
+    agents,
+    fail,
+    archives,
+    present,
+    run,
+    untouched,
+  };
+}
+type CleanupFixture = Awaited<ReturnType<typeof cleanupFixture>>;
+
+test("GREEN pi-paseo-workflow: authorized cleanup archives the linked worktree workspace, then deletes its scratch folder", async () => {
+  const c = await cleanupFixture();
+  await locked(c.path, (state) => {
+    state.heartbeat = {
+      id: "heartbeat-stale",
+      agentId: orchestrator.agentId,
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      promptSha256: "c".repeat(64),
+    };
+  });
+  const { targets } = await c.run();
+  assert.deepEqual(targets, {
+    worktree: { status: "removed", target: c.tree },
+    workspace: { status: "removed", target: "workspace-cleanup" },
+    scratch: { status: "removed", target: c.scratch },
+  });
+  assert.equal(await c.present(c.tree), false);
+  assert.equal(await c.present(c.scratch), false);
+  assert.doesNotMatch(c.git(c.repository, ["worktree", "list"]), /tree/);
+  assert.match(c.git(c.repository, ["branch", "--list", "feature"]), /feature/);
+  assert.equal(c.archives().length, 1);
+  assert.ok(
+    c.calls.some(
+      (args) => args[0] === "heartbeat" && args[2] === "heartbeat-stale",
+    ),
+  );
+  assert.ok(c.calls.every((args) => !args.includes("--force")));
+});
+
+test("RED pi-paseo-workflow: cleanup refuses unsafe targets and removes nothing", async () => {
+  const refusals: [
+    string,
+    Parameters<typeof cleanupFixture>[0],
+    (c: CleanupFixture) => Promise<unknown>,
+    RegExp,
+  ][] = [
+    [
+      "work in flight",
+      {},
+      async (c) => {
+        await locked(c.path, (state) => {
+          const snapshot = { path: c.path, sha256: "d".repeat(64) };
+          state.handoff = {
+            status: "running",
+            brief: snapshot,
+            planResolution: snapshot,
+          };
+        });
+        return c.run();
+      },
+      /in flight: handoff/,
+    ],
+    [
+      "unfinished without a reason",
+      {},
+      async (c) => {
+        await locked(c.path, (state) => {
+          delete state.finished;
+        });
+        return c.run();
+      },
+      /requires a reason/,
+    ],
+    [
+      "a running workspace agent",
+      {},
+      async (c) => {
+        c.agents.push({ id: "busy-worker", cwd: c.tree, status: "running" });
+        return c.run();
+      },
+      /still running .*busy-worker/,
+    ],
+    [
+      "an ambiguous workspace",
+      {},
+      async (c) => {
+        c.workspaces.push({
+          workspaceId: "workspace-duplicate",
+          cwd: c.tree,
+          isolation: "worktree",
+        });
+        return c.run();
+      },
+      /ambiguous Paseo workspaces/,
+    ],
+    [
+      "a dirty worktree",
+      {},
+      async (c) => {
+        await writeFile(join(c.tree, "unsaved.txt"), "work");
+        return c.run();
+      },
+      /uncommitted changes: \?\? unsaved\.txt/,
+    ],
+    [
+      "a head mismatch",
+      {},
+      (c) => c.run({ head: "f".repeat(40) }),
+      /not the expected head/,
+    ],
+    [
+      "a scratch folder outside the temporary roots",
+      {},
+      async (c) => {
+        await mkdir(join(c.base, "elsewhere"));
+        return c.run({}, [join(c.base, "elsewhere")]);
+      },
+      /outside the temporary roots/,
+    ],
+    [
+      "a symlinked scratch path resolving outside the temporary roots",
+      { scratch: "symlink" },
+      (c) => c.run(),
+      /resolves to .*outside, outside the temporary roots/,
+    ],
+    [
+      "a scratch folder inside a Git work tree",
+      { scratch: "repository" },
+      (c) => c.run({}, [c.base]),
+      /inside a Git repository/,
+    ],
+    [
+      "a scratch folder holding another workflow's state",
+      {},
+      async (c) => {
+        await mkdir(join(c.scratch, "other"));
+        await writeFile(
+          join(c.scratch, "other", "state.json"),
+          await readFile(c.path, "utf8"),
+        );
+        return c.run();
+      },
+      /another workflow's runner state/,
+    ],
+  ];
+  for (const [name, options, act, message] of refusals) {
+    const c = await cleanupFixture(options);
+    await assert.rejects(act(c), message, name);
+    await c.untouched();
+  }
+});
+
+test("GREEN pi-paseo-workflow: cleanup skips main checkouts, local-checkout workspaces, and unbound scratch folders", async () => {
+  const checkout = await cleanupFixture({ linked: false });
+  await locked(checkout.path, (state) => {
+    delete state.finished;
+  });
+  const skippedMain = await checkout.run({
+    reason: "User abandoned the work.",
+  });
+  assert.deepEqual(skippedMain.targets.worktree, {
+    status: "skipped",
+    target: checkout.repository,
+    reason: "main checkout",
+  });
+  assert.equal(skippedMain.targets.workspace.status, "skipped");
+  assert.equal(skippedMain.targets.scratch.status, "removed");
+  assert.equal(checkout.archives().length, 0);
+  assert.ok(await checkout.present(checkout.repository));
+
+  const local = await cleanupFixture({ isolation: "local" });
+  const skippedLocal = await local.run();
+  assert.deepEqual(skippedLocal.targets.workspace, {
+    status: "skipped",
+    target: "workspace-cleanup",
+    reason: "local-checkout workspace",
+  });
+  assert.equal(local.archives().length, 0);
+  assert.ok(await local.present(local.tree));
+
+  const unbound = await cleanupFixture();
+  await locked(unbound.path, (state) => {
+    delete state.scratch;
+  });
+  const skippedScratch = await unbound.run();
+  assert.equal(skippedScratch.targets.worktree.status, "removed");
+  assert.deepEqual(skippedScratch.targets.scratch, {
+    status: "skipped",
+    target: unbound.scratch,
+    reason: "state has no recorded scratch binding",
+  });
+  assert.ok(await unbound.present(unbound.path));
+});
+
+test("RED pi-paseo-workflow: a failed cleanup step stops without retry and reports removed and remaining targets", async () => {
+  const receiptOf = (error: unknown) =>
+    JSON.parse(String((error as Error).message).split("\n")[1]).targets;
+
+  const archive = await cleanupFixture();
+  archive.fail.archive = true;
+  const archiveError = await archive.run().catch((error) => error);
+  assert.match(String(archiveError), /stopped at workspace archive/);
+  assert.equal(receiptOf(archiveError).workspace.status, "remaining");
+  assert.equal(receiptOf(archiveError).scratch.status, "remaining");
+  assert.equal(archive.archives().length, 1);
+  assert.ok(await archive.present(archive.path));
+  await assert.rejects(archive.run(), /already started/);
+  assert.equal(archive.archives().length, 1);
+
+  const kept = await cleanupFixture();
+  kept.fail.keepTree = true;
+  const keptError = await kept.run().catch((error) => error);
+  assert.match(String(keptError), /stopped at worktree removal/);
+  assert.equal(receiptOf(keptError).workspace.status, "removed");
+  assert.equal(receiptOf(keptError).worktree.status, "remaining");
+  assert.ok(await kept.present(kept.path));
+
+  const scratch = await cleanupFixture();
+  const sealed = join(scratch.scratch, "sealed");
+  await mkdir(sealed);
+  await writeFile(join(sealed, "note.md"), "kept");
+  await chmod(sealed, 0o500);
+  try {
+    const scratchError = await scratch.run().catch((error) => error);
+    assert.match(String(scratchError), /stopped at scratch deletion/);
+    assert.deepEqual(
+      Object.values(receiptOf(scratchError)).map(
+        (target) => (target as { status: string }).status,
+      ),
+      ["removed", "removed", "remaining"],
+    );
+    assert.equal(scratch.archives().length, 1);
+  } finally {
+    await chmod(sealed, 0o700);
+  }
 });

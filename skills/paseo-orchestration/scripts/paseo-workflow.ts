@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { cleanup } from "./paseo-workflow-cleanup.ts";
 import {
   assignReviewLenses,
   createSnapshots,
@@ -38,6 +39,7 @@ import {
   workers,
 } from "./paseo-workflow-state.ts";
 
+export { cleanup } from "./paseo-workflow-cleanup.ts";
 export {
   assertActionGateDisposition,
   initialize,
@@ -70,19 +72,21 @@ const heartbeatLifetimeMs = 24 * 60 * 60_000;
 
 export type Worktree = { branch: string; head: string; uncommitted: string[] };
 export type WorktreeReader = (cwd: string) => Promise<Worktree>;
-// Reads the workflow worktree's Git identity, ignoring any caller Git environment redirects.
-export const readWorktree: WorktreeReader = async (cwd) => {
+// Runs Git against cwd, ignoring any caller Git environment redirects.
+export async function git(cwd: string, args: string[]) {
   const env = { ...process.env };
   delete env.GIT_DIR;
   delete env.GIT_WORK_TREE;
   delete env.GIT_INDEX_FILE;
-  const git = async (args: string[]) =>
-    (await execute("git", ["-C", cwd, ...args], { timeout: 30_000, env }))
-      .stdout;
+  return (await execute("git", ["-C", cwd, ...args], { timeout: 30_000, env }))
+    .stdout;
+}
+// Reads the workflow worktree's Git identity.
+export const readWorktree: WorktreeReader = async (cwd) => {
   return {
-    branch: (await git(["rev-parse", "--abbrev-ref", "HEAD"])).trim(),
-    head: (await git(["rev-parse", "HEAD"])).trim(),
-    uncommitted: (await git(["status", "--porcelain=v1"]))
+    branch: (await git(cwd, ["rev-parse", "--abbrev-ref", "HEAD"])).trim(),
+    head: (await git(cwd, ["rev-parse", "HEAD"])).trim(),
+    uncommitted: (await git(cwd, ["status", "--porcelain=v1"]))
       .trimEnd()
       .split("\n")
       .filter(nonempty)
@@ -127,10 +131,11 @@ type WorkspaceOptions = {
 type WorkspaceRow = {
   workspaceId: string;
   cwd: string;
+  isolation?: string;
   archived?: boolean;
 };
 
-async function listWorkspaces(transport: Transport) {
+export async function listWorkspaces(transport: Transport) {
   const rows = JSON.parse(
     await transport(["workspace", "ls", "--json"], 30_000),
   );
@@ -141,7 +146,7 @@ async function listWorkspaces(transport: Transport) {
   );
   return rows as WorkspaceRow[];
 }
-function matchingWorkspace(
+export function matchingWorkspace(
   rows: WorkspaceRow[],
   cwd: string,
   workspaceId?: string,
@@ -1359,6 +1364,13 @@ export async function main(args: string[], env = process.env) {
   if (action === "tick") {
     process.stdout.write(
       `${JSON.stringify({ action, ...(await tick(path, caller)) })}\n`,
+    );
+    return;
+  }
+  // Cleanup deletes the state with its scratch folder, so its receipt is the whole result line.
+  if (action === "cleanup") {
+    process.stdout.write(
+      `${JSON.stringify({ action, ...(await cleanup(path, input)) })}\n`,
     );
     return;
   }

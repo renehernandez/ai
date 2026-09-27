@@ -1114,6 +1114,15 @@ test("GREEN skill-rule-evals: session handoff, worker handoff, and orchestration
   assert.match(worker, /^## Immutable Publication Packet$/m);
   assert.match(orchestration, /not another mode/);
   assert.match(orchestration, /with `worker-handoff`/);
+  assert.match(
+    orchestration,
+    /grants no merge, deployment, or cleanup\s+authority/,
+  );
+  assert.match(orchestration, /`cleanup` action, never\s+shell deletion/);
+  assert.match(
+    workflow,
+    /`cleanup` action is the mechanism for authorized cleanup, not its\s+authority/,
+  );
   assert.match(workflow, /with `worker-handoff`/);
   assert.match(workflow, /Only the user's statements in this session create/);
 });
