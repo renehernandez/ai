@@ -183,6 +183,14 @@ export type Workflow = {
   heartbeat?: Heartbeat;
   hostedMonitor?: { probeCommand: string[]; deadline: string };
   cwd: string;
+  // The state file's directory, dedicated to this workflow; cleanup deletes only this recorded folder.
+  scratch?: string;
+  cleanup?: {
+    authorizationSource: string;
+    head: string;
+    reason?: string;
+    startedAt: string;
+  };
   workspace?: WorkspaceBinding;
   workspaceRegistration?: {
     status: "reserved" | "uncertain";
@@ -653,6 +661,11 @@ export async function locked<T>(
   try {
     const state: Workflow = JSON.parse(await readFile(path, "utf8"));
     requireThat(state.version === 1, "Unsupported workflow state");
+    // Cleanup is terminal: once recorded, every mutation refuses and only `status` may read the state.
+    requireThat(
+      !state.cleanup,
+      "Cleanup already started; inspect the remaining targets instead of retrying or continuing the workflow",
+    );
     const result = await update(state);
     await save(path, state);
     return result;
@@ -761,6 +774,7 @@ export async function initialize(
     orchestration: "planner-v2",
     standingOrders: [],
     cwd: resolve(input.cwd),
+    scratch: dirname(resolve(path)),
     routes: routesFromConfig(config),
     lenses: lensesByPhase,
     timeoutSeconds,

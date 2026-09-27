@@ -1,9 +1,17 @@
-import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
+import { cleanup } from "./paseo-workflow-cleanup.ts";
+import {
+  digest,
+  listWorkspaces,
+  matchingWorkspace,
+  paseo,
+  readProbe,
+  readWorktree,
+  syncHeartbeat,
+  type WorktreeReader,
+} from "./paseo-workflow-io.ts";
 import {
   archiveRound,
   assignReviewLenses,
@@ -40,10 +48,18 @@ import {
   type Transport,
   transition,
   type Workflow,
-  type WorkspaceBinding,
   workers,
 } from "./paseo-workflow-state.ts";
 
+export { cleanup } from "./paseo-workflow-cleanup.ts";
+export {
+  paseo,
+  readWorktree,
+  syncHeartbeat,
+  tickPrompt,
+  type Worktree,
+  type WorktreeReader,
+} from "./paseo-workflow-io.ts";
 export {
   assertActionGateDisposition,
   initialize,
@@ -52,49 +68,6 @@ export {
   transition,
   type Workflow,
 } from "./paseo-workflow-state.ts";
-
-const execute = promisify(execFile);
-export const paseo: Transport = async (args, timeout, env) =>
-  (
-    await execute("paseo", args, {
-      timeout,
-      maxBuffer: 8 * 1024 * 1024,
-      ...(env ? { env: { ...process.env, ...env } } : {}),
-    })
-  ).stdout;
-const readProbe: Transport = async (args, timeout) =>
-  (
-    await execute(args[0], args.slice(1), {
-      timeout,
-      maxBuffer: 8 * 1024 * 1024,
-    })
-  ).stdout;
-const digest = (text: string) =>
-  createHash("sha256").update(text).digest("hex");
-const runner = fileURLToPath(import.meta.url);
-const heartbeatLifetimeMs = 24 * 60 * 60_000;
-
-export type Worktree = { branch: string; head: string; uncommitted: string[] };
-export type WorktreeReader = (cwd: string) => Promise<Worktree>;
-// Reads the workflow worktree's Git identity, ignoring any caller Git environment redirects.
-export const readWorktree: WorktreeReader = async (cwd) => {
-  const env = { ...process.env };
-  delete env.GIT_DIR;
-  delete env.GIT_WORK_TREE;
-  delete env.GIT_INDEX_FILE;
-  const git = async (args: string[]) =>
-    (await execute("git", ["-C", cwd, ...args], { timeout: 30_000, env }))
-      .stdout;
-  return {
-    branch: (await git(["rev-parse", "--abbrev-ref", "HEAD"])).trim(),
-    head: (await git(["rev-parse", "HEAD"])).trim(),
-    uncommitted: (await git(["status", "--porcelain=v1"]))
-      .trimEnd()
-      .split("\n")
-      .filter(nonempty)
-      .sort(),
-  };
-};
 
 async function inspectSession(agentId: string, transport: Transport) {
   return JSON.parse(await transport(["inspect", "--json", agentId], 30_000));
@@ -130,45 +103,6 @@ type WorkspaceOptions = {
   registerWorkspace?: boolean;
   projectId?: string;
 };
-type WorkspaceRow = {
-  workspaceId: string;
-  cwd: string;
-  archived?: boolean;
-};
-
-async function listWorkspaces(transport: Transport) {
-  const rows = JSON.parse(
-    await transport(["workspace", "ls", "--json"], 30_000),
-  );
-  requireThat(
-    Array.isArray(rows) &&
-      rows.every((row) => nonempty(row.workspaceId) && nonempty(row.cwd)),
-    "Paseo returned an invalid workspace list",
-  );
-  return rows as WorkspaceRow[];
-}
-function matchingWorkspace(
-  rows: WorkspaceRow[],
-  cwd: string,
-  workspaceId?: string,
-): WorkspaceBinding | undefined {
-  const available = rows.filter((row) => !row.archived);
-  if (workspaceId) {
-    const row = available.find((item) => item.workspaceId === workspaceId);
-    requireThat(row, `Paseo workspace ${workspaceId} is missing or archived`);
-    requireThat(
-      resolve(row.cwd) === cwd,
-      `Paseo workspace ${workspaceId} does not match canonical cwd ${cwd}`,
-    );
-    return { id: row.workspaceId, cwd };
-  }
-  const matches = available.filter((row) => resolve(row.cwd) === cwd);
-  requireThat(
-    matches.length <= 1,
-    `Canonical cwd ${cwd} has ambiguous Paseo workspaces`,
-  );
-  return matches[0] ? { id: matches[0].workspaceId, cwd } : undefined;
-}
 export async function bindWorkspace(
   path: string,
   input: WorkspaceOptions = {},
@@ -1139,85 +1073,6 @@ export async function monitor(
   });
 }
 
-export function tickPrompt(path: string, state: Workflow) {
-  return `AX orchestration tick. Run \`node ${runner} ${resolve(path)} tick\` and take the next step it names in this turn. When the result is \`unchanged\`, end the turn with no user-visible message. Report to the user only on a completed phase, a new blocker, an open gate, or finish.\n\n${ordersBlock(state)}`;
-}
-
-async function deleteHeartbeat(
-  heartbeat: NonNullable<Workflow["heartbeat"]>,
-  transport: Transport,
-) {
-  try {
-    await transport(["heartbeat", "delete", heartbeat.id, "--json"], 30_000, {
-      PASEO_AGENT_ID: heartbeat.agentId,
-    });
-  } catch (error) {
-    // An expired or already deleted heartbeat is the desired end state.
-    if (!/not found/i.test(String(error))) throw error;
-  }
-}
-
-// Keeps one heartbeat on the caller while work is in flight, renewing it before half its lifetime passes.
-export async function syncHeartbeat(
-  path: string,
-  input: { agentId?: string },
-  transport: Transport = paseo,
-  now = Date.now,
-) {
-  return locked(path, async (state) => {
-    const current = state.heartbeat;
-    if (state.finished || !inFlight(state).length) {
-      if (current) await deleteHeartbeat(current, transport);
-      delete state.heartbeat;
-      return undefined;
-    }
-    const agentId = input.agentId;
-    requireThat(
-      nonempty(agentId),
-      "Arming the orchestrator heartbeat requires the caller's PASEO_AGENT_ID",
-    );
-    const prompt = tickPrompt(path, state);
-    if (
-      current?.agentId === agentId &&
-      current.promptSha256 === digest(prompt) &&
-      Date.parse(current.expiresAt) - now() > heartbeatLifetimeMs / 2
-    )
-      return current;
-    const created = JSON.parse(
-      await transport(
-        [
-          "heartbeat",
-          "create",
-          "--cron",
-          "*/5 * * * *",
-          "--expires-in",
-          "24h",
-          "--name",
-          "ax-orchestrator-tick",
-          "--json",
-          prompt,
-        ],
-        30_000,
-        { PASEO_AGENT_ID: agentId },
-      ),
-    );
-    const target = String(created.target ?? "").replace(/^agent:/, "");
-    requireThat(
-      nonempty(created.id) && nonempty(target) && agentId.startsWith(target),
-      "Paseo heartbeat does not target the calling orchestrator session",
-    );
-    state.heartbeat = {
-      id: created.id,
-      agentId,
-      expiresAt: new Date(now() + heartbeatLifetimeMs).toISOString(),
-      promptSha256: digest(prompt),
-    };
-    // The replacement already exists; a stale predecessor expires on its own and extra ticks are idempotent.
-    if (current) await deleteHeartbeat(current, transport).catch(() => {});
-    return state.heartbeat;
-  });
-}
-
 export function loopStatus(state: Workflow, now = Date.now) {
   if (!state.heartbeat) return inFlight(state).length ? "unarmed" : "idle";
   return Date.parse(state.heartbeat.expiresAt) <= now() ? "expired" : "armed";
@@ -1434,6 +1289,13 @@ export async function main(args: string[], env = process.env) {
   if (action === "tick") {
     process.stdout.write(
       `${JSON.stringify({ action, ...(await tick(path, caller)) })}\n`,
+    );
+    return;
+  }
+  // Cleanup deletes the state with its scratch folder, so its receipt is the whole result line.
+  if (action === "cleanup") {
+    process.stdout.write(
+      `${JSON.stringify({ action, ...(await cleanup(path, input, caller)) })}\n`,
     );
     return;
   }

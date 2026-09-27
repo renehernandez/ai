@@ -16,7 +16,9 @@ code edits and commits. Every new head then receives a fresh review round.
 This skill is a bounded specialist inside the five modes, not another mode.
 Plan, Execute, Review, and Finish keep their authority; the runner supplies the
 dispatch, state, and gate machinery. It grants no merge, deployment, or cleanup
-authority.
+authority. After the user authorizes cleanup, remove the workflow's worktree,
+workspace, and scratch folder through the runner's `cleanup` action, never
+shell deletion.
 
 Follow [the Pi workflow contract](references/paseo-workflow.md). Pi launch
 injects that contract into every managed role. Write every implementer brief,

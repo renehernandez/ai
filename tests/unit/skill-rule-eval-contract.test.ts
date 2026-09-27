@@ -1137,6 +1137,24 @@ test("GREEN skill-rule-evals: session handoff, worker handoff, and orchestration
   assert.match(worker, /^## Immutable Publication Packet$/m);
   assert.match(orchestration, /not another mode/);
   assert.match(orchestration, /with `worker-handoff`/);
+  assert.match(
+    orchestration,
+    /grants no merge, deployment, or cleanup\s+authority/,
+  );
+  assert.match(orchestration, /`cleanup` action, never\s+shell deletion/);
+  assert.match(
+    workflow,
+    /`cleanup` action is the mechanism for authorized cleanup, not its\s+authority/,
+  );
+  assert.match(
+    workflow,
+    /caller's own session \(`PASEO_AGENT_ID`\) is the only running agent there,\s+the runner skips the workspace archive[\s\S]*still deletes the scratch\s+folder/,
+  );
+  assert.match(
+    workflow,
+    /caller\s+without `PASEO_AGENT_ID` gets no exemption\. Once cleanup starts, every action\s+except `status` refuses/,
+  );
+  assert.doesNotMatch(workflow, /must therefore live outside the workflow/);
   assert.match(workflow, /with `worker-handoff`/);
   assert.match(workflow, /Only the user's statements in this session create/);
 });
