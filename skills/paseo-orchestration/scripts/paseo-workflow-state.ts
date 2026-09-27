@@ -542,6 +542,11 @@ export async function locked<T>(
   try {
     const state: Workflow = JSON.parse(await readFile(path, "utf8"));
     requireThat(state.version === 1, "Unsupported workflow state");
+    // Cleanup is terminal: once recorded, every mutation refuses and only `status` may read the state.
+    requireThat(
+      !state.cleanup,
+      "Cleanup already started; inspect the remaining targets instead of retrying or continuing the workflow",
+    );
     const result = await update(state);
     await save(path, state);
     return result;

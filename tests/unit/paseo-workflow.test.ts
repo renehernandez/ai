@@ -2390,7 +2390,11 @@ async function cleanupFixture(
       () => true,
       () => false,
     );
-  const run = (overrides: Record<string, unknown> = {}, roots = [temp]) =>
+  const run = (
+    overrides: Record<string, unknown> = {},
+    roots = [temp],
+    caller: { agentId?: string } = { agentId: "orchestrator" },
+  ) =>
     cleanup(
       path,
       {
@@ -2398,6 +2402,7 @@ async function cleanupFixture(
         head,
         ...overrides,
       },
+      caller,
       transport,
       roots,
     );
@@ -2414,6 +2419,7 @@ async function cleanupFixture(
     scratch,
     path,
     git,
+    transport,
     calls,
     workspaces,
     agents,
@@ -2436,6 +2442,12 @@ test("GREEN pi-paseo-workflow: authorized cleanup archives the linked worktree w
       promptSha256: "c".repeat(64),
     };
   });
+  // Runner-owned snapshots may quote workflow state without counting as another workflow.
+  await mkdir(join(c.scratch, ".paseo-snapshot-fixture"));
+  await writeFile(
+    join(c.scratch, ".paseo-snapshot-fixture", "artifact.md"),
+    await readFile(c.path, "utf8"),
+  );
   const { targets } = await c.run();
   assert.deepEqual(targets, {
     worktree: { status: "removed", target: c.tree },
@@ -2499,6 +2511,25 @@ test("RED pi-paseo-workflow: cleanup refuses unsafe targets and removes nothing"
       /still running .*busy-worker/,
     ],
     [
+      "the calling orchestrator plus another running agent in the workspace",
+      {},
+      async (c) => {
+        c.agents[0].cwd = c.tree;
+        c.agents.push({ id: "busy-worker", cwd: c.tree, status: "running" });
+        return c.run();
+      },
+      /still running .*busy-worker/,
+    ],
+    [
+      "a running agent in the workspace without the caller's PASEO_AGENT_ID",
+      {},
+      async (c) => {
+        c.agents[0].cwd = c.tree;
+        return c.run({}, undefined, {});
+      },
+      /still running .*orchestrator \(running\)/,
+    ],
+    [
       "an ambiguous workspace",
       {},
       async (c) => {
@@ -2560,6 +2591,18 @@ test("RED pi-paseo-workflow: cleanup refuses unsafe targets and removes nothing"
       },
       /another workflow's runner state/,
     ],
+    [
+      "a scratch folder holding another workflow's extensionless state",
+      {},
+      async (c) => {
+        await writeFile(
+          join(c.scratch, "other-state"),
+          await readFile(c.path, "utf8"),
+        );
+        return c.run();
+      },
+      /another workflow's runner state at .*other-state/,
+    ],
   ];
   for (const [name, options, act, message] of refusals) {
     const c = await cleanupFixture(options);
@@ -2608,6 +2651,52 @@ test("GREEN pi-paseo-workflow: cleanup skips main checkouts, local-checkout work
     reason: "state has no recorded scratch binding",
   });
   assert.ok(await unbound.present(unbound.path));
+});
+
+test("GREEN pi-paseo-workflow: cleanup from an orchestrator inside the workflow workspace deletes scratch and leaves the workspace for the user", async () => {
+  const c = await cleanupFixture();
+  c.agents[0].cwd = c.tree;
+  const { targets } = await c.run();
+  const reason =
+    "the calling orchestrator session runs in this workspace; archive workspace workspace-cleanup from Paseo when done";
+  assert.deepEqual(targets, {
+    worktree: { status: "skipped", target: c.tree, reason },
+    workspace: { status: "skipped", target: "workspace-cleanup", reason },
+    scratch: { status: "removed", target: c.scratch },
+  });
+  assert.equal(c.archives().length, 0);
+  assert.ok(await c.present(c.tree));
+  assert.equal(await c.present(c.scratch), false);
+});
+
+test("RED pi-paseo-workflow: once cleanup starts, every orchestrator action except status refuses", async () => {
+  const c = await cleanupFixture();
+  c.fail.archive = true;
+  await assert.rejects(c.run(), /stopped at workspace archive/);
+  const artifactPath = join(c.base, "artifact.md");
+  await writeFile(artifactPath, "Plan artifact");
+  await assert.rejects(
+    dispatchReview(c.path, { phase: "planning", artifactPath }, c.transport),
+    /Cleanup already started/,
+  );
+  await assert.rejects(
+    transition(c.path, "order", {
+      op: "add",
+      id: "late-order",
+      constraint: "Keep going.",
+      authorizationSource: "User message in this task",
+    }),
+    /Cleanup already started/,
+  );
+  await assert.rejects(
+    tick(c.path, { agentId: "orchestrator" }, c.transport),
+    /Cleanup already started/,
+  );
+  const state = JSON.parse(await readFile(c.path, "utf8")) as Workflow;
+  assert.equal(state.rounds.planning, undefined);
+  assert.equal(state.standingOrders.length, 0);
+  assert.ok(state.cleanup);
+  assert.equal(c.archives().length, 1);
 });
 
 test("RED pi-paseo-workflow: a failed cleanup step stops without retry and reports removed and remaining targets", async () => {

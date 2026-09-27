@@ -286,7 +286,7 @@ is the only full-state read.
 | `publication` | Observed `artifactUrl`, `head`, exact `targetBase` SHA, optional policy-required `reviewer`, `ready: true`, `evidence`, and the unchanged policy-source fingerprint. When a hosted gate is required, also the Finish `probeCommand` argv and optional `deadlineMs`. |
 | `finish` | Current observed publication fields and final evidence; does not merge. |
 | `continuation` | Explicit `batchId`, authorization source, purpose, allowed phases, and expected current head. Archives prior evidence and opens one bounded batch. |
-| `cleanup` | `authorizationSource` (the user's cleanup statement, or the ID of the active standing order that carries it), the expected worktree `head`, and a `reason` when the workflow is not finished. Removes only this workflow's recorded targets. |
+| `cleanup` | `authorizationSource` (the user's cleanup statement, or the ID of the active standing order that carries it), the expected worktree `head`, and a `reason` when the workflow is not finished. Removes only this workflow's recorded targets; when the caller is the only running agent in the workspace, deletes only the scratch folder. |
 | `status` | No input required; any role may read it. Prints the full state, the only full-state read. Inspect persisted phase, reports, unresolved gaps, and an expired heartbeat loop. |
 
 For hosted probes, use the installed Finish probe with the resolved `--ci-policy`,
@@ -310,9 +310,13 @@ not hand-edit state, stop/archive the old session, or create another attempt.
 After the user authorizes cleanup, use `cleanup` instead of shell deletion.
 Before removing anything, the runner requires that nothing is in flight,
 deletes any remaining heartbeat, and verifies that the recorded workspace still
-resolves uniquely for the workflow cwd with no running agent in that cwd. The
-orchestrator's own session must therefore live outside the workflow workspace.
-For a Paseo worktree workspace on a linked worktree whose HEAD equals `head`
+resolves uniquely for the workflow cwd with no running agent in that cwd. When
+the caller's own session (`PASEO_AGENT_ID`) is the only running agent there,
+the runner skips the workspace archive and worktree removal and tells you to
+archive that workspace from Paseo when done; it still deletes the scratch
+folder. Any other running agent in that cwd refuses the action, and a caller
+without `PASEO_AGENT_ID` gets no exemption. Once cleanup starts, every action
+except `status` refuses. For a Paseo worktree workspace on a linked worktree whose HEAD equals `head`
 with no uncommitted changes, the runner archives the workspace; Paseo's archive
 removes the worktree directory and its Git registration. A main checkout or
 local-checkout workspace is skipped. Last, it deletes the scratch folder

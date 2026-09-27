@@ -32,7 +32,10 @@ deployment, or publication authority.
   cleanup consumes them rather than re-deriving phase.
 - Both modules are already about 1,300 lines, so the cleanup logic lives in one
   cohesive sibling module wired into `main`, following the prior plan's
-  direction to extract rather than enlarge.
+  direction to extract rather than enlarge. The Paseo transport, Git and
+  worktree reader, heartbeat sync, and workspace list/match helpers move into
+  one lower-level sibling that both the runner and cleanup import, so the two
+  modules do not import each other.
 - Rejected alternative: allow the planner role to `rm` under the temp
   directory and worktree roots. That would weaken the hook shared by every
   managed session on path grounds alone, and it would not bind deletion to the
@@ -57,8 +60,13 @@ Preconditions, all checked before any removal:
   workspace identity on agents, so workspace membership is defined as agents
   whose cwd equals that verified workspace cwd. No such non-archived agent may
   be running. Idle agents are acceptable because archiving the workspace
-  closes them. This also refuses when the orchestrator itself runs inside the
-  workflow workspace.
+  closes them. One exception: when the caller's own session
+  (`PASEO_AGENT_ID`) is the only running agent in that cwd, cleanup does not
+  refuse. It skips the workspace archive, and therefore the worktree removal,
+  with a reason telling the user to archive that workspace from Paseo when
+  done, and still deletes the scratch folder under every scratch check. Any
+  other running agent in that cwd refuses the whole action, and a caller
+  without `PASEO_AGENT_ID` gets no exemption.
 
 Worktree and workspace: a main checkout or local-checkout workspace is never
 removed or archived; the result records both as skipped. For a linked worktree
@@ -78,6 +86,10 @@ when its real path sits strictly below the real path of `os.tmpdir()` or
 state, and it is not inside any Git work tree. States without a scratch
 binding, including ones created before this change, record the folder as
 skipped. Scratch deletion runs last because it removes the runner record.
+
+Cleanup is terminal. Once the runner records it, every action except
+`status` refuses through the shared state lock, including `tick`, so no
+dispatch or transition races the removals.
 
 Any failed precondition refuses the whole action with no removal. A failure
 after a removal has started stops immediately and reports what was removed and
@@ -114,10 +126,17 @@ repositories and a fake Paseo transport:
   symlinked scratch path that resolves outside the temp roots;
 - skips: main checkout, local-checkout workspace, and state without a
   scratch binding;
+- the caller as the only running agent in the workspace: scratch removed,
+  worktree and workspace skipped with the archive-from-Paseo reason, and no
+  archive call; the caller plus another running agent, or a running agent
+  with no caller `PASEO_AGENT_ID`, refuses with nothing removed;
+- once cleanup has started, dispatch, transition, and `tick` refuse;
 - partial failures stop without retrying and report removed and remaining
   targets: workspace archive failing after worktree removal (when that
   sequence is selected), and scratch deletion failing after archive;
-- a scratch folder holding another workflow's state is refused;
+- a scratch folder holding another workflow's state is refused, whatever the
+  file's extension; runner-owned snapshots, lock, and atomic-save files are
+  not counted, and reads stay bounded so large files cannot stall cleanup;
 - `--force` is never passed and no branch is deleted.
 
 Run the project's lint, format, and native hook suites, and `writing-skills`

@@ -1,6 +1,21 @@
-import { access, readdir, readFile, realpath, rm } from "node:fs/promises";
+import {
+  access,
+  open,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+} from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import {
   git,
   listWorkspaces,
@@ -8,7 +23,7 @@ import {
   paseo,
   readWorktree,
   syncHeartbeat,
-} from "./paseo-workflow.ts";
+} from "./paseo-workflow-io.ts";
 import {
   inFlight,
   locked,
@@ -47,7 +62,10 @@ async function exists(path: string) {
 }
 
 // Paseo lists agents with a home-relative cwd; archived agents are excluded by default.
-async function busyAgents(cwd: string, transport: Transport) {
+async function busyAgents(
+  cwd: string,
+  transport: Transport,
+): Promise<{ id: string; status: string }[]> {
   const rows = JSON.parse(
     await transport(["ls", "--global", "--json"], 30_000),
   );
@@ -58,14 +76,12 @@ async function busyAgents(cwd: string, transport: Transport) {
       ),
     "Paseo returned an invalid agent list",
   );
-  return (rows as { id: string; cwd: string; status: string }[])
-    .filter(
-      (row) =>
-        resolve(row.cwd.replace(/^~(?=$|\/)/, homedir())) === cwd &&
-        row.status !== "idle" &&
-        row.status !== "closed",
-    )
-    .map((row) => `${row.id} (${row.status})`);
+  return (rows as { id: string; cwd: string; status: string }[]).filter(
+    (row) =>
+      resolve(row.cwd.replace(/^~(?=$|\/)/, homedir())) === cwd &&
+      row.status !== "idle" &&
+      row.status !== "closed",
+  );
 }
 
 async function insideGitRepository(path: string) {
@@ -78,17 +94,40 @@ async function insideGitRepository(path: string) {
   }
 }
 
-async function isWorkflowState(path: string) {
+const stateReadLimit = 8 * 1024 * 1024;
+
+// STATE paths are arbitrary, so any file may hold workflow state; an oversized JSON-looking file counts as state.
+async function mayBeWorkflowState(path: string) {
+  const file = await open(path, "r");
   try {
-    const state = JSON.parse(await readFile(path, "utf8"));
+    const buffer = Buffer.alloc(stateReadLimit + 1);
+    const { bytesRead } = await file.read(buffer, 0, buffer.length, 0);
+    const text = buffer.subarray(0, bytesRead).toString("utf8");
+    if (bytesRead > stateReadLimit) return text.trimStart().startsWith("{");
+    const state = JSON.parse(text);
     return state?.version === 1 && nonempty(state.cwd) && !!state.routes;
   } catch {
     return false;
+  } finally {
+    await file.close();
   }
 }
 
 // Refuses a folder that holds Git metadata or any other workflow's runner state; symlinks are never followed.
 async function requireOnlyThisWorkflow(directory: string, statePath: string) {
+  // The runner's own snapshots, lock, and atomic-save files sit beside the state.
+  const name = basename(statePath);
+  const runnerOwned = (path: string) => {
+    const [top, ...rest] = relative(dirname(statePath), path).split(sep);
+    return (
+      top === name ||
+      top === `${name}.lock` ||
+      top.startsWith(".paseo-snapshot-") ||
+      (!rest.length &&
+        top.startsWith(`${name}.`) &&
+        /^\d+\.tmp$/.test(top.slice(name.length + 1)))
+    );
+  };
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
     requireThat(
@@ -99,9 +138,8 @@ async function requireOnlyThisWorkflow(directory: string, statePath: string) {
     else
       requireThat(
         !entry.isFile() ||
-          !entry.name.endsWith(".json") ||
-          path === statePath ||
-          !(await isWorkflowState(path)),
+          runnerOwned(path) ||
+          !(await mayBeWorkflowState(path)),
         `Scratch folder holds another workflow's runner state at ${path}`,
       );
   }
@@ -179,6 +217,7 @@ async function worktreeTargets(
 export async function cleanup(
   path: string,
   input: CleanupInput,
+  caller: { agentId?: string },
   transport: Transport = paseo,
   tempRoots: string[] = defaultTempRoots(),
 ): Promise<{ targets: CleanupReceipt }> {
@@ -192,12 +231,8 @@ export async function cleanup(
     !pending.length,
     `Cleanup refuses while work is in flight: ${pending.join(", ")}`,
   );
-  await syncHeartbeat(path, {}, transport);
+  await syncHeartbeat(path, caller, transport);
   const targets = await locked(path, async (state) => {
-    requireThat(
-      !state.cleanup,
-      "Cleanup already started; inspect the remaining targets instead of retrying",
-    );
     requireThat(!inFlight(state).length, "Work started before cleanup");
     requireThat(
       state.finished || nonempty(input.reason),
@@ -212,17 +247,26 @@ export async function cleanup(
       `Recorded workspace ${state.workspace.id} no longer resolves uniquely for ${cwd}`,
     );
     const busy = await busyAgents(cwd, transport);
+    // The calling orchestrator may run inside the workspace; archiving would close it mid-action.
+    const selfHosted =
+      busy.length > 0 && busy.every((agent) => agent.id === caller.agentId);
     requireThat(
-      !busy.length,
-      `Agents are still running in workspace ${binding.id}: ${busy.join(", ")}`,
+      !busy.length || selfHosted,
+      `Agents are still running in workspace ${binding.id}: ${busy.map((agent) => `${agent.id} (${agent.status})`).join(", ")}`,
     );
     const workspace = rows.find((row) => row.workspaceId === binding.id);
+    const reason = `the calling orchestrator session runs in this workspace; archive workspace ${binding.id} from Paseo when done`;
     const receipt: CleanupReceipt = {
-      ...(await worktreeTargets(
-        cwd,
-        { id: binding.id, isolation: workspace?.isolation },
-        input.head,
-      )),
+      ...(selfHosted
+        ? {
+            worktree: { status: "skipped", target: cwd, reason },
+            workspace: { status: "skipped", target: binding.id, reason },
+          }
+        : await worktreeTargets(
+            cwd,
+            { id: binding.id, isolation: workspace?.isolation },
+            input.head,
+          )),
       scratch: await scratchTarget(path, state, tempRoots),
     };
     state.cleanup = {
