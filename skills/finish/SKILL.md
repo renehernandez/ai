@@ -106,7 +106,7 @@ and its dated archive. Missing state returns to Execute; Finish does not create 
 ## Provider-Only Delegated Lanes
 
 An MR-scoped Finish subagent is a provider-only delegated lane. Its Immutable Publication Packet must
-satisfy `rules/handoff-and-resume.md`. Before each mutation, validate source SHA,
+satisfy `worker-handoff`. Before each mutation, validate source SHA,
 target identity, lane identity, and provider-ownership generation against
 live state; any mismatch invalidates it.
 

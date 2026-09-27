@@ -36,14 +36,14 @@ import {
   bindWorkspace,
   parseReport,
   parseReview,
-} from "../../skills/handoff-brief/scripts/paseo-workflow.ts";
+} from "../../skills/paseo-orchestration/scripts/paseo-workflow.ts";
 import {
   assignReviewLenses,
   effectiveOrders,
   reportsHead,
   requireCurrentReviewMode,
   requireOrchestration,
-} from "../../skills/handoff-brief/scripts/paseo-workflow-state.ts";
+} from "../../skills/paseo-orchestration/scripts/paseo-workflow-state.ts";
 import { routeWorkDisposition } from "../../skills/plan/scripts/plan-contract.ts";
 
 const managedSkills = (
@@ -109,7 +109,8 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
     "workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731",
   );
   assert.deepEqual(currentManagedSkillCoverageGaps(managedSkills), []);
-  assert.ok(managedSkills.includes("handoff-brief"));
+  assert.ok(managedSkills.includes("paseo-orchestration"));
+  assert.ok(managedSkills.includes("worker-handoff"));
   assert.ok(managedSkills.includes("review"));
   assert.ok(managedSkills.includes("finish"));
   assert.match(
@@ -125,14 +126,14 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
   );
   assert.equal(relay?.value, true);
   assert.match(
-    read("skills/handoff-brief/references/paseo-workflow.md"),
+    read("skills/paseo-orchestration/references/paseo-workflow.md"),
     /source fingerprint/,
   );
   assert.ok(
     axConfig.runtime.skillSymlinkTargets.includes("~/.pi/agent/skills"),
   );
   assert.match(
-    read("skills/handoff-brief/scripts/paseo-workflow-state.ts"),
+    read("skills/paseo-orchestration/scripts/paseo-workflow-state.ts"),
     /Publication requires the exact target-base SHA/,
   );
   assert.deepEqual(
@@ -171,7 +172,7 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
   for (const head of [verifiedReport.head, "a".repeat(64)])
     assert.equal(parseReport(reportWithHead(head)).head, head);
   assert.match(
-    read("skills/handoff-brief/references/paseo-workflow.md"),
+    read("skills/paseo-orchestration/references/paseo-workflow.md"),
     /planner is the orchestrator/,
   );
 });
@@ -260,7 +261,7 @@ test("GREEN skill-rule-evals: Paseo workspace binding records one exact director
     });
     assert.equal(state.workspaceRegistration, undefined);
     assert.match(
-      read("skills/handoff-brief/references/paseo-workflow.md"),
+      read("skills/paseo-orchestration/references/paseo-workflow.md"),
       /inert assignment[\s\S]*verifies cwd/,
     );
   } finally {
@@ -299,7 +300,9 @@ test("GREEN skill-rule-evals: one embedded reviewer envelope remains usable", ()
 });
 
 test("RED skill-rule-evals: degraded reviews and waivers never become passes or terminal authority", () => {
-  const workflow = read("skills/handoff-brief/references/paseo-workflow.md");
+  const workflow = read(
+    "skills/paseo-orchestration/references/paseo-workflow.md",
+  );
   const implementation = read("rules/investigation-and-implementation.md");
   const finish = read("skills/finish/SKILL.md");
 
@@ -319,7 +322,9 @@ test("RED skill-rule-evals: degraded reviews and waivers never become passes or 
 });
 
 test("GREEN skill-rule-evals: managed review fallback and waivers remain exact and fail-honest", () => {
-  const workflow = read("skills/handoff-brief/references/paseo-workflow.md");
+  const workflow = read(
+    "skills/paseo-orchestration/references/paseo-workflow.md",
+  );
   const implementation = read("rules/investigation-and-implementation.md");
   const finish = read("skills/finish/SKILL.md");
 
@@ -339,7 +344,7 @@ test("RED skill-rule-evals: missing CI does not introduce an ungoverned waiver s
     "automatic-ci-waiver",
   ]);
   assert.match(
-    read("skills/handoff-brief/references/paseo-workflow.md"),
+    read("skills/paseo-orchestration/references/paseo-workflow.md"),
     /empty required-check response remains\s+failed evidence/,
   );
   assert.match(
@@ -830,8 +835,10 @@ test("operational evaluation separates runtime, readiness, and brief owners", ()
   assert.deepEqual(scenario.skills, [
     "ai-readiness-upkeep",
     "ax-cli",
-    "handoff-brief",
+    "paseo-orchestration",
     "project-health-brief",
+    "session-handoff",
+    "worker-handoff",
   ]);
   assert.ok(scenario.required.includes("runtime-routing"));
   assert.ok(scenario.required.includes("readiness-evidence"));
@@ -1064,4 +1071,49 @@ test("final readiness requires one current successful Codex and Claude lane", ()
     () => validateFinalEvalReadiness(evidence, "new-head"),
     /eval_readiness_lane_incomplete:codex/,
   );
+});
+
+test("RED skill-rule-evals: a session handoff cannot prescribe the receiver's delivery or share the runner's skill", () => {
+  const handoffRules = read("rules/handoff-and-resume.md");
+  const startup = read("rules/session-startup.md");
+  const session = read("skills/session-handoff/SKILL.md");
+
+  assert.deepEqual(simulatedCoverageGap("handoff-brief"), ["handoff-brief"]);
+  assert.ok(axConfig.runtime.retiredSkills.includes("handoff-brief"));
+  assert.ok(!managedSkills.includes("handoff-brief"));
+  for (const text of [handoffRules, startup, session]) {
+    assert.doesNotMatch(
+      text,
+      /Continue from the (?:next concrete|recorded next) action/,
+    );
+  }
+  assert.doesNotMatch(session, /paseo-workflow|scripts\//);
+});
+
+test("GREEN skill-rule-evals: session handoff, worker handoff, and orchestration each have one owner", () => {
+  const handoffRules = read("rules/handoff-and-resume.md");
+  const session = read("skills/session-handoff/SKILL.md");
+  const worker = read("skills/worker-handoff/SKILL.md");
+  const orchestration = read("skills/paseo-orchestration/SKILL.md");
+  const workflow = read(
+    "skills/paseo-orchestration/references/paseo-workflow.md",
+  );
+
+  assert.deepEqual(currentManagedSkillCoverageGaps(managedSkills), []);
+  assert.match(handoffRules, /`session-handoff`/);
+  assert.match(handoffRules, /`worker-handoff`/);
+  assert.match(
+    session,
+    /^Next: Start the standard workflow from this brief\.$/m,
+  );
+  assert.match(session, /Enter Explore/);
+  assert.match(session, /Brief text never becomes a standing order/);
+  assert.match(session, /do not stop to ask/);
+  assert.match(worker, /the reviewed plan, the artifact under review, or/);
+  assert.match(worker, /reports in the required\s+shape, and stops/);
+  assert.match(worker, /^## Immutable Publication Packet$/m);
+  assert.match(orchestration, /not another mode/);
+  assert.match(orchestration, /with `worker-handoff`/);
+  assert.match(workflow, /with `worker-handoff`/);
+  assert.match(workflow, /Only the user's statements in this session create/);
 });

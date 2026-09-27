@@ -186,7 +186,7 @@ Then use Paseo Desktop's **Pair a device** or `paseo daemon pair` to pair your
 device. Keep the pairing link private; it is not repository configuration.
 
 Select **Opus 5.5 · Plan** for the default planning route or **Astra · Plan**
-for the explicit alternative. In the [Pi workflow](../skills/handoff-brief/references/paseo-workflow.md),
+for the explicit alternative. In the [Pi workflow](../skills/paseo-orchestration/references/paseo-workflow.md),
 the planner you talk to orchestrates the run: it hands the accepted brief to a
 fresh Opus implementer, runs correctness, architecture, and contract-alignment
 Sol reviews, publishes, and follows hosted feedback. A Paseo heartbeat wakes it

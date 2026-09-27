@@ -288,11 +288,13 @@ export const behaviorScenarios: BehaviorScenario[] = [
     skills: [
       "ai-readiness-upkeep",
       "ax-cli",
-      "handoff-brief",
+      "paseo-orchestration",
       "project-health-brief",
+      "session-handoff",
+      "worker-handoff",
     ],
     prompt:
-      "Inspect the fixture and explain which operational brief or AX route owns readiness, runtime state, handoff, and project health. Remain read-only.",
+      "Inspect the fixture and explain which operational brief or AX route owns readiness, runtime state, session handoff, worker assignment, Pi orchestration, and project health. Remain read-only.",
     required: ["runtime-routing", "readiness-evidence", "brief-boundaries"],
     forbidden: ["repository-write", "provider-write"],
     allowRepositoryWrite: false,

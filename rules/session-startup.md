@@ -41,24 +41,11 @@ If the worktree is dirty, shared, divergent from its handoff, changed by an
 uncoordinated process, or has unknown ownership, Plan and Execute block or move
 to a new isolated worktree. Review may inspect the state but does not repair it.
 
-## Resume pass
+## Starting from a handoff
 
-When continuing from a handoff:
-
-1. Verify cwd, branch, worktree, HEAD, changed paths, untracked paths, and diff
-   fingerprint against live state.
-2. Verify provider artifact, CI, review, merge, and deployment state when they
-   affect the next action.
-3. Re-read only the rules and changed files needed for that action.
-4. Continue from the recorded next action unless live state contradicts it.
-
-Live state is authoritative. A contradiction invalidates ownership, exact-head
-review, or publication evidence until the owning mode refreshes it.
-
-When resuming a multi-MR stack, reconstruct each lane from live worktree and
-provider state, including its source HEAD, target branch and HEAD, draft state,
-pipeline graph, configured reviewer feedback, and predecessor relationship.
-Do not create or depend on a persisted workflow ledger.
+A session that starts from a handoff brief follows `session-handoff`: verify
+the brief against live state, then enter Explore. Do not create or depend on a
+persisted workflow ledger.
 
 ## Startup brief
 

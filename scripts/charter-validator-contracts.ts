@@ -82,6 +82,7 @@ export type Change = {
   path: string;
   content: string;
   additions: string;
+  deleted?: true;
 };
 
 const behaviorScenarioContracts = {
@@ -90,12 +91,13 @@ const behaviorScenarioContracts = {
     path: "tests/unit/paseo-workflow.test.ts",
     redName: "RED pi-paseo-workflow:",
     greenName: "GREEN pi-paseo-workflow:",
-    owns: (change: Change) => change.path.startsWith("skills/handoff-brief/"),
+    owns: (change: Change) =>
+      change.path.startsWith("skills/paseo-orchestration/"),
     redEvidence: {
       source: {
         binding: {
           kind: "import",
-          module: "../../skills/handoff-brief/scripts/paseo-workflow.ts",
+          module: "../../skills/paseo-orchestration/scripts/paseo-workflow.ts",
           name: "dispatchReview",
         },
         callee: /^dispatchReview$/,
@@ -106,7 +108,7 @@ const behaviorScenarioContracts = {
       source: {
         binding: {
           kind: "import",
-          module: "../../skills/handoff-brief/scripts/paseo-workflow.ts",
+          module: "../../skills/paseo-orchestration/scripts/paseo-workflow.ts",
           name: "transition",
         },
         callee: /^transition$/,

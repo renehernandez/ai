@@ -45,7 +45,7 @@ test("mode skills coordinate parallel draft stacks through hosted readiness", ()
 test("hook-clean multi-MR units dispatch provider-only Finish subagents", () => {
   const implementationRules = read("rules/investigation-and-implementation.md");
   const gitRules = read("rules/git-and-review.md");
-  const handoffRules = read("rules/handoff-and-resume.md");
+  const packetOwner = read("skills/worker-handoff/SKILL.md");
   const execute = read("skills/execute/SKILL.md");
   const finish = read("skills/finish/SKILL.md");
 
@@ -155,20 +155,20 @@ test("hook-clean multi-MR units dispatch provider-only Finish subagents", () => 
     gitRules,
     /source HEAD or resolved target-base SHA.*invalidates.*packet/is,
   );
-  assert.match(handoffRules, /immutable publication packet/);
-  assert.match(handoffRules, /unit and current Execute owner/);
+  assert.match(packetOwner, /immutable publication packet/);
+  assert.match(packetOwner, /unit and current Execute owner/);
   assert.match(
-    handoffRules,
+    packetOwner,
     /Finish lane identity.*provider-ownership generation/is,
   );
   assert.match(
-    handoffRules,
+    packetOwner,
     /changed.*lane identity.*provider-ownership generation.*invalidates/is,
   );
-  assert.match(handoffRules, /target branch and expected target-base identity/);
-  assert.match(handoffRules, /draft title and incremental scope/);
-  assert.match(handoffRules, /issue relationship or completion semantics/);
-  assert.match(handoffRules, /mutation ceiling/);
+  assert.match(packetOwner, /target branch and expected target-base identity/);
+  assert.match(packetOwner, /draft title and incremental scope/);
+  assert.match(packetOwner, /issue relationship or completion semantics/);
+  assert.match(packetOwner, /mutation ceiling/);
 });
 
 test("GitLab feedback monitoring is serialized and rate-limit aware", () => {

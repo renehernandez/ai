@@ -110,7 +110,7 @@ contract findings return to Plan. Keep the checkpoint task-local.
 ## Publication and Review Dispatch
 
 A hook-clean multi-MR unit freezes at its source branch and exact SHA. Assemble
-the canonical Immutable Publication Packet from `rules/handoff-and-resume.md`
+the canonical Immutable Publication Packet from `worker-handoff`
 and launch one MR-scoped, provider-only Finish lane under the shared scheduling
 barrier. The lane never becomes a repository writer. Do not invent a user pause
 between accepted delivery units.

@@ -8,7 +8,9 @@ import { read } from "../../scripts/charter-validator-reader.ts";
 const root = process.cwd();
 
 test("GREEN authority: managed Pi workflow keeps Ready publication separate from merge", () => {
-  const workflow = read("skills/handoff-brief/references/paseo-workflow.md");
+  const workflow = read(
+    "skills/paseo-orchestration/references/paseo-workflow.md",
+  );
   assert.match(workflow, /Merge requires separate\s+user authority/);
   assert.match(workflow, /one hosted\s+repair batch/);
   assert.match(workflow, /direct unmanaged Pi sessions/);
@@ -26,13 +28,15 @@ test("GREEN authority: managed Pi workflow keeps Ready publication separate from
     /work.*GitLab `origin` with Nitro/,
   );
   assert.match(
-    read("skills/handoff-brief/scripts/paseo-workflow-state.ts"),
+    read("skills/paseo-orchestration/scripts/paseo-workflow-state.ts"),
     /Publication requires the exact target-base SHA/,
   );
 });
 
 test("GREEN authority: the managed planner orchestrates through runner ticks and workers stop at their report", () => {
-  const workflow = read("skills/handoff-brief/references/paseo-workflow.md");
+  const workflow = read(
+    "skills/paseo-orchestration/references/paseo-workflow.md",
+  );
   assert.match(workflow, /planner\s+is\s+the\s+orchestrator/i);
   assert.match(
     workflow,
@@ -48,20 +52,24 @@ test("GREEN authority: the managed planner orchestrates through runner ticks and
 });
 
 test("RED authority: the managed implementer no longer owns review, publication, or hosted repair", () => {
-  const workflow = read("skills/handoff-brief/references/paseo-workflow.md");
+  const workflow = read(
+    "skills/paseo-orchestration/references/paseo-workflow.md",
+  );
   assert.doesNotMatch(
     workflow,
     /implementation owner (?:evaluates|must assess|follows Execute)/i,
   );
   assert.doesNotMatch(workflow, /planning session remains available/i);
   assert.doesNotMatch(
-    read("skills/handoff-brief/scripts/paseo-workflow.ts"),
+    read("skills/paseo-orchestration/scripts/paseo-workflow.ts"),
     /Ready publication through Finish, one hosted feedback repair batch/,
   );
 });
 
 test("GREEN authority: managed Pi workflow degrades reviewer outages and scopes waivers without granting terminal actions", () => {
-  const workflow = read("skills/handoff-brief/references/paseo-workflow.md");
+  const workflow = read(
+    "skills/paseo-orchestration/references/paseo-workflow.md",
+  );
   const implementation = read("rules/investigation-and-implementation.md");
   const finish = read("skills/finish/SKILL.md");
 
@@ -99,7 +107,9 @@ test("GREEN authority: managed Pi workflow degrades reviewer outages and scopes 
 });
 
 test("RED authority: scoped gate waivers cannot convert failed evidence into a pass", () => {
-  const workflow = read("skills/handoff-brief/references/paseo-workflow.md");
+  const workflow = read(
+    "skills/paseo-orchestration/references/paseo-workflow.md",
+  );
   const finish = read("skills/finish/SKILL.md");
 
   assert.doesNotMatch(workflow, /waiver (?:marks|records).*as passed/i);
@@ -116,7 +126,9 @@ test("RED authority: this repository does not force personal publication through
 });
 
 test("RED authority: absent CI does not create a publication policy", () => {
-  const workflow = read("skills/handoff-brief/references/paseo-workflow.md");
+  const workflow = read(
+    "skills/paseo-orchestration/references/paseo-workflow.md",
+  );
   assert.doesNotMatch(workflow, /an empty check list establishes/i);
   assert.match(
     workflow,

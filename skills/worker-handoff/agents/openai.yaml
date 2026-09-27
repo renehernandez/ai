@@ -1,0 +1,4 @@
+interface:
+  display_name: "Worker Handoff"
+  short_description: "Assign one bounded task to a worker"
+  default_prompt: "Use $worker-handoff to write an exact assignment for one worker."

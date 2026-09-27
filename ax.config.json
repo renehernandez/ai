@@ -7,6 +7,7 @@
       "compound",
       "github-pr-create",
       "glab-mr-create",
+      "handoff-brief",
       "merge-followthrough",
       "plan-coordinate",
       "plan-delivery",
@@ -553,13 +554,13 @@
             "github-adapter-review",
             "gitlab-adapter-review",
             "glab-stacked-diffs",
-            "handoff-brief",
             "linear-breakdown",
             "linear-project-overview",
             "linearis",
             "maintain-verification-skill",
             "nitro-review-feedback",
             "openspec-tasks",
+            "paseo-orchestration",
             "plan",
             "project-health-brief",
             "research",
@@ -568,8 +569,10 @@
             "review",
             "scrutinize",
             "security-review",
+            "session-handoff",
             "show-me",
             "start-project",
+            "worker-handoff",
             "writing-skills"
           ]
         }

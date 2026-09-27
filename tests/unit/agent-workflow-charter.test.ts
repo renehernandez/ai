@@ -464,3 +464,65 @@ test("RED canonical-ownership: alternate commit indexes cannot be masked by work
     rmSync(fixtureRoot, { recursive: true, force: true });
   }
 });
+
+test("retiring a skill needs no surviving owner but keeps its behavior contracts", () => {
+  const fixtureRoot = mkdtempSync(join(tmpdir(), "ax-charter-retire-"));
+  const entrypoint = "See agent-development-workflow-charter.md.\n";
+
+  try {
+    mkdirSync(join(fixtureRoot, "rules"));
+    mkdirSync(join(fixtureRoot, "instructions"));
+    mkdirSync(join(fixtureRoot, "skills/retired-skill/agents"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(fixtureRoot, "rules/agent-development-workflow-charter.md"),
+      "# Agent development workflow charter\nThis charter applies to every kind of work.\nPrefer one canonical owner.\nUse clean-context RED/GREEN pressure scenarios.\n",
+    );
+    writeFileSync(join(fixtureRoot, "AGENTS.md"), entrypoint);
+    writeFileSync(join(fixtureRoot, "instructions/AGENTS.md"), entrypoint);
+    writeFileSync(
+      join(fixtureRoot, "skills/retired-skill/SKILL.md"),
+      "---\nname: retired-skill\ndescription: Use when testing retirement.\n---\n",
+    );
+    writeFileSync(
+      join(fixtureRoot, "skills/retired-skill/agents/openai.yaml"),
+      "interface:\n  display_name: Retired\n",
+    );
+    const gitEnv = withoutGitRepositoryEnv();
+    execFileSync("git", ["init"], { cwd: fixtureRoot, env: gitEnv });
+    execFileSync("git", ["add", "."], { cwd: fixtureRoot, env: gitEnv });
+    execFileSync(
+      "git",
+      [
+        "-c",
+        "user.name=Charter Test",
+        "-c",
+        "user.email=charter@example.test",
+        "commit",
+        "-m",
+        "baseline",
+      ],
+      { cwd: fixtureRoot, env: gitEnv },
+    );
+    execFileSync("git", ["rm", "-r", "-q", "skills/retired-skill"], {
+      cwd: fixtureRoot,
+      env: gitEnv,
+    });
+
+    const contract =
+      "contract skill-rule-evals requires staged executable RED and GREEN scenarios in tests/unit/skill-rule-eval-contract.test.ts";
+    assert.deepEqual(
+      validateCharterRepository(
+        fixtureRoot,
+        join(fixtureRoot, ".git", "index"),
+      ),
+      [
+        `skills/retired-skill/SKILL.md: ${contract}`,
+        `skills/retired-skill/agents/openai.yaml: ${contract}`,
+      ],
+    );
+  } finally {
+    rmSync(fixtureRoot, { recursive: true, force: true });
+  }
+});

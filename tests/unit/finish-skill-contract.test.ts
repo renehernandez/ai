@@ -10,7 +10,7 @@ test("Finish keeps runtime guidance bounded and delegates shared mechanics", () 
   assert.doesNotMatch(finish, /^## (?:Common Mistakes|Test Evidence)$/m);
   assert.match(finish, /rules\/investigation-and-implementation\.md/);
   assert.match(finish, /scripts\/finish-contract\.ts/);
-  assert.match(finish, /rules\/handoff-and-resume\.md/);
+  assert.match(finish, /`worker-handoff`/);
   assert.match(finish, /rules\/fullscript\/nitro-review\.md/);
 });
 
