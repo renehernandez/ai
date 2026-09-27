@@ -43,10 +43,9 @@ to a new isolated worktree. Review may inspect the state but does not repair it.
 
 ## Starting from a handoff
 
-A session that starts from a handoff brief follows
-[Receiving a session handoff](handoff-and-resume.md#receiving-a-session-handoff):
-verify the brief against live state, then enter Explore. Do not create or
-depend on a persisted workflow ledger.
+A session that starts from a handoff brief follows `session-handoff`: verify
+the brief against live state, then enter Explore. Do not create or depend on a
+persisted workflow ledger.
 
 ## Startup brief
 

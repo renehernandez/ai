@@ -1,0 +1,4 @@
+interface:
+  display_name: "Paseo Orchestration"
+  short_description: "Run accepted work through managed Pi/Paseo workers"
+  default_prompt: "Use $paseo-orchestration to carry accepted work through the workflow runner."

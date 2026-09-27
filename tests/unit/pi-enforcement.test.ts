@@ -180,9 +180,9 @@ test("managed roles cannot dispatch Paseo sessions outside the runner but keep r
     "paseo inspect --json agent-1",
     "paseo logs --filter assistant_message --tail 1 agent-1",
     "paseo wait --json --timeout 60 agent-1",
-    'grep -n "paseo run" skills/handoff-brief/references/paseo-workflow.md',
+    'grep -n "paseo run" skills/paseo-orchestration/references/paseo-workflow.md',
     "echo 'paseo send agent-1; paseo run task'",
-    "node ~/.agents/skills/handoff-brief/scripts/paseo-workflow.ts state.json review input.json",
+    "node ~/.agents/skills/paseo-orchestration/scripts/paseo-workflow.ts state.json review input.json",
     '"$EDITOR" notes.md',
   ])
     assert.equal(
@@ -270,7 +270,7 @@ test("compound denial applies to agent shell calls, not a person's own commands"
     process.env.AX_PI_CONTRACT = JSON.stringify(implementer);
     process.env.AX_PI_WORKFLOW_FILE = join(
       f.root,
-      "skills/handoff-brief/references/paseo-workflow.md",
+      "skills/paseo-orchestration/references/paseo-workflow.md",
     );
     const handlers = new Map<string, (...args: unknown[]) => unknown>();
     enforcement({
@@ -313,7 +313,7 @@ test("compound denial applies to agent shell calls, not a person's own commands"
 function fixture(): { root: string; launcher: string; env: NodeJS.ProcessEnv } {
   const root = mkdtempSync(join(tmpdir(), "pi-enforcement-"));
   cpSync(resolve("hooks"), join(root, "hooks"), { recursive: true });
-  const references = join(root, "skills/handoff-brief/references");
+  const references = join(root, "skills/paseo-orchestration/references");
   mkdirSync(references, { recursive: true });
   writeFileSync(
     join(references, "paseo-workflow.md"),
@@ -456,7 +456,7 @@ test("adapter injects the canonical workflow and retains preexisting system prom
     process.env.AX_PI_CONTRACT = JSON.stringify(contract);
     process.env.AX_PI_WORKFLOW_FILE = join(
       f.root,
-      "skills/handoff-brief/references/paseo-workflow.md",
+      "skills/paseo-orchestration/references/paseo-workflow.md",
     );
     const handlers = new Map<string, (...args: unknown[]) => unknown>();
     enforcement({

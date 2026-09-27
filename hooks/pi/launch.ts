@@ -140,7 +140,7 @@ export function launch(argv: string[]): void {
   const { contract, args } = launchArguments(argv);
   const workflow = resolve(
     directory,
-    "../../skills/handoff-brief/references/paseo-workflow.md",
+    "../../skills/paseo-orchestration/references/paseo-workflow.md",
   );
   accessSync(join(directory, "enforcement.ts"), constants.R_OK);
   if (!readFileSync(workflow, "utf8").trim())

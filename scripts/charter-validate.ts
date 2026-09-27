@@ -192,8 +192,10 @@ export function validateCharterRepository(
   const changes: Change[] = [];
   for (const path of paths) {
     try {
+      const content = optionalStagedContent(root, path, indexFile);
+      // A deleted path adds no behavior; retirement is governed by what remains.
+      if (content === undefined) continue;
       const diff = stagedDiff(root, path, indexFile);
-      const content = optionalStagedContent(root, path, indexFile) ?? "";
       changes.push({
         path,
         content,
@@ -205,7 +207,9 @@ export function validateCharterRepository(
       ];
     }
   }
-  for (const path of paths.filter((path) => behaviorTestPattern.test(path))) {
+  for (const { path } of changes.filter(({ path }) =>
+    behaviorTestPattern.test(path),
+  )) {
     try {
       const indexContent = stagedContent(root, path, indexFile);
       if (
@@ -252,13 +256,11 @@ export function validateCharterRange(
       `git: unable to discover range agent-behavior surfaces: ${error instanceof Error ? error.message : String(error)}`,
     ];
   }
-  const changes: Change[] = paths.map((path) => {
+  const changes: Change[] = paths.flatMap((path) => {
+    const content = readHead(path);
+    if (content === undefined) return [];
     const diff = rangeDiff(root, targetBase, sourceHead, path);
-    return {
-      path,
-      content: readHead(path) ?? "",
-      additions: addedText(diff),
-    };
+    return [{ path, content, additions: addedText(diff) }];
   });
   return validateChanges(changes, (path) => readHead(path) !== undefined, true);
 }

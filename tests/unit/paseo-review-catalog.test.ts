@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
-import { loadReviewCatalog } from "../../skills/handoff-brief/scripts/paseo-workflow-state.ts";
+import { loadReviewCatalog } from "../../skills/paseo-orchestration/scripts/paseo-workflow-state.ts";
 import {
   finalImplementationReviewerCatalog,
   planningReviewerCatalog,
@@ -32,7 +32,7 @@ test("missing Review skill reports the required CLI dependency clearly", async (
   const stateModule = join(temporary, "paseo-workflow-state.ts");
   await copyFile(
     new URL(
-      "../../skills/handoff-brief/scripts/paseo-workflow-state.ts",
+      "../../skills/paseo-orchestration/scripts/paseo-workflow-state.ts",
       import.meta.url,
     ),
     stateModule,

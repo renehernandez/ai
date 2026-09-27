@@ -12,8 +12,8 @@ test("AI readiness keeps judgment in prose and deterministic verdicts in its scr
   assert.doesNotMatch(skill, /```yaml|## (?:Mistakes|Test Evidence)/);
 });
 
-test("handoff brief starts a new standard workflow without delivery mechanics", () => {
-  const skill = read("handoff-brief");
+test("session handoff starts a new standard workflow without delivery mechanics", () => {
+  const skill = read("session-handoff");
   for (const field of [
     "Objective:",
     "Verified state:",
@@ -30,7 +30,7 @@ test("handoff brief starts a new standard workflow without delivery mechanics", 
     skill,
     /^(?:Branch \/ artifact \/ exact head|State|Changed|Verified):$/m,
   );
-  assert.match(skill, /Do not use this skill for worker assignments/);
+  assert.match(skill, /use `worker-handoff`/);
   assert.doesNotMatch(
     skill,
     /^## (?:Mistakes|Validation Scenarios|Test Evidence)$/m,

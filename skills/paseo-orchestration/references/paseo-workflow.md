@@ -69,13 +69,9 @@ workflow instead of changing provider or model.
 
 ## Hand off to implementation
 
-The orchestrator writes the implementer assignment directly from the reviewed
-plan; it is a worker assignment, not a session handoff brief. Carry the accepted
-objective, reviewed plan, constraints, design rationale, original evidence
-references, acceptance criteria and named verification layers. Include repository, worktree, branch, target base, current
-head, dirty files, unresolved risks, publication host and automated reviewer.
-Keep the brief and workflow state task-local. Preserve the plan's durable
-content in the repository; do not commit private review receipts.
+The orchestrator writes the implementer brief with `worker-handoff`, directly
+from the reviewed plan; it is a worker assignment, not a session handoff. Keep
+the brief and workflow state task-local.
 
 When implementation is accepted, the orchestrator uses the runner to start a
 new Paseo-managed Opus implementer session with that brief. The runner resolves one
@@ -259,7 +255,7 @@ transitions manually. Use Node 26 and private files outside the repository for
 state and input. The installed Review skill supplies the canonical lens catalog.
 
 ```bash
-node ~/.agents/skills/handoff-brief/scripts/paseo-workflow.ts STATE ACTION INPUT.json
+node ~/.agents/skills/paseo-orchestration/scripts/paseo-workflow.ts STATE ACTION INPUT.json
 ```
 
 Each input is one JSON object. The following table is the readable input

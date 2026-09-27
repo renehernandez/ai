@@ -27,8 +27,8 @@ import {
   transition,
   type Workflow,
   type WorktreeReader,
-} from "../../skills/handoff-brief/scripts/paseo-workflow.ts";
-import { locked } from "../../skills/handoff-brief/scripts/paseo-workflow-state.ts";
+} from "../../skills/paseo-orchestration/scripts/paseo-workflow.ts";
+import { locked } from "../../skills/paseo-orchestration/scripts/paseo-workflow-state.ts";
 
 const policySourceFingerprint = "a".repeat(64);
 const targetBase = "b".repeat(40);

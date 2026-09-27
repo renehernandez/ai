@@ -44,6 +44,15 @@ test("RED hook-registration: MCP and Pi runtime configuration, including the in-
       }),
     /hook_registration_target_invalid/u,
   );
+  assert.throws(
+    () =>
+      assertRegistrationTargetSafe({
+        path: "/tmp/isolated-home/.agents/skills/paseo-orchestration/references/paseo-workflow.md",
+        target: "claude",
+        home: "/tmp/isolated-home",
+      }),
+    /hook_registration_target_invalid/u,
+  );
 });
 
 test("GREEN hook-registration: rendered force-push guard targets both agent harnesses", () => {

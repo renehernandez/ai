@@ -1,0 +1,4 @@
+interface:
+  display_name: "Session Handoff"
+  short_description: "Brief a new session to start its own workflow"
+  default_prompt: "Use $session-handoff to create a session handoff brief from live state."
