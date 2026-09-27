@@ -13,7 +13,6 @@ import {
   type Hosted,
   hostedBatch,
   type ImplementerReport,
-  implementationAction,
   implementationCycle,
   inFlight,
   initialize,
@@ -981,7 +980,7 @@ export async function dispatchRepair(
       `Active continuation does not authorize ${phase} repair`,
     );
     const requestedAction =
-      phase === "implementation" ? implementationAction(state) : "finish";
+      phase === "implementation" ? "publication" : "finish";
     settled(state, phase, requestedAction);
     // A moved target base is reconciled by a fresh implementer, like a hosted fix.
     const reconcile = phase === "hosted" && input.targetBase !== undefined;

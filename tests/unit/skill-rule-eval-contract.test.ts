@@ -182,6 +182,10 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
     /## Review every head/,
   );
   assert.match(
+    read("skills/paseo-orchestration/references/paseo-workflow.md"),
+    /repair that\s+reports no new head stops at `awaiting-user`/,
+  );
+  assert.match(
     read("skills/paseo-orchestration/SKILL.md"),
     /accepted-proposal contract selects Execute[\s\S]*runner `handoff`/,
   );

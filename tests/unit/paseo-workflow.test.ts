@@ -1791,6 +1791,28 @@ test("GREEN pi-paseo-workflow: every repaired head gets a fresh implementation r
   });
 });
 
+test("RED pi-paseo-workflow: a repair that reports no new head stops for the user instead of looping", async () => {
+  const f = await fixture();
+  await f.review("planning");
+  await f.accept();
+  await findingRound(f);
+  await f.repair("implementation", heads.first);
+  const stopped = await f.step();
+  assert.equal(stopped.result, "awaiting-user");
+  assert.match(
+    stopped.result === "awaiting-user" ? stopped.gate : "",
+    /reported no new head/,
+  );
+  await assert.rejects(
+    dispatchFixtureReview(
+      f.path,
+      { phase: "implementation", artifactPath: f.artifactPath },
+      f.transport,
+    ),
+    /already dispatched for this target/,
+  );
+});
+
 test("RED pi-paseo-workflow: a third implementation round with fixes stops for the user until a continuation", async () => {
   const f = await fixture();
   await f.review("planning");

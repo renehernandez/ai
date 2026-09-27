@@ -137,10 +137,13 @@ const plannerGitMutations = new Set([
   "am",
   "apply",
   "checkout",
+  "checkout-index",
   "cherry-pick",
   "commit",
+  "commit-tree",
   "merge",
   "mv",
+  "read-tree",
   "rebase",
   "reset",
   "restore",
@@ -148,6 +151,7 @@ const plannerGitMutations = new Set([
   "rm",
   "stash",
   "switch",
+  "update-ref",
 ]);
 const gitValueOptions = new Set([
   "-C",

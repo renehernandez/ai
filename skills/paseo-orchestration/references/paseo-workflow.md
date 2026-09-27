@@ -186,7 +186,8 @@ The orchestrator evaluates the combined findings and records rejected findings
 with reasons. Applicable fixes go to one fresh implementer session with a repair
 brief the orchestrator writes from the triaged findings; never send a repair to
 an earlier session. A repaired head has no verdict, so the next tick names a
-fresh round on it, with fresh reviewers, until a round is clean. A clean round
+fresh round on it, with fresh reviewers, until a round is clean. A repair that
+reports no new head stops at `awaiting-user`. A clean round
 has no open question and no unwaived fix; publication needs a clean verdict for
 the published head.
 
@@ -245,7 +246,8 @@ For agent tool calls in the `planner` role, the Pi policy denies `edit` and
 `write` outside `.agents/plans` in the workflow cwd, except for private task
 files outside every Git work tree. It denies git commands that change branch
 content: `add`, `am`, `apply`, `checkout`, `cherry-pick`, `commit`, `merge`,
-`mv`, `rebase`, `reset`, `restore`, `revert`, `rm`, `stash`, `switch`, and a
+`mv`, `rebase`, `reset`, `restore`, `revert`, `rm`, `stash`, `switch`, the
+`commit-tree`, `update-ref`, `read-tree`, and `checkout-index` plumbing, and a
 `pull` without `--ff-only`, including nested shell payloads. Read-only git,
 `push`, and `gh`/`glab` publication stay available for Finish. The implementer
 commits the plan with the implementation. A shell redirection or in-place edit

@@ -341,10 +341,6 @@ export function roundCount(state: Workflow, phase: Phase) {
   const cycle = implementationCycle(state);
   return all.filter((round) => (round.cycle ?? 0) === cycle).length;
 }
-// Local rounds after publication gate republication of a hosted repair head.
-export function implementationAction(state: Workflow) {
-  return state.publication ? "republication" : "publication";
-}
 // Moves the current round, its triage, and its repair aside so the next round starts clean.
 export function archiveRound(state: Workflow, phase: Phase) {
   const round = state.rounds[phase];
@@ -510,12 +506,17 @@ export function nextStep(state: Workflow): Step {
       );
   };
   // Reviews every new implementation head until one round is clean; returns undefined once it is.
-  const implementationLoop = (requestedAction: string) => {
+  const implementationLoop = () => {
     const loop =
-      reviewed("implementation", requestedAction) ??
-      repair("implementation", requestedAction);
+      reviewed("implementation", "publication") ??
+      repair("implementation", "publication");
     if (loop) return loop;
-    if (state.repairs.implementation?.status === "complete")
+    const repaired = state.repairs.implementation;
+    if (repaired?.head === state.rounds.implementation?.head)
+      return awaiting(
+        "The implementation repair reported no new head; direct how to resolve the open fixes",
+      );
+    if (repaired?.status === "complete")
       return changed(
         "review",
         "Dispatch a fresh implementation round on the repaired head",
@@ -546,7 +547,7 @@ export function nextStep(state: Workflow): Step {
       "Dispatch the implementation review round on the worktree head",
     );
   if (!state.publication) {
-    const implementation = implementationLoop("publication");
+    const implementation = implementationLoop();
     if (implementation) return implementation;
   }
   if (!state.publication)
@@ -565,6 +566,10 @@ export function nextStep(state: Workflow): Step {
   const hosted = repair("hosted", "finish");
   if (hosted) return hosted;
   if (state.repairs.hosted?.status === "complete") {
+    if (state.repairs.hosted.head === state.publication.head)
+      return awaiting(
+        "The hosted repair reported no new head; direct how to resolve the open hosted fixes",
+      );
     if (
       (state.rounds.implementation?.cycle ?? 0) !== implementationCycle(state)
     )
@@ -573,7 +578,7 @@ export function nextStep(state: Workflow): Step {
         "Dispatch a fresh local implementation round on the hosted repair head",
       );
     return (
-      implementationLoop("republication") ??
+      implementationLoop() ??
       changed(
         "publication",
         "Push the reviewed head through Finish and record the republication to re-arm hosted gates",
@@ -1293,7 +1298,7 @@ export async function transition(path: string, action: string, input: Input) {
       const decisions = settled(
         state,
         phase,
-        phase === "implementation" ? implementationAction(state) : "finish",
+        phase === "implementation" ? "publication" : "finish",
       );
       if (input.stage === "start") {
         requireThat(
@@ -1326,11 +1331,7 @@ export async function transition(path: string, action: string, input: Input) {
     } else if (action === "publication") {
       const republication =
         state.orchestration === "planner-v2" && state.publication !== undefined;
-      verdict(
-        state,
-        "implementation",
-        republication ? "republication" : "publication",
-      );
+      verdict(state, "implementation", "publication");
       if (republication)
         requireThat(
           state.repairs.hosted?.status === "complete" &&
