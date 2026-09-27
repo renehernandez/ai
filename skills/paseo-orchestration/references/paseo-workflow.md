@@ -1,9 +1,10 @@
 # Pi and Paseo workflow
 
 This contract applies to AX-managed Paseo providers running Pi. It is the
-explicitly accepted Pi workflow: one local review round per phase, one hosted
-repair batch, and Ready publication. It takes precedence over older generic
-draft-until-merge and repeated-review guidance in these sessions. Explore, Plan,
+explicitly accepted Pi workflow: a fresh review round for every new head or
+revised plan, bounded at three rounds per phase and three hosted repair
+batches, and Ready publication. It takes precedence over older generic
+draft-until-merge and review-loop guidance in these sessions. Explore, Plan,
 Execute, Review and Finish retain their authority. Merge requires separate
 user authority.
 
@@ -13,11 +14,16 @@ The planner is the orchestrator. The session the user talks to carries accepted
 work from Plan through Finish: it owns the planning artifact, every worker
 dispatch, triage, gate decisions, Finish provider actions, and the user
 conversation. It never edits implementation files and never dispatches outside
-the runner.
+the runner. When the accepted-proposal contract in
+`rules/investigation-and-implementation.md` selects Execute, the planner hands
+the work to a fresh implementer through the runner `handoff`, whatever the
+wording of the acceptance and however small the change. Merging a moved target
+base, resolving conflicts, and every other change to branch content are
+implementer tasks too.
 
 Workers are fresh sessions that keep no context between assignments. An
 implementer assignment ends at its report: it implements one accepted handoff
-or one repair batch, verifies, commits through native hooks, reports branch,
+or one repair, verifies, commits through native hooks, reports branch,
 head, commits, verification, deviations and open risks, then stops. It issues
 one shell command per tool call and never issues git mutations as parallel tool
 calls. It does not dispatch reviewers, start workers, push, publish, or merge.
@@ -53,12 +59,14 @@ inline fallback assessment for that review group's assigned lenses before
 advancing. Uncertain implementer launch, missing session identity, corrupt state,
 snapshot failure, or ownership-transfer failure remains a hard blocker.
 
-The orchestrator starts one planning review round with three fresh Sol
+The orchestrator starts each planning review round with three fresh Sol
 sessions: correctness and risk, architecture and simplification, and contract
 alignment. Each session reads the whole plan but reports only its immutable lens
 assignment. Keep all three reports and the architecture group's distinct
 code-simplifier outcome. Deduplicate findings only after preserving each report.
-Do not start a second review round after repairs.
+When triage keeps a `fix`, the orchestrator revises the plan and the changed
+plan receives a fresh round. Handoff requires a clean planning verdict: no open
+question and no unwaived fix. The runner refuses a round on an unchanged plan.
 
 Opus planner and implementer routes use the pinned subscription bridge and exact
 model identity. They do not accept API-key, auth-token, gateway, Bedrock, Vertex,
@@ -145,15 +153,17 @@ standing orders verbatim. Amended and retired versions stay in history but never
 reach a worker. Project-specific delivery adaptations belong in the register,
 not in pasted prompts.
 
-## Review implementation once
+## Review every head
 
 After a tick records the implementer's report, dispatch one parallel round with
-three fresh Sol sessions against the reported head. The reviewed head, and a
-completed repair's head, must equal the verified head recorded from the
-implementer's report envelope exactly; a short SHA or a SHA named only in prose
-never binds. States recorded before the envelope hold only free-text reports
-and fail this check. A worker whose last reply is still its inert startup reply has not begun
-the assignment and stays in flight. Correctness covers diff
+three fresh Sol sessions. The runner reads the workflow worktree's branch and
+head with `git rev-parse` and binds the round to that committed head, whoever
+produced it; a caller head that differs, a short SHA, or a SHA named only in
+prose never binds. Uncommitted files are recorded as evidence and are not
+reviewed. The runner refuses a round while an implementer or repair is in
+flight. A completed repair's head must still equal the verified head from its
+report envelope. A worker whose last reply is still its inert startup reply has
+not begun the assignment and stays in flight. Correctness covers diff
 correctness and risk; architecture covers quality, simplification, and deslop;
 contract alignment scrutinizes verification, requirements, and documentation.
 Assign conditional security and production risk to correctness,
@@ -175,10 +185,18 @@ review evidence.
 The orchestrator evaluates the combined findings and records rejected findings
 with reasons. Applicable fixes go to one fresh implementer session with a repair
 brief the orchestrator writes from the triaged findings; never send a repair to
-an earlier session. This is one local repair batch; do not automatically rerun
-reviewers after it. Identify the reviewed, degraded, waived, and subsequent
-repair heads accurately instead of claiming repairs received another independent
-review.
+an earlier session. A repaired head has no verdict, so the next tick names a
+fresh round on it, with fresh reviewers, until a round is clean. A repair that
+reports no new head stops at `awaiting-user`. A clean round
+has no open question and no unwaived fix; publication needs a clean verdict for
+the published head.
+
+Planning and implementation each allow three rounds before publication. When
+the third round still keeps a `fix` or an open question, the runner stops at
+`awaiting-user` with the open findings, reviewed heads, and repairs. It never
+repairs past the bound, starts a fourth round, or downgrades findings to pass.
+Only a user-authorized `continuation` opens another bounded batch. Identify the
+reviewed, degraded, waived, and repaired heads accurately.
 
 ## Publish and follow hosted feedback
 
@@ -196,13 +214,17 @@ deadline. Report missing reviewer evidence explicitly. A completed review is
 evidence to triage, not an automatic assertion that all findings are valid or
 resolved.
 
-The orchestrator triages one hosted findings batch. Applicable fixes go to one
-fresh implementer repair session; after its report, Finish verifies and pushes
-the repaired head through native hooks and keeps the artifact Ready. Report
-current CI and any later automated feedback, but do not start another repair
-batch. Stop with the open PR/MR URL, reviewed and current heads, repairs,
-rejected findings and remaining gaps. A second repair batch requires a new user
-instruction.
+The orchestrator triages each hosted findings batch. Applicable fixes go to one
+fresh implementer repair session. A moved target base is reconciled the same
+way: a hosted repair started with the new `targetBase` and no findings. The
+repaired head then receives fresh local rounds, which count against that hosted
+batch rather than the implementation rounds. After a clean local verdict,
+Finish pushes the head through native hooks, keeps the artifact Ready, and
+records the republication, which re-arms the hosted probe for the next batch.
+Hosted feedback allows three repair batches; open fixes after that stop at
+`awaiting-user`. Finish needs a completed hosted gate with no unwaived fix on
+the published head. Stop with the open PR/MR URL, reviewed and current heads,
+repairs, rejected findings and remaining gaps.
 
 ## User gates
 
@@ -218,8 +240,21 @@ authority.
 
 Paseo owns session creation and visibility. Use the runner for every workflow
 launch; do not call generic create-agent tools, recursive delegation or another
-orchestration package. Its state records each phase dispatch before launch and
-prevents automatic duplicate rounds or repairs.
+orchestration package. Its state records each dispatch before launch, archives
+superseded rounds with their triage and repairs, and refuses a duplicate round
+for the same head or plan and a second repair for the same round.
+
+For agent tool calls in the `planner` role, the Pi policy denies `edit` and
+`write` outside `.agents/plans` in the workflow cwd, except for private task
+files outside every Git work tree. It denies git commands that change branch
+content: `add`, `am`, `apply`, `checkout`, `cherry-pick`, `commit`, `merge`,
+`mv`, `rebase`, `reset`, `restore`, `revert`, `rm`, `stash`, `switch`, the
+`commit-tree`, `update-ref`, `read-tree`, and `checkout-index` plumbing, and a
+`pull` without `--ff-only`, including nested shell payloads. Read-only git,
+`push`, and `gh`/`glab` publication stay available for Finish. The implementer
+commits the plan with the implementation. A shell redirection or in-place edit
+stays outside what the policy can prove; the commit denial keeps it from
+becoming a planner-authored head.
 
 The Pi shell policy denies direct `paseo run`, `send`, `stop`, `delete`,
 `archive`, `heartbeat`, and `schedule` commands for every managed role; `ls`,
@@ -276,14 +311,14 @@ is the only full-state read.
 | `init` | `cwd`; optional `configPath`, `timeoutSeconds`, and `additionalLenses` keyed by planning/implementation. Put STATE in a new temporary folder dedicated to this workflow; `init` records that folder as its scratch folder. |
 | `policy` | `deliveryPolicy` with provider/repository identity, independent CI and reviewer status, source, and source fingerprint. Unknown policy blocks handoff. |
 | `order` | `op` (add/amend/retire), stable `id`, `constraint` except on retire, and `authorizationSource`. |
-| `review` | `phase`, `artifactPath`, and implementation `head`. The artifact includes the exact diff/base or complete plan and original evidence references. Dispatches once and returns. Optional `workspaceId`; when no exact workspace exists, explicit `registerWorkspace: true` and optional `projectId` register the canonical cwd locally. |
+| `review` | `phase` and `artifactPath`; optional implementation `head`, which must equal the worktree head the runner reads. The artifact includes the exact diff/base or complete plan and original evidence references. Dispatches one round and returns; a later round needs a revised plan or a repaired head. Optional `workspaceId`; when no exact workspace exists, explicit `registerWorkspace: true` and optional `projectId` register the canonical cwd locally. |
 | `tick` | No input. Records completions and one hosted probe, renews or deletes the heartbeat, and returns the compact result. |
 | `triage` | `phase`, `decisions` containing each finding's `id`, `action` (fix/dismiss/question) and `reason`; for each degraded reviewer, `assessments` with its `role` and complete per-lens `outcomes` using the review outcome shape. |
 | `waiver` | `phase`, exact current `target`, exact `requestedAction`, nonempty `failedGates`, and `reason`. Records failed evidence without granting the action itself. |
 | `handoff` | `briefPath`, `planResolution`; launches the fresh implementer and returns. Accepts the same optional workspace fields as `review`. |
 | `retry-handoff` | Exact `previousAgentId`, immutable authorization source, target `branch` and `head`, exact porcelain `dirtyStatus`, and `noWritesEvidence`; optional explicit workspace registration fields. Recovers only an inactive known wrong-cwd implementation handoff with unused implementation/review phases. |
-| `repair` | `phase` (implementation/hosted) and `stage`. `start` needs `briefPath` and launches one fresh implementer; `complete` needs the exact verified `head` from the tick-recorded repair report and named `verification`. |
-| `publication` | Observed `artifactUrl`, `head`, exact `targetBase` SHA, optional policy-required `reviewer`, `ready: true`, `evidence`, and the unchanged policy-source fingerprint. When a hosted gate is required, also the Finish `probeCommand` argv and optional `deadlineMs`. |
+| `repair` | `phase` (implementation/hosted) and `stage`. `start` needs `briefPath` and launches one fresh implementer for the current round or hosted batch; a hosted `start` with a new `targetBase` reconciles a moved base. `complete` needs the exact verified `head` from the tick-recorded repair report and named `verification`. |
+| `publication` | Observed `artifactUrl`, `head`, exact `targetBase` SHA, optional policy-required `reviewer`, `ready: true`, `evidence`, and the unchanged policy-source fingerprint. When a hosted gate is required, also the Finish `probeCommand` argv and optional `deadlineMs`. After a hosted repair's clean local round, the same action records the republication of that head. |
 | `finish` | Current observed publication fields and final evidence; does not merge. |
 | `continuation` | Explicit `batchId`, authorization source, purpose, allowed phases, and expected current head. Archives prior evidence and opens one bounded batch. |
 | `cleanup` | `authorizationSource` (the user's cleanup statement, or the ID of the active standing order that carries it), the expected worktree `head`, and a `reason` when the workflow is not finished. Removes only this workflow's recorded targets; when the caller is the only running agent in the workspace, deletes only the scratch folder. |
@@ -337,11 +372,13 @@ A moved head, mismatched artifact, unsupported format, or uncertain ownership
 stops recovery; bookkeeping reconciliation neither launches reviewers nor
 grants terminal authority.
 
-New runner states carry the planner orchestration marker, identify the focused
-Sol roster, and store one immutable lens snapshot per review group. States
-created before orchestration remain readable through `status` and keep their
-recorded `collect`, `monitor`, and transition actions, but `tick` and every
-dispatch refuse them explicitly; `collect` and `monitor` refuse orchestrated
+New runner states carry the head-keyed planner orchestration marker, identify
+the focused Sol roster, and store one immutable lens snapshot per review group.
+States written with the earlier single-round planner marker stay readable
+through `status`; `tick` and every dispatch refuse them, and nothing migrates
+them. States created before orchestration remain readable through `status` and
+keep their recorded `collect`, `monitor`, and transition actions, but `tick`
+and every dispatch refuse them explicitly; `collect` and `monitor` refuse orchestrated
 states. States created by the former mixed-model roster remain read-only and are
 never reinterpreted as Sol evidence.
 
@@ -359,7 +396,7 @@ exact target immediately before an already-authorized action such as deployment;
 the consumer supplies no terminal authority. Stop on any hard-failed orchestration phase
 and report the saved error. A reserved launch with no returned identity needs
 Paseo inspection before human-directed recovery; never delete state to bypass
-the one-pass limit. Before acting on a waiver, the runner compares its interpreted
+the round bound. Before acting on a waiver, the runner compares its interpreted
 target with the current artifact or head. A waiver preserves failed evidence,
 does not grant its requested terminal action, and never permits force-push,
 credential disclosure, hook bypass, destructive action without authority, or a

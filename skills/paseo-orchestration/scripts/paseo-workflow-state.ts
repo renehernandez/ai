@@ -142,10 +142,43 @@ export type ManagedConfig = {
     >;
   };
 };
+export type Round = {
+  fingerprint: string;
+  artifact: Snapshot;
+  lenses: Snapshot;
+  lensAssignments: Record<string, { lensIds: string[]; snapshot: Snapshot }>;
+  head?: string;
+  // Uncommitted worktree files observed at dispatch; evidence only, never reviewed.
+  uncommitted?: string[];
+  // 0 before publication; n for the local rounds of hosted feedback batch n.
+  cycle?: number;
+  reviews: Record<string, Review>;
+};
+export type Repair = {
+  status: "started" | "complete";
+  head?: string;
+  verification?: string;
+  // A hosted repair that reconciles a moved target base records the new base.
+  targetBase?: string;
+  session?: Review & { brief: Snapshot };
+};
+// A superseded round keeps its triage and repair; a new head or plan needs its own round.
+export type ArchivedRound = {
+  round: Round;
+  decisions?: Decision[];
+  assessments?: FallbackAssessment[];
+  repair?: Repair;
+};
+export type ArchivedHostedBatch = {
+  publication: Receipt;
+  hosted?: Hosted;
+  decisions?: Decision[];
+  repair?: Repair;
+};
 export type Workflow = {
   version: 1;
   reviewMode?: "sol-focused-v1";
-  orchestration?: "planner-v1";
+  orchestration?: "planner-v1" | "planner-v2";
   standingOrders?: StandingOrderChange[];
   heartbeat?: Heartbeat;
   hostedMonitor?: { probeCommand: string[]; deadline: string };
@@ -167,37 +200,17 @@ export type Workflow = {
   routes: Record<Role, Route>;
   lenses: Record<Phase, Lens[]>;
   timeoutSeconds: number;
-  rounds: Partial<
-    Record<
-      Phase,
-      {
-        fingerprint: string;
-        artifact: Snapshot;
-        lenses: Snapshot;
-        lensAssignments: Record<
-          string,
-          { lensIds: string[]; snapshot: Snapshot }
-        >;
-        head?: string;
-        reviews: Record<string, Review>;
-      }
-    >
-  >;
+  rounds: Partial<Record<Phase, Round>>;
+  priorRounds?: {
+    planning?: ArchivedRound[];
+    implementation?: ArchivedRound[];
+    hosted?: ArchivedHostedBatch[];
+  };
   decisions: Partial<Record<Phase | "hosted", Decision[]>>;
   assessments: Partial<Record<Phase, FallbackAssessment[]>>;
   waivers: Waiver[];
   handoff?: Review & { brief: Snapshot; planResolution: Snapshot };
-  repairs: Partial<
-    Record<
-      "implementation" | "hosted",
-      {
-        status: "started" | "complete";
-        head?: string;
-        verification?: string;
-        session?: Review & { brief: Snapshot };
-      }
-    >
-  >;
+  repairs: Partial<Record<"implementation" | "hosted", Repair>>;
   deliveryPolicy?: DeliveryPolicy;
   publication?: Receipt;
   hosted?: Hosted;
@@ -221,6 +234,7 @@ export type Workflow = {
     authorization?: Workflow["currentAuthorization"];
     artifactUrl?: string;
     rounds: Workflow["rounds"];
+    priorRounds?: Workflow["priorRounds"];
     handoff?: Workflow["handoff"];
     decisions: Workflow["decisions"];
     assessments: Workflow["assessments"];
@@ -312,9 +326,61 @@ export function requireCurrentReviewMode(state: Workflow) {
 export function requireOrchestration(state: Workflow) {
   requireCurrentReviewMode(state);
   requireThat(
-    state.orchestration === "planner-v1",
-    "Workflow state predates planner orchestration; it stays readable through status, but tick and orchestrator dispatch refuse it",
+    state.orchestration === "planner-v2",
+    "Workflow state predates planner orchestration with head-keyed review; it stays readable through status, but tick and orchestrator dispatch refuse it",
   );
+}
+// Each phase, and each hosted feedback batch's local loop, allows this many review rounds.
+export const maxReviewRounds = 3;
+// Hosted feedback batch n follows the nth publication of a head.
+export function hostedBatch(state: Workflow) {
+  return (state.priorRounds?.hosted?.length ?? 0) + 1;
+}
+export function implementationCycle(state: Workflow) {
+  return state.publication ? hostedBatch(state) : 0;
+}
+// Rounds already dispatched in the current planning phase or implementation cycle.
+export function roundCount(state: Workflow, phase: Phase) {
+  const all = [
+    ...(state.priorRounds?.[phase] ?? []).map((item) => item.round),
+    ...(state.rounds[phase] ? [state.rounds[phase]] : []),
+  ];
+  if (phase === "planning") return all.length;
+  const cycle = implementationCycle(state);
+  return all.filter((round) => (round.cycle ?? 0) === cycle).length;
+}
+// Moves the current round, its triage, and its repair aside so the next round starts clean.
+export function archiveRound(state: Workflow, phase: Phase) {
+  const round = state.rounds[phase];
+  requireThat(round, "No round to archive");
+  const repair =
+    phase === "implementation" ? state.repairs.implementation : undefined;
+  state.priorRounds ??= {};
+  state.priorRounds[phase] ??= [];
+  state.priorRounds[phase].push({
+    round,
+    ...(state.decisions[phase] ? { decisions: state.decisions[phase] } : {}),
+    ...(state.assessments[phase]
+      ? { assessments: state.assessments[phase] }
+      : {}),
+    ...(repair ? { repair } : {}),
+  });
+  delete state.rounds[phase];
+  delete state.decisions[phase];
+  delete state.assessments[phase];
+  if (phase === "implementation") delete state.repairs.implementation;
+}
+// The newest head a runner-launched implementer produced, reviewed or not.
+export function latestHead(state: Workflow) {
+  const round = state.rounds.implementation;
+  if (state.repairs.implementation?.head)
+    return state.repairs.implementation.head;
+  if (
+    state.repairs.hosted?.head &&
+    (round?.cycle ?? 0) !== implementationCycle(state)
+  )
+    return state.repairs.hosted.head;
+  return round?.head ?? state.publication?.head;
 }
 // Binds a caller-supplied head to the worktree-verified head in the implementer's structured report.
 export function reportsHead(worker: Review | undefined, head: unknown) {
@@ -389,9 +455,9 @@ function openQuestions(
       !waiverFor(state, phase, requestedAction, decision.id),
   );
 }
-function pendingFixes(
+export function pendingFixes(
   state: Workflow,
-  phase: "implementation" | "hosted",
+  phase: Phase | "hosted",
   requestedAction: string,
 ) {
   return (state.decisions[phase] ?? []).some(
@@ -417,16 +483,26 @@ export function nextStep(state: Workflow): Step {
         `${phase} findings need user input or an exact scoped waiver`,
       );
   };
+  const bounded = (phase: Phase | "hosted") =>
+    awaiting(
+      `${phase} review bound of ${maxReviewRounds} reached with open fixes; report the findings, reviewed heads, and repairs for user direction`,
+    );
   const repair = (
     phase: "implementation" | "hosted",
     requestedAction: string,
   ) => {
     const current = state.repairs[phase];
     if (!current && pendingFixes(state, phase, requestedAction))
-      return changed(
-        "repair",
-        `Dispatch one fresh ${phase} repair batch with an orchestrator-written brief`,
-      );
+      return (
+        phase === "implementation"
+          ? roundCount(state, phase) >= maxReviewRounds
+          : hostedBatch(state) > maxReviewRounds
+      )
+        ? bounded(phase)
+        : changed(
+            "repair",
+            `Dispatch one fresh ${phase} repair with an orchestrator-written brief`,
+          );
     if (current?.session?.status === "failed")
       return awaiting(
         `${phase} repair session failed; inspect Paseo state before human-directed recovery`,
@@ -437,10 +513,34 @@ export function nextStep(state: Workflow): Step {
         `Record ${phase} repair completion with the reported head and verification`,
       );
   };
+  // Reviews every new implementation head until one round is clean; returns undefined once it is.
+  const implementationLoop = () => {
+    const loop =
+      reviewed("implementation", "publication") ??
+      repair("implementation", "publication");
+    if (loop) return loop;
+    const repaired = state.repairs.implementation;
+    if (repaired?.head === state.rounds.implementation?.head)
+      return awaiting(
+        "The implementation repair reported no new head; direct how to resolve the open fixes",
+      );
+    if (repaired?.status === "complete")
+      return changed(
+        "review",
+        "Dispatch a fresh implementation round on the repaired head",
+      );
+  };
   if (!state.rounds.planning)
     return changed("review", "Dispatch the planning review round");
   const planning = reviewed("planning", "handoff");
   if (planning) return planning;
+  if (pendingFixes(state, "planning", "handoff"))
+    return roundCount(state, "planning") >= maxReviewRounds
+      ? bounded("planning")
+      : changed(
+          "review",
+          "Revise the plan from the triaged findings and dispatch a fresh planning round on the changed plan",
+        );
   if (!state.handoff)
     return awaiting(
       "Plan acceptance is required before implementation handoff",
@@ -452,12 +552,12 @@ export function nextStep(state: Workflow): Step {
   if (!state.rounds.implementation)
     return changed(
       "review",
-      "Dispatch the implementation review round against the reported head",
+      "Dispatch the implementation review round on the worktree head",
     );
-  const implementation =
-    reviewed("implementation", "publication") ??
-    repair("implementation", "publication");
-  if (implementation) return implementation;
+  if (!state.publication) {
+    const implementation = implementationLoop();
+    if (implementation) return implementation;
+  }
   if (!state.publication)
     return changed(
       "publication",
@@ -471,12 +571,31 @@ export function nextStep(state: Workflow): Step {
     return awaiting(
       "hosted findings need user input or an exact scoped waiver",
     );
-  return (
-    repair("hosted", "finish") ??
-    changed(
-      "finish",
-      "Record the observed final Ready state through Finish; merge needs separate user authority",
+  const hosted = repair("hosted", "finish");
+  if (hosted) return hosted;
+  if (state.repairs.hosted?.status === "complete") {
+    if (state.repairs.hosted.head === state.publication.head)
+      return awaiting(
+        "The hosted repair reported no new head; direct how to resolve the open hosted fixes",
+      );
+    if (
+      (state.rounds.implementation?.cycle ?? 0) !== implementationCycle(state)
     )
+      return changed(
+        "review",
+        "Dispatch a fresh local implementation round on the hosted repair head",
+      );
+    return (
+      implementationLoop() ??
+      changed(
+        "publication",
+        "Push the reviewed head through Finish and record the republication to re-arm hosted gates",
+      )
+    );
+  }
+  return changed(
+    "finish",
+    "Record the observed final Ready state through Finish; merge needs separate user authority",
   );
 }
 function assignedLenses(state: Workflow, phase: Phase, role: string) {
@@ -652,7 +771,7 @@ export async function initialize(
   const state: Workflow = {
     version: 1,
     reviewMode: "sol-focused-v1",
-    orchestration: "planner-v1",
+    orchestration: "planner-v2",
     standingOrders: [],
     cwd: resolve(input.cwd),
     scratch: dirname(resolve(path)),
@@ -687,7 +806,8 @@ function currentTarget(state: Workflow, phase: Phase | "hosted") {
   const round = state.rounds[phase];
   requireThat(round, "Review has not run");
   if (phase === "planning") return round.fingerprint;
-  return state.repairs.implementation?.head ?? round.head;
+  requireThat(round.head, "Implementation round has no head");
+  return round.head;
 }
 function outcomeGates(role: string, outcomes: Record<string, Outcome>) {
   return Object.entries(outcomes).flatMap(([id, outcome]) => {
@@ -831,19 +951,31 @@ export function settled(
   );
   return decisions;
 }
-function repaired(
+// Before head-keyed orchestration, one completed repair batch stood in for re-review.
+function verdict(
   state: Workflow,
   phase: "implementation" | "hosted",
   requestedAction: string,
 ) {
-  const decisions = settled(state, phase, requestedAction);
+  if (state.orchestration === "planner-v2")
+    return clean(state, phase, requestedAction);
+  settled(state, phase, requestedAction);
   requireThat(
-    !decisions.some(
-      (decision) =>
-        decision.action === "fix" &&
-        !waiverFor(state, phase, requestedAction, decision.id),
-    ) || state.repairs[phase]?.status === "complete",
+    !pendingFixes(state, phase, requestedAction) ||
+      state.repairs[phase]?.status === "complete",
     `${phase} repairs require completed verification or an exact scoped waiver`,
+  );
+}
+// A clean verdict: triaged, no open questions, and no unwaived fix left for a later round.
+export function clean(
+  state: Workflow,
+  phase: Phase | "hosted",
+  requestedAction: string,
+) {
+  settled(state, phase, requestedAction);
+  requireThat(
+    !pendingFixes(state, phase, requestedAction),
+    `${phase} fixes need a repair and a fresh review round on the new head, or an exact scoped waiver`,
   );
 }
 export function assertActionGateDisposition(
@@ -864,8 +996,10 @@ export function assertActionGateDisposition(
         liveArtifact.targetBase === state.publication?.targetBase,
       "Bookkeeping mismatch: live artifact or target base differs from publication",
     );
-  if (phase === "planning") settled(state, phase, requestedAction);
-  else repaired(state, phase, requestedAction);
+  if (phase !== "planning") verdict(state, phase, requestedAction);
+  else if (state.orchestration === "planner-v2")
+    clean(state, phase, requestedAction);
+  else settled(state, phase, requestedAction);
 }
 function validatedPolicy(policy: DeliveryPolicy | undefined) {
   requireThat(policy, "Resolved delivery policy is required");
@@ -967,10 +1101,12 @@ export async function transition(path: string, action: string, input: Input) {
         "Continuation requires explicit bounded authorization and expected head",
       );
       const currentHead =
-        state.repairs.hosted?.head ??
-        state.repairs.implementation?.head ??
-        state.publication?.head ??
-        state.rounds.implementation?.head;
+        state.orchestration === "planner-v2"
+          ? latestHead(state)
+          : (state.repairs.hosted?.head ??
+            state.repairs.implementation?.head ??
+            state.publication?.head ??
+            state.rounds.implementation?.head);
       requireThat(
         input.expectedHead === currentHead &&
           (!state.publication ||
@@ -989,6 +1125,9 @@ export async function transition(path: string, action: string, input: Input) {
           structuredClone(state.currentAuthorization),
         artifactUrl: state.publication?.artifactUrl,
         rounds: structuredClone(state.rounds),
+        ...(state.priorRounds
+          ? { priorRounds: structuredClone(state.priorRounds) }
+          : {}),
         handoff: state.handoff && structuredClone(state.handoff),
         decisions: structuredClone(state.decisions),
         assessments: structuredClone(state.assessments),
@@ -1008,12 +1147,27 @@ export async function transition(path: string, action: string, input: Input) {
       };
       if (input.allowedPhases.includes("planning")) {
         state.rounds = {};
+        delete state.priorRounds;
         delete state.handoff;
-      } else if (input.allowedPhases.includes("implementation"))
+      } else if (input.allowedPhases.includes("implementation")) {
         delete state.rounds.implementation;
-      state.decisions = {};
-      state.assessments = {};
-      state.waivers = [];
+        delete state.priorRounds?.implementation;
+        delete state.priorRounds?.hosted;
+      } else delete state.priorRounds?.hosted;
+      // A batch that does not reopen planning keeps the settled planning verdict.
+      const reopened = (phase: Phase | "hosted") =>
+        input.allowedPhases?.includes("planning") || phase !== "planning";
+      state.decisions = Object.fromEntries(
+        Object.entries(state.decisions).filter(
+          ([phase]) => !reopened(phase as Phase),
+        ),
+      );
+      state.assessments = Object.fromEntries(
+        Object.entries(state.assessments).filter(
+          ([phase]) => !reopened(phase as Phase),
+        ),
+      );
+      state.waivers = state.waivers.filter((waiver) => !reopened(waiver.phase));
       state.repairs = {};
       if (
         input.allowedPhases.includes("planning") ||
@@ -1047,11 +1201,18 @@ export async function transition(path: string, action: string, input: Input) {
       });
     } else if (action === "triage") {
       const phase = input.phase === "hosted" ? "hosted" : phaseOf(input.phase);
+      // A published round's triage is final; a local round on a hosted repair head is not yet published.
+      const publishedRound =
+        state.orchestration === "planner-v2"
+          ? state.publication !== undefined &&
+            (state.rounds.implementation?.cycle ?? 0) !==
+              implementationCycle(state)
+          : state.publication !== undefined;
       requireThat(
         !(phase === "planning"
           ? state.handoff
           : phase === "implementation"
-            ? state.publication
+            ? publishedRound
             : state.repairs.hosted),
         "Triage is already consumed by the next phase",
       );
@@ -1182,12 +1343,26 @@ export async function transition(path: string, action: string, input: Input) {
         });
       }
     } else if (action === "publication") {
-      repaired(state, "implementation", "publication");
-      requireThat(!state.publication, "Publication already recorded");
+      const republication =
+        state.orchestration === "planner-v2" && state.publication !== undefined;
+      verdict(state, "implementation", "publication");
+      if (republication)
+        requireThat(
+          state.repairs.hosted?.status === "complete" &&
+            (state.rounds.implementation?.cycle ?? 0) ===
+              implementationCycle(state),
+          "Republication requires a completed hosted repair and a clean local round on the resulting head",
+        );
+      else requireThat(!state.publication, "Publication already recorded");
       requireThat(
         nonempty(input.targetBase) &&
           /^[a-f0-9]{40,64}$/.test(input.targetBase),
         "Publication requires the exact target-base SHA",
+      );
+      requireThat(
+        !state.repairs.hosted?.targetBase ||
+          input.targetBase === state.repairs.hosted.targetBase,
+        "Republication target base differs from the reconciled base",
       );
       const policy = validatedPolicy(state.deliveryPolicy);
       requireThat(
@@ -1201,10 +1376,33 @@ export async function transition(path: string, action: string, input: Input) {
       const observed = receipt(input, policy);
       requireThat(
         observed.head ===
-          (state.repairs.implementation?.head ??
-            state.rounds.implementation?.head),
-        "Publication head differs from reviewed or repaired implementation",
+          (state.orchestration === "planner-v2"
+            ? state.rounds.implementation?.head
+            : (state.repairs.implementation?.head ??
+              state.rounds.implementation?.head)),
+        "Publication head differs from the head with a clean review verdict",
       );
+      if (republication && state.publication) {
+        requireThat(
+          observed.artifactUrl === state.publication.artifactUrl &&
+            observed.reviewer === state.publication.reviewer,
+          "Republication artifact differs from publication",
+        );
+        state.priorRounds ??= {};
+        state.priorRounds.hosted ??= [];
+        state.priorRounds.hosted.push({
+          publication: state.publication,
+          ...(state.hosted ? { hosted: state.hosted } : {}),
+          ...(state.decisions.hosted
+            ? { decisions: state.decisions.hosted }
+            : {}),
+          ...(state.repairs.hosted ? { repair: state.repairs.hosted } : {}),
+        });
+        delete state.decisions.hosted;
+        delete state.repairs.hosted;
+        delete state.hosted;
+        delete state.hostedMonitor;
+      }
       const unmonitored =
         policy.ci === "not-required" && policy.reviewer === "not-required";
       if (state.orchestration && !unmonitored) {
@@ -1234,14 +1432,21 @@ export async function transition(path: string, action: string, input: Input) {
         };
       }
     } else if (action === "finish") {
-      repaired(state, "hosted", "finish");
+      verdict(state, "hosted", "finish");
+      const current = state.orchestration === "planner-v2";
+      requireThat(
+        !current || !state.repairs.hosted,
+        "A hosted repair head needs a clean local round and republication before finish",
+      );
       const final = receipt(input, validatedPolicy(state.deliveryPolicy));
       requireThat(
         final.artifactUrl === state.publication?.artifactUrl &&
           final.reviewer === state.publication.reviewer,
         "Final artifact differs from publication",
       );
-      const expectedHead = state.repairs.hosted?.head ?? state.publication.head;
+      const expectedHead = current
+        ? state.publication.head
+        : (state.repairs.hosted?.head ?? state.publication.head);
       requireThat(
         final.head === expectedHead,
         "Final observed head differs from reviewed or repaired head",

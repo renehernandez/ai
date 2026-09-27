@@ -12,7 +12,11 @@ test("GREEN authority: managed Pi workflow keeps Ready publication separate from
     "skills/paseo-orchestration/references/paseo-workflow.md",
   );
   assert.match(workflow, /Merge requires separate\s+user authority/);
-  assert.match(workflow, /one hosted\s+repair batch/);
+  assert.match(workflow, /three hosted repair\s+batches/);
+  assert.match(
+    read("skills/execute/SKILL.md"),
+    /managed Pi planners delegate them via runner `handoff`/,
+  );
   assert.match(workflow, /direct unmanaged Pi sessions/);
   assert.match(workflow, /source fingerprint/);
   assert.match(
@@ -63,6 +67,10 @@ test("RED authority: the managed implementer no longer owns review, publication,
   assert.doesNotMatch(
     read("skills/paseo-orchestration/scripts/paseo-workflow.ts"),
     /Ready publication through Finish, one hosted feedback repair batch/,
+  );
+  assert.doesNotMatch(
+    workflow,
+    /do not automatically rerun\s+reviewers|Do not start a second review round/i,
   );
 });
 

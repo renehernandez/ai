@@ -8,9 +8,10 @@ allowed-tools: Read, Glob, Grep, Task, AskUserQuestion, Write, Edit, Bash
 
 ## Authority
 
-Execute owns repository implementation writes in one coordinated worktree. It
-does not own provider mutation, merge, deployment, or remote cleanup. Announce
-Execute, repository-write authority, and the goal once on non-trivial entry.
+Execute owns repository implementation writes in one coordinated worktree;
+managed Pi planners delegate them via runner `handoff`. It does not own
+provider mutation, merge, deployment, or remote cleanup. Announce Execute,
+repository-write authority, and the goal once on non-trivial entry.
 
 Enter only when no material behavior, architecture, migration, safety,
 ownership, ordering, cross-component, or proof decision remains. Freeze writes
@@ -29,8 +30,8 @@ Before writing or resuming:
    task credentials with one small representative command; and
 4. allow exactly one writer to edit, stage, and commit the artifact.
 
-This is ordinary Execute setup, including under Fast delivery. Do not expose a
-separate setup checkpoint or user pause.
+This is ordinary Execute setup, including under Fast delivery, with no
+separate checkpoint or user pause.
 
 Use another worktree for another writer. Read-only reviewers may run in
 parallel. A handoff records branch, worktree, HEAD, changed/untracked paths, and
@@ -60,7 +61,7 @@ Plan.
 Final implementation starts from the normal target plus reconciled planning
 state, never POC ancestry, commits, patches, cherry-picks, or branches.
 An accepted POC remains open; closure requires an explicit request or contextual
-authority that the work is ready to proceed to stack breakdown.
+authority to proceed to stack breakdown.
 
 In the last final unit, after every reconciled requirement and task has proof,
 mark tasks complete, synchronize delta specs into canonical specs, move the

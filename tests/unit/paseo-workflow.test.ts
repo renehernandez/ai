@@ -40,6 +40,18 @@ import {
 } from "../../skills/paseo-orchestration/scripts/paseo-workflow.ts";
 import { locked } from "../../skills/paseo-orchestration/scripts/paseo-workflow-state.ts";
 
+// Each fixture's fake worktree stands in for `git rev-parse` when a round binds its head.
+const worktrees = new Map<string, WorktreeReader>();
+const dispatchFixtureReview = (
+  path: string,
+  input: {
+    phase: "planning" | "implementation";
+    artifactPath: string;
+    head?: string;
+  },
+  transport: Transport,
+) => dispatchReview(path, input, transport, worktrees.get(path));
+
 const policySourceFingerprint = "a".repeat(64);
 const targetBase = "b".repeat(40);
 const orchestrator = { agentId: "orchestrator-0001" };
@@ -150,6 +162,7 @@ async function fixture(
     head: tree.head ?? reportedHead,
     uncommitted: tree.uncommitted,
   });
+  worktrees.set(path, worktree);
   let heartbeatIds = 0;
   let maxHeartbeats = 0;
   const transport: Transport = async (args, _timeout, env) => {
@@ -229,11 +242,7 @@ async function fixture(
   ) => tick(path, orchestrator, via, probe, now, worktree);
   const review = async (phase: "planning" | "implementation") => {
     await step();
-    await dispatchReview(
-      path,
-      { phase, artifactPath, head: heads.first },
-      transport,
-    );
+    await dispatchFixtureReview(path, { phase, artifactPath }, transport);
     await step();
     await transition(path, "triage", { phase, decisions: [] });
   };
@@ -408,7 +417,7 @@ test("GREEN pi-paseo-workflow: deliberate focused handoff reaches Ready once wit
   assert.equal((await f.step()).result, "finished");
   assert.equal(f.heartbeats.size, 0);
   await assert.rejects(
-    dispatchReview(
+    dispatchFixtureReview(
       f.path,
       { phase: "planning", artifactPath: f.artifactPath },
       f.transport,
@@ -629,7 +638,7 @@ async function captureStdout(run: () => Promise<void>) {
 
 test("GREEN pi-paseo-workflow: pre-orchestration state stays readable while tick is the only orchestrated advancement path", async () => {
   const f = await fixture();
-  await dispatchReview(
+  await dispatchFixtureReview(
     f.path,
     { phase: "planning", artifactPath: f.artifactPath },
     f.transport,
@@ -678,10 +687,10 @@ test("GREEN pi-paseo-workflow: pre-orchestration state stays readable while tick
   );
 });
 
-test("RED pi-paseo-workflow: repeated phase cannot dispatch another review", async () => {
+test("RED pi-paseo-workflow: an untriaged round cannot be replaced by another review of the phase", async () => {
   const f = await fixture();
   const originalArtifact = await readFile(f.artifactPath, "utf8");
-  await dispatchReview(
+  await dispatchFixtureReview(
     f.path,
     { phase: "planning", artifactPath: f.artifactPath },
     f.transport,
@@ -693,12 +702,12 @@ test("RED pi-paseo-workflow: repeated phase cannot dispatch another review", asy
     "A different artifact cannot replace the reserved review.",
   );
   await assert.rejects(
-    dispatchReview(
+    dispatchFixtureReview(
       f.path,
       { phase: "planning", artifactPath: f.artifactPath },
       f.transport,
     ),
-    /already dispatched; no automatic reruns/,
+    /already dispatched for this target/,
   );
   assert.deepEqual((await f.read()).rounds.planning?.artifact, reserved);
   assert.equal(await readFile(reserved.path, "utf8"), originalArtifact);
@@ -709,7 +718,7 @@ test("parallel phase callers reserve each reviewer only once", async () => {
   const f = await fixture();
   const results = await Promise.allSettled(
     [1, 2].map(() =>
-      dispatchReview(
+      dispatchFixtureReview(
         f.path,
         { phase: "planning", artifactPath: f.artifactPath },
         f.transport,
@@ -727,7 +736,7 @@ test("parallel phase callers reserve each reviewer only once", async () => {
 
 test("reviewer launch and response failures become degraded evidence without retry", async () => {
   const f = await fixture();
-  await dispatchReview(
+  await dispatchFixtureReview(
     f.path,
     { phase: "planning", artifactPath: f.artifactPath },
     async (args, timeout, env) => {
@@ -758,7 +767,7 @@ test("reviewer launch and response failures become degraded evidence without ret
   assert.equal(f.calls.filter((args) => args[0] === "run").length, 1);
 
   const g = await fixture();
-  await dispatchReview(
+  await dispatchFixtureReview(
     g.path,
     { phase: "planning", artifactPath: g.artifactPath },
     g.transport,
@@ -797,7 +806,7 @@ test("reviewer launch and response failures become degraded evidence without ret
 
 test("scoped waivers preserve failed evidence, bind the current target, and do not widen authority", async () => {
   const f = await fixture();
-  await dispatchReview(
+  await dispatchFixtureReview(
     f.path,
     { phase: "planning", artifactPath: f.artifactPath },
     f.transport,
@@ -1037,7 +1046,7 @@ test("authorized known-misroute recovery archives history and launches once", as
 
 test("actual session model mismatch records degraded evidence", async () => {
   const f = await fixture();
-  await dispatchReview(
+  await dispatchFixtureReview(
     f.path,
     { phase: "planning", artifactPath: f.artifactPath },
     f.transport,
@@ -1146,7 +1155,7 @@ test("review reports reject duplicate findings and contradictory pass outcomes",
   );
 });
 
-test("one hosted repair batch is permitted and final receipt must match repaired head", async () => {
+test("GREEN pi-paseo-workflow: a hosted repair head gets a fresh local round and republication before finish", async () => {
   const f = await fixture();
   await f.review("planning");
   await f.accept("No findings.");
@@ -1169,16 +1178,36 @@ test("one hosted repair batch is permitted and final receipt must match repaired
       { phase: "hosted", briefPath: f.repairBrief },
       f.transport,
     ),
-    /Only one/,
+    /One repair per review round or hosted batch/,
   );
   await assert.rejects(
-    transition(f.path, "finish", hostedReceipt),
-    /head differs/,
+    transition(f.path, "finish", { ...hostedReceipt, head: heads.second }),
+    /hosted fixes need a repair and a fresh review round/,
   );
+  assert.equal(await nextAction(f), "review");
+  await f.review("implementation");
+  const local = (await f.read()).rounds.implementation;
+  assert.equal(local?.head, heads.second);
+  assert.equal(local?.cycle, 1);
+  assert.equal(await nextAction(f), "publication");
+  await assert.rejects(
+    transition(f.path, "publication", hostedReceipt),
+    /clean review verdict/,
+  );
+  await transition(f.path, "publication", {
+    ...hostedReceipt,
+    head: heads.second,
+  });
+  const republished = await f.read();
+  assert.equal(republished.hosted?.status, "waiting");
+  assert.equal(republished.priorRounds?.hosted?.length, 1);
+  assert.equal(republished.repairs.hosted, undefined);
+  await f.step(f.transport, hostedProbe(heads.second));
+  assert.equal(await nextAction(f), "finish");
   await transition(f.path, "finish", {
     ...hostedReceipt,
     head: heads.second,
-    evidence: "Second head observed Ready; hosted review only covered first.",
+    evidence: "Second head observed Ready after its own hosted review.",
   });
   assert.equal((await f.read()).publication?.head, heads.second);
   await assert.rejects(
@@ -1291,11 +1320,11 @@ test("failed, awaiting-user, and waiting hosted evidence expose exact waivable g
   }
 });
 
-test("implementation questions block publication and applicable fixes consume one verified repair batch", async () => {
+test("implementation questions block publication and applicable fixes need a repair and a fresh round on its head", async () => {
   const f = await fixture();
   await f.review("planning");
   await f.accept("No findings.");
-  await dispatchReview(
+  await dispatchFixtureReview(
     f.path,
     {
       phase: "implementation",
@@ -1341,7 +1370,7 @@ test("implementation questions block publication and applicable fixes consume on
   });
   await assert.rejects(
     transition(f.path, "publication", receipt),
-    /completed verification/,
+    /fixes need a repair and a fresh review round/,
   );
   await assert.rejects(
     transition(f.path, "repair", { phase: "implementation", stage: "start" }),
@@ -1354,11 +1383,16 @@ test("implementation questions block publication and applicable fixes consume on
       { phase: "implementation", briefPath: f.repairBrief },
       f.transport,
     ),
-    /Only one/,
+    /One repair per review round/,
   );
   await assert.rejects(
+    transition(f.path, "publication", { ...receipt, head: heads.repaired }),
+    /fixes need a repair and a fresh review round/,
+  );
+  await f.review("implementation");
+  await assert.rejects(
     transition(f.path, "publication", receipt),
-    /head differs/,
+    /clean review verdict/,
   );
   await transition(f.path, "publication", { ...receipt, head: heads.repaired });
   assert.equal((await f.read()).publication?.head, heads.repaired);
@@ -1369,7 +1403,7 @@ test("terminal gate disposition rejects an A-to-B stale waiver and consumes an e
   await f.review("planning");
   f.reportHead(heads.headA);
   await f.accept("No planning findings.");
-  await dispatchReview(
+  await dispatchFixtureReview(
     f.path,
     {
       phase: "implementation",
@@ -1448,19 +1482,24 @@ test("terminal gate disposition rejects an A-to-B stale waiver and consumes an e
         "deployment",
         heads.headB,
       ),
-    /user input/,
+    /Action target differs/,
   );
-  await transition(f.path, "waiver", {
-    phase: "implementation",
-    target: heads.headB,
-    requestedAction: "deployment",
-    failedGates: actionGates,
-    reason: "Deploy repaired head B despite the same named gates.",
-  });
-  const waived = await f.read();
+  await f.review("implementation");
+  const reviewed = await f.read();
+  assert.equal(reviewed.rounds.implementation?.head, heads.headB);
+  assert.throws(
+    () =>
+      assertActionGateDisposition(
+        reviewed,
+        "implementation",
+        "deployment",
+        heads.headA,
+      ),
+    /Action target differs/,
+  );
   assert.doesNotThrow(() =>
     assertActionGateDisposition(
-      waived,
+      reviewed,
       "implementation",
       "deployment",
       heads.headB,
@@ -1495,7 +1534,7 @@ test("large plan, implementation and handoff use private snapshots with bounded 
   const review = async (phase: "planning" | "implementation") => {
     const content = `${phase}\n${large}`;
     await writeFile(f.artifactPath, content);
-    await dispatchReview(
+    await dispatchFixtureReview(
       f.path,
       { phase, artifactPath: f.artifactPath, head: heads.first },
       transport,
@@ -1548,7 +1587,7 @@ test("GREEN pi-paseo-workflow: ticks carry an unattended run from implementation
   assert.equal(reported.result === "changed" && reported.next.action, "review");
   assert.equal(reported.heartbeat, undefined);
   assert.ok((await f.read()).handoff?.report);
-  await dispatchReview(
+  await dispatchFixtureReview(
     f.path,
     {
       phase: "implementation",
@@ -1568,7 +1607,7 @@ test("GREEN pi-paseo-workflow: ticks carry an unattended run from implementation
 
 test("GREEN pi-paseo-workflow: a tick with busy workers is quiet and never dispatches", async () => {
   const f = await fixture();
-  await dispatchReview(
+  await dispatchFixtureReview(
     f.path,
     { phase: "planning", artifactPath: f.artifactPath },
     f.transport,
@@ -1708,7 +1747,325 @@ test("RED pi-paseo-workflow: managed workers cannot run orchestrator actions", a
       AX_PI_CONTRACT: JSON.stringify({ role: "implementer" }),
     }),
   );
+  assert.equal(JSON.parse(status).orchestration, "planner-v2");
+});
+
+type Flow = Awaited<ReturnType<typeof fixture>>;
+const regression = {
+  status: "finding",
+  evidence: "A regression needs repair.",
+  findings: [{ id: "regression", evidence: "The guard is inverted." }],
+};
+const fixRegression = {
+  phase: "implementation" as const,
+  decisions: [
+    {
+      id: "review-correctness:diff-review:regression",
+      action: "fix" as const,
+      reason: "Reproduced.",
+    },
+  ],
+};
+const nextAction = async (f: Flow) => {
+  const step = await f.step();
+  return step.result === "changed" ? step.next.action : step.result;
+};
+async function findingRound(f: Flow) {
+  await dispatchFixtureReview(
+    f.path,
+    { phase: "implementation", artifactPath: f.artifactPath },
+    f.transport,
+  );
+  await f.step(withReviewOutcome(f.transport, "diff-review", regression));
+  await transition(f.path, "triage", fixRegression);
+}
+const hostedProbe =
+  (head: string, findings: { id: string; evidence: string }[] = []) =>
+  async () =>
+    JSON.stringify({ ...hostedReceipt, head, status: "completed", findings });
+
+test("GREEN pi-paseo-workflow: every repaired head gets a fresh implementation round until one is clean", async () => {
+  const f = await fixture();
+  await f.review("planning");
+  await f.accept();
+  await findingRound(f);
+  assert.equal(await nextAction(f), "repair");
+  await f.repair("implementation", heads.second);
+  const next = await f.step();
+  assert.equal(next.result, "changed");
+  assert.match(
+    next.result === "changed" ? next.next.detail : "",
+    /fresh implementation round on the repaired head/,
+  );
+  await f.review("implementation");
+  const state = await f.read();
+  assert.equal(state.rounds.implementation?.head, heads.second);
+  assert.equal(state.priorRounds?.implementation?.length, 1);
+  assert.equal(
+    state.priorRounds?.implementation?.[0].repair?.head,
+    heads.second,
+  );
+  assert.equal(state.batchId, "initial");
+  assert.equal(await nextAction(f), "publication");
+  await transition(f.path, "publication", {
+    ...hostedReceipt,
+    head: heads.second,
+  });
+});
+
+test("RED pi-paseo-workflow: a repair that reports no new head stops for the user instead of looping", async () => {
+  const f = await fixture();
+  await f.review("planning");
+  await f.accept();
+  await findingRound(f);
+  await f.repair("implementation", heads.first);
+  const stopped = await f.step();
+  assert.equal(stopped.result, "awaiting-user");
+  assert.match(
+    stopped.result === "awaiting-user" ? stopped.gate : "",
+    /reported no new head/,
+  );
+  await assert.rejects(
+    dispatchFixtureReview(
+      f.path,
+      { phase: "implementation", artifactPath: f.artifactPath },
+      f.transport,
+    ),
+    /already dispatched for this target/,
+  );
+});
+
+test("RED pi-paseo-workflow: a third implementation round with fixes stops for the user until a continuation", async () => {
+  const f = await fixture();
+  await f.review("planning");
+  await f.accept();
+  await findingRound(f);
+  await f.repair("implementation", heads.second);
+  await findingRound(f);
+  await f.repair("implementation", heads.repaired);
+  await findingRound(f);
+  const stopped = await f.step();
+  assert.equal(stopped.result, "awaiting-user");
+  assert.match(
+    stopped.result === "awaiting-user" ? stopped.gate : "",
+    /review bound of 3 reached with open fixes/,
+  );
+  await assert.rejects(
+    dispatchRepair(
+      f.path,
+      { phase: "implementation", briefPath: f.repairBrief },
+      f.transport,
+    ),
+    /review bound of 3 reached/,
+  );
+  await assert.rejects(
+    dispatchFixtureReview(
+      f.path,
+      { phase: "implementation", artifactPath: f.artifactPath },
+      f.transport,
+    ),
+    /already dispatched for this target/,
+  );
+  await transition(f.path, "continuation", {
+    batchId: "user-extends-review",
+    authorizationSource: "User asked for another bounded review batch.",
+    purpose: "Review the current head again.",
+    allowedPhases: ["implementation"],
+    expectedHead: heads.repaired,
+  });
+  const continued = await f.read();
+  assert.equal(continued.priorRounds?.implementation, undefined);
+  assert.equal(
+    continued.history?.at(-1)?.priorRounds?.implementation?.length,
+    2,
+  );
+  assert.equal(await nextAction(f), "review");
+  await findingRound(f);
+  assert.equal(await nextAction(f), "repair");
+});
+
+test("GREEN pi-paseo-workflow: planning fixes need a revised plan and a fresh planning round before handoff", async () => {
+  const f = await fixture();
+  await f.step();
+  await dispatchFixtureReview(
+    f.path,
+    { phase: "planning", artifactPath: f.artifactPath },
+    f.transport,
+  );
+  await f.step(
+    withReviewOutcome(f.transport, "implementation-readiness", {
+      status: "finding",
+      evidence: "The plan leaves the owner unnamed.",
+      findings: [{ id: "owner", evidence: "No canonical owner is named." }],
+    }),
+  );
+  await transition(f.path, "triage", {
+    phase: "planning",
+    decisions: [
+      {
+        id: "review-correctness:implementation-readiness:owner",
+        action: "fix",
+        reason: "Name the owner.",
+      },
+    ],
+  });
+  assert.equal(await nextAction(f), "review");
+  await assert.rejects(
+    handoff(
+      f.path,
+      { briefPath: f.artifactPath, planResolution: "Settled." },
+      f.transport,
+    ),
+    /planning fixes need a repair and a fresh review round/,
+  );
+  await assert.rejects(
+    dispatchFixtureReview(
+      f.path,
+      { phase: "planning", artifactPath: f.artifactPath },
+      f.transport,
+    ),
+    /already dispatched for this target/,
+  );
+  await writeFile(
+    f.artifactPath,
+    "Objective: test the accepted behavior. Owner: the runner. Exact target evidence: test fixture.",
+  );
+  await f.review("planning");
+  assert.equal((await f.read()).priorRounds?.planning?.length, 1);
+  assert.equal(await nextAction(f), "awaiting-user");
+  await f.accept();
+  assert.equal((await f.read()).handoff?.status, "complete");
+});
+
+test("GREEN pi-paseo-workflow: hosted repair rounds use the hosted budget after implementation used all three rounds", async () => {
+  const f = await fixture();
+  await f.review("planning");
+  await f.accept();
+  await findingRound(f);
+  await f.repair("implementation", heads.second);
+  await findingRound(f);
+  await f.repair("implementation", heads.repaired);
+  await f.review("implementation");
+  await transition(f.path, "publication", {
+    ...hostedReceipt,
+    head: heads.repaired,
+  });
+  await f.step(
+    f.transport,
+    hostedProbe(heads.repaired, [
+      { id: "finding-1", evidence: "Concrete defect." },
+    ]),
+  );
+  await transition(f.path, "triage", {
+    phase: "hosted",
+    decisions: [{ id: "finding-1", action: "fix", reason: "Reproduced." }],
+  });
+  await f.repair("hosted", heads.other);
+  assert.equal(await nextAction(f), "review");
+  await f.review("implementation");
+  const local = (await f.read()).rounds.implementation;
+  assert.equal(local?.head, heads.other);
+  assert.equal(local?.cycle, 1);
+  assert.equal(await nextAction(f), "publication");
+});
+
+test("GREEN pi-paseo-workflow: a moved target base is reconciled by a fresh implementer and re-reviewed", async () => {
+  const f = await fixture();
+  await f.review("planning");
+  await f.accept();
+  await f.review("implementation");
+  await transition(f.path, "publication", hostedReceipt);
+  await f.step(f.transport, probeReturning("completed"));
+  assert.equal(await nextAction(f), "finish");
+  await assert.rejects(
+    dispatchRepair(
+      f.path,
+      { phase: "hosted", briefPath: f.repairBrief, targetBase },
+      f.transport,
+    ),
+    /new exact target-base SHA/,
+  );
+  const movedBase = "c".repeat(40);
+  f.reportHead(heads.second);
+  await dispatchRepair(
+    f.path,
+    { phase: "hosted", briefPath: f.repairBrief, targetBase: movedBase },
+    f.transport,
+  );
+  await f.step();
+  await transition(f.path, "repair", {
+    phase: "hosted",
+    stage: "complete",
+    head: heads.second,
+    verification: "Merged the moved base; suite passes.",
+  });
+  await assert.rejects(
+    transition(f.path, "finish", { ...hostedReceipt, head: heads.second }),
+    /needs a clean local round and republication/,
+  );
+  assert.equal(await nextAction(f), "review");
+  await f.review("implementation");
+  await assert.rejects(
+    transition(f.path, "publication", {
+      ...hostedReceipt,
+      head: heads.second,
+    }),
+    /reconciled base/,
+  );
+  await transition(f.path, "publication", {
+    ...hostedReceipt,
+    head: heads.second,
+    targetBase: movedBase,
+  });
+  assert.equal((await f.read()).publication?.targetBase, movedBase);
+});
+
+test("RED pi-paseo-workflow: a round waits for in-flight writers and records uncommitted files as evidence", async () => {
+  const f = await fixture();
+  await f.review("planning");
+  await handoff(
+    f.path,
+    { briefPath: f.artifactPath, planResolution: "Settled." },
+    f.transport,
+  );
+  await assert.rejects(
+    dispatchFixtureReview(
+      f.path,
+      { phase: "implementation", artifactPath: f.artifactPath },
+      f.transport,
+    ),
+    /while an implementer or repair is in flight/,
+  );
+  await f.step();
+  f.tree.uncommitted = ["?? scratch.txt"];
+  await dispatchFixtureReview(
+    f.path,
+    { phase: "implementation", artifactPath: f.artifactPath },
+    f.transport,
+  );
+  const round = (await f.read()).rounds.implementation;
+  assert.equal(round?.head, heads.first);
+  assert.deepEqual(round?.uncommitted, ["?? scratch.txt"]);
+});
+
+test("RED pi-paseo-workflow: single-round planner-v1 state stays readable but cannot advance", async () => {
+  const f = await fixture();
+  const legacy = await f.read();
+  legacy.orchestration = "planner-v1";
+  await writeFile(f.path, JSON.stringify(legacy));
+  const status = await captureStdout(() =>
+    main([f.path, "status"], { AX_PI_CONTRACT: '{"role":"implementer"}' }),
+  );
   assert.equal(JSON.parse(status).orchestration, "planner-v1");
+  await assert.rejects(f.step(), /predates planner orchestration/);
+  await assert.rejects(
+    dispatchFixtureReview(
+      f.path,
+      { phase: "planning", artifactPath: f.artifactPath },
+      f.transport,
+    ),
+    /predates planner orchestration/,
+  );
 });
 
 test("GREEN pi-paseo-workflow: assignments and tick prompts carry only the effective standing orders", async () => {
@@ -1732,7 +2089,7 @@ test("GREEN pi-paseo-workflow: assignments and tick prompts carry only the effec
     order({ op: "add", id: "visibility", constraint: "Duplicate." }),
     /Standing order changes/,
   );
-  await dispatchReview(
+  await dispatchFixtureReview(
     f.path,
     { phase: "planning", artifactPath: f.artifactPath },
     f.transport,
@@ -1775,7 +2132,7 @@ test("GREEN pi-paseo-workflow: assignments and tick prompts carry only the effec
 
 test("GREEN pi-paseo-workflow: contract questions and hosted user gates return awaiting-user and delete the heartbeat", async () => {
   const f = await fixture();
-  await dispatchReview(
+  await dispatchFixtureReview(
     f.path,
     { phase: "planning", artifactPath: f.artifactPath },
     f.transport,
@@ -1821,7 +2178,7 @@ test("GREEN pi-paseo-workflow: a repair batch launches one new verified implemen
   const f = await fixture();
   await f.review("planning");
   await f.accept();
-  await dispatchReview(
+  await dispatchFixtureReview(
     f.path,
     {
       phase: "implementation",
@@ -1896,7 +2253,7 @@ test("GREEN pi-paseo-workflow: a repair batch launches one new verified implemen
 
 test("RED pi-paseo-workflow: ticks never start another review round or repair batch and time out busy reviewers as degraded evidence", async () => {
   const f = await fixture();
-  await dispatchReview(
+  await dispatchFixtureReview(
     f.path,
     { phase: "planning", artifactPath: f.artifactPath },
     f.transport,
@@ -1930,18 +2287,18 @@ test("RED pi-paseo-workflow: ticks never start another review round or repair ba
   await f.step();
   assert.equal(runs(f), launches);
   await assert.rejects(
-    dispatchReview(
+    dispatchFixtureReview(
       f.path,
       { phase: "planning", artifactPath: f.artifactPath },
       f.transport,
     ),
-    /no automatic reruns/,
+    /already dispatched for this target/,
   );
 });
 
 test("RED pi-paseo-workflow: an idle worker that has not begun its assignment stays in flight", async () => {
   const f = await fixture();
-  await dispatchReview(
+  await dispatchFixtureReview(
     f.path,
     { phase: "planning", artifactPath: f.artifactPath },
     f.transport,
@@ -1959,12 +2316,12 @@ test("RED pi-paseo-workflow: an idle worker that has not begun its assignment st
   assert.equal((await f.step()).recorded.length, 3);
 });
 
-test("RED pi-paseo-workflow: review and repair heads must match the implementer report", async () => {
+test("RED pi-paseo-workflow: review binds the worktree head and repair completion binds the repair report head", async () => {
   const f = await fixture();
   await f.review("planning");
   await f.accept();
   await assert.rejects(
-    dispatchReview(
+    dispatchFixtureReview(
       f.path,
       {
         phase: "implementation",
@@ -1973,9 +2330,9 @@ test("RED pi-paseo-workflow: review and repair heads must match the implementer 
       },
       f.transport,
     ),
-    /verified report head equals the reviewed head/,
+    /differs from the workflow worktree head/,
   );
-  await dispatchReview(
+  await dispatchFixtureReview(
     f.path,
     {
       phase: "implementation",
@@ -2025,7 +2382,7 @@ test("RED pi-paseo-workflow: review and repair heads must match the implementer 
 
 test("GREEN pi-paseo-workflow: inspection errors degrade reviewers and keep implementers in flight", async () => {
   const f = await fixture();
-  await dispatchReview(
+  await dispatchFixtureReview(
     f.path,
     { phase: "planning", artifactPath: f.artifactPath },
     f.transport,
@@ -2094,7 +2451,7 @@ test("GREEN pi-paseo-workflow: runner actions print one compact line and status 
     result: "changed",
     next: { action: "review", detail: "Dispatch the planning review round" },
   });
-  await dispatchReview(
+  await dispatchFixtureReview(
     f.path,
     { phase: "planning", artifactPath: f.artifactPath },
     f.transport,
@@ -2126,7 +2483,7 @@ test("GREEN pi-paseo-workflow: runner actions print one compact line and status 
   assert.ok(status.rounds.planning.reviews["review-architecture"].outcomes);
 });
 
-test("RED pi-paseo-workflow: only the worktree-verified envelope head binds review, never a prose SHA", async () => {
+test("RED pi-paseo-workflow: only the worktree head binds review, never a prose or short SHA", async () => {
   const f = await fixture();
   await f.review("planning");
   f.replyWith(
@@ -2139,14 +2496,14 @@ test("RED pi-paseo-workflow: only the worktree-verified envelope head binds revi
   });
   for (const head of [heads.second, heads.first.slice(0, 7)])
     await assert.rejects(
-      dispatchReview(
+      dispatchFixtureReview(
         f.path,
         { phase: "implementation", artifactPath: f.artifactPath, head },
         f.transport,
       ),
-      /verified report head equals the reviewed head/,
+      /differs from the workflow worktree head/,
     );
-  await dispatchReview(
+  await dispatchFixtureReview(
     f.path,
     {
       phase: "implementation",
@@ -2249,7 +2606,7 @@ test("RED pi-paseo-workflow: a session brief's reviewer roster cannot start impl
   const f = await fixture();
   await writeFile(f.artifactPath, sessionBriefDeliveryScript);
   await assert.rejects(
-    dispatchReview(
+    dispatchFixtureReview(
       f.path,
       {
         phase: "implementation",
@@ -2266,7 +2623,7 @@ test("GREEN pi-paseo-workflow: brief delivery text reaches the implementer only 
   const f = await fixture();
   await writeFile(f.artifactPath, sessionBriefDeliveryScript);
   await f.step();
-  await dispatchReview(
+  await dispatchFixtureReview(
     f.path,
     { phase: "planning", artifactPath: f.artifactPath },
     f.transport,
