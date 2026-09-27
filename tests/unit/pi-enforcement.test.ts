@@ -256,6 +256,117 @@ test("write roles are denied compound shell commands, including nested shell pay
   );
 });
 
+test("the planner writes only its plan and private task files outside Git work trees", () => {
+  const cwd = process.cwd();
+  const otherRepo = mkdtempSync(join(tmpdir(), "planner-other-repo-"));
+  mkdirSync(join(otherRepo, ".git"));
+  const task = mkdtempSync(join(tmpdir(), "planner-task-"));
+  try {
+    for (const name of ["edit", "write"]) {
+      for (const path of [
+        ".agents/plans/next-change.md",
+        join(cwd, ".agents/plans/next-change.md"),
+        join(task, "brief.md"),
+      ])
+        assert.equal(
+          toolDenial("planner", name, { path }, cwd),
+          undefined,
+          path,
+        );
+      for (const path of [
+        "hooks/pi/policy.ts",
+        ".agents/plans/../../hooks/pi/policy.ts",
+        ".agents/plan-notes.md",
+        join(otherRepo, "src/index.ts"),
+      ])
+        assert.match(
+          toolDenial("planner", name, { path }, cwd) ?? "",
+          /^Planner policy: .* runner handoff or repair/u,
+          path,
+        );
+      assert.match(
+        toolDenial("planner", name, {}, cwd) ?? "",
+        /explicit path/u,
+      );
+      assert.equal(
+        toolDenial("implementer", name, { path: "hooks/pi/policy.ts" }, cwd),
+        undefined,
+      );
+    }
+  } finally {
+    rmSync(otherRepo, { recursive: true, force: true });
+    rmSync(task, { recursive: true, force: true });
+  }
+});
+
+test("the planner cannot change branch content through git, but keeps read-only git and publication", () => {
+  const cwd = process.cwd();
+  for (const command of [
+    "git commit -m change",
+    "git -C /repo add .",
+    "git -c core.editor=true merge main",
+    "git rebase main",
+    "git pull",
+    "git pull origin main",
+    "git stash push -u -m tag",
+    "git checkout -b topic",
+    "git switch main",
+    "git restore notes.md",
+    "git reset --hard HEAD",
+    "git cherry-pick abc123",
+    "git revert abc123",
+    "git am fix.patch",
+    "git apply fix.patch",
+    "git rm notes.md",
+    "git mv a.md b.md",
+    "git commit-tree HEAD^{tree} -m change",
+    "git update-ref refs/heads/topic abc123",
+    "git read-tree HEAD",
+    "git checkout-index -a",
+    "sh -c 'git commit -m change'",
+    "env GIT_AUTHOR_NAME=x git commit -m change",
+    '"$GIT" commit -m change',
+  ])
+    assert.match(
+      toolDenial("planner", "bash", { command }, cwd) ?? "",
+      /^Planner policy: `git [a-z-]+` changes branch content/u,
+      command,
+    );
+  for (const command of [
+    "git status",
+    "git diff --stat",
+    "git log --oneline -5",
+    "git rev-parse HEAD",
+    "git fetch origin",
+    "git pull --ff-only origin main",
+    "git push -u origin HEAD",
+    "gh pr create --draft --title change --body-file body.md",
+    "echo 'git commit -m change'",
+  ])
+    assert.equal(
+      toolDenial("planner", "bash", { command }, cwd),
+      undefined,
+      command,
+    );
+  assert.equal(
+    toolDenial("implementer", "bash", { command: "git commit -m x" }, cwd),
+    undefined,
+  );
+  assert.equal(
+    toolDenial("planner", "bash", { command: "git commit -m x" }, cwd, "user"),
+    undefined,
+  );
+  assert.match(
+    toolDenial(
+      "planner",
+      "bash",
+      { command: "git add a && git commit" },
+      cwd,
+    ) ?? "",
+    /^Shell discipline/u,
+  );
+});
+
 test("compound denial applies to agent shell calls, not a person's own commands", () => {
   const f = fixture();
   const savedContract = process.env.AX_PI_CONTRACT;
