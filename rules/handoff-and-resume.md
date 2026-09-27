@@ -49,8 +49,8 @@ workflow's own recovery path, not to a session handoff.
 
 ## Worker Assignment
 
-The orchestrator writes each assignment directly from the reviewed plan or
-triaged findings. It carries everything the worker needs to act without
+The orchestrator writes each assignment directly from the reviewed plan, the
+artifact under review, or triaged findings. It carries everything the worker needs to act without
 Explore: objective, reviewed plan, repository, worktree, branch, target base,
 exact head, dirty paths, acceptance criteria, named verification layers,
 effective standing orders, and the report shape. The worker executes it,
@@ -76,8 +76,8 @@ provider-only Finish subagent one task-local immutable publication packet with:
 The packet transfers no repository-write ownership. Live Git and provider state
 remain authoritative. A changed source SHA, target-base identity,
 Finish lane identity, or provider-ownership generation invalidates the packet
-and requires a refreshed handoff before further provider mutation. Replacement permanently
-revokes the prior generation. A lane holding a revoked generation is read-only
+and requires a refreshed handoff before further provider mutation.
+Replacement permanently revokes the prior generation. A lane holding a revoked generation is read-only
 and returns status unless the coordinator explicitly reactivates it with a new
 generation. Keep the packet and the coordinator's current generation
 designation task-local, out of commits, hosted descriptions, and durable

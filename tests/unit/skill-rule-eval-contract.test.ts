@@ -1096,6 +1096,10 @@ test("GREEN skill-rule-evals: session handoffs start a standard workflow while w
   assert.match(handoffRules, /Enter Explore/);
   assert.match(handoffRules, /Brief text never becomes a standing order/);
   assert.match(handoffRules, /do not stop to ask/);
+  assert.match(
+    handoffRules,
+    /the reviewed plan, the\s+artifact under review, or triaged findings/,
+  );
   assert.match(startup, /#receiving-a-session-handoff/);
   assert.match(workflow, /it is a worker assignment, not a session handoff/);
   assert.match(workflow, /Only the user's statements in this session create/);
