@@ -82,6 +82,7 @@ export type Change = {
   path: string;
   content: string;
   additions: string;
+  deleted?: true;
 };
 
 const behaviorScenarioContracts = {

@@ -465,7 +465,7 @@ test("RED canonical-ownership: alternate commit indexes cannot be masked by work
   }
 });
 
-test("retiring a skill deletes its surfaces without requiring a surviving owner", () => {
+test("retiring a skill needs no surviving owner but keeps its behavior contracts", () => {
   const fixtureRoot = mkdtempSync(join(tmpdir(), "ax-charter-retire-"));
   const entrypoint = "See agent-development-workflow-charter.md.\n";
 
@@ -510,12 +510,17 @@ test("retiring a skill deletes its surfaces without requiring a surviving owner"
       env: gitEnv,
     });
 
+    const contract =
+      "contract skill-rule-evals requires staged executable RED and GREEN scenarios in tests/unit/skill-rule-eval-contract.test.ts";
     assert.deepEqual(
       validateCharterRepository(
         fixtureRoot,
         join(fixtureRoot, ".git", "index"),
       ),
-      [],
+      [
+        `skills/retired-skill/SKILL.md: ${contract}`,
+        `skills/retired-skill/agents/openai.yaml: ${contract}`,
+      ],
     );
   } finally {
     rmSync(fixtureRoot, { recursive: true, force: true });

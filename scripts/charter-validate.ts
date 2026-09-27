@@ -59,7 +59,8 @@ function validateChanges(
       );
       continue;
     }
-    if (!ownerExists(owner)) {
+    // A deleted surface needs no surviving owner, but keeps its behavior contracts.
+    if (!change.deleted && !ownerExists(owner)) {
       errors.push(`${change.path}: canonical owner ${owner} does not exist`);
     }
     if (isGuidanceSurface(change.path)) {
@@ -193,8 +194,10 @@ export function validateCharterRepository(
   for (const path of paths) {
     try {
       const content = optionalStagedContent(root, path, indexFile);
-      // A deleted path adds no behavior; retirement is governed by what remains.
-      if (content === undefined) continue;
+      if (content === undefined) {
+        changes.push({ path, content: "", additions: "", deleted: true });
+        continue;
+      }
       const diff = stagedDiff(root, path, indexFile);
       changes.push({
         path,
@@ -207,8 +210,8 @@ export function validateCharterRepository(
       ];
     }
   }
-  for (const { path } of changes.filter(({ path }) =>
-    behaviorTestPattern.test(path),
+  for (const { path } of changes.filter(
+    ({ path, deleted }) => !deleted && behaviorTestPattern.test(path),
   )) {
     try {
       const indexContent = stagedContent(root, path, indexFile);
@@ -258,7 +261,9 @@ export function validateCharterRange(
   }
   const changes: Change[] = paths.flatMap((path) => {
     const content = readHead(path);
-    if (content === undefined) return [];
+    if (content === undefined) {
+      return [{ path, content: "", additions: "", deleted: true as const }];
+    }
     const diff = rangeDiff(root, targetBase, sourceHead, path);
     return [{ path, content, additions: addedText(diff) }];
   });
