@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join, resolve, sep } from "node:path";
 import { findForcePush } from "../block-agent-force-push.ts";
 import { evaluateCommand } from "../block-delete-outside-cwd.ts";
 import {
@@ -128,10 +131,102 @@ export function findCompoundCommand(command: string): boolean {
 
 const compoundRoles = new Set(["planner", "implementer"]);
 
+// Git subcommands that change branch content; the planner delegates them to a runner-launched implementer.
+const plannerGitMutations = new Set([
+  "add",
+  "am",
+  "apply",
+  "checkout",
+  "cherry-pick",
+  "commit",
+  "merge",
+  "mv",
+  "rebase",
+  "reset",
+  "restore",
+  "revert",
+  "rm",
+  "stash",
+  "switch",
+]);
+const gitValueOptions = new Set([
+  "-C",
+  "-c",
+  "--git-dir",
+  "--work-tree",
+  "--namespace",
+]);
+
+function gitMutation(words: ShellWord[]): string | undefined {
+  const { words: unwrapped, splitCommand } = unwrap(words);
+  if (splitCommand)
+    return splitCommand.dynamic
+      ? "<dynamic split command>"
+      : findPlannerGitMutation(splitCommand.value);
+  if (unwrapped.length === 0) return undefined;
+  const next = unwrapped[1]?.value ?? "";
+  if (unwrapped[0].dynamic && plannerGitMutations.has(next)) return next;
+  const executable = basename(unwrapped[0].value);
+  if (SHELLS.has(executable)) {
+    const flag = unwrapped.findIndex((word) => isShellCommandFlag(word.value));
+    const nested = flag >= 0 ? unwrapped[flag + 1] : undefined;
+    return nested ? findPlannerGitMutation(nested.value) : undefined;
+  }
+  if (executable !== "git") return undefined;
+  let index = 1;
+  while (index < unwrapped.length) {
+    const word = unwrapped[index];
+    if (word.dynamic) return word.value || "<dynamic subcommand>";
+    if (!word.value.startsWith("-")) break;
+    index += gitValueOptions.has(word.value) ? 2 : 1;
+  }
+  const subcommand = unwrapped[index]?.value;
+  if (!subcommand) return undefined;
+  if (plannerGitMutations.has(subcommand)) return subcommand;
+  // A pull that may merge creates a planner-authored commit; a fast-forward only moves to published history.
+  if (
+    subcommand === "pull" &&
+    !unwrapped.slice(index + 1).some((word) => word.value === "--ff-only")
+  )
+    return subcommand;
+  return undefined;
+}
+
+export function findPlannerGitMutation(command: string): string | undefined {
+  for (const words of tokenize(command)) {
+    const match = gitMutation(words);
+    if (match) return match;
+  }
+  return undefined;
+}
+
+function insideGitWorkTree(path: string): boolean {
+  for (let directory = dirname(path); ; directory = dirname(directory)) {
+    if (existsSync(join(directory, ".git"))) return true;
+    if (dirname(directory) === directory) return false;
+  }
+}
+
+// The planner writes only its plan and private task files; implementation belongs to a fresh implementer.
+function plannerWriteDenial(
+  input: Record<string, unknown>,
+  cwd: string,
+): string | undefined {
+  const raw = input.path ?? input.file_path;
+  if (typeof raw !== "string" || raw.length === 0)
+    return "Planner writes require an explicit path";
+  const target = resolve(cwd, raw.replace(/^~(?=$|\/)/u, homedir()));
+  if (target.startsWith(`${resolve(cwd, ".agents/plans")}${sep}`))
+    return undefined;
+  if (!insideGitWorkTree(target)) return undefined;
+  return `Planner policy: ${target} is inside a Git work tree; the planner writes only .agents/plans and private task files, and implementation goes to a fresh implementer through the runner handoff or repair`;
+}
+
 export function shellDenial(
   command: unknown,
   cwd: string,
   denyCompound: boolean,
+  denyGitMutation = false,
 ): string | undefined {
   if (typeof command !== "string") return "Shell command must be a string";
   const force = findForcePush(command);
@@ -143,6 +238,11 @@ export function shellDenial(
   if (deletion) return `Deletion policy: ${deletion.detail}`;
   if (denyCompound && findCompoundCommand(command))
     return "Shell discipline (rules/command-and-tools.md): compound commands are denied; issue one command per tool call without `&&`, `||`, `;`, pipes, background `&`, subshells, command substitution, or newline-separated commands";
+  const mutation = denyGitMutation
+    ? findPlannerGitMutation(command)
+    : undefined;
+  if (mutation)
+    return `Planner policy: \`git ${mutation}\` changes branch content; the planner delegates code, merges, and conflict resolution to a fresh implementer through the runner handoff or repair`;
 }
 
 export function toolDenial(
@@ -160,7 +260,10 @@ export function toolDenial(
       input.command,
       cwd,
       origin === "agent" && compoundRoles.has(role),
+      origin === "agent" && role === "planner",
     );
+  if (role === "planner" && (name === "edit" || name === "write"))
+    return plannerWriteDenial(input, cwd);
   if (name === "mcp") {
     if (input.action !== undefined)
       return "MCP configuration and authentication actions require explicit operator handling";

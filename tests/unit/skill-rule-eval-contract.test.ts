@@ -40,6 +40,7 @@ import {
 import {
   assignReviewLenses,
   effectiveOrders,
+  maxReviewRounds,
   reportsHead,
   requireCurrentReviewMode,
   requireOrchestration,
@@ -175,6 +176,15 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
     read("skills/paseo-orchestration/references/paseo-workflow.md"),
     /planner is the orchestrator/,
   );
+  assert.equal(maxReviewRounds, 3);
+  assert.match(
+    read("skills/paseo-orchestration/references/paseo-workflow.md"),
+    /## Review every head/,
+  );
+  assert.match(
+    read("skills/paseo-orchestration/SKILL.md"),
+    /accepted-proposal contract selects Execute[\s\S]*runner `handoff`/,
+  );
 });
 
 test("RED skill-rule-evals: Paseo workspace binding rejects a wrong directory", async () => {
@@ -189,6 +199,15 @@ test("RED skill-rule-evals: Paseo workspace binding rejects a wrong directory", 
         reviewMode: "sol-focused-v1",
       } as never),
     /predates planner orchestration/u,
+  );
+  assert.throws(
+    () =>
+      requireOrchestration({
+        version: 1,
+        reviewMode: "sol-focused-v1",
+        orchestration: "planner-v1",
+      } as never),
+    /predates planner orchestration with head-keyed review/u,
   );
   for (const head of [
     verifiedReport.head.slice(0, 7),

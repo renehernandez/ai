@@ -51,7 +51,7 @@ export default function enforcement(pi: Pi): void {
   pi.on("before_agent_start", (event, ctx) => {
     verify(ctx);
     return {
-      systemPrompt: `${event.systemPrompt}\n\nActive fixed Pi/Paseo role: ${contract.role}. The user accepted the following bounded workflow; its one-pass review and Ready publication policy supersede legacy draft/review-loop defaults for this session.\n\n${workflow}`,
+      systemPrompt: `${event.systemPrompt}\n\nActive fixed Pi/Paseo role: ${contract.role}. The user accepted the following bounded workflow; its bounded head-keyed review loop and Ready publication policy supersede legacy draft/review-loop defaults for this session.\n\n${workflow}`,
     };
   });
   pi.on("before_provider_request", (_event, ctx) => verify(ctx));
