@@ -1,7 +1,11 @@
 // charter-contracts: pi-paseo-hosted
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import test from "node:test";
+import { pathToFileURL } from "node:url";
 import {
   type Command,
   type ProbeOptions,
@@ -23,31 +27,53 @@ function github(
   overrides: {
     completion?: boolean;
     stale?: boolean;
+    draft?: boolean;
+    closed?: boolean;
     partial?: boolean;
     pending?: boolean;
     human?: boolean;
-    checks?: unknown[] | string;
+    checkRuns?: unknown[] | string;
+    statuses?: unknown[] | string;
   } = {},
 ): Command {
   let reads = 0;
   return (program, args) => {
     assert.equal(program, "gh");
     assert.ok(!args.includes("--method"));
-    if (args[0] === "pr")
-      if (overrides.checks !== undefined)
-        return typeof overrides.checks === "string"
-          ? overrides.checks
-          : JSON.stringify(overrides.checks);
-    if (args[0] === "pr")
-      return JSON.stringify([
-        { name: "unit", bucket: overrides.pending ? "pending" : "pass" },
-      ]);
     const path = args.at(-1) ?? "";
+    if (path.includes("/check-runs?")) {
+      if (typeof overrides.checkRuns === "string") return overrides.checkRuns;
+      const checkRuns = overrides.checkRuns ?? [
+        {
+          id: 10,
+          name: "unit",
+          head_sha: head,
+          status: overrides.pending ? "in_progress" : "completed",
+          conclusion: overrides.pending ? null : "success",
+          details_url: "https://github.com/owner/repo/actions/runs/10",
+        },
+        {
+          id: 11,
+          name: "integration",
+          head_sha: head,
+          status: "completed",
+          conclusion: "success",
+          details_url: "https://github.com/owner/repo/actions/runs/11",
+        },
+      ];
+      return JSON.stringify([
+        { total_count: checkRuns.length, check_runs: checkRuns },
+      ]);
+    }
+    if (path.includes("/statuses?")) {
+      if (typeof overrides.statuses === "string") return overrides.statuses;
+      return JSON.stringify([overrides.statuses ?? []]);
+    }
     if (path.endsWith("pulls/1"))
       return JSON.stringify({
         head: { sha: overrides.stale && reads++ > 0 ? "b".repeat(40) : head },
-        draft: false,
-        state: "open",
+        draft: overrides.draft ?? false,
+        state: overrides.closed ? "closed" : "open",
       });
     if (path.startsWith("users/"))
       return JSON.stringify({ ...bot, type: overrides.human ? "User" : "Bot" });
@@ -116,6 +142,50 @@ test("GREEN pi-paseo-hosted: collects complete exact-head feedback for semantic 
   assert.ok(result.findings.every((finding) => finding.id && finding.evidence));
 });
 
+test("GREEN pi-paseo-hosted: direct symlink invocation runs while import stays inert", () => {
+  const directory = mkdtempSync(join(tmpdir(), "paseo-hosted-probe-"));
+  const source = resolve("skills/finish/scripts/paseo-hosted-probe.ts");
+  const link = join(directory, "paseo-hosted-probe.ts");
+  try {
+    symlinkSync(source, link);
+    const output = execFileSync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        link,
+        "--artifact-url",
+        "https://example.com/owner/repo/pull/1",
+        "--head",
+        head,
+        "--ci-policy",
+        "not-required",
+        "--reviewer",
+        "none",
+        "--policy-evidence",
+        "fixture policy",
+      ],
+      { encoding: "utf8" },
+    );
+    assert.equal(JSON.parse(output).status, "awaiting-user");
+    assert.equal(
+      execFileSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "--eval",
+          `import(${JSON.stringify(pathToFileURL(source).href)})`,
+        ],
+        { encoding: "utf8" },
+      ),
+      "",
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("RED pi-paseo-hosted: stale bot review and pending required CI cannot complete", () => {
   assert.equal(
     probeHosted(options, github({ completion: false })).status,
@@ -144,16 +214,163 @@ test("GREEN pi-paseo-hosted: all CI and reviewer policy combinations stay indepe
     }
 });
 
-test("RED pi-paseo-hosted: required CI rejects empty or malformed command evidence", () => {
-  for (const checks of [[], "", [{ name: "unit", bucket: "skipping" }]])
-    assert.equal(
-      probeHosted(options, github({ checks })).status,
-      "awaiting-user",
-    );
+test("GREEN pi-paseo-hosted: commit-addressed CI consumes every page and requests latest check attempts", () => {
+  const base = github();
+  const calls: string[][] = [];
+  const result = probeHosted(options, (program, args, input) => {
+    calls.push(args);
+    const path = args.at(-1) ?? "";
+    if (path.includes("/check-runs?"))
+      return JSON.stringify([
+        {
+          total_count: 2,
+          check_runs: [
+            {
+              id: 10,
+              name: "unit",
+              head_sha: head,
+              status: "completed",
+              conclusion: "success",
+            },
+          ],
+        },
+        {
+          total_count: 2,
+          check_runs: [
+            {
+              id: 11,
+              name: "integration",
+              head_sha: head,
+              status: "completed",
+              conclusion: "success",
+            },
+          ],
+        },
+      ]);
+    return base(program, args, input);
+  });
+  assert.equal(result.status, "completed");
+  assert.ok(
+    calls.some(
+      (args) =>
+        args.includes("--paginate") &&
+        args.at(-1)?.includes("check-runs?filter=latest&per_page=100"),
+    ),
+  );
 });
 
-test("partial GraphQL, changed source, and unverified bot fail closed", () => {
-  for (const override of [{ partial: true }, { stale: true }, { human: true }])
+test("GREEN pi-paseo-hosted: commit-addressed CI keeps only the latest status context", () => {
+  const result = probeHosted(
+    options,
+    github({
+      statuses: [
+        {
+          id: 2,
+          sha: head,
+          context: "deploy",
+          state: "success",
+          target_url: "https://example.com/status/2",
+        },
+        {
+          id: 1,
+          sha: head,
+          context: "deploy",
+          state: "failure",
+          target_url: "https://example.com/status/1",
+        },
+      ],
+    }),
+  );
+  assert.equal(result.status, "completed");
+  assert.doesNotMatch(result.evidence, /status\/1/);
+  assert.match(result.evidence, /status\/2/);
+});
+
+test("GREEN pi-paseo-hosted: a not-required reviewer is never queried", () => {
+  const calls: string[][] = [];
+  const result = probeHosted(
+    {
+      ...options,
+      ciPolicy: "not-required",
+      reviewer: undefined,
+      botLogin: undefined,
+    },
+    (program, args, input) => {
+      calls.push(args);
+      return github()(program, args, input);
+    },
+  );
+  assert.equal(result.status, "completed");
+  assert.equal(calls.length, 2);
+  assert.ok(calls.every((args) => args.at(-1)?.endsWith("pulls/1")));
+});
+
+test("RED pi-paseo-hosted: required CI rejects empty, skipped, unknown, or malformed evidence", () => {
+  for (const checkRuns of [
+    [],
+    [
+      {
+        id: 10,
+        name: "unit",
+        head_sha: head,
+        status: "completed",
+        conclusion: "skipped",
+      },
+    ],
+    [
+      {
+        id: 10,
+        name: "unit",
+        head_sha: head,
+        status: "completed",
+        conclusion: "mystery",
+      },
+    ],
+  ])
+    assert.equal(
+      probeHosted(options, github({ checkRuns })).status,
+      "awaiting-user",
+    );
+  assert.equal(
+    probeHosted(options, github({ checkRuns: "not-json" })).status,
+    "awaiting-user",
+  );
+});
+
+test("GREEN pi-paseo-hosted: failed and cancelled CI produce actionable findings", () => {
+  const checkRuns = [
+    {
+      id: 10,
+      name: "unit",
+      head_sha: head,
+      status: "completed",
+      conclusion: "failure",
+      details_url: "https://example.com/check/10",
+    },
+    {
+      id: 11,
+      name: "integration",
+      head_sha: head,
+      status: "completed",
+      conclusion: "cancelled",
+      details_url: "https://example.com/check/11",
+    },
+  ];
+  const result = probeHosted(options, github({ checkRuns }));
+  assert.equal(result.status, "completed");
+  assert.equal(result.findings.length, 4);
+  assert.match(result.findings[2].evidence as string, /unit/);
+  assert.match(result.findings[3].evidence as string, /integration/);
+});
+
+test("partial GraphQL, changed source, draft, closed, and unverified bot fail closed", () => {
+  for (const override of [
+    { partial: true },
+    { stale: true },
+    { draft: true },
+    { closed: true },
+    { human: true },
+  ])
     assert.equal(
       probeHosted(options, github(override)).status,
       "awaiting-user",

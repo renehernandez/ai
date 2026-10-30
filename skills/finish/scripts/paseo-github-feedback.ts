@@ -112,25 +112,102 @@ export function github(
         review.body.includes(`Reviewed \`${options.head}\` ·`),
     );
   }
-  let checks: RecordValue[] = [];
+  let ci: RecordValue[] = [];
   if (options.ciPolicy === "required") {
-    const output = run("gh", [
-      "pr",
-      "checks",
-      options.artifactUrl,
-      "--required",
-      "--json",
-      "name,bucket,state,link",
-    ]);
-    if (!output.trim()) throw new Error("Empty required CI command output");
-    checks = array(JSON.parse(output));
-    if (checks.length === 0)
-      throw new Error("Required CI policy has no configured required checks");
+    const checkPages = JSON.parse(
+      run("gh", [
+        "api",
+        "--hostname",
+        url.hostname,
+        "--paginate",
+        "--slurp",
+        `${endpoint}/commits/${options.head}/check-runs?filter=latest&per_page=100`,
+      ]),
+    );
+    if (!Array.isArray(checkPages) || !checkPages.length)
+      throw new Error("Missing GitHub check-run pagination evidence");
+    const checkRuns = checkPages.flatMap((page) => {
+      const value = object(page);
+      if (!Number.isSafeInteger(value.total_count))
+        throw new Error("Incomplete GitHub check-run count");
+      return array(value.check_runs);
+    });
+    if (
+      checkPages.some((page) => object(page).total_count !== checkRuns.length)
+    )
+      throw new Error("Incomplete GitHub check-run pagination");
+    const statuses = pages(
+      `${endpoint}/commits/${options.head}/statuses?per_page=100`,
+    );
+    const contexts = new Map<string, RecordValue>();
+    for (const status of statuses) {
+      if (
+        typeof status.context !== "string" ||
+        !status.context ||
+        status.sha !== options.head
+      )
+        throw new Error("Incomplete or mismatched GitHub status evidence");
+      if (!contexts.has(status.context)) contexts.set(status.context, status);
+    }
+    for (const check of checkRuns) {
+      if (
+        !Number.isSafeInteger(check.id) ||
+        typeof check.name !== "string" ||
+        !check.name ||
+        check.head_sha !== options.head ||
+        !["queued", "in_progress", "completed"].includes(String(check.status))
+      )
+        throw new Error("Incomplete or mismatched GitHub check-run evidence");
+      if (
+        check.status === "completed" &&
+        ![
+          "success",
+          "failure",
+          "cancelled",
+          "timed_out",
+          "startup_failure",
+          "action_required",
+        ].includes(String(check.conclusion))
+      )
+        throw new Error(
+          "Skipped, neutral, stale, or unknown GitHub check result needs policy disposition",
+        );
+    }
+    for (const status of contexts.values())
+      if (
+        !["success", "pending", "failure", "error"].includes(
+          String(status.state),
+        )
+      )
+        throw new Error(
+          "Unknown GitHub commit status needs policy disposition",
+        );
+    ci = [
+      ...checkRuns.map((check) => ({
+        kind: "check-run",
+        ...check,
+        link: check.details_url ?? check.html_url ?? check.url ?? null,
+      })),
+      ...Array.from(contexts.values(), (status) => ({
+        kind: "status-context",
+        ...status,
+        link: status.target_url ?? status.url ?? null,
+      })),
+    ];
+    if (ci.length === 0)
+      throw new Error("Required CI policy has no commit check evidence");
   }
   result.findings.push(
-    ...checks
-      .filter((check) => ["fail", "cancel"].includes(String(check.bucket)))
-      .map((check) => ({ kind: "ci", ...check })),
+    ...ci.filter((entry) =>
+      [
+        "failure",
+        "cancelled",
+        "timed_out",
+        "startup_failure",
+        "action_required",
+        "error",
+      ].includes(String(entry.conclusion ?? entry.state)),
+    ),
   );
   const final = api(`${endpoint}/pulls/${number}`);
   assertArtifact(
@@ -140,17 +217,13 @@ export function github(
     options,
     result,
   );
-  if (checks.some((check) => check.bucket === "skipping"))
-    throw new Error("Skipped required CI needs policy disposition");
-  if (
-    checks.some(
-      (check) =>
-        !["pass", "fail", "pending", "cancel"].includes(String(check.bucket)),
-    )
-  )
-    throw new Error("Unknown required CI state");
   result.status =
-    !completion || checks.some((check) => check.bucket === "pending")
+    !completion ||
+    ci.some(
+      (entry) =>
+        ["queued", "in_progress", "pending"].includes(String(entry.status)) ||
+        entry.state === "pending",
+    )
       ? "waiting"
       : "completed";
   result.evidence = JSON.stringify({
@@ -160,7 +233,7 @@ export function github(
     reviewer: options.reviewer ?? "not-required",
     bot: options.botLogin ?? null,
     completionReceived: completion,
-    requiredCi: checks,
+    requiredCi: ci,
     reviews,
     comments,
     inline,

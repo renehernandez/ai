@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
+import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import {
   array,
@@ -41,12 +42,7 @@ const command: Command = (program, args, input) => {
     timeout: 60_000,
     maxBuffer: 32 * 1024 * 1024,
   });
-  // gh pr checks deliberately uses nonzero exit codes for pending/failed CI.
-  const checks = program === "gh" && args[0] === "pr" && args[1] === "checks";
-  if (
-    result.error ||
-    (result.status !== 0 && !(checks && [1, 8].includes(result.status ?? -1)))
-  ) {
+  if (result.error || result.status !== 0) {
     throw new Error(
       `Read-only command failed: ${program} ${args.slice(0, 2).join(" ")}; ${result.error?.message ?? result.stderr}`,
     );
@@ -346,6 +342,7 @@ function main(): void {
 }
 if (
   process.argv[1] &&
-  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+  realpathSync(fileURLToPath(import.meta.url)) ===
+    realpathSync(resolve(process.argv[1]))
 )
   main();
