@@ -12,6 +12,7 @@ import {
   type Transport,
   type Workflow,
   type WorkspaceBinding,
+  type WorktreeState,
 } from "./paseo-workflow-state.ts";
 
 // Provider and Git access shared by the runner entrypoint and its cleanup action.
@@ -33,10 +34,84 @@ export const readProbe: Transport = async (args, timeout) =>
   ).stdout;
 export const digest = (text: string) =>
   createHash("sha256").update(text).digest("hex");
+
+// Observation calls retry transient transport errors; non-repeatable calls never come through here.
+export async function observe(
+  transport: Transport,
+  args: string[],
+  timeout: number,
+) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await transport(args, timeout);
+    } catch (error) {
+      if (attempt >= 3) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 100 * attempt));
+    }
+  }
+}
+export async function paseoVersion(transport: Transport) {
+  return (await observe(transport, ["--version"], 30_000)).trim();
+}
+export type Inspection = {
+  id: string;
+  cwd: string;
+  provider: string;
+  model: string;
+  thinking: string;
+  status: string;
+  archived: boolean;
+  pendingPermissions: unknown[];
+};
+// Decodes only the stable inspect fields and fails closed, naming the field and Paseo version.
+export async function inspectSession(
+  agentId: string,
+  transport: Transport,
+): Promise<Inspection> {
+  const raw = JSON.parse(
+    await observe(transport, ["inspect", "--json", agentId], 30_000),
+  );
+  const fields = {
+    id: ["Id", nonempty],
+    cwd: ["Cwd", nonempty],
+    provider: ["Provider", nonempty],
+    model: ["Model", nonempty],
+    thinking: ["Thinking", nonempty],
+    status: ["Status", nonempty],
+    archived: ["Archived", (value: unknown) => typeof value === "boolean"],
+    pendingPermissions: ["PendingPermissions", Array.isArray],
+  } as const;
+  for (const [field, valid] of Object.values(fields))
+    if (!valid(raw?.[field])) {
+      const version = await paseoVersion(transport).catch(() => "unknown");
+      throw new Error(
+        `Paseo ${version} inspect output lacks required field ${field}`,
+      );
+    }
+  return Object.fromEntries(
+    Object.entries(fields).map(([key, [field]]) => [key, raw[field]]),
+  ) as Inspection;
+}
+export function lifecycle(status: string) {
+  if (status === "initializing" || status === "running") return "active";
+  if (status === "idle" || status === "closed") return "quiet";
+  return status === "error" ? "errored" : "unknown";
+}
+export function lastReply(agentId: string, transport: Transport) {
+  return observe(
+    transport,
+    ["logs", "--filter", "assistant_message", "--tail", "1", agentId],
+    30_000,
+  );
+}
+// The session timeline, including each received prompt.
+export function timeline(agentId: string, transport: Transport) {
+  return observe(transport, ["logs", agentId], 30_000);
+}
 const runner = fileURLToPath(new URL("./paseo-workflow.ts", import.meta.url));
 const heartbeatLifetimeMs = 24 * 60 * 60_000;
 
-export type Worktree = { branch: string; head: string; uncommitted: string[] };
+export type Worktree = WorktreeState;
 export type WorktreeReader = (cwd: string) => Promise<Worktree>;
 // Runs Git against cwd, ignoring any caller Git environment redirects.
 export async function git(cwd: string, args: string[]) {
@@ -69,7 +144,7 @@ export type WorkspaceRow = {
 
 export async function listWorkspaces(transport: Transport) {
   const rows = JSON.parse(
-    await transport(["workspace", "ls", "--json"], 30_000),
+    await observe(transport, ["workspace", "ls", "--json"], 30_000),
   );
   requireThat(
     Array.isArray(rows) &&
@@ -128,7 +203,7 @@ export async function syncHeartbeat(
 ) {
   return locked(path, async (state) => {
     const current = state.heartbeat;
-    if (state.finished || !inFlight(state).length) {
+    if (state.finished || !inFlight(state, now()).length) {
       if (current) await deleteHeartbeat(current, transport);
       delete state.heartbeat;
       return undefined;

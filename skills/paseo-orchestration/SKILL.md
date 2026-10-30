@@ -32,4 +32,7 @@ Drive the runner only from the orchestrator session:
 node <skill-dir>/scripts/paseo-workflow.ts STATE ACTION INPUT.json
 ```
 
-The contract's runner interface lists every action and its input.
+The contract's runner interface lists every action and its input. When a
+worker's assignment delivery is ambiguous, undelivered, or in conflict, or a
+worker failed after reporting, take the action the `awaiting-user` gate names
+(`tick`, `adopt`, or `retry-launch`). Never edit or replace state.

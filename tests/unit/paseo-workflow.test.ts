@@ -16,20 +16,22 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import {
+  adopt,
   assertActionGateDisposition,
   bindWorkspace,
   cleanup,
   collectReviews,
-  dispatchRepair,
   dispatchReview,
-  handoff,
   initialize,
   loopStatus,
   main,
   monitor,
   parseReview,
+  retryLaunch,
   retryMisroutedHandoff,
   routesFromConfig,
+  dispatchRepair as runnerDispatchRepair,
+  handoff as runnerHandoff,
   syncHeartbeat,
   type Transport,
   tick,
@@ -38,7 +40,11 @@ import {
   type Workflow,
   type WorktreeReader,
 } from "../../skills/paseo-orchestration/scripts/paseo-workflow.ts";
-import { locked } from "../../skills/paseo-orchestration/scripts/paseo-workflow-state.ts";
+import {
+  gates,
+  locked,
+  nextStep,
+} from "../../skills/paseo-orchestration/scripts/paseo-workflow-state.ts";
 
 // Each fixture's fake worktree stands in for `git rev-parse` when a round binds its head.
 const worktrees = new Map<string, WorktreeReader>();
@@ -51,6 +57,16 @@ const dispatchFixtureReview = (
   },
   transport: Transport,
 ) => dispatchReview(path, input, transport, worktrees.get(path));
+const handoff = (
+  path: string,
+  input: Parameters<typeof runnerHandoff>[1],
+  transport?: Transport,
+) => runnerHandoff(path, input, transport, worktrees.get(path));
+const dispatchRepair = (
+  path: string,
+  input: Parameters<typeof runnerDispatchRepair>[1],
+  transport?: Transport,
+) => runnerDispatchRepair(path, input, transport, worktrees.get(path));
 
 const policySourceFingerprint = "a".repeat(64);
 const targetBase = "b".repeat(40);
@@ -153,6 +169,8 @@ async function fixture(
   const heartbeats = new Map<string, { agentId: string; prompt: string }>();
   let reportedHead = heads.first;
   let implementerReply: string | undefined;
+  // Per-session last replies, as a session that stopped without reporting would show.
+  const replies = new Map<string, string>();
   const tree: { branch: string; head?: string; uncommitted: string[] } = {
     branch: "feature",
     uncommitted: [],
@@ -181,6 +199,7 @@ async function fixture(
     }
     if (args[0] === "workspace" && args[1] === "ls")
       return JSON.stringify([{ workspaceId, cwd: dir }]);
+    if (args[0] === "--version") return "0.14.0\n";
     if (args[0] === "run") {
       const agentId = `agent-${sessions.size}`;
       const flag = (name: string) => args[args.indexOf(name) + 1];
@@ -203,11 +222,13 @@ async function fixture(
         args[args.indexOf("--prompt-file") + 1],
         "utf8",
       );
-      return JSON.stringify({ agentId, status: "sent" });
+      return JSON.stringify({ agentId, status: "queued" });
     }
     const agentId = args[args.length - 1];
     const session = sessions.get(agentId);
     assert.ok(session);
+    if (args[0] === "logs" && args.length === 2)
+      return `[Message received] ${orchestrator.agentId}\n${session.prompt}`;
     if (args[0] === "wait") return JSON.stringify({ agentId, status: "idle" });
     if (args[0] === "inspect")
       return JSON.stringify({
@@ -220,6 +241,8 @@ async function fixture(
         Archived: false,
         PendingPermissions: [],
       });
+    const override = replies.get(agentId);
+    if (override !== undefined) return override;
     if (session.prompt.startsWith("Start inertly")) return startupReply;
     if (session.provider === "ax-implementer")
       return (
@@ -282,6 +305,7 @@ async function fixture(
     replyWith: (text: string) => {
       implementerReply = text;
     },
+    replies,
     tree,
     heartbeats,
     maxHeartbeats: () => maxHeartbeats,
@@ -894,31 +918,488 @@ test("uncertain implementer launch remains a hard blocker without retry", async 
   assert.equal((await f.read()).handoff?.status, "failed");
 });
 
-test("uncertain assignment release preserves the known identity and blocks retry", async () => {
+// Fails every send; `deliver` first lets the fake session receive the assignment, as a late Paseo queue flush would.
+const failingSend =
+  (f: { transport: Transport }, deliver: boolean): Transport =>
+  async (args, timeout, env) => {
+    if (args[0] !== "send") return f.transport(args, timeout, env);
+    if (deliver) await f.transport(args, timeout, env);
+    throw new Error("Command failed: paseo send timed out");
+  };
+const sends = (f: { calls: string[][] }, agentId?: string) =>
+  f.calls.filter((args) => args[0] === "send" && args[1] === agentId).length;
+const later = (ms: number) => () => Date.now() + ms;
+const gateOf = (step: { result: string; gate?: string }) =>
+  step.result === "awaiting-user" ? (step.gate ?? "") : "";
+const actionOf = (step: { result: string; next?: { action: string } }) =>
+  step.result === "changed" ? step.next?.action : step.result;
+const statuses = (state: Workflow) =>
+  Object.values(state.rounds.planning?.reviews ?? {}).map(
+    (review) => review.status,
+  );
+
+test("GREEN pi-paseo-workflow: a zero send exit releases the worker whatever Paseo returns", async () => {
+  for (const body of [undefined, '{"status":"sent"}', "unrecognized body"]) {
+    const f = await fixture();
+    await dispatchFixtureReview(
+      f.path,
+      { phase: "planning", artifactPath: f.artifactPath },
+      async (args, timeout, env) => {
+        const output = await f.transport(args, timeout, env);
+        return args[0] === "send" && body ? body : output;
+      },
+    );
+    const reviews = Object.values(
+      (await f.read()).rounds.planning?.reviews ?? {},
+    );
+    assert.deepEqual(
+      reviews.map((review) => review.status),
+      ["running", "running", "running"],
+    );
+    // `status` shows what Paseo returned and which Paseo version took the dispatch.
+    for (const review of reviews) {
+      assert.match(review.sendOutput ?? "", /queued|sent|unrecognized/);
+      assert.equal(review.paseoVersion, "0.14.0");
+    }
+    assert.equal(actionOf(await f.step()), "triage");
+  }
+});
+
+test("RED pi-paseo-workflow: an ambiguous send is decided only by delivery evidence and never re-sent", async () => {
   const f = await fixture();
   await f.review("planning");
-  await assert.rejects(
-    handoff(
-      f.path,
-      { briefPath: f.artifactPath, planResolution: "Planning is settled." },
-      async (args, timeout, env) => {
-        if (args[0] === "send") throw new Error("lost send response");
-        return f.transport(args, timeout, env);
-      },
-    ),
-    /lost send response/,
+  await handoff(
+    f.path,
+    { briefPath: f.artifactPath, planResolution: "Settled." },
+    failingSend(f, true),
   );
-  const failed = await f.read();
-  assert.ok(failed.handoff?.agentId);
-  assert.equal(failed.handoff?.launchStatus, "blocked");
+  const ambiguous = await f.read();
+  const agentId = ambiguous.handoff?.agentId;
+  assert.equal(ambiguous.handoff?.status, "ambiguous");
+  assert.deepEqual(nextStep(ambiguous), {
+    result: "unchanged",
+    inFlight: ["handoff"],
+  });
   await assert.rejects(
     handoff(
       f.path,
       { briefPath: f.artifactPath, planResolution: "Do not resend." },
       f.transport,
     ),
-    /already dispatched/,
   );
+  // Evidence of receipt returns the worker to monitoring, and its report then completes it.
+  await f.step();
+  assert.equal((await f.read()).handoff?.status, "running");
+  assert.equal(actionOf(await f.step()), "review");
+  assert.equal((await f.read()).handoff?.report?.head, heads.first);
+  assert.equal(sends(f, agentId), 1);
+
+  const g = await fixture();
+  await g.review("planning");
+  await handoff(
+    g.path,
+    { briefPath: g.artifactPath, planResolution: "Settled." },
+    failingSend(g, false),
+  );
+  const lost = (await g.read()).handoff?.agentId;
+  const session = g.sessions.get(lost ?? "");
+  assert.ok(lost && session);
+  // Inside the queue window nothing is decided.
+  await g.step(g.transport, undefined, later(59_000));
+  assert.equal((await g.read()).handoff?.status, "ambiguous");
+  // An unknown lifecycle status never decides; past the timeout the gate names its recoveries.
+  session.status = "paused";
+  const unknown = await g.step(g.transport, undefined, later(601_000));
+  assert.equal((await g.read()).handoff?.status, "ambiguous");
+  assert.match(gateOf(unknown), /`tick`.*`adopt`.*`retry-launch`/);
+  // A closed session counts as quiet: past the window it is undelivered and stopped.
+  session.status = "closed";
+  const undelivered = await g.step(g.transport, undefined, later(61_000));
+  assert.equal((await g.read()).handoff?.status, "undelivered");
+  assert.equal(actionOf(undelivered), "retry-launch");
+  assert.ok(g.calls.some((args) => args[0] === "stop" && args[1] === lost));
+  await retryLaunch(
+    g.path,
+    { worker: "handoff", agentId: lost },
+    g.transport,
+    worktrees.get(g.path),
+  );
+  const relaunched = await g.read();
+  assert.equal(relaunched.handoff?.status, "running");
+  assert.notEqual(relaunched.handoff?.agentId, lost);
+  assert.equal(relaunched.handoff?.attempts?.[0].agentId, lost);
+  // The only send to the lost session failed before reaching Paseo; nothing was re-sent.
+  assert.equal(sends(g, lost), 0);
+});
+
+test("RED pi-paseo-workflow: a released reviewer that never began is retried once, then degraded with reduced independence", async () => {
+  const f = await fixture();
+  await dispatchFixtureReview(
+    f.path,
+    { phase: "planning", artifactPath: f.artifactPath },
+    f.transport,
+  );
+  // Each session stays at its startup reply with no received assignment.
+  const neverBegan = () => {
+    for (const [id, session] of f.sessions) {
+      session.prompt = "Start inertly.";
+      f.replies.set(id, startupReply);
+    }
+  };
+  neverBegan();
+  const first = await f.step(f.transport, undefined, later(601_000));
+  assert.deepEqual(statuses(await f.read()), [
+    "undelivered",
+    "undelivered",
+    "undelivered",
+  ]);
+  assert.equal(actionOf(first), "retry-launch");
+  for (const role of [
+    "review-correctness",
+    "review-architecture",
+    "review-contract",
+  ]) {
+    const agentId = (await f.read()).rounds.planning?.reviews[role].agentId;
+    await retryLaunch(
+      f.path,
+      { worker: `planning:${role}`, agentId: agentId ?? "" },
+      f.transport,
+    );
+  }
+  assert.deepEqual(statuses(await f.read()), ["running", "running", "running"]);
+  neverBegan();
+  const second = await f.step(f.transport, undefined, later(601_000));
+  assert.deepEqual(statuses(await f.read()), [
+    "degraded",
+    "degraded",
+    "degraded",
+  ]);
+  assert.equal(actionOf(second), "triage");
+  assert.match(
+    second.result === "changed" ? second.next.detail : "",
+    /reduced independence/,
+  );
+  assert.ok(second.recorded.every((line) => /reduced independence/.test(line)));
+  // One automatic retry per reviewer, never a third session.
+  assert.equal(runs(f), 6);
+});
+
+test("RED pi-paseo-workflow: retry-launch needs established non-delivery and an unchanged worktree, and a spent retry needs user authorization", async () => {
+  const f = await fixture();
+  await f.review("planning");
+  await handoff(
+    f.path,
+    { briefPath: f.artifactPath, planResolution: "Settled." },
+    failingSend(f, false),
+  );
+  const first = (await f.read()).handoff?.agentId ?? "";
+  const relaunch = (
+    input: { agentId: string; authorizationSource?: string },
+    transport = f.transport,
+  ) =>
+    retryLaunch(
+      f.path,
+      { worker: "handoff", ...input },
+      transport,
+      worktrees.get(f.path),
+      later(61_000),
+    );
+  // Still ambiguous inside the queue window: no relaunch.
+  await assert.rejects(
+    retryLaunch(
+      f.path,
+      { worker: "handoff", agentId: first },
+      f.transport,
+      worktrees.get(f.path),
+    ),
+  );
+  await f.step(f.transport, undefined, later(61_000));
+  f.tree.uncommitted = ["?? stray.ts"];
+  await assert.rejects(relaunch({ agentId: first }));
+  f.tree.uncommitted = [];
+  assert.equal(runs(f), 4);
+  await relaunch({ agentId: first }, failingSend(f, false));
+  const second = (await f.read()).handoff?.agentId ?? "";
+  const spent = await f.step(f.transport, undefined, later(61_000));
+  assert.match(gateOf(spent), /`retry-launch`.*authorizationSource/);
+  await assert.rejects(relaunch({ agentId: second }));
+  await relaunch({
+    agentId: second,
+    authorizationSource: "User: relaunch the handoff once more.",
+  });
+  const authorized = await f.read();
+  assert.equal(authorized.handoff?.status, "running");
+  assert.deepEqual(
+    authorized.handoff?.attempts?.map((item) => item.agentId),
+    [first, second],
+  );
+});
+
+// Strands a handoff whose first session receives its assignment after the replacement completed.
+async function conflictFixture() {
+  const f = await fixture();
+  await f.review("planning");
+  await handoff(
+    f.path,
+    { briefPath: f.artifactPath, planResolution: "Settled." },
+    failingSend(f, false),
+  );
+  await f.step(f.transport, undefined, later(61_000));
+  const old = (await f.read()).handoff?.agentId ?? "";
+  await retryLaunch(
+    f.path,
+    { worker: "handoff", agentId: old },
+    f.transport,
+    worktrees.get(f.path),
+    later(61_000),
+  );
+  const replacement = (await f.read()).handoff?.agentId ?? "";
+  assert.equal(actionOf(await f.step()), "review");
+  const session = f.sessions.get(old);
+  const assignment = (await f.read()).handoff?.attempts?.[0].assignment?.path;
+  assert.ok(session && assignment);
+  session.prompt = await readFile(assignment, "utf8");
+  session.status = "running";
+  // While either session is active the conflict stays in flight and blocks new dispatch.
+  const conflicted = await f.step();
+  assert.equal((await f.read()).handoff?.status, "conflict");
+  assert.deepEqual(conflicted.result === "unchanged" && conflicted.inFlight, [
+    "handoff",
+  ]);
+  assert.ok((await f.read()).heartbeat);
+  await assert.rejects(
+    dispatchFixtureReview(
+      f.path,
+      { phase: "implementation", artifactPath: f.artifactPath },
+      f.transport,
+    ),
+  );
+  session.status = "idle";
+  return { f, old, replacement };
+}
+const withoutReport = (f: { replies: Map<string, string> }, ids: string[]) => {
+  for (const id of ids) f.replies.set(id, "Stopped without a report.");
+};
+
+test("RED pi-paseo-workflow: a superseded attempt that receives its assignment conflicts until adopt or an authorized retry-launch resolves it", async () => {
+  const both = await conflictFixture();
+  const bothGate = gateOf(await both.f.step());
+  assert.match(bothGate, /`adopt`.*authorizationSource/);
+  assert.ok(bothGate.includes(both.old) && bothGate.includes(both.replacement));
+  const adoptOld = {
+    worker: "handoff",
+    agentId: both.old,
+    branch: "feature",
+    head: heads.first,
+  };
+  await assert.rejects(
+    adopt(both.f.path, adoptOld, both.f.transport, worktrees.get(both.f.path)),
+  );
+  await adopt(
+    both.f.path,
+    { ...adoptOld, authorizationSource: "User: keep the first session." },
+    both.f.transport,
+    worktrees.get(both.f.path),
+  );
+  const adopted = (await both.f.read()).handoff;
+  assert.equal(adopted?.agentId, both.old);
+  assert.equal(adopted?.status, "complete");
+  assert.deepEqual(
+    adopted?.attempts?.map((item) => item.status),
+    ["superseded"],
+  );
+  assert.equal(actionOf(await both.f.step()), "review");
+
+  const one = await conflictFixture();
+  withoutReport(one.f, [one.old]);
+  const oneGate = gateOf(await one.f.step());
+  assert.match(oneGate, /`adopt`/);
+  assert.ok(oneGate.includes(one.replacement) && !oneGate.includes(one.old));
+  await adopt(
+    one.f.path,
+    {
+      worker: "handoff",
+      agentId: one.replacement,
+      branch: "feature",
+      head: heads.first,
+    },
+    one.f.transport,
+    worktrees.get(one.f.path),
+  );
+  assert.equal(actionOf(await one.f.step()), "review");
+
+  const none = await conflictFixture();
+  withoutReport(none.f, [none.old, none.replacement]);
+  assert.match(gateOf(await none.f.step()), /`retry-launch`/);
+  const restart = {
+    worker: "handoff",
+    agentId: none.replacement,
+    authorizationSource: "User: restart from the observed worktree.",
+  };
+  await assert.rejects(
+    retryLaunch(
+      none.f.path,
+      { ...restart, authorizationSource: undefined },
+      none.f.transport,
+      worktrees.get(none.f.path),
+    ),
+  );
+  none.f.tree.uncommitted = ["M partial.ts"];
+  await retryLaunch(
+    none.f.path,
+    restart,
+    none.f.transport,
+    worktrees.get(none.f.path),
+  );
+  const restarted = await none.f.read();
+  assert.equal(restarted.handoff?.status, "running");
+  // The fresh attempt receives the original brief plus the observed worktree.
+  const prompt =
+    none.f.sessions.get(restarted.handoff?.agentId ?? "")?.prompt ?? "";
+  assert.match(prompt, /Implementation brief snapshot/);
+  assert.match(prompt, /partial\.ts/);
+});
+
+test("GREEN pi-paseo-workflow: adopt records a falsely failed handoff once and refuses mismatched evidence", async () => {
+  const f = await fixture();
+  await f.review("planning");
+  await handoff(
+    f.path,
+    { briefPath: f.artifactPath, planResolution: "Settled." },
+    f.transport,
+  );
+  // The earlier runner recorded a delivered handoff as failed when Paseo answered `queued`.
+  await locked(f.path, (state) => {
+    Object.assign(state.handoff ?? {}, {
+      status: "failed",
+      error: "Error: Paseo did not confirm assignment delivery",
+    });
+  });
+  const agentId = (await f.read()).handoff?.agentId ?? "";
+  const input = {
+    worker: "handoff",
+    agentId,
+    branch: "feature",
+    head: heads.first,
+  };
+  const inspected =
+    (change: Record<string, unknown>): Transport =>
+    async (args, timeout, env) => {
+      const output = await f.transport(args, timeout, env);
+      return args[0] === "inspect"
+        ? JSON.stringify({ ...JSON.parse(output), ...change })
+        : output;
+    };
+  const before = await f.read();
+  const refusals: [Partial<typeof input>, Transport][] = [
+    [{ head: heads.second }, f.transport],
+    [{ branch: "other" }, f.transport],
+    [{ agentId: "agent-unknown" }, f.transport],
+    [{ worker: "planning:review-correctness" }, f.transport],
+    [{}, inspected({ Cwd: "/elsewhere" })],
+    [{}, inspected({ Model: "other" })],
+    [{}, inspected({ Status: "running" })],
+  ];
+  for (const [change, transport] of refusals)
+    await assert.rejects(
+      adopt(f.path, { ...input, ...change }, transport, worktrees.get(f.path)),
+    );
+  const envelope = reportEnvelope(implementerReport(heads.first));
+  for (const reply of [
+    "AX_REPORT_BEGIN{}AX_REPORT_END",
+    `${envelope}\n${envelope}`,
+  ]) {
+    f.replyWith(reply);
+    await assert.rejects(
+      adopt(f.path, input, f.transport, worktrees.get(f.path)),
+    );
+  }
+  // Every refusal records nothing.
+  assert.deepEqual(await f.read(), before);
+  f.replyWith(`Done.\n${envelope}`);
+  const session = f.sessions.get(agentId);
+  assert.ok(session);
+  session.status = "closed";
+  const adopted = await adopt(
+    f.path,
+    input,
+    f.transport,
+    worktrees.get(f.path),
+  );
+  assert.equal(adopted.handoff?.status, "complete");
+  assert.equal(adopted.handoff?.report?.head, heads.first);
+  assert.equal(adopted.history?.at(-1)?.adoption?.prior.status, "failed");
+  assert.deepEqual(nextStep(adopted), {
+    result: "changed",
+    next: {
+      action: "review",
+      detail: "Dispatch the implementation review round on the worktree head",
+    },
+  });
+  await adopt(f.path, input, f.transport, worktrees.get(f.path));
+  assert.deepEqual(await f.read(), adopted);
+});
+
+test("RED pi-paseo-workflow: a missing inspect field stops the launch before any send, naming the field and version", async () => {
+  const f = await fixture();
+  await f.review("planning");
+  const before = f.calls.length;
+  await assert.rejects(
+    handoff(
+      f.path,
+      { briefPath: f.artifactPath, planResolution: "Settled." },
+      async (args, timeout, env) => {
+        const output = await f.transport(args, timeout, env);
+        if (args[0] !== "inspect") return output;
+        const { Archived: _archived, ...rest } = JSON.parse(output);
+        return JSON.stringify(rest);
+      },
+    ),
+    (error: Error) =>
+      /Archived/.test(error.message) && /0\.14\.0/.test(error.message),
+  );
+  assert.equal(
+    f.calls.slice(before).filter((args) => args[0] === "send").length,
+    0,
+  );
+  assert.equal((await f.read()).handoff?.status, "failed");
+});
+
+test("GREEN pi-paseo-workflow: a planning-bound continuation binds the planning fingerprint before any implementation head", async () => {
+  const f = await fixture();
+  await f.review("planning");
+  const fingerprint = (await f.read()).rounds.planning?.fingerprint;
+  const input = {
+    batchId: "planning-2",
+    authorizationSource: "User: revise the plan.",
+    purpose: "Another planning batch",
+    allowedPhases: ["planning" as const],
+  };
+  await assert.rejects(
+    transition(f.path, "continuation", { ...input, expectedHead: heads.first }),
+  );
+  await transition(f.path, "continuation", {
+    ...input,
+    expectedHead: fingerprint,
+  });
+  assert.equal((await f.read()).batchId, "planning-2");
+  assert.equal(actionOf(await f.step()), "review");
+});
+
+test("GREEN pi-paseo-workflow: every awaiting-user gate names the supported action that clears it", () => {
+  const actions =
+    /`(tick|adopt|retry-launch|retry-handoff|continuation|triage|waiver|handoff)`|Finish/;
+  const texts = Object.values(gates).flatMap((gate) =>
+    typeof gate === "string"
+      ? [gate]
+      : [[], ["agent-a"], ["agent-a", "agent-b"], true, false].map((arg) =>
+          (gate as (name: string, arg: unknown) => string)("handoff", arg),
+        ),
+  );
+  // Phase questions, bounds, no-new-head repairs, acceptance, failed, ambiguous, spent, conflict, and hosted input.
+  assert.ok(texts.length >= 9);
+  for (const text of texts) assert.match(text, actions);
+  assert.doesNotMatch(texts.join("\n"), /hand-edit|replace state/i);
 });
 
 test("wrong-cwd inert launch never receives the task assignment", async () => {
@@ -2471,7 +2952,7 @@ test("GREEN pi-paseo-workflow: runner actions print one compact line and status 
     recorded: ["decisions", "assessments"],
     ids: {},
     result: "awaiting-user",
-    gate: "Plan acceptance is required before implementation handoff",
+    gate: gates.acceptance,
   });
   assert.doesNotMatch(triaged, /code-simplifier|outcomes|lenses/);
   const ticked = await captureStdout(() => main([f.path, "tick"], env));
