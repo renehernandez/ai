@@ -1386,6 +1386,53 @@ test("GREEN pi-paseo-workflow: a planning-bound continuation binds the planning 
   assert.equal(actionOf(await f.step()), "review");
 });
 
+test("GREEN pi-paseo-workflow: a transient wait error during inert startup still releases the round", async () => {
+  const f = await fixture();
+  const failedOnce = new Set<string>();
+  await dispatchReview(
+    f.path,
+    { phase: "planning", artifactPath: f.artifactPath },
+    async (args, timeout, env) => {
+      const agentId = args.at(-1) ?? "";
+      if (args[0] === "wait" && !failedOnce.has(agentId)) {
+        failedOnce.add(agentId);
+        throw new Error("connect ECONNRESET");
+      }
+      return f.transport(args, timeout, env);
+    },
+  );
+  await f.step();
+  const triaged = await transition(f.path, "triage", {
+    phase: "planning",
+    decisions: [],
+  });
+  assert.equal(
+    triaged.rounds.planning?.reviews["review-contract"].status,
+    "complete",
+  );
+  assert.equal(runs(f), 3);
+});
+
+test("RED pi-paseo-workflow: a reviewer still at its startup reply keeps its round in flight until the timeout", async () => {
+  const f = await fixture();
+  const dispatch = () =>
+    dispatchReview(
+      f.path,
+      { phase: "planning", artifactPath: f.artifactPath },
+      f.transport,
+      worktrees.get(f.path),
+    );
+  await dispatch();
+  for (const [id, session] of f.sessions) {
+    session.prompt = "Start inertly.";
+    f.replies.set(id, startupReply);
+  }
+  const waiting = await f.step(f.transport, undefined, later(300_000));
+  assert.equal(waiting.result, "unchanged");
+  await assert.rejects(dispatch());
+  assert.deepEqual(statuses(await f.read()), ["running", "running", "running"]);
+});
+
 test("GREEN pi-paseo-workflow: every awaiting-user gate names the supported action that clears it", () => {
   const actions =
     /`(tick|adopt|retry-launch|retry-handoff|continuation|triage|waiver|handoff)`|Finish/;

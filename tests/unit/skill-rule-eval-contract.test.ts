@@ -197,6 +197,10 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
     read("skills/paseo-orchestration/SKILL.md"),
     /`awaiting-user` gate names\s+\(`tick`, `adopt`, or `retry-launch`\)/,
   );
+  assert.match(
+    read("skills/paseo-orchestration/references/paseo-workflow.md"),
+    /stays in flight until the reviewer timeout, when\s+the delivery evaluator decides/,
+  );
 });
 
 test("RED skill-rule-evals: Paseo workspace binding rejects a wrong directory", async () => {
@@ -247,7 +251,7 @@ test("RED skill-rule-evals: Paseo workspace binding rejects a wrong directory", 
   // A queued send is accepted delivery; the contract never asks Paseo for a literal "sent".
   assert.doesNotMatch(
     read("skills/paseo-orchestration/references/paseo-workflow.md"),
-    /uncertain assignment response blocks release|"sent"/,
+    /uncertain assignment response blocks release|"sent"|has\s+not begun the assignment and stays in flight\./,
   );
   const directory = mkdtempSync(join(tmpdir(), "paseo-binding-red-"));
   const statePath = join(directory, "state.json");

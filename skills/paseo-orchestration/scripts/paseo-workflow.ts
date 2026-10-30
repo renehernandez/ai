@@ -10,6 +10,7 @@ import {
   lifecycle,
   listWorkspaces,
   matchingWorkspace,
+  observe,
   paseo,
   paseoVersion,
   readProbe,
@@ -271,7 +272,8 @@ async function launch(
       });
     });
     const waiting = JSON.parse(
-      await transport(
+      await observe(
+        transport,
         ["wait", "--json", "--timeout", "60", response.agentId],
         70_000,
       ),
@@ -1559,7 +1561,10 @@ async function settleDelivery(
       return `${name}: delivered`;
     }
     // A reviewer whose automatic retry was also undelivered is degraded evidence.
-    const degraded = name.includes(":") && Boolean(target.attempts?.length);
+    const reviewer = workers(current).some(
+      (entry) => entry.name === name && entry.phase,
+    );
+    const degraded = reviewer && Boolean(target.attempts?.length);
     Object.assign(target, {
       status: degraded ? "degraded" : "undelivered",
       error:

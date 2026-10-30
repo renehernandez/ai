@@ -235,7 +235,8 @@ prose never binds. Uncommitted files are recorded as evidence and are not
 reviewed. The runner refuses a round while an implementer or repair is in
 flight. A completed repair's head must still equal the verified head from its
 report envelope. A worker whose last reply is still its inert startup reply has
-not begun the assignment and stays in flight. Correctness covers diff
+not begun the assignment; it stays in flight until the reviewer timeout, when
+the delivery evaluator decides. Correctness covers diff
 correctness and risk; architecture covers quality, simplification, and deslop;
 contract alignment scrutinizes verification, requirements, and documentation.
 Assign conditional security and production risk to correctness,
