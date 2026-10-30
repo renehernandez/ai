@@ -44,17 +44,46 @@ export type LaunchInspection = {
   thinking: string;
   status: string;
 };
+export type WorktreeState = {
+  branch: string;
+  head: string;
+  uncommitted: string[];
+};
 export type Review = {
-  status: "reserved" | "running" | "complete" | "degraded" | "failed";
+  status:
+    | "reserved"
+    | "running"
+    | "complete"
+    | "degraded"
+    | "failed"
+    // The send command failed or timed out; Paseo may still have queued the assignment.
+    | "ambiguous"
+    // Delivery evidence established that the assignment never reached the session.
+    | "undelivered"
+    // A superseded attempt received its assignment after its replacement was reserved.
+    | "conflict"
+    | "superseded";
   agentId?: string;
   launchStatus?: "identity-recorded" | "verified" | "released" | "blocked";
   inspection?: LaunchInspection;
   assignment?: Snapshot;
+  // Leads the assignment prompt, so the session timeline proves receipt.
+  assignmentDigest?: string;
   startupReplySha256?: string;
+  paseoVersion?: string;
+  sentAt?: string;
+  sendOutput?: string;
   releasedAt?: string;
   outcomes?: Record<string, Outcome>;
   report?: ImplementerReport;
   error?: string;
+  // Implementer worktree at the original reservation; a relaunch requires it unchanged.
+  baseline?: WorktreeState;
+  authorizationSource?: string;
+  // Earlier attempts in this worker slot, oldest first.
+  attempts?: Review[];
+  // Agent IDs whose report matches the worktree head, recorded once both conflicted sessions are quiet.
+  conflictReports?: string[];
 };
 export type StandingOrderChange = {
   id: string;
@@ -256,6 +285,12 @@ export type Workflow = {
       };
       noWritesEvidence: string;
     };
+    adoption?: {
+      worker: string;
+      agentId: string;
+      prior: Review;
+      authorizationSource?: string;
+    };
   }[];
 };
 export type Transport = (
@@ -431,12 +466,54 @@ export function workers(state: Workflow): Worker[] {
   }
   return entries;
 }
-export function inFlight(state: Workflow) {
+// Paseo flushes queued sends within seconds; past this window an absent assignment is undelivered.
+export const queueWindowMs = 60_000;
+export type DeliveryEvidence = {
+  lifecycle: "active" | "quiet" | "errored" | "unknown";
+  archived: boolean;
+  received: boolean;
+  startupReply: boolean;
+};
+// Decides delivery only from evidence; anything else stays undecided.
+export function deliveryVerdict(
+  evidence: DeliveryEvidence,
+  sentAt: string | undefined,
+  timeoutSeconds: number,
+  now: number,
+) {
+  if (
+    evidence.received ||
+    evidence.lifecycle === "active" ||
+    !evidence.startupReply
+  )
+    return "delivered";
+  const elapsed = sentAt ? now - Date.parse(sentAt) : 0;
+  if (
+    elapsed >= Math.min(queueWindowMs, timeoutSeconds * 1000) &&
+    evidence.lifecycle === "quiet" &&
+    !evidence.archived
+  )
+    return "undelivered";
+  return undefined;
+}
+function pastTimeout(state: Workflow, worker: Review, now: number) {
+  return now - Date.parse(worker.sentAt ?? "") > state.timeoutSeconds * 1000;
+}
+export function requireNoConflict(state: Workflow) {
+  requireThat(
+    !workers(state).some(({ worker }) => worker.status === "conflict"),
+    "A delivery conflict stops new dispatch until adopt or an authorized retry-launch resolves it",
+  );
+}
+export function inFlight(state: Workflow, now = Date.now()) {
   return [
     ...workers(state)
       .filter(
         ({ worker }) =>
-          worker.status === "reserved" || worker.status === "running",
+          worker.status === "reserved" ||
+          worker.status === "running" ||
+          (worker.status === "ambiguous" && !pastTimeout(state, worker, now)) ||
+          (worker.status === "conflict" && !worker.conflictReports),
       )
       .map(({ name }) => name),
     ...(state.hostedMonitor && state.hosted?.status === "waiting"
@@ -466,27 +543,77 @@ export function pendingFixes(
       !waiverFor(state, phase, requestedAction, decision.id),
   );
 }
-export function nextStep(state: Workflow): Step {
+// Every awaiting-user gate names the supported action that clears it.
+export const gates = {
+  questions: (phase: Phase | "hosted") =>
+    `${phase} findings need user input; record the answer through \`triage\` or an exact scoped \`waiver\``,
+  bound: (phase: Phase | "hosted") =>
+    `${phase} review bound of ${maxReviewRounds} reached with open fixes; report the findings, reviewed heads, and repairs, and open another batch only through a user-authorized \`continuation\``,
+  noNewHead: (phase: "implementation" | "hosted") =>
+    `The ${phase} repair reported no new head; resolve the open fixes through a user-authorized \`continuation\``,
+  acceptance:
+    "Plan acceptance is required before implementation; run `handoff` once the user accepts the plan",
+  failed: (name: string) =>
+    `${name} failed; \`adopt\` its session's verified report, or \`retry-handoff\` a verified no-write misroute, after inspecting the saved error`,
+  ambiguous: (name: string, implementer: boolean) =>
+    `${name} assignment delivery is ambiguous past the reviewer timeout; run \`tick\` for new evidence, ${implementer ? "`adopt` its verified report, " : ""}or \`retry-launch\` once non-delivery is established`,
+  spent: (name: string) =>
+    `${name} was not delivered after its automatic retry; \`retry-launch\` needs an authorizationSource carrying the user's statement`,
+  conflict: (name: string, reports: string[]) =>
+    reports.length === 1
+      ? `${name} delivery conflict: only session ${reports[0]} reported the worktree head; \`adopt\` that attempt`
+      : reports.length
+        ? `${name} delivery conflict: sessions ${reports.join(" and ")} both reported the worktree head; \`adopt\` the attempt the user names in an authorizationSource`
+        : `${name} delivery conflict: no session reported the worktree head; \`retry-launch\` with an authorizationSource relaunches from the observed worktree`,
+  hostedInput: "The hosted gate requires user input; resolve it through Finish",
+};
+// Ambiguous, undelivered, and conflicted workers name their recovery before any phase step.
+function deliveryStep(state: Workflow): Step | undefined {
+  for (const { name, phase, worker } of workers(state)) {
+    if (worker.status === "conflict")
+      return {
+        result: "awaiting-user",
+        gate: gates.conflict(name, worker.conflictReports ?? []),
+      };
+    if (worker.status === "ambiguous")
+      return { result: "awaiting-user", gate: gates.ambiguous(name, !phase) };
+    if (worker.status === "undelivered")
+      return worker.attempts?.length
+        ? { result: "awaiting-user", gate: gates.spent(name) }
+        : {
+            result: "changed",
+            next: {
+              action: "retry-launch",
+              detail: `Relaunch ${name} once in a fresh session; its assignment was never delivered`,
+            },
+          };
+  }
+}
+export function nextStep(state: Workflow, now = Date.now()): Step {
   if (state.finished) return { result: "finished" };
-  const pending = inFlight(state);
+  const pending = inFlight(state, now);
   if (pending.length) return { result: "unchanged", inFlight: pending };
+  const delivery = deliveryStep(state);
+  if (delivery) return delivery;
   const changed = (action: string, detail: string): Step => ({
     result: "changed",
     next: { action, detail },
   });
   const awaiting = (gate: string): Step => ({ result: "awaiting-user", gate });
   const reviewed = (phase: Phase, requestedAction: string) => {
-    if (!state.decisions[phase])
-      return changed("triage", `Triage the ${phase} review round`);
-    if (openQuestions(state, phase, requestedAction).length)
-      return awaiting(
-        `${phase} findings need user input or an exact scoped waiver`,
+    if (!state.decisions[phase]) {
+      const degraded = reviewRoles[phase].filter(
+        (role) => state.rounds[phase]?.reviews[role].status === "degraded",
       );
+      return changed(
+        "triage",
+        `Triage the ${phase} review round${degraded.length ? `; ${degraded.join(", ")} degraded with reduced independence: record the inline fallback assessment and report the reduced independence to the user this turn` : ""}`,
+      );
+    }
+    if (openQuestions(state, phase, requestedAction).length)
+      return awaiting(gates.questions(phase));
   };
-  const bounded = (phase: Phase | "hosted") =>
-    awaiting(
-      `${phase} review bound of ${maxReviewRounds} reached with open fixes; report the findings, reviewed heads, and repairs for user direction`,
-    );
+  const bounded = (phase: Phase | "hosted") => awaiting(gates.bound(phase));
   const repair = (
     phase: "implementation" | "hosted",
     requestedAction: string,
@@ -504,9 +631,7 @@ export function nextStep(state: Workflow): Step {
             `Dispatch one fresh ${phase} repair with an orchestrator-written brief`,
           );
     if (current?.session?.status === "failed")
-      return awaiting(
-        `${phase} repair session failed; inspect Paseo state before human-directed recovery`,
-      );
+      return awaiting(gates.failed(`${phase}-repair`));
     if (current?.status === "started")
       return changed(
         "repair",
@@ -521,9 +646,7 @@ export function nextStep(state: Workflow): Step {
     if (loop) return loop;
     const repaired = state.repairs.implementation;
     if (repaired?.head === state.rounds.implementation?.head)
-      return awaiting(
-        "The implementation repair reported no new head; direct how to resolve the open fixes",
-      );
+      return awaiting(gates.noNewHead("implementation"));
     if (repaired?.status === "complete")
       return changed(
         "review",
@@ -541,14 +664,9 @@ export function nextStep(state: Workflow): Step {
           "review",
           "Revise the plan from the triaged findings and dispatch a fresh planning round on the changed plan",
         );
-  if (!state.handoff)
-    return awaiting(
-      "Plan acceptance is required before implementation handoff",
-    );
+  if (!state.handoff) return awaiting(gates.acceptance);
   if (state.handoff.status === "failed")
-    return awaiting(
-      "Implementation handoff failed; inspect Paseo state and the saved error before human-directed recovery",
-    );
+    return awaiting(gates.failed("handoff"));
   if (!state.rounds.implementation)
     return changed(
       "review",
@@ -564,20 +682,16 @@ export function nextStep(state: Workflow): Step {
       "Publish Ready through Finish and record the observed publication",
     );
   if (state.hosted?.status === "awaiting-user")
-    return awaiting("The hosted gate requires user input");
+    return awaiting(gates.hostedInput);
   if (!state.decisions.hosted && reviewGates(state, "hosted").length)
     return changed("triage", "Triage the hosted feedback batch");
   if (openQuestions(state, "hosted", "finish").length)
-    return awaiting(
-      "hosted findings need user input or an exact scoped waiver",
-    );
+    return awaiting(gates.questions("hosted"));
   const hosted = repair("hosted", "finish");
   if (hosted) return hosted;
   if (state.repairs.hosted?.status === "complete") {
     if (state.repairs.hosted.head === state.publication.head)
-      return awaiting(
-        "The hosted repair reported no new head; direct how to resolve the open hosted fixes",
-      );
+      return awaiting(gates.noNewHead("hosted"));
     if (
       (state.rounds.implementation?.cycle ?? 0) !== implementationCycle(state)
     )
@@ -1100,9 +1214,10 @@ export async function transition(path: string, action: string, input: Input) {
           nonempty(input.expectedHead),
         "Continuation requires explicit bounded authorization and expected head",
       );
+      // Before any implementation head, a planning-bound batch binds the current planning fingerprint.
       const currentHead =
         state.orchestration === "planner-v2"
-          ? latestHead(state)
+          ? (latestHead(state) ?? state.rounds.planning?.fingerprint)
           : (state.repairs.hosted?.head ??
             state.repairs.implementation?.head ??
             state.publication?.head ??
@@ -1239,7 +1354,7 @@ export async function transition(path: string, action: string, input: Input) {
                 assessments.some((item) => item.role === role) ||
                 waiverFor(state, phase, undefined, `${role}:review-evidence`),
             ),
-          "Every degraded reviewer needs one complete per-lens owner fallback assessment or exact scoped waiver",
+          "Every degraded reviewer needs one complete per-lens owner fallback assessment or exact scoped waiver, and its reduced independence is reported to the user",
         );
       }
       const ids = reviewGates(state, phase, assessments).filter(

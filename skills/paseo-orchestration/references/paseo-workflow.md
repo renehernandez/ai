@@ -46,8 +46,8 @@ through `git rev-parse`. It records the parsed report with the worktree's
 uncommitted files as evidence; uncommitted files do not fail the report. A
 missing, duplicate, or malformed envelope, or a branch or head that differs from
 the worktree, marks the session failed, and the next step becomes
-`awaiting-user` for human-directed recovery. The runner never guesses a head and
-never retries a malformed report.
+`awaiting-user` naming `adopt`. The runner never guesses a head and never
+retries a malformed report.
 
 ## Work without model selection
 
@@ -94,12 +94,84 @@ identity, waits for the startup turn to become idle, then verifies cwd,
 provider, model, effort, archive state, and pending permissions. Only after
 that verification does it send the immutable task assignment and transfer
 write ownership. A missing, ambiguous, moved, or archived workspace, wrong cwd
-or route, unknown identity, or uncertain assignment response blocks release
-without an automatic replacement. Dispatch returns after that verified release;
-it does not wait for the worker. The orchestrator never writes the
+or route, or unknown identity blocks release. Delivery of the sent assignment
+follows [delivery evidence](#delivery-evidence-and-recovery). Dispatch returns
+after the send; it does not wait for the worker. The orchestrator never writes the
 implementation worktree. Do not fork accumulated conversation or reuse a
 previous worker session. Independent concurrent tasks use separate singly owned
 worktrees.
+
+## Delivery evidence and recovery
+
+The runner depends only on stable Paseo facts: `run --json` returns an agent
+ID; `inspect --json` exposes ID, cwd, provider, model, thinking, lifecycle
+status, archive state, and pending permissions; `logs` returns the last
+assistant reply and a timeline that includes received prompts; and `send`
+exits zero when Paseo accepts the message. A missing `inspect` field stops the
+launch before any send, naming the field and the Paseo version. Lifecycle
+status is active (`initializing`, `running`), quiet (`idle`, `closed`),
+errored (`error`), or unknown; an unknown status never decides anything. Each
+dispatch records `paseo --version` for diagnostics only, and the worker stores
+the raw send output, truncated, so `status` shows what Paseo returned.
+Observation calls (`inspect`, `logs`, `wait`, `workspace ls`, `--version`)
+retry transient errors up to three attempts; `run` and `send` never repeat.
+
+Every assignment starts with its digest line, so the session timeline proves
+receipt. A zero `send` exit releases the worker; the send body is never
+interpreted. A non-zero exit or timeout records the worker `ambiguous`,
+because Paseo may still have queued the message. One evaluator decides from
+evidence:
+
+- delivered: the timeline holds the assignment digest, the session is active,
+  or the last reply differs from the startup reply. The worker returns to
+  monitoring.
+- undelivered: the 60-second queue window has passed since the send, and the
+  session is quiet and unarchived, without the digest, still at its startup
+  reply. The runner stops the session and records `undelivered`.
+- otherwise, nothing is decided.
+
+Each tick evaluates ambiguous workers, and released workers still at their
+startup reply past the reviewer timeout. An ambiguous worker stays in flight
+until the reviewer timeout; afterwards its gate names `tick`, `adopt`, or
+`retry-launch`. No worker is ever sent its assignment twice.
+
+A retry needs established non-delivery. A reviewer whose launch fails after
+its identity is known, but before send, retries once inside the same dispatch.
+An implementer launch failure before send stays `failed`. An undelivered
+worker gets one automatic `retry-launch` in a fresh session. That action
+re-runs the evaluator on the old session, and, for implementers, requires the
+worktree branch, head, and uncommitted files to equal the baseline recorded at
+the original reservation. Ticks never dispatch. A spent retry stops at
+`awaiting-user`; each further `retry-launch` needs an `authorizationSource`
+carrying the user's statement. A reviewer whose retry is also undelivered, or
+whose report is degraded, is degraded evidence. `nextStep`, the tick line,
+and the triage requirement name its reduced independence, and the
+orchestrator reports that to the user in the same turn.
+
+The replacement alone owns the worktree; every earlier attempt stays in the
+worker's attempt history. Until the workflow finishes, each tick checks
+superseded implementer sessions' timelines. If one received its assignment,
+both attempts become `conflict` and new dispatch stops. They stay in flight
+until both sessions are quiet. The gate then depends on which sessions
+reported the worktree head: one names `adopt` of that attempt; both name
+`adopt` of the attempt the user chooses, with an `authorizationSource`;
+neither names `retry-launch` with an `authorizationSource`. That relaunch
+records the observed worktree as the new baseline, and the fresh attempt gets
+the original brief plus that observed state.
+
+`adopt` records a completion for a handoff, implementation repair, or hosted
+repair whose exact session produced a valid report after the runner lost track
+of it. It accepts the current attempt when that attempt is `failed`,
+`ambiguous`, `undelivered`, or `conflict`, and a superseded attempt only under
+a conflict. It verifies everything a tick verifies: the recorded identity,
+route and cwd, a quiet unarchived session without pending permissions, a reply
+other than the startup reply holding exactly one valid `AX_REPORT`, a branch and
+head equal to the input and the worktree, and, for a repair, a head other than
+the reviewed head. A mismatch refuses with nothing recorded. On success the
+worker becomes `complete`, the prior attempt is archived in `Workflow.history`,
+the other conflicted attempt becomes superseded, and an identical repeat is a
+no-op. Outside the both-reports conflict, adoption needs no user authorization.
+It grants no review round, repair, or terminal authority.
 
 ## Advance with ticks
 
@@ -163,7 +235,8 @@ prose never binds. Uncommitted files are recorded as evidence and are not
 reviewed. The runner refuses a round while an implementer or repair is in
 flight. A completed repair's head must still equal the verified head from its
 report envelope. A worker whose last reply is still its inert startup reply has
-not begun the assignment and stays in flight. Correctness covers diff
+not begun the assignment; it stays in flight until the reviewer timeout, when
+the delivery evaluator decides. Correctness covers diff
 correctness and risk; architecture covers quality, simplification, and deslop;
 contract alignment scrutinizes verification, requirements, and documentation.
 Assign conditional security and production risk to correctness,
@@ -174,7 +247,8 @@ Thermonuclear review is quality-review depth, not an extra worker.
 Bind reports to the inspected source and base. Require a complete nonempty
 report from every model when available. A reviewer timeout, provider error,
 malformed report, truncated response, or unavailable reviewer records degraded
-evidence; it never becomes a pass and never triggers replacement dispatch. The
+evidence; it never becomes a pass. Only established non-delivery earns a
+reviewer its one fresh retry. The
 orchestrator must assess every missing assigned lens inline and record
 one structured outcome per lens,
 and resolve every fallback finding before advancing. Incomplete lens coverage
@@ -234,7 +308,8 @@ the plan's contract, or material questions; merge, deployment, cleanup, and any
 action outside the accepted proposal; and human-only credential steps. Ordinary
 findings, repairs, reviewer outages, and CI diagnosis continue without a prompt.
 The runner's `cleanup` action is the mechanism for authorized cleanup, not its
-authority.
+authority. Delivery recovery asks the user only for a spent retry or a
+conflict, as [delivery evidence](#delivery-evidence-and-recovery) describes.
 
 ## Enforced boundary
 
@@ -316,11 +391,13 @@ is the only full-state read.
 | `triage` | `phase`, `decisions` containing each finding's `id`, `action` (fix/dismiss/question) and `reason`; for each degraded reviewer, `assessments` with its `role` and complete per-lens `outcomes` using the review outcome shape. |
 | `waiver` | `phase`, exact current `target`, exact `requestedAction`, nonempty `failedGates`, and `reason`. Records failed evidence without granting the action itself. |
 | `handoff` | `briefPath`, `planResolution`; launches the fresh implementer and returns. Accepts the same optional workspace fields as `review`. |
+| `adopt` | `worker` (`handoff`, `implementation-repair`, or `hosted-repair`), its recorded `agentId`, expected `branch` and full `head`, and an `authorizationSource` when both conflicted sessions reported the head. Records a verified report from a failed, ambiguous, undelivered, or conflicted attempt. |
+| `retry-launch` | `worker` (a name from `status`, such as `handoff` or `planning:review-contract`), its recorded `agentId`, and an `authorizationSource` once the automatic retry is spent or for a conflict with no matching report. Relaunches established non-delivery in one fresh session. |
 | `retry-handoff` | Exact `previousAgentId`, immutable authorization source, target `branch` and `head`, exact porcelain `dirtyStatus`, and `noWritesEvidence`; optional explicit workspace registration fields. Recovers only an inactive known wrong-cwd implementation handoff with unused implementation/review phases. |
 | `repair` | `phase` (implementation/hosted) and `stage`. `start` needs `briefPath` and launches one fresh implementer for the current round or hosted batch; a hosted `start` with a new `targetBase` reconciles a moved base. `complete` needs the exact verified `head` from the tick-recorded repair report and named `verification`. |
 | `publication` | Observed `artifactUrl`, `head`, exact `targetBase` SHA, optional policy-required `reviewer`, `ready: true`, `evidence`, and the unchanged policy-source fingerprint. When a hosted gate is required, also the Finish `probeCommand` argv and optional `deadlineMs`. After a hosted repair's clean local round, the same action records the republication of that head. |
 | `finish` | Current observed publication fields and final evidence; does not merge. |
-| `continuation` | Explicit `batchId`, authorization source, purpose, allowed phases, and expected current head. Archives prior evidence and opens one bounded batch. |
+| `continuation` | Explicit `batchId`, authorization source, purpose, allowed phases, and expected current head; before any implementation head, the expected head is the current planning round fingerprint. Archives prior evidence and opens one bounded batch. |
 | `cleanup` | `authorizationSource` (the user's cleanup statement, or the ID of the active standing order that carries it), the expected worktree `head`, and a `reason` when the workflow is not finished. Removes only this workflow's recorded targets; when the caller is the only running agent in the workspace, deletes only the scratch folder. |
 | `status` | No input required; any role may read it. Prints the full state, the only full-state read. Inspect persisted phase, reports, unresolved gaps, and an expired heartbeat loop. |
 
@@ -363,7 +440,9 @@ after removal starts stops without retry and reports each target as removed,
 skipped, or remaining. Cleanup never forces removal and never deletes a
 branch.
 
-For other recovery, the orchestrator inspects immutable authorization
+Every `awaiting-user` result names the action that clears it. Use `adopt`,
+`retry-launch`, `retry-handoff`, or `continuation` as named. For other
+recovery, the orchestrator inspects immutable authorization
 evidence, sole writer ownership, live artifact URL/head/base/Ready state, and a
 copy of the old state. Preview and test the `continuation` input against that
 isolated copy, then apply the identical transition to the original under the
