@@ -602,6 +602,11 @@ test("the orchestrator and its planner alias cannot change dependencies, but kee
     "pnpm --unknown=value run test",
     "npm --unknown=value run build",
     "pnpm -Cpackages/app add left-pad",
+    "pnpm --dir $X run test",
+    'pnpm -C "$X" run test',
+    "pnpm --filter $PKG run build",
+    "npm --prefix $X run test",
+    "pnpm --dir",
   ];
   for (const role of orchestratorRoles)
     for (const command of denied)
@@ -622,6 +627,8 @@ test("the orchestrator and its planner alias cannot change dependencies, but kee
     "pnpm -C packages/app exec tsc",
     "pnpm --filter app run build",
     "npm --prefix packages/app run build",
+    "pnpm --dir app run test",
+    "npm --prefix app run test",
     "pnpm --version",
     "npm -v",
     "pnpm list",

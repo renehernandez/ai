@@ -362,8 +362,13 @@ function dependencyChange(words: ShellWord[]): string | undefined {
     const equals = /^(--[^=]+)=/u.exec(word.value);
     if (equals ? options.values.has(equals[1]) : options.flags.has(word.value))
       index += 1;
-    else if (options.values.has(word.value)) index += 2;
-    else return `<unclassified option ${word.value}>`;
+    else if (options.values.has(word.value)) {
+      // A missing or dynamic separate value could word-split into the subcommand, so it fails closed.
+      const value = unwrapped[index + 1];
+      if (!value) return `<missing value for ${word.value}>`;
+      if (value.dynamic) return value.value || "<dynamic subcommand>";
+      index += 2;
+    } else return `<unclassified option ${word.value}>`;
   }
   const subcommand = unwrapped[index]?.value;
   return subcommand && dependencyChanges.has(subcommand)

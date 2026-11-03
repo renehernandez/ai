@@ -20,6 +20,15 @@ test("RED hook-registration: MCP and Pi runtime configuration, including the in-
   assert.throws(
     () =>
       assertRegistrationTargetSafe({
+        path: "/tmp/isolated-home/.pi/agent/extensions/orchestrator-dependency-policy.json",
+        target: "codex",
+        home: "/tmp/isolated-home",
+      }),
+    /hook_registration_target_invalid/u,
+  );
+  assert.throws(
+    () =>
+      assertRegistrationTargetSafe({
         path: "/tmp/isolated-home/.pi/agent/extensions/planner-git-policy.json",
         target: "codex",
         home: "/tmp/isolated-home",
