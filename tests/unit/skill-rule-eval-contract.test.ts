@@ -174,7 +174,7 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
     assert.equal(parseReport(reportWithHead(head)).head, head);
   assert.match(
     read("skills/paseo-orchestration/references/paseo-workflow.md"),
-    /planner is the orchestrator/,
+    /orchestrator is the session the user talks to/,
   );
   assert.equal(maxReviewRounds, 3);
   assert.match(

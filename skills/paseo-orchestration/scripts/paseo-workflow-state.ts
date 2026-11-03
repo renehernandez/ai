@@ -14,8 +14,8 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 export type Phase = "planning" | "implementation";
+// Worker roles the runner launches; it never launches the orchestrator, so it needs no orchestrator route.
 export type Role =
-  | "planner"
   | "implementer"
   | "review-correctness"
   | "review-architecture"
@@ -299,7 +299,6 @@ export type Transport = (
   env?: Record<string, string>,
 ) => Promise<string>;
 export const roles: Role[] = [
-  "planner",
   "implementer",
   "review-correctness",
   "review-architecture",

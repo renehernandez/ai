@@ -43,7 +43,18 @@ test("Opus is the subscription-backed default and Sol owns three focused reviews
           profile.thinkingOptionId === "medium",
       ),
   );
-  assert.ok(profiles.some((profile) => profile.id === "ax-planner-astra"));
+  const orchestrators = profiles.filter(
+    (profile) => !/Review|Implement/u.test(profile.name),
+  );
+  assert.deepEqual(orchestrators, [
+    {
+      id: "ax-orchestrator",
+      name: "Orchestrator",
+      provider: "ax-orchestrator",
+      model: "claude-bridge/claude-opus-5-5",
+      thinkingOptionId: "medium",
+    },
+  ]);
 
   const launch = launchArguments([
     "implementer",
@@ -87,13 +98,37 @@ test("Paseo hosted relay is explicit and keeps pairing identity machine-local", 
   );
 });
 
-test("Pi and Paseo roles are configured without a model selection step", () => {
+test("one Orchestrator profile offers Opus and Astra while worker roles keep one fixed model", () => {
   const entries = config.runtime.configs.paseo.managedPaths;
   const providers = entries.filter(
     (entry) => entry.path.slice(0, 2).join(".") === "agents.providers",
   );
-  assert.equal(providers.length, 7);
-  for (const entry of providers) {
+  assert.equal(providers.length, 6);
+  const [orchestrator, ...workers] = providers;
+  assert.deepEqual(orchestrator.path, [
+    "agents",
+    "providers",
+    "ax-orchestrator",
+  ]);
+  assert.equal(orchestrator.value.label, "Orchestrator");
+  assert.deepEqual(orchestrator.value.command.slice(1), [
+    "~/.agents/hooks/pi/launch.ts",
+    "orchestrator",
+    "claude-bridge/claude-opus-5-5:medium",
+    "openai-codex/gpt-6-astra:medium",
+  ]);
+  assert.deepEqual(
+    orchestrator.value.models.map((model) => [
+      model.id,
+      model.isDefault === true,
+      model.thinkingOptions.map((option) => option.id),
+    ]),
+    [
+      ["claude-bridge/claude-opus-5-5", true, ["medium"]],
+      ["openai-codex/gpt-6-astra", false, ["medium"]],
+    ],
+  );
+  for (const entry of workers) {
     const provider = entry.value;
     assert.equal(provider.extends, "pi");
     assert.equal(provider.models.length, 1);
@@ -105,6 +140,7 @@ test("Pi and Paseo roles are configured without a model selection step", () => {
     assert.equal(provider.command[5], provider.models[0].thinkingOptions[0].id);
     assert.equal(entry.expandHome, true);
   }
+  assert.equal(orchestrator.expandHome, true);
   assert.ok(config.runtime.skillSymlinkTargets.includes("~/.pi/agent/skills"));
   assert.equal(config.runtime.instructionSymlinkTargets.pi, "~/.pi/agent");
 });
