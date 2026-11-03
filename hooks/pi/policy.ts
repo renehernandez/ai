@@ -339,8 +339,13 @@ function dependencyChange(words: ShellWord[]): string | undefined {
       ? "<dynamic split command>"
       : findDependencyChange(splitCommand.value);
   if (unwrapped.length === 0) return undefined;
-  const next = unwrapped[1]?.value ?? "";
-  if (unwrapped[0].dynamic && dependencyChanges.has(next)) return next;
+  if (unwrapped[0].dynamic) {
+    // A dynamic executable may be a package manager with any options, so any later dependency subcommand or dynamic word fails closed.
+    const match = unwrapped
+      .slice(1)
+      .find((word) => word.dynamic || dependencyChanges.has(word.value));
+    return match && (match.value || "<dynamic subcommand>");
+  }
   const executable = basename(unwrapped[0].value);
   if (SHELLS.has(executable)) {
     const flag = unwrapped.findIndex((word) => isShellCommandFlag(word.value));

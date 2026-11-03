@@ -14,6 +14,7 @@ import test from "node:test";
 import enforcement from "../../hooks/pi/enforcement.ts";
 import { launchArguments, rpcDenial } from "../../hooks/pi/launch.ts";
 import {
+  findDependencyChange,
   parseContract,
   runtimeDenial,
   toolDenial,
@@ -593,6 +594,9 @@ test("the orchestrator and its planner alias cannot change dependencies, but kee
     "env -S 'pnpm add left-pad'",
     "pnpm $ACTION left-pad",
     '"$PM" install left-pad',
+    '"$PM" --filter app add left-pad',
+    '"$PM" --prefix app install',
+    '"$PM" -r update',
     "pnpm --unknown-option add left-pad",
     "npm --unknown value install",
     "pnpm --unknown=value run test",
@@ -623,6 +627,7 @@ test("the orchestrator and its planner alias cannot change dependencies, but kee
     "pnpm list",
     "npm view left-pad version",
     "echo 'pnpm add left-pad'",
+    '"$PM" exec vitest',
   ])
     for (const role of writeRoles)
       assert.equal(
@@ -630,7 +635,14 @@ test("the orchestrator and its planner alias cannot change dependencies, but kee
         undefined,
         command,
       );
-  for (const command of denied.filter((command) => !command.includes("$")))
+  // The Paseo policy separately denies a dynamic executable followed by `run`.
+  assert.equal(findDependencyChange('"$PM" run test'), undefined);
+  for (const command of [
+    ...denied.filter((command) => !command.includes("$")),
+    '"$PM" --filter app add left-pad',
+    '"$PM" --prefix app install',
+    '"$PM" -r update',
+  ])
     assert.equal(
       toolDenial("implementer", "bash", { command }, cwd),
       undefined,
