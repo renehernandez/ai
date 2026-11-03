@@ -27,6 +27,7 @@ import {
   main,
   monitor,
   parseReview,
+  requireOrchestratorCaller,
   retryLaunch,
   retryMisroutedHandoff,
   routesFromConfig,
@@ -106,7 +107,6 @@ async function fixture(
   const path = join(dir, "state.json");
   const configPath = join(dir, "config.json");
   const roles = [
-    "planner",
     "implementer",
     "review-correctness",
     "review-architecture",
@@ -1655,7 +1655,7 @@ test("canonical lenses cannot be omitted and incomplete report is rejected", asy
       ),
     /Incomplete/,
   );
-  f.config.agents.providers["ax-planner"].models[0].id = "override";
+  f.config.agents.providers["ax-implementer"].models[0].id = "override";
   assert.throws(() => routesFromConfig(f.config), /metadata differs/);
 });
 
@@ -2276,6 +2276,70 @@ test("RED pi-paseo-workflow: managed workers cannot run orchestrator actions", a
     }),
   );
   assert.equal(JSON.parse(status).orchestration, "planner-v2");
+});
+
+test("GREEN pi-paseo-workflow: init needs no orchestrator route, and orchestrator and planner callers keep existing planner-v2 states working", async () => {
+  const f = await fixture();
+  const state = await f.read();
+  assert.equal(state.orchestration, "planner-v2");
+  assert.deepEqual(Object.keys(state.routes).sort(), [
+    "implementer",
+    "review-architecture",
+    "review-contract",
+    "review-correctness",
+  ]);
+  // A state initialized before the rename also recorded the orchestrator's own route.
+  await writeFile(
+    f.path,
+    JSON.stringify({
+      ...state,
+      routes: {
+        ...state.routes,
+        planner: {
+          provider: "ax-planner",
+          model: "claude-bridge/claude-opus-5-5",
+          thinking: "medium",
+        },
+      },
+    }),
+  );
+  for (const role of ["orchestrator", "planner"]) {
+    const env = { AX_PI_CONTRACT: JSON.stringify({ role }) };
+    assert.doesNotThrow(() => requireOrchestratorCaller(env));
+    const input = join(f.dir, `${role}-order.json`);
+    await writeFile(
+      input,
+      JSON.stringify({
+        op: "add",
+        id: role,
+        constraint: "Keep the repository private.",
+        authorizationSource: "User message in this task",
+      }),
+    );
+    await captureStdout(() =>
+      main([f.path, "order", input], {
+        ...env,
+        PASEO_AGENT_ID: orchestrator.agentId,
+      }),
+    );
+  }
+  const updated = await f.read();
+  assert.deepEqual(
+    updated.standingOrders.map((order) => order.id),
+    ["orchestrator", "planner"],
+  );
+  assert.equal(updated.orchestration, "planner-v2");
+  assert.equal(
+    (updated.routes as Record<string, { provider: string }>).planner.provider,
+    "ax-planner",
+  );
+  assert.throws(
+    () =>
+      requireOrchestratorCaller({
+        AX_PI_CONTRACT: JSON.stringify({ role: "implementer" }),
+      }),
+    /cannot run orchestrator actions/,
+  );
 });
 
 type Flow = Awaited<ReturnType<typeof fixture>>;
@@ -2955,7 +3019,7 @@ test("GREEN pi-paseo-workflow: inspection errors degrade reviewers and keep impl
 test("GREEN pi-paseo-workflow: runner actions print one compact line and status stays the full read", async () => {
   const f = await fixture();
   const env = {
-    AX_PI_CONTRACT: JSON.stringify({ role: "planner" }),
+    AX_PI_CONTRACT: JSON.stringify({ role: "orchestrator" }),
     PASEO_AGENT_ID: orchestrator.agentId,
   };
   const orderInput = join(f.dir, "order.json");
@@ -3208,7 +3272,6 @@ async function cleanupFixture(
   } else await mkdir(scratch);
   const configPath = join(base, "config.json");
   const roles = [
-    "planner",
     "implementer",
     "review-correctness",
     "review-architecture",

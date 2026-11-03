@@ -8,6 +8,7 @@ import {
   allowedTools,
   type Contract,
   parseContract,
+  roles,
   toolDenial,
 } from "./policy.ts";
 
@@ -34,18 +35,64 @@ export function launchEnvironment(
   return env;
 }
 
+type Route = { provider: string; model: string; thinking: string };
+
+function parseRoute(spec: string): Route {
+  const slash = spec.indexOf("/");
+  const colon = spec.lastIndexOf(":");
+  if (slash <= 0 || colon <= slash + 1 || colon === spec.length - 1)
+    throw new Error(`Invalid managed route: ${spec}`);
+  return {
+    provider: spec.slice(0, slash),
+    model: spec.slice(slash + 1, colon),
+    thinking: spec.slice(colon + 1),
+  };
+}
+
+// Only the orchestrator lists `provider/model:thinking` routes, the first being the default; every other role has one route.
+function launchRoutes(role: string, rest: string[]) {
+  if (role !== "orchestrator") {
+    const [provider, model, thinking, ...tail] = rest;
+    return { routes: [{ provider, model, thinking }], tail };
+  }
+  const count = rest.findIndex((token) => token.startsWith("-"));
+  const specs = count < 0 ? rest : rest.slice(0, count);
+  if (specs.length === 0) throw new Error("Missing orchestrator routes");
+  return { routes: specs.map(parseRoute), tail: rest.slice(specs.length) };
+}
+
+// Paseo's launch model and thinking select one listed route; the session then stays on it.
+function selectRoute(routes: Route[], requested: Record<string, string[]>) {
+  const byModel = routes.filter((route) =>
+    requested["--model"].every((value) =>
+      [route.model, `${route.provider}/${route.model}`].includes(value),
+    ),
+  );
+  if (byModel.length === 0) throw new Error("Model override rejected");
+  const byProvider = byModel.filter((route) =>
+    requested["--provider"].every((value) => value === route.provider),
+  );
+  if (byProvider.length === 0) throw new Error("Provider override rejected");
+  const route = byProvider.find((route) =>
+    requested["--thinking"].every((value) => value === route.thinking),
+  );
+  if (!route) throw new Error("Thinking override rejected");
+  return route;
+}
+
 export function launchArguments(argv: string[]): {
   contract: Contract;
   args: string[];
 } {
-  const [role, provider, model, thinking, ...tail] = argv;
-  const contract = parseContract({
-    role,
-    provider,
-    model,
-    thinking,
-    nonce: randomUUID(),
-  });
+  const [role, ...rest] = argv;
+  if (!roles.includes(role))
+    throw new Error("Invalid mandatory Pi role contract");
+  const { routes, tail } = launchRoutes(role, rest);
+  const requested: Record<string, string[]> = {
+    "--model": [],
+    "--provider": [],
+    "--thinking": [],
+  };
   const args: string[] = [];
   let rpc = false;
   const valueFlags = new Set([
@@ -72,7 +119,8 @@ export function launchArguments(argv: string[]): {
       continue;
     }
     if (
-      !["--mode", "--model", "--provider", "--thinking"].includes(flag) &&
+      flag !== "--mode" &&
+      !Object.hasOwn(requested, flag) &&
       !valueFlags.has(flag)
     )
       throw new Error(`Unsupported managed Pi argument: ${flag}`);
@@ -82,16 +130,18 @@ export function launchArguments(argv: string[]): {
     if (flag === "--mode") {
       if (value !== "rpc") throw new Error("Managed Pi requires RPC mode");
       rpc = true;
-    } else if (flag === "--model") {
-      if (![model, `${provider}/${model}`].includes(value))
-        throw new Error("Model override rejected");
-    } else if (flag === "--provider") {
-      if (value !== provider) throw new Error("Provider override rejected");
-    } else if (flag === "--thinking") {
-      if (value !== thinking) throw new Error("Thinking override rejected");
-    } else args.push(flag, value);
+    } else if (Object.hasOwn(requested, flag)) requested[flag].push(value);
+    else args.push(flag, value);
   }
   if (!rpc) throw new Error("Managed Pi requires --mode rpc");
+  const { provider, model, thinking } = selectRoute(routes, requested);
+  const contract = parseContract({
+    role,
+    provider,
+    model,
+    thinking,
+    nonce: randomUUID(),
+  });
   args.push(
     "--mode",
     "rpc",

@@ -212,18 +212,11 @@
             "path": ["daemon", "agentProfiles"],
             "value": [
               {
-                "id": "ax-planner",
-                "name": "Opus 5.5 · Plan",
-                "provider": "ax-planner",
+                "id": "ax-orchestrator",
+                "name": "Orchestrator",
+                "provider": "ax-orchestrator",
                 "model": "claude-bridge/claude-opus-5-5",
                 "thinkingOptionId": "medium"
-              },
-              {
-                "id": "ax-planner-astra",
-                "name": "Astra · Plan",
-                "provider": "ax-planner-astra",
-                "model": "openai-codex/gpt-6-astra",
-                "thinkingOptionId": "low"
               },
               {
                 "id": "ax-implementer",
@@ -256,18 +249,17 @@
             ]
           },
           {
-            "path": ["agents", "providers", "ax-planner"],
+            "path": ["agents", "providers", "ax-orchestrator"],
             "expandHome": true,
             "value": {
               "extends": "pi",
-              "label": "Opus 5.5 · Plan",
+              "label": "Orchestrator",
               "command": [
                 "node",
                 "~/.agents/hooks/pi/launch.ts",
-                "planner",
-                "claude-bridge",
-                "claude-opus-5-5",
-                "medium"
+                "orchestrator",
+                "claude-bridge/claude-opus-5-5:medium",
+                "openai-codex/gpt-6-astra:medium"
               ],
               "models": [
                 {
@@ -275,38 +267,11 @@
                   "label": "Claude Opus 5.5",
                   "isDefault": true,
                   "thinkingOptions": [{ "id": "medium", "label": "Medium" }]
-                }
-              ],
-              "paseoTools": {
-                "enabled": true,
-                "disabledTools": [
-                  "create_agent",
-                  "update_agent",
-                  "respond_to_permission"
-                ]
-              }
-            }
-          },
-          {
-            "path": ["agents", "providers", "ax-planner-astra"],
-            "expandHome": true,
-            "value": {
-              "extends": "pi",
-              "label": "Astra · Plan",
-              "command": [
-                "node",
-                "~/.agents/hooks/pi/launch.ts",
-                "planner",
-                "openai-codex",
-                "gpt-6-astra",
-                "low"
-              ],
-              "models": [
+                },
                 {
                   "id": "openai-codex/gpt-6-astra",
                   "label": "Astra",
-                  "isDefault": true,
-                  "thinkingOptions": [{ "id": "low", "label": "Low" }]
+                  "thinkingOptions": [{ "id": "medium", "label": "Medium" }]
                 }
               ],
               "paseoTools": {

@@ -14,11 +14,14 @@ import test from "node:test";
 import enforcement from "../../hooks/pi/enforcement.ts";
 import { launchArguments, rpcDenial } from "../../hooks/pi/launch.ts";
 import {
+  findDependencyChange,
   parseContract,
   runtimeDenial,
   toolDenial,
 } from "../../hooks/pi/policy.ts";
 
+const orchestratorRoles = ["orchestrator", "planner"];
+const writeRoles = [...orchestratorRoles, "implementer"];
 const baseArgs = [
   "review-astra",
   "openai-codex",
@@ -75,6 +78,156 @@ test("managed arguments preserve Paseo extensions and enforce the fixed route", 
   }
   assert.throws(() => launchArguments(["unknown", ...baseArgs.slice(1)]));
   assert.throws(() => launchArguments(baseArgs.slice(0, 4)));
+});
+
+const orchestratorRoutes = [
+  "orchestrator",
+  "claude-bridge/claude-opus-5-5:medium",
+  "openai-codex/gpt-6-astra:medium",
+];
+const route = ({ contract }: ReturnType<typeof launchArguments>) => [
+  contract.role,
+  contract.provider,
+  contract.model,
+  contract.thinking,
+];
+
+test("the orchestrator launches on the listed route Paseo selects, Opus by default, and refuses others", () => {
+  const opus = ["orchestrator", "claude-bridge", "claude-opus-5-5", "medium"];
+  const astra = ["orchestrator", "openai-codex", "gpt-6-astra", "medium"];
+  for (const [tail, expected] of [
+    [[], opus],
+    [["--thinking", "medium"], opus],
+    [["--model", "claude-bridge/claude-opus-5-5"], opus],
+    [["--model", "openai-codex/gpt-6-astra", "--thinking", "medium"], astra],
+    [["--model=gpt-6-astra"], astra],
+    [["--provider", "openai-codex"], astra],
+  ] as const) {
+    const result = launchArguments([
+      ...orchestratorRoutes,
+      "--mode",
+      "rpc",
+      ...tail,
+    ]);
+    assert.deepEqual(route(result), expected, tail.join(" "));
+    const at = result.args.indexOf("--model");
+    assert.deepEqual(result.args.slice(at - 2, at + 4), [
+      "--provider",
+      expected[1],
+      "--model",
+      expected[2],
+      "--thinking",
+      "medium",
+    ]);
+    assert.equal(
+      result.args.includes("npm:pi-claude-bridge@0.8.0"),
+      expected[1] === "claude-bridge",
+    );
+    assert.ok(result.args.includes("npm:pi-mcp-adapter@2.34.0"));
+    assert.equal(result.args.at(-1), "read,grep,find,ls,bash,edit,write,mcp");
+  }
+  for (const [tail, message] of [
+    [["--model", "openai-codex/gpt-5.6-sol"], /Model override/],
+    [["--model", "gpt-6-astra", "--thinking", "high"], /Thinking override/],
+    [["--thinking", "low"], /Thinking override/],
+    [["--provider", "anthropic"], /Provider override/],
+    [["--model", "claude-opus-5-5", "--provider", "openai-codex"], /Provider/],
+    [["--model", "claude-opus-5-5", "--model", "gpt-6-astra"], /Model/],
+  ] as const)
+    assert.throws(
+      () => launchArguments([...orchestratorRoutes, "--mode", "rpc", ...tail]),
+      message,
+      tail.join(" "),
+    );
+  for (const argv of [
+    ["orchestrator", "--mode", "rpc"],
+    [
+      "orchestrator",
+      "claude-bridge",
+      "claude-opus-5-5",
+      "medium",
+      "--mode",
+      "rpc",
+    ],
+    ["orchestrator", "claude-bridge/claude-opus-5-5", "--mode", "rpc"],
+    ["orchestrator", "claude-bridge/claude-opus-5-5:fast", "--mode", "rpc"],
+    [...orchestratorRoutes, "--mode", "rpc", "a prompt"],
+  ])
+    assert.throws(() => launchArguments(argv), argv.join(" "));
+
+  const chosen = launchArguments([
+    ...orchestratorRoutes,
+    "--mode",
+    "rpc",
+    "--model",
+    "openai-codex/gpt-6-astra",
+  ]).contract;
+  for (const request of [
+    {
+      type: "set_model",
+      provider: "claude-bridge",
+      modelId: "claude-opus-5-5",
+    },
+    { type: "set_model", provider: "openai-codex", modelId: "gpt-5.6-sol" },
+    { type: "set_thinking_level", level: "high" },
+    { type: "cycle_model" },
+    { type: "cycle_thinking_level" },
+  ])
+    assert.ok(rpcDenial(chosen, request, process.cwd()), request.type);
+  assert.equal(
+    rpcDenial(
+      chosen,
+      { type: "set_model", provider: "openai-codex", modelId: "gpt-6-astra" },
+      process.cwd(),
+    ),
+    undefined,
+  );
+  assert.ok(
+    runtimeDenial(
+      chosen,
+      { provider: "claude-bridge", id: "claude-opus-5-5" },
+      "medium",
+    ),
+  );
+  assert.equal(
+    runtimeDenial(
+      chosen,
+      { provider: "openai-codex", id: "gpt-6-astra" },
+      "medium",
+    ),
+    undefined,
+  );
+});
+
+test("implementer, reviewer, and planner alias routes stay single and fixed", () => {
+  for (const fixed of [
+    ["implementer", "claude-bridge", "claude-opus-5-5", "medium"],
+    ["planner", "claude-bridge", "claude-opus-5-5", "medium"],
+    ["review-correctness", "openai-codex", "gpt-5.6-sol", "medium"],
+  ]) {
+    assert.deepEqual(
+      route(launchArguments([...fixed, "--mode", "rpc"])),
+      fixed,
+    );
+    for (const tail of [
+      ["--model", "openai-codex/gpt-6-astra"],
+      ["--thinking", "high"],
+      ["--provider", "anthropic"],
+    ])
+      assert.throws(
+        () => launchArguments([...fixed, "--mode", "rpc", ...tail]),
+        /override rejected/,
+      );
+    assert.throws(() =>
+      launchArguments([
+        fixed[0],
+        "claude-bridge/claude-opus-5-5:medium",
+        "openai-codex/gpt-6-astra:medium",
+        "--mode",
+        "rpc",
+      ]),
+    );
+  }
 });
 
 test("runtime model and thinking drift and unsupported reviewer tools are denied", () => {
@@ -137,10 +290,17 @@ test("runtime model and thinking drift and unsupported reviewer tools are denied
     "paseo.update_agent",
     "mcp__paseo__respond_to_permission",
   ])
-    assert.ok(toolDenial("planner", "mcp", { tool }, process.cwd()));
-  assert.ok(toolDenial("planner", "mcp", { action: "install" }, process.cwd()));
+    assert.ok(toolDenial("orchestrator", "mcp", { tool }, process.cwd()));
+  assert.ok(
+    toolDenial("orchestrator", "mcp", { action: "install" }, process.cwd()),
+  );
   assert.equal(
-    toolDenial("planner", "mcp", { tool: "paseo_list_agents" }, process.cwd()),
+    toolDenial(
+      "orchestrator",
+      "mcp",
+      { tool: "paseo_list_agents" },
+      process.cwd(),
+    ),
     undefined,
   );
   assert.ok(
@@ -167,7 +327,7 @@ test("managed roles cannot dispatch Paseo sessions outside the runner but keep r
     "P=paseo; $P run task",
     '"$PASEO_BIN" send agent-1 follow-up',
   ]) {
-    for (const role of ["planner", "implementer"])
+    for (const role of writeRoles)
       assert.match(
         toolDenial(role, "bash", { command }, process.cwd()) ?? "",
         /Paseo policy/u,
@@ -185,11 +345,52 @@ test("managed roles cannot dispatch Paseo sessions outside the runner but keep r
     "node ~/.agents/skills/paseo-orchestration/scripts/paseo-workflow.ts state.json review input.json",
     '"$EDITOR" notes.md',
   ])
-    assert.equal(
-      toolDenial("planner", "bash", { command }, process.cwd()),
-      undefined,
-      command,
-    );
+    for (const role of writeRoles)
+      assert.equal(
+        toolDenial(role, "bash", { command }, process.cwd()),
+        undefined,
+        command,
+      );
+});
+
+test("pure Paseo help and global version requests stay available, but never hide a dispatch", () => {
+  for (const command of [
+    "paseo --help",
+    "paseo -h",
+    "paseo run --help",
+    "paseo send -h",
+    "paseo agent run --help",
+    "paseo --host localhost:1 stop --help",
+    "paseo heartbeat --help",
+    "paseo --version",
+    "paseo -v",
+  ])
+    for (const role of writeRoles)
+      assert.equal(
+        toolDenial(role, "bash", { command }, process.cwd()),
+        undefined,
+        command,
+      );
+  for (const command of [
+    "paseo run --version",
+    "paseo run -v",
+    "paseo -v run task",
+    "paseo --help run task",
+    "paseo run --help task",
+    "paseo run task --help",
+    "paseo run --prompt --help task",
+    "paseo send agent-1 -h follow-up",
+    "paseo run $HELP",
+    "paseo run --help && paseo run task",
+    "paseo run task; echo --help",
+    "sh -c 'paseo run task --help'",
+  ])
+    for (const role of writeRoles)
+      assert.match(
+        toolDenial(role, "bash", { command }, process.cwd()) ?? "",
+        /^Paseo policy/u,
+        command,
+      );
 });
 
 test("write roles are denied compound shell commands, including nested shell payloads", () => {
@@ -210,7 +411,7 @@ test("write roles are denied compound shell commands, including nested shell pay
     "env -S 'git status; git diff'",
     'sh -c "$SCRIPT"',
   ]) {
-    for (const role of ["planner", "implementer"])
+    for (const role of writeRoles)
       assert.match(
         toolDenial(role, "bash", { command }, process.cwd()) ?? "",
         /^Shell discipline .*one command per tool call/u,
@@ -230,7 +431,7 @@ test("write roles are denied compound shell commands, including nested shell pay
     "printf '%s' '$(literal)'",
     "echo '`literal`'",
   ])
-    for (const role of ["planner", "implementer"])
+    for (const role of writeRoles)
       assert.equal(
         toolDenial(role, "bash", { command }, process.cwd()),
         undefined,
@@ -256,23 +457,22 @@ test("write roles are denied compound shell commands, including nested shell pay
   );
 });
 
-test("the planner writes only its plan and private task files outside Git work trees", () => {
+test("the orchestrator and its planner alias write only the plan and private task files outside Git work trees", () => {
   const cwd = process.cwd();
   const otherRepo = mkdtempSync(join(tmpdir(), "planner-other-repo-"));
   mkdirSync(join(otherRepo, ".git"));
   const task = mkdtempSync(join(tmpdir(), "planner-task-"));
+  const cases = orchestratorRoles.flatMap((role) =>
+    ["edit", "write"].map((name) => [role, name]),
+  );
   try {
-    for (const name of ["edit", "write"]) {
+    for (const [role, name] of cases) {
       for (const path of [
         ".agents/plans/next-change.md",
         join(cwd, ".agents/plans/next-change.md"),
         join(task, "brief.md"),
       ])
-        assert.equal(
-          toolDenial("planner", name, { path }, cwd),
-          undefined,
-          path,
-        );
+        assert.equal(toolDenial(role, name, { path }, cwd), undefined, path);
       for (const path of [
         "hooks/pi/policy.ts",
         ".agents/plans/../../hooks/pi/policy.ts",
@@ -280,14 +480,11 @@ test("the planner writes only its plan and private task files outside Git work t
         join(otherRepo, "src/index.ts"),
       ])
         assert.match(
-          toolDenial("planner", name, { path }, cwd) ?? "",
-          /^Planner policy: .* runner handoff or repair/u,
+          toolDenial(role, name, { path }, cwd) ?? "",
+          /^Orchestrator policy: .* runner handoff or repair/u,
           path,
         );
-      assert.match(
-        toolDenial("planner", name, {}, cwd) ?? "",
-        /explicit path/u,
-      );
+      assert.match(toolDenial(role, name, {}, cwd) ?? "", /explicit path/u);
       assert.equal(
         toolDenial("implementer", name, { path: "hooks/pi/policy.ts" }, cwd),
         undefined,
@@ -299,7 +496,7 @@ test("the planner writes only its plan and private task files outside Git work t
   }
 });
 
-test("the planner cannot change branch content through git, but keeps read-only git and publication", () => {
+test("the orchestrator and its planner alias cannot change branch content through git, but keep read-only git and publication", () => {
   const cwd = process.cwd();
   for (const command of [
     "git commit -m change",
@@ -327,11 +524,12 @@ test("the planner cannot change branch content through git, but keeps read-only 
     "env GIT_AUTHOR_NAME=x git commit -m change",
     '"$GIT" commit -m change',
   ])
-    assert.match(
-      toolDenial("planner", "bash", { command }, cwd) ?? "",
-      /^Planner policy: `git [a-z-]+` changes branch content/u,
-      command,
-    );
+    for (const role of orchestratorRoles)
+      assert.match(
+        toolDenial(role, "bash", { command }, cwd) ?? "",
+        /^Orchestrator policy: `git [a-z-]+` changes branch content/u,
+        command,
+      );
   for (const command of [
     "git status",
     "git diff --stat",
@@ -343,27 +541,123 @@ test("the planner cannot change branch content through git, but keeps read-only 
     "gh pr create --draft --title change --body-file body.md",
     "echo 'git commit -m change'",
   ])
-    assert.equal(
-      toolDenial("planner", "bash", { command }, cwd),
-      undefined,
-      command,
-    );
+    for (const role of orchestratorRoles)
+      assert.equal(
+        toolDenial(role, "bash", { command }, cwd),
+        undefined,
+        command,
+      );
   assert.equal(
     toolDenial("implementer", "bash", { command: "git commit -m x" }, cwd),
     undefined,
   );
+  for (const role of orchestratorRoles) {
+    assert.equal(
+      toolDenial(role, "bash", { command: "git commit -m x" }, cwd, "user"),
+      undefined,
+    );
+    assert.match(
+      toolDenial(role, "bash", { command: "git add a && git commit" }, cwd) ??
+        "",
+      /^Shell discipline/u,
+    );
+  }
+});
+
+test("the orchestrator and its planner alias cannot change dependencies, but keep scripts and tools", () => {
+  const cwd = process.cwd();
+  const denied = [
+    "pnpm install",
+    "pnpm i",
+    "pnpm add left-pad",
+    "pnpm remove left-pad",
+    "pnpm rm left-pad",
+    "pnpm uninstall left-pad",
+    "pnpm update",
+    "pnpm up --latest",
+    "npm install",
+    "npm i left-pad",
+    "npm ci",
+    "npm uninstall left-pad",
+    "npm update",
+    "npm --prefix packages/app install",
+    "npm --prefix=packages/app install",
+    "npm -g install left-pad",
+    "pnpm --dir packages/app add left-pad",
+    "pnpm -C packages/app add left-pad",
+    "pnpm --filter app add left-pad",
+    "pnpm -r --filter app update",
+    "/usr/local/bin/pnpm add left-pad",
+    "env CI=1 pnpm install",
+    "sh -c 'pnpm add left-pad'",
+    "bash -lc 'npm --prefix app ci'",
+    "env -S 'pnpm add left-pad'",
+    "pnpm $ACTION left-pad",
+    '"$PM" install left-pad',
+    '"$PM" --filter app add left-pad',
+    '"$PM" --prefix app install',
+    '"$PM" -r update',
+    "pnpm --unknown-option add left-pad",
+    "npm --unknown value install",
+    "pnpm --unknown=value run test",
+    "npm --unknown=value run build",
+    "pnpm -Cpackages/app add left-pad",
+    "pnpm --dir $X run test",
+    'pnpm -C "$X" run test',
+    "pnpm --filter $PKG run build",
+    "npm --prefix $X run test",
+    "pnpm --dir",
+  ];
+  for (const role of orchestratorRoles)
+    for (const command of denied)
+      assert.match(
+        toolDenial(role, "bash", { command }, cwd) ?? "",
+        /^Orchestrator policy: package-manager `[^`]+` changes dependencies/u,
+        command,
+      );
+  for (const command of [
+    "pnpm run test:unit",
+    "pnpm exec biome check .",
+    "pnpm dlx cowsay hi",
+    "npm run build",
+    "npx tsc --noEmit",
+    "pnpm --dir packages/app run test",
+    "pnpm --dir=packages/app run test",
+    "npm --prefix=packages/app run build",
+    "pnpm -C packages/app exec tsc",
+    "pnpm --filter app run build",
+    "npm --prefix packages/app run build",
+    "pnpm --dir app run test",
+    "npm --prefix app run test",
+    "pnpm --version",
+    "npm -v",
+    "pnpm list",
+    "npm view left-pad version",
+    "echo 'pnpm add left-pad'",
+    '"$PM" exec vitest',
+  ])
+    for (const role of writeRoles)
+      assert.equal(
+        toolDenial(role, "bash", { command }, cwd),
+        undefined,
+        command,
+      );
+  // The Paseo policy separately denies a dynamic executable followed by `run`.
+  assert.equal(findDependencyChange('"$PM" run test'), undefined);
+  for (const command of [
+    ...denied.filter((command) => !command.includes("$")),
+    '"$PM" --filter app add left-pad',
+    '"$PM" --prefix app install',
+    '"$PM" -r update',
+  ])
+    assert.equal(
+      toolDenial("implementer", "bash", { command }, cwd),
+      undefined,
+      command,
+    );
   assert.equal(
-    toolDenial("planner", "bash", { command: "git commit -m x" }, cwd, "user"),
+    toolDenial("orchestrator", "bash", { command: "pnpm add x" }, cwd, "user"),
     undefined,
-  );
-  assert.match(
-    toolDenial(
-      "planner",
-      "bash",
-      { command: "git add a && git commit" },
-      cwd,
-    ) ?? "",
-    /^Shell discipline/u,
   );
 });
 

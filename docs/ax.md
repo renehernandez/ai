@@ -131,7 +131,7 @@ Each entry names a path and value. An object or array at that path is replaced
 as a whole; other JSON values survive, although formatting may change.
 `expandHome: true` expands strings beginning with `~/` within that entry.
 
-The tracked Paseo profile array and five `ax-` provider objects are AX-owned.
+The tracked Paseo profile array and its `ax-` provider objects are AX-owned.
 Add or modify those profiles in source. Unrelated provider objects remain
 unowned. Credentials, sessions and Pi's `auth.json` are never AX targets.
 Top-level sync applies configs, instructions, skills, hooks and selected profile
@@ -167,7 +167,7 @@ paseo reload
 
 Use `work` instead of `personal` for work instructions. Both profiles default
 planning and implementation to exact-model Opus 5.5 through the pinned Claude
-subscription bridge. Astra remains a selectable planning alternative. Three
+subscription bridge. Astra remains a selectable orchestrator model. Three
 focused Sol sessions provide automatic reviews. Paseo applies provider/profile
 changes to new sessions; existing sessions keep their launch configuration.
 Read its reload result before assuming changes were applied.
@@ -185,9 +185,12 @@ deployment overrides before expecting the file to control relay behavior.
 Then use Paseo Desktop's **Pair a device** or `paseo daemon pair` to pair your
 device. Keep the pairing link private; it is not repository configuration.
 
-Select **Opus 5.5 · Plan** for the default planning route or **Astra · Plan**
-for the explicit alternative. In the [Pi workflow](../skills/paseo-orchestration/references/paseo-workflow.md),
-the planner you talk to orchestrates the run: it hands the accepted brief to a
+Select the **Orchestrator** profile. New tabs open on Opus 5.5; choose Astra
+from the model menu for the alternative, both at medium thinking. Sync never
+removes unmanaged provider entries, so the retired `ax-planner` providers stay
+in your Paseo config, and sessions launched from them keep working. In the
+[Pi workflow](../skills/paseo-orchestration/references/paseo-workflow.md),
+the orchestrator you talk to runs the work: it hands the accepted brief to a
 fresh Opus implementer, runs correctness, architecture, and contract-alignment
 Sol reviews, publishes, and follows hosted feedback. A Paseo heartbeat wakes it
 while work is in flight, so you do not need to ask for status. You do not

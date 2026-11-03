@@ -10,16 +10,18 @@ user authority.
 
 ## Roles
 
-The planner is the orchestrator. The session the user talks to carries accepted
-work from Plan through Finish: it owns the planning artifact, every worker
+The orchestrator is the session the user talks to. It carries accepted work
+from Plan through Finish: it owns the planning artifact, every worker
 dispatch, triage, gate decisions, Finish provider actions, and the user
 conversation. It never edits implementation files and never dispatches outside
 the runner. When the accepted-proposal contract in
-`rules/investigation-and-implementation.md` selects Execute, the planner hands
-the work to a fresh implementer through the runner `handoff`, whatever the
+`rules/investigation-and-implementation.md` selects Execute, the orchestrator
+hands the work to a fresh implementer through the runner `handoff`, whatever the
 wording of the acceptance and however small the change. Merging a moved target
 base, resolving conflicts, and every other change to branch content are
-implementer tasks too.
+implementer tasks too. `planner` is the orchestrator's earlier role name; it
+keeps identical policy and runner access so sessions launched under it keep
+working.
 
 Workers are fresh sessions that keep no context between assignments. An
 implementer assignment ends at its report: it implements one accepted handoff
@@ -51,9 +53,14 @@ retries a malformed report.
 
 ## Work without model selection
 
-Use the configured planner for brainstorming, research and the initial plan.
+Use the orchestrator for brainstorming, research and the initial plan.
 Role model and effort come from the managed Paseo provider command. Never ask
 the user to select a worker model, override it, or substitute another model.
+Only the Orchestrator profile offers a choice: Opus 5.5, the default, or
+Astra, both at medium thinking, picked when the tab opens. The launcher fixes
+the route matching the model and thinking Paseo passes, uses Opus when none is
+passed, and refuses any other; the chosen route then stays fixed for the
+session.
 Unavailable reviewer models and incomplete reviewer responses are degraded evidence, never passing reviews. The orchestrator records a complete
 inline fallback assessment for that review group's assigned lenses before
 advancing. Uncertain implementer launch, missing session identity, corrupt state,
@@ -68,7 +75,7 @@ When triage keeps a `fix`, the orchestrator revises the plan and the changed
 plan receives a fresh round. Handoff requires a clean planning verdict: no open
 question and no unwaived fix. The runner refuses a round on an unchanged plan.
 
-Opus planner and implementer routes use the pinned subscription bridge and exact
+Opus orchestrator and implementer routes use the pinned subscription bridge and exact
 model identity. They do not accept API-key, auth-token, gateway, Bedrock, Vertex,
 or Foundry environment redirects, paid long-context fallback, AskClaude
 delegation, or model fallback. Authentication and account billing controls remain
@@ -319,24 +326,36 @@ orchestration package. Its state records each dispatch before launch, archives
 superseded rounds with their triage and repairs, and refuses a duplicate round
 for the same head or plan and a second repair for the same round.
 
-For agent tool calls in the `planner` role, the Pi policy denies `edit` and
+For agent tool calls in the `orchestrator` role and its `planner` alias, the
+Pi policy denies `edit` and
 `write` outside `.agents/plans` in the workflow cwd, except for private task
 files outside every Git work tree. It denies git commands that change branch
 content: `add`, `am`, `apply`, `checkout`, `cherry-pick`, `commit`, `merge`,
 `mv`, `rebase`, `reset`, `restore`, `revert`, `rm`, `stash`, `switch`, the
 `commit-tree`, `update-ref`, `read-tree`, and `checkout-index` plumbing, and a
 `pull` without `--ff-only`, including nested shell payloads. Read-only git,
-`push`, and `gh`/`glab` publication stay available for Finish. The implementer
-commits the plan with the implementation. A shell redirection or in-place edit
-stays outside what the policy can prove; the commit denial keeps it from
-becoming a planner-authored head.
+`push`, and `gh`/`glab` publication stay available for Finish. It also denies
+`pnpm` and `npm` commands that change dependencies: `install`, `add`,
+`remove`, `uninstall`, `update`, `ci`, and their aliases such as `i`, `rm`,
+and `up`. It finds the subcommand after leading global options, including
+value options such as `npm --prefix <dir>` and `pnpm --dir`, `-C`, or
+`--filter`; an unrecognized option or dynamic word before the subcommand is
+denied. `pnpm run`, `pnpm exec`, `pnpm dlx`, `npm run`, and `npx` stay
+available. The implementer commits the plan with the implementation. A shell
+redirection or in-place edit stays outside what the policy can prove; the
+commit denial keeps it from becoming an orchestrator-authored head.
 
 The Pi shell policy denies direct `paseo run`, `send`, `stop`, `delete`,
 `archive`, `heartbeat`, and `schedule` commands for every managed role; `ls`,
-`inspect`, `logs`, and `wait` stay available. Runner actions other than
-`status` refuse a caller whose managed role contract is not `planner`.
+`inspect`, `logs`, and `wait` stay available, as do `paseo --help` or `-h`,
+`paseo <subcommand> --help` or `-h` with nothing else after the subcommand,
+and the global `paseo --version` or `-v`. A version flag after a subcommand,
+or a help flag beside other arguments, gets no allowance. Runner actions other
+than `status` refuse a caller whose managed role contract is not
+`orchestrator` or `planner`.
 
-For agent shell calls in the `planner` and `implementer` roles, the Pi shell
+For agent shell calls in the `orchestrator`, `planner`, and `implementer`
+roles, the Pi shell
 policy also enforces the one-command rule in `rules/command-and-tools.md`. A
 person's own `!` commands in those sessions skip this check but keep the Paseo,
 force-push, and deletion policies. It denies any agent command with
@@ -349,7 +368,8 @@ messages. Heredocs are split at each newline and denied, so commit with `-m` or
 `-F <file>`. The policy cannot see parallel tool calls; the assignment rule
 against parallel git mutations covers them.
 
-The managed Pi wrapper fixes role/model/effort and waits for the mandatory
+The managed Pi wrapper fixes role/model/effort, selecting the orchestrator's
+route from its allowlist at launch, and waits for the mandatory
 adapter before forwarding the first prompt. The adapter enforces role identity
 and tool policy during work. Reviewers can only read, search and list files.
 Existing force-push and deletion policies govern supported shell calls.

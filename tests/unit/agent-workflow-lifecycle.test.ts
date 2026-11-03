@@ -15,7 +15,7 @@ test("GREEN authority: managed Pi workflow keeps Ready publication separate from
   assert.match(workflow, /three hosted repair\s+batches/);
   assert.match(
     read("skills/execute/SKILL.md"),
-    /managed Pi planners delegate them via runner `handoff`/,
+    /managed Pi orchestrators delegate them via runner `handoff`/,
   );
   assert.match(workflow, /direct unmanaged Pi sessions/);
   assert.match(workflow, /source fingerprint/);
@@ -37,11 +37,18 @@ test("GREEN authority: managed Pi workflow keeps Ready publication separate from
   );
 });
 
-test("GREEN authority: the managed planner orchestrates through runner ticks and workers stop at their report", () => {
+test("GREEN authority: the managed orchestrator works through runner ticks and workers stop at their report", () => {
   const workflow = read(
     "skills/paseo-orchestration/references/paseo-workflow.md",
   );
-  assert.match(workflow, /planner\s+is\s+the\s+orchestrator/i);
+  assert.match(
+    workflow,
+    /orchestrator\s+is\s+the\s+session\s+the\s+user\s+talks\s+to/i,
+  );
+  assert.match(
+    workflow,
+    /`planner`\s+is\s+the\s+orchestrator's\s+earlier\s+role\s+name[\s\S]*identical\s+policy/,
+  );
   assert.match(
     workflow,
     /implementer\s+assignment\s+ends\s+at\s+its\s+report/i,
@@ -51,7 +58,7 @@ test("GREEN authority: the managed planner orchestrates through runner ticks and
   assert.match(workflow, /`unchanged`[\s\S]*no\s+user-visible\s+message/);
   assert.match(workflow, /effective\s+standing\s+orders/i);
   assert.match(workflow, /denies\s+direct\s+`paseo run`/);
-  assert.match(workflow, /refuse[\s\S]*not\s+`planner`/);
+  assert.match(workflow, /refuse[\s\S]*not\s+`orchestrator`\s+or\s+`planner`/);
   assert.match(workflow, /no\s+new\s+autonomy\s+and\s+no\s+new\s+gates/i);
 });
 

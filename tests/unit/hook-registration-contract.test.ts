@@ -7,7 +7,25 @@ import {
   renderHookRegistrationDocument,
 } from "../../scripts/ax/hook-registration.ts";
 
-test("RED hook-registration: MCP and Pi runtime configuration, including the in-process Paseo dispatch, planner write and git, and agent shell-discipline policies, are not hook targets", () => {
+test("RED hook-registration: MCP and Pi runtime configuration, including the in-process Paseo dispatch, orchestrator write, git, and dependency, and agent shell-discipline policies, are not hook targets", () => {
+  assert.throws(
+    () =>
+      assertRegistrationTargetSafe({
+        path: "/tmp/isolated-home/.pi/agent/extensions/orchestrator-dependency-policy.json",
+        target: "claude",
+        home: "/tmp/isolated-home",
+      }),
+    /hook_registration_target_invalid/u,
+  );
+  assert.throws(
+    () =>
+      assertRegistrationTargetSafe({
+        path: "/tmp/isolated-home/.pi/agent/extensions/orchestrator-dependency-policy.json",
+        target: "codex",
+        home: "/tmp/isolated-home",
+      }),
+    /hook_registration_target_invalid/u,
+  );
   assert.throws(
     () =>
       assertRegistrationTargetSafe({
@@ -22,6 +40,15 @@ test("RED hook-registration: MCP and Pi runtime configuration, including the in-
       assertRegistrationTargetSafe({
         path: "/tmp/isolated-home/.pi/agent/extensions/planner-policy.json",
         target: "claude",
+        home: "/tmp/isolated-home",
+      }),
+    /hook_registration_target_invalid/u,
+  );
+  assert.throws(
+    () =>
+      assertRegistrationTargetSafe({
+        path: "/tmp/isolated-home/.pi/agent/extensions/orchestrator-policy.json",
+        target: "codex",
         home: "/tmp/isolated-home",
       }),
     /hook_registration_target_invalid/u,

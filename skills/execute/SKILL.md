@@ -9,7 +9,7 @@ allowed-tools: Read, Glob, Grep, Task, AskUserQuestion, Write, Edit, Bash
 ## Authority
 
 Execute owns repository implementation writes in one coordinated worktree;
-managed Pi planners delegate them via runner `handoff`. It does not own
+managed Pi orchestrators delegate them via runner `handoff`. It does not own
 provider mutation, merge, deployment, or remote cleanup. Announce Execute,
 repository-write authority, and the goal once on non-trivial entry.
 
