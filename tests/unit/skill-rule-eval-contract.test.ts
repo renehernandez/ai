@@ -133,6 +133,15 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
   assert.ok(
     axConfig.runtime.skillSymlinkTargets.includes("~/.pi/agent/skills"),
   );
+  const piPackage = axConfig.runtime.configs.pi.managedPaths.find(
+    (entry) => entry.path.join(".") === "packages",
+  )?.value;
+  assert.ok(
+    read("hooks/pi/launch.ts").includes(
+      `const claudeBridgePackage = "${piPackage}";`,
+    ),
+    "managed Pi settings and the launcher must pin the same bridge",
+  );
   assert.match(
     read("skills/paseo-orchestration/scripts/paseo-workflow-state.ts"),
     /Publication requires the exact target-base SHA/,

@@ -15,7 +15,7 @@ test("Opus is the subscription-backed default and Sol owns three focused reviews
   assert.equal(pi.defaultProvider, "claude-bridge");
   assert.equal(pi.defaultModel, "claude-opus-5-5");
   assert.equal(pi.defaultThinkingLevel, "medium");
-  assert.equal(pi.packages, "npm:pi-claude-bridge@0.8.0");
+  assert.equal(pi.packages, "npm:pi-claude-bridge@0.9.3");
   const bridge = config.runtime.configs.piClaudeBridge.managedPaths;
   assert.equal(
     bridge.find((entry) => entry.path.join(".") === "askClaude.enabled")?.value,
@@ -64,7 +64,7 @@ test("Opus is the subscription-backed default and Sol owns three focused reviews
     "--mode",
     "rpc",
   ]);
-  assert.ok(launch.args.includes("npm:pi-claude-bridge@0.8.0"));
+  assert.ok(launch.args.includes("npm:pi-claude-bridge@0.9.3"));
   assert.ok(launch.args.includes("--no-extensions"));
   const env = launchEnvironment("claude-bridge", {
     ANTHROPIC_API_KEY: "secret",

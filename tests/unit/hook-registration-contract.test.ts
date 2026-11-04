@@ -7,7 +7,17 @@ import {
   renderHookRegistrationDocument,
 } from "../../scripts/ax/hook-registration.ts";
 
-test("RED hook-registration: MCP and Pi runtime configuration, including the in-process Paseo dispatch, orchestrator write, git, and dependency, and agent shell-discipline policies, are not hook targets", () => {
+test("RED hook-registration: MCP and Pi runtime configuration, including the in-process Paseo dispatch, orchestrator write, git, dependency, and nested MCP tool policies, agent shell discipline, and pinned package configs, are not hook targets", () => {
+  for (const config of ["mcp-adapter.json", "claude-bridge.json"])
+    assert.throws(
+      () =>
+        assertRegistrationTargetSafe({
+          path: `/tmp/isolated-home/.pi/agent/${config}`,
+          target: "claude",
+          home: "/tmp/isolated-home",
+        }),
+      /hook_registration_target_invalid/u,
+    );
   assert.throws(
     () =>
       assertRegistrationTargetSafe({

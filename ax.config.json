@@ -73,7 +73,7 @@
           { "path": ["defaultThinkingLevel"], "value": "medium" },
           {
             "path": ["packages"],
-            "value": "npm:pi-claude-bridge@0.8.0",
+            "value": "npm:pi-claude-bridge@0.9.3",
             "merge": "append-unique"
           },
           { "path": ["retry", "enabled"], "value": false },
