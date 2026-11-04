@@ -143,16 +143,21 @@ provider commands and their adapters.
 Install Pi and Paseo using their official installers, and authenticate Pi's
 `openai-codex` provider with your ChatGPT account. Configure the
 `cloudflare-ai-gateway` provider locally for your account and Gateway. This
-repository does not supply or synchronize credentials. The initial integration
-targets Pi 0.85.1, Paseo 0.8.0 and the pinned pi-mcp-adapter 2.34.0.
+repository does not supply or synchronize credentials. The managed launcher
+targets Pi 1.5.0 with the pinned pi-mcp-adapter 7.0.0 and pi-claude-bridge
+0.9.3. Older adapter releases do not support Pi 1.x.
 
-Install the pinned MCP package before the first managed session, so a cold
+Install the pinned packages before the first managed session, so a cold
 package download does not consume the wrapper's 60-second startup deadline:
 
 ```bash
-pi install npm:pi-mcp-adapter@2.34.0
-pi install npm:pi-claude-bridge@0.8.0
+pi install npm:pi-mcp-adapter@7.0.0
+pi install npm:pi-claude-bridge@0.9.3
 ```
+
+On its first start the adapter adds `-builtin:mcp` to `extensions` in
+`~/.pi/agent/settings.json`, so Pi's built-in MCP does not run next to it.
+AX does not own that value and preserves it.
 
 If startup times out, inspect the package installation before requesting a new
 session. The workflow does not retry a failed launch automatically.

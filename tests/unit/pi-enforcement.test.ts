@@ -64,7 +64,7 @@ test("managed arguments preserve Paseo extensions and enforce the fixed route", 
     "--mode",
     "rpc",
   ]);
-  assert.ok(implementation.args.includes("npm:pi-mcp-adapter@2.34.0"));
+  assert.ok(implementation.args.includes("npm:pi-mcp-adapter@7.0.0"));
   for (const tail of [
     ["--model", "gpt-5.6-sol"],
     ["--thinking=high"],
@@ -120,10 +120,10 @@ test("the orchestrator launches on the listed route Paseo selects, Opus by defau
       "medium",
     ]);
     assert.equal(
-      result.args.includes("npm:pi-claude-bridge@0.8.0"),
+      result.args.includes("npm:pi-claude-bridge@0.9.3"),
       expected[1] === "claude-bridge",
     );
-    assert.ok(result.args.includes("npm:pi-mcp-adapter@2.34.0"));
+    assert.ok(result.args.includes("npm:pi-mcp-adapter@7.0.0"));
     assert.equal(result.args.at(-1), "read,grep,find,ls,bash,edit,write,mcp");
   }
   for (const [tail, message] of [
@@ -258,8 +258,11 @@ test("runtime model and thinking drift and unsupported reviewer tools are denied
     "write",
     "edit",
     "mcp",
+    "mcp__paseo__list_agents",
     "mcpScript",
     "paseo_create_agent",
+    "tool_search",
+    "codemode",
     "unknown",
   ])
     assert.ok(toolDenial(contract.role, name, {}, process.cwd()));
@@ -291,6 +294,23 @@ test("runtime model and thinking drift and unsupported reviewer tools are denied
     "mcp__paseo__respond_to_permission",
   ])
     assert.ok(toolDenial("orchestrator", "mcp", { tool }, process.cwd()));
+  for (const role of writeRoles) {
+    for (const name of [
+      "mcp__paseo__create_agent",
+      "mcp__paseo__update_agent",
+      "mcp__paseo__respond_to_permission",
+    ])
+      assert.match(
+        toolDenial(role, name, {}, process.cwd()) ?? "",
+        /bounded workflow runner/u,
+      );
+    assert.equal(
+      toolDenial(role, "mcp__paseo__list_agents", { action: "x" }, "/"),
+      undefined,
+    );
+    for (const name of ["mcp__paseo", "tool_search", "codemode"])
+      assert.ok(toolDenial(role, name, {}, process.cwd()));
+  }
   assert.ok(
     toolDenial("orchestrator", "mcp", { action: "install" }, process.cwd()),
   );
@@ -821,7 +841,7 @@ test("Paseo MCP config reaches the pinned adapter only for nonreview roles", () 
       const index = result.args.indexOf("--mcp-config");
       assert.notEqual(index, -1);
       assert.equal(result.args[index + 1], "/tmp/paseo mcp.json");
-      assert.ok(result.args.includes("npm:pi-mcp-adapter@2.34.0"));
+      assert.ok(result.args.includes("npm:pi-mcp-adapter@7.0.0"));
     }
     assert.throws(
       () =>
@@ -853,7 +873,7 @@ test("Paseo MCP config reaches the pinned adapter only for nonreview roles", () 
   );
 });
 
-test("adapter injects the canonical workflow and retains preexisting system prompt", () => {
+test("adapter injects the canonical workflow section once and retains other prompt sections", () => {
   const f = fixture();
   const savedContract = process.env.AX_PI_CONTRACT;
   const savedWorkflow = process.env.AX_PI_WORKFLOW_FILE;
@@ -875,12 +895,25 @@ test("adapter injects the canonical workflow and retains preexisting system prom
       cwd: f.root,
       model: { provider: contract.provider, id: contract.model },
     };
-    const result = handlers.get("before_agent_start")?.(
-      { systemPrompt: "Paseo original instructions" },
+    const sections: Record<string, string> = { paseo: "Paseo original" };
+    handlers.get("before_agent_start")?.(
+      { systemPromptOptions: { sections } },
       ctx,
-    ) as { systemPrompt: string };
-    assert.match(result.systemPrompt, /^Paseo original instructions/u);
-    assert.match(result.systemPrompt, /Publish Ready/u);
+    );
+    handlers.get("before_agent_start")?.(
+      { systemPromptOptions: { sections } },
+      ctx,
+    );
+    assert.equal(sections.paseo, "Paseo original");
+    assert.match(
+      sections["ax-paseo-workflow"],
+      /^Active fixed Pi\/Paseo role: review-astra\./u,
+    );
+    assert.match(sections["ax-paseo-workflow"], /Publish Ready/u);
+    assert.equal(
+      sections["ax-paseo-workflow"].split("Active fixed Pi/Paseo role").length,
+      2,
+    );
     const blocked = handlers.get("tool_call")?.(
       { toolName: "bash", input: { command: "git status" } },
       ctx,

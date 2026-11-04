@@ -439,7 +439,9 @@ export function toolDenial(
   // Shell discipline governs agent tool calls; a person's own `!` commands skip only the compound check.
   origin: "agent" | "user" = "agent",
 ): string | undefined {
-  if (!allowedTools(role).includes(name))
+  // pi-mcp-adapter runs each `mcp({ tool })` call as a nested `mcp__<server>__<tool>` call.
+  const nestedMcp = /^mcp__.+__.+$/u.test(name);
+  if (!allowedTools(role).includes(nestedMcp ? "mcp" : name))
     return `Tool ${name} is unavailable for fixed role ${role}`;
   if (name === "bash")
     return shellDenial(
@@ -450,18 +452,16 @@ export function toolDenial(
     );
   if (orchestratorRoles.has(role) && (name === "edit" || name === "write"))
     return orchestratorWriteDenial(input, cwd);
-  if (name === "mcp") {
-    if (input.action !== undefined)
-      return "MCP configuration and authentication actions require explicit operator handling";
-    if (
-      typeof input.tool === "string" &&
-      /(?:^|[^a-z])(?:create_agent|update_agent|respond_to_permission)$/u.test(
-        input.tool,
-      )
-    ) {
-      return "Agent orchestration must use the bounded workflow runner";
-    }
-  }
+  if (name === "mcp" && input.action !== undefined)
+    return "MCP configuration and authentication actions require explicit operator handling";
+  const mcpTool = nestedMcp ? name : name === "mcp" ? input.tool : undefined;
+  if (
+    typeof mcpTool === "string" &&
+    /(?:^|[^a-z])(?:create_agent|update_agent|respond_to_permission)$/u.test(
+      mcpTool,
+    )
+  )
+    return "Agent orchestration must use the bounded workflow runner";
 }
 
 export function runtimeDenial(

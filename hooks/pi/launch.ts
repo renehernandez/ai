@@ -13,8 +13,8 @@ import {
 } from "./policy.ts";
 
 const directory = dirname(fileURLToPath(import.meta.url));
-const mcpPackage = "npm:pi-mcp-adapter@2.34.0";
-const claudeBridgePackage = "npm:pi-claude-bridge@0.8.0";
+const mcpPackage = "npm:pi-mcp-adapter@7.0.0";
+const claudeBridgePackage = "npm:pi-claude-bridge@0.9.3";
 const alternateBillingEnvironment = [
   "ANTHROPIC_API_KEY",
   "ANTHROPIC_AUTH_TOKEN",
