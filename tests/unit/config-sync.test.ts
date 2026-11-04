@@ -20,6 +20,7 @@ import {
   validateManagedConfigs,
 } from "../../scripts/ax/config-sync.ts";
 import type { AxRuntimeConfig } from "../../scripts/ax/runtime-sync.ts";
+import { runMiseConfigValidator } from "../../scripts/ax/toml-config.ts";
 
 function withTempDir(callback: (root: string) => void): void {
   const root = mkdtempSync(join(tmpdir(), "managed-config-sync-"));
@@ -349,5 +350,114 @@ test("validate remains read-only and requires convergence plus Codex config load
     assert.equal(drifted.ok, false);
     assert.equal(drifted.tools.codex.validator, "not_run");
     assert.match(drifted.findings[0], /memories\.use_memories/);
+  });
+});
+
+const misePins = {
+  node: "26.3.0",
+  pnpm: "12.16.1",
+  "npm:@earendil-works/pi-coding-agent": "1.5.0",
+  "npm:@fission-ai/openspec": "1.15.0",
+};
+
+function miseOptions(root: string, tools: Record<string, string> = misePins) {
+  const input = options(root);
+  return {
+    ...input,
+    config: {
+      ...input.config,
+      runtime: {
+        ...input.config.runtime,
+        configs: {
+          mise: { target: "~/.config/mise/config.toml", managed: { tools } },
+        },
+      },
+    },
+    miseValidator: (candidateHome: string) => {
+      assert.match(
+        readFileSync(join(candidateHome, "config.toml"), "utf-8"),
+        /^"npm:@earendil-works\/pi-coding-agent" = "1\.5\.0"$/m,
+      );
+      return { status: 0 };
+    },
+  };
+}
+
+const userMiseConfig = `# personal tools
+[tools]
+"npm:ccmanager" = "latest"
+ruby = "3.4.1"
+"npm:@fission-ai/openspec" = "1.2.0" # pinned by hand
+`;
+
+function writeMiseConfig(home: string, content: string): string {
+  const path = join(home, ".config", "mise", "config.toml");
+  mkdirSync(join(path, ".."), { recursive: true });
+  writeFileSync(path, content, "utf-8");
+  return path;
+}
+
+test("mise pins use quoted npm keys, keep unowned tools and comments, and converge once", () => {
+  withTempDir((root) => {
+    const input = miseOptions(root);
+    const path = writeMiseConfig(input.home, userMiseConfig);
+
+    const first = syncManagedConfigs(input);
+    assert.deepEqual(first.changedPaths, [path]);
+    assert.equal(
+      readFileSync(path, "utf-8"),
+      `# personal tools
+[tools]
+"npm:ccmanager" = "latest"
+ruby = "3.4.1"
+"npm:@fission-ai/openspec" = "1.15.0" # pinned by hand
+node = "26.3.0"
+"npm:@earendil-works/pi-coding-agent" = "1.5.0"
+pnpm = "12.16.1"
+`,
+    );
+    assert.deepEqual(syncManagedConfigs(input).changedPaths, []);
+    assert.equal(inspectManagedConfigs(input).ok, true);
+  });
+});
+
+test("rejected mise candidates and unsafe keys leave the user config unchanged", () => {
+  withTempDir((root) => {
+    const input = miseOptions(root);
+    const path = writeMiseConfig(input.home, userMiseConfig);
+    assert.throws(
+      () =>
+        syncManagedConfigs({
+          ...input,
+          miseValidator: () => ({ status: 1, stderr: "invalid TOML" }),
+        }),
+      /managed_config_validator_failed: invalid TOML/,
+    );
+    assert.throws(
+      () => syncManagedConfigs(miseOptions(root, { 'npm:"x': "1.0.0" })),
+      /managed_config_key_invalid/,
+    );
+    assert.equal(readFileSync(path, "utf-8"), userMiseConfig);
+  });
+});
+
+test("the mise validator fails closed on releases that ignore the candidate config", () => {
+  withTempDir((root) => {
+    const bin = join(root, "bin");
+    mkdirSync(bin);
+    writeFileSync(
+      join(bin, "mise"),
+      '#!/bin/sh\necho "2025.1.9 macos-arm64 (2025-01-17)"\n',
+    );
+    chmodSync(join(bin, "mise"), 0o755);
+    const savedPath = process.env.PATH;
+    process.env.PATH = `${bin}:/usr/bin:/bin`;
+    try {
+      const result = runMiseConfigValidator(root);
+      assert.equal(result.status, 1);
+      assert.match(result.error ?? "", /mise 2026\.11\.0 or newer.*2025\.1\.9/);
+    } finally {
+      process.env.PATH = savedPath;
+    }
   });
 });

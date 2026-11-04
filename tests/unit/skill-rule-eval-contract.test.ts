@@ -142,6 +142,15 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
     ),
     "managed Pi settings and the launcher must pin the same bridge",
   );
+  const piVersion =
+    axConfig.runtime.configs.mise.managed.tools[
+      "npm:@earendil-works/pi-coding-agent"
+    ];
+  assert.match(
+    read("docs/ax.md"),
+    new RegExp(`targets Pi ${piVersion.replaceAll(".", "\\.")} with`),
+    "the global mise Pi pin must be the version the managed launcher targets",
+  );
   assert.match(
     read("skills/paseo-orchestration/scripts/paseo-workflow-state.ts"),
     /Publication requires the exact target-base SHA/,

@@ -15,6 +15,8 @@ import {
 const directory = dirname(fileURLToPath(import.meta.url));
 const mcpPackage = "npm:pi-mcp-adapter@7.0.0";
 const claudeBridgePackage = "npm:pi-claude-bridge@0.9.3";
+// Packages managed launches load explicitly; bootstrap pre-downloads them.
+export const launchPackages = [claudeBridgePackage, mcpPackage];
 const alternateBillingEnvironment = [
   "ANTHROPIC_API_KEY",
   "ANTHROPIC_AUTH_TOKEN",

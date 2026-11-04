@@ -11,6 +11,37 @@ From another project, use the managed `~/.local/bin/ax` shim. The shim keeps the
 durable AI repository as its source/config root. Repo-local scopes such as
 OpenSpec target the current working directory.
 
+## Set up a machine
+
+On macOS with Homebrew installed, set up or refresh the whole AI toolchain from
+the clean `main` checkout:
+
+```bash
+bin/bootstrap personal
+```
+
+Use `work` for the work profile. The script is safe to re-run and stops at the
+first failing step, naming it. In order, it:
+
+1. installs the `Brewfile`: mise, plus the Paseo, Claude Code, and Codex apps.
+   Homebrew does not pin these; they update to the latest release.
+2. installs this repository's mise tools and runs `mise run setup`.
+3. installs the `ax` shim and runs `ax sync --profile <profile>`. This also
+   writes the pinned Node, pnpm, Pi, and OpenSpec versions into
+   `~/.config/mise/config.toml`.
+4. installs those global mise tools.
+5. installs Pi's configured packages and pre-downloads the managed launcher's
+   pinned extensions (`pnpm run pi:packages-install`).
+6. runs `ax validate`, prints each tool's version and path, and lists any
+   other copy of a tool on PATH with a suggested removal command. It never
+   uninstalls anything.
+
+Afterwards, restart Paseo so it picks up the new PATH, and sign in where
+needed: Claude Code, `codex login`, and Pi's `/login`. To change a version,
+edit its pin (`runtime.configs.mise` in `ax.config.json`, the repo
+`mise.toml`, or `packageManager`) and re-run bootstrap from `main`. pnpm is
+pinned in all three places; a unit test keeps them in agreement.
+
 ## State model
 
 Tracked `ax.config.json` is authoritative for available profile definitions,
@@ -120,6 +151,14 @@ verifies that Codex Desktop has not changed the original bytes and uses a
 recoverable transaction. A matching file is not rewritten. Validate is
 read-only and requires both convergence and a successful Codex load.
 
+`runtime.configs.mise` manages the `[tools]` pins in
+`~/.config/mise/config.toml` the same way, leaving other tools and comments
+untouched. Keys outside the bare-key set, such as
+`"npm:@earendil-works/pi-coding-agent"`, are written quoted. Its validator runs
+`mise ls --global --offline` against the candidate with isolated mise
+directories and requires mise 2026.11.0 or newer, because older releases read
+the live config instead of the candidate.
+
 A missing config is ordinary drift; sync creates the minimum managed document.
 AX rejects alternate targets, symlinked config paths, unsafe parent paths,
 ambiguous TOML representations, validator failures, and concurrent target
@@ -140,20 +179,16 @@ provider commands and their adapters.
 
 ## Use Pi with Paseo
 
-Install Pi and Paseo using their official installers, and authenticate Pi's
-`openai-codex` provider with your ChatGPT account. Configure the
+[Set up a machine](#set-up-a-machine) installs Pi and Paseo. Authenticate Pi's
+`openai-codex` provider with your ChatGPT account, and configure the
 `cloudflare-ai-gateway` provider locally for your account and Gateway. This
 repository does not supply or synchronize credentials. The managed launcher
 targets Pi 1.5.0 with the pinned pi-mcp-adapter 7.0.0 and pi-claude-bridge
 0.9.3. Older adapter releases do not support Pi 1.x.
 
-Install the pinned packages before the first managed session, so a cold
-package download does not consume the wrapper's 60-second startup deadline:
-
-```bash
-pi install npm:pi-mcp-adapter@7.0.0
-pi install npm:pi-claude-bridge@0.9.3
-```
+Bootstrap pre-downloads both packages, so a cold download does not consume the
+wrapper's 60-second startup deadline. After changing a pin, run
+`pnpm run pi:packages-install` before the next managed session.
 
 On its first start the adapter adds `-builtin:mcp` to `extensions` in
 `~/.pi/agent/settings.json`, so Pi's built-in MCP does not run next to it.

@@ -237,9 +237,13 @@ function writeEvalConfig(path: string): void {
   const config = JSON.parse(
     readFileSync(join(sourceRoot, "ax.config.json"), "utf8"),
   ) as {
+    runtime: { configs?: Record<string, unknown> };
     profiles: Record<string, { include: string[] }>;
     blocks: Record<string, unknown>;
   };
+  // Global toolchain pins describe the host, not agent behavior, and their
+  // validator needs a current host mise.
+  delete config.runtime.configs?.mise;
   for (const profile of Object.values(config.profiles)) {
     profile.include = profile.include.filter(
       (name) => name === "personal-skills",

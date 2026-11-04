@@ -4,11 +4,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parse } from "smol-toml";
 import type {
-  CodexConfigValidator,
   ManagedJsonValue,
   ManagedLeaf,
+  TomlConfigValidator,
 } from "./config-sync.ts";
 import { isPlainObject, isScalar, valueAtPath } from "./json-config.ts";
+
+const bareKey = /^[A-Za-z0-9_-]+$/;
+// Keys outside the bare set are written as TOML basic strings, e.g. mise's `"npm:@scope/name"`.
+const quotableKey = /^[A-Za-z0-9_@:/.+-]+$/;
+const keyPattern = `(?:[A-Za-z0-9_-]+|"[^"\\\\]*"|'[^']*')`;
+// The first mise release verified to honor MISE_GLOBAL_CONFIG_FILE; older releases read the live config.
+const minimumMiseVersion = [2026, 11, 0];
 
 export function flattenManagedLeaves(
   tool: string,
@@ -32,7 +39,7 @@ export function flattenManagedLeaves(
   for (const [key, child] of Object.entries(value).sort(([left], [right]) =>
     left.localeCompare(right),
   )) {
-    if (!/^[A-Za-z0-9_-]+$/.test(key)) {
+    if (!quotableKey.test(key)) {
       throw new Error(
         `managed_config_key_invalid: ${tool}.${[...path, key].join(".")}`,
       );
@@ -88,7 +95,9 @@ function updateTomlTable(
     }
     lines.push(`[${table}]`);
     for (const leaf of leaves) {
-      lines.push(`${leaf.path.at(-1)} = ${renderScalar(leaf.value)}`);
+      lines.push(
+        `${renderKey(leaf.path.at(-1) ?? "")} = ${renderScalar(leaf.value)}`,
+      );
     }
     return;
   }
@@ -112,7 +121,6 @@ function updateTomlTable(
     if (matches.length === 1) {
       lines[matches[0]] = replaceScalarAssignment(
         lines[matches[0]],
-        key,
         leaf.value,
         leaf.path.join("."),
       );
@@ -125,7 +133,11 @@ function updateTomlTable(
     while (insertion > header.line + 1 && lines[insertion - 1]?.trim() === "") {
       insertion -= 1;
     }
-    lines.splice(insertion, 0, `${key} = ${renderScalar(leaf.value)}`);
+    lines.splice(
+      insertion,
+      0,
+      `${renderKey(key)} = ${renderScalar(leaf.value)}`,
+    );
   }
 }
 
@@ -152,18 +164,20 @@ function isTableBoundary(line: string): boolean {
 }
 
 function directKey(line: string): string | undefined {
-  return line.match(/^\s*([A-Za-z0-9_-]+)\s*=/)?.[1];
+  const key = line.match(new RegExp(`^\\s*(${keyPattern})\\s*=`))?.[1];
+  return key && /^["']/.test(key) ? key.slice(1, -1) : key;
+}
+
+function renderKey(key: string): string {
+  return bareKey.test(key) ? key : JSON.stringify(key);
 }
 
 function replaceScalarAssignment(
   line: string,
-  key: string,
   value: ManagedJsonValue,
   path: string,
 ): string {
-  const match = line.match(
-    new RegExp(`^(\\s*${escapeRegExp(key)}\\s*=\\s*)(.*)$`),
-  );
+  const match = line.match(new RegExp(`^(\\s*${keyPattern}\\s*=\\s*)(.*)$`));
   if (!match) {
     throw new Error(`managed_config_path_uneditable: ${path}`);
   }
@@ -217,11 +231,11 @@ function renderScalar(value: ManagedJsonValue): string {
   return String(value);
 }
 
-export function validateWithCodex(
+export function validateTomlCandidate(
   content: string,
-  validator: CodexConfigValidator,
+  validator: TomlConfigValidator,
 ): void {
-  const candidateHome = mkdtempSync(join(tmpdir(), "ax-codex-config-"));
+  const candidateHome = mkdtempSync(join(tmpdir(), "ax-toml-config-"));
   try {
     writeFileSync(join(candidateHome, "config.toml"), content, {
       encoding: "utf-8",
@@ -241,9 +255,54 @@ export function validateWithCodex(
   }
 }
 
+export function runMiseConfigValidator(
+  candidateHome: string,
+): ReturnType<TomlConfigValidator> {
+  const version = spawnSync("mise", ["--version"], {
+    encoding: "utf-8",
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: 60_000,
+  });
+  const found = version.stdout
+    ?.match(/^(\d+)\.(\d+)\.(\d+)/)
+    ?.slice(1)
+    .map(Number);
+  if (!found || versionBelow(found, minimumMiseVersion))
+    return {
+      status: 1,
+      error: `mise ${minimumMiseVersion.join(".")} or newer is required to validate the candidate; found ${version.stdout?.trim() || version.error?.message || "none"}`,
+    };
+  const result = spawnSync("mise", ["ls", "--global", "--offline", "--json"], {
+    cwd: candidateHome,
+    encoding: "utf-8",
+    env: {
+      ...process.env,
+      HOME: candidateHome,
+      MISE_GLOBAL_CONFIG_FILE: join(candidateHome, "config.toml"),
+      MISE_CONFIG_DIR: join(candidateHome, "config"),
+      MISE_DATA_DIR: join(candidateHome, "data"),
+      MISE_CACHE_DIR: join(candidateHome, "cache"),
+      MISE_STATE_DIR: join(candidateHome, "state"),
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: 60_000,
+  });
+  return {
+    status: result.status,
+    stdout: result.stdout ?? "",
+    stderr: result.stderr ?? "",
+    error: result.error?.message,
+  };
+}
+
+function versionBelow(found: number[], minimum: number[]): boolean {
+  const index = found.findIndex((part, at) => part !== minimum[at]);
+  return index >= 0 && found[index] < minimum[index];
+}
+
 export function runCodexConfigValidator(
   candidateHome: string,
-): ReturnType<CodexConfigValidator> {
+): ReturnType<TomlConfigValidator> {
   const result = spawnSync("codex", ["features", "list"], {
     encoding: "utf-8",
     env: {
@@ -276,10 +335,6 @@ export function parseToml(
       `managed_config_toml_invalid: ${path}: ${errorMessage(error)}`,
     );
   }
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function errorMessage(error: unknown): string {

@@ -33,12 +33,19 @@ function options(root: string) {
     home: join(root, "home"),
     liveHome: join(root, "live"),
     sourceVerified: false,
+    miseValidator: () => ({ status: 0 }),
     config: {
       version: 1 as const,
       runtime: {
         canonicalSkillsDir: "~/.agents/skills",
         skillSymlinkTargets: [],
         configs: {
+          mise: {
+            target: "~/.config/mise/config.toml",
+            managed: {
+              tools: { "npm:@earendil-works/pi-coding-agent": "1.5.0" },
+            },
+          },
           pi: {
             target: "~/.pi/agent/settings.json",
             managedPaths: [
@@ -169,6 +176,10 @@ test("GREEN pi-paseo-config: JSON sync preserves unowned configuration and crede
     lstatSync(join(input.home, ".pi/agent/settings.json")).mode & 0o777,
     0o600,
   );
+  assert.equal(
+    readFileSync(join(input.home, ".config/mise/config.toml"), "utf-8"),
+    '[tools]\n"npm:@earendil-works/pi-coding-agent" = "1.5.0"\n',
+  );
   assert.equal(inspectManagedConfigs(input).ok, true);
   assert.deepEqual(syncManagedConfigs(input).changedPaths, []);
 });
@@ -179,11 +190,15 @@ test("RED pi-paseo-config: invalid JSON leaves every target unchanged", (t) => {
   const input = options(root);
   const pi = join(input.home, ".pi/agent/settings.json");
   const paseo = join(input.home, ".paseo/config.json");
+  const mise = join(input.home, ".config/mise/config.toml");
   write(pi, { defaultProvider: "old" });
   write(paseo, {});
   writeFileSync(paseo, "invalid json");
+  mkdirSync(join(mise, ".."), { recursive: true });
+  writeFileSync(mise, '[tools]\nruby = "3.4.1"\n');
   assert.throws(() => syncManagedConfigs(input), /json_invalid/);
   assert.equal(readFileSync(pi, "utf-8"), '{"defaultProvider":"old"}');
+  assert.equal(readFileSync(mise, "utf-8"), '[tools]\nruby = "3.4.1"\n');
 });
 
 test("Pi parent symlink escapes are rejected", (t) => {
