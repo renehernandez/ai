@@ -94,8 +94,10 @@ for entry in node=node pnpm=pnpm pi=npm:@earendil-works/pi-coding-agent openspec
   version="$(mise -C "$HOME" exec -- "$tool" --version)"
   resolved="$(mise -C "$HOME" which "$tool")"
   printf '%s %s (%s)\n' "$tool" "$version" "$resolved"
+  # Compare the reported version exactly; Node prints a leading "v".
+  read -r reported _ <<<"${version#v}"
   # A global npm package inside a mise Node install can shadow the pinned tool.
-  [[ "$version" == *"$pinned"* ]] ||
+  [[ "$reported" == "$pinned" ]] ||
     fail "$tool at $resolved shadows the pinned $owner@$pinned; $(removal_hint "$resolved")"
   seen=" "
   while IFS= read -r other; do
