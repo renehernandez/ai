@@ -32,9 +32,10 @@ first failing step, naming it. In order, it:
 4. installs those global mise tools.
 5. installs Pi's configured packages and pre-downloads the managed launcher's
    pinned extensions (`pnpm run pi:packages-install`).
-6. runs `ax validate`, prints each tool's version and path, and lists any
-   other copy of a tool on PATH with a suggested removal command. It never
-   uninstalls anything.
+6. runs `ax validate` and checks that Node, pnpm, Pi, and OpenSpec run at
+   their pinned versions. It fails when another copy shadows a pin, such as a
+   global npm package inside a mise Node install, and lists any other copy on
+   PATH, each with a suggested removal command. It never uninstalls anything.
 
 Afterwards, restart Paseo so it picks up the new PATH, and sign in where
 needed: Claude Code, `codex login`, and Pi's `/login`. To change a version,
