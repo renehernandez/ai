@@ -51,8 +51,9 @@ with that step named. In order, it:
 4. installs the global mise tools;
 5. reconciles Pi packages and pre-downloads the launcher's explicit extension
    packages;
-6. runs `ax validate`, confirms `pi`, `node`, and `pnpm` on PATH report the
-   pinned versions, and reports any shadowing copies;
+6. runs `ax validate`, prints the version and path mise resolves for Node,
+   pnpm, Pi, and OpenSpec (the pinned versions, by construction), and reports
+   any other copies on PATH;
 7. prints the remaining manual steps: restart Paseo (it captures PATH at app
    start), and sign in where needed.
 
