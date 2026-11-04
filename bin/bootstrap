@@ -27,6 +27,26 @@ begin() {
   printf '\n==> %s\n' "$step"
 }
 
+removal_hint() {
+  local resolved prefix="" package
+  resolved="$(realpath "$1")"
+  [[ "$resolved" == */mise/installs/* ]] && prefix="mise exec -- "
+  if [[ "$resolved" == */lib/node_modules/* ]]; then
+    package="${resolved#*/lib/node_modules/}"
+    # Scoped packages keep two path segments: @scope/name.
+    if [[ "$package" == @* ]]; then
+      package="$(cut -d/ -f1-2 <<<"$package")"
+    else
+      package="${package%%/*}"
+    fi
+    echo "remove with: ${prefix}npm uninstall -g $package"
+  elif [[ "$resolved" == */Cellar/* ]]; then
+    echo "remove with: brew uninstall $(cut -d/ -f1 <<<"${resolved#*/Cellar/}")"
+  else
+    echo "remove it with the tool that installed it"
+  fi
+}
+
 trap 'echo "bootstrap failed during: $step" >&2' ERR
 
 case "${1:-}" in
@@ -66,23 +86,22 @@ mise -C "$repo" exec -- pnpm run pi:packages-install
 
 begin "Validation"
 mise -C "$repo" exec -- pnpm ax validate
-for tool in node pnpm pi openspec; do
-  managed="$(mise -C "$HOME" which "$tool")"
-  printf '%s %s (%s)\n' "$tool" "$(mise -C "$HOME" exec -- "$tool" --version)" "$managed"
+# Each executable and the mise tool that pins it.
+for entry in node=node pnpm=pnpm pi=npm:@earendil-works/pi-coding-agent openspec=npm:@fission-ai/openspec; do
+  tool="${entry%%=*}"
+  owner="${entry#*=}"
+  pinned="$(mise -C "$HOME" current "$owner")"
+  version="$(mise -C "$HOME" exec -- "$tool" --version)"
+  resolved="$(mise -C "$HOME" which "$tool")"
+  printf '%s %s (%s)\n' "$tool" "$version" "$resolved"
+  # A global npm package inside a mise Node install can shadow the pinned tool.
+  [[ "$version" == *"$pinned"* ]] ||
+    fail "$tool at $resolved shadows the pinned $owner@$pinned; $(removal_hint "$resolved")"
+  seen=" "
   while IFS= read -r other; do
-    [[ "$other" == "$managed" || "$other" == */mise/* ]] && continue
-    resolved="$(realpath "$other")"
-    if [[ "$resolved" == */lib/node_modules/* ]]; then
-      # Scoped packages keep two path segments: @scope/name.
-      segments=1
-      [[ "${resolved#*/lib/node_modules/}" == @* ]] && segments=2
-      hint="npm uninstall -g $(cut -d/ -f"1-$segments" <<<"${resolved#*/lib/node_modules/}")"
-    elif [[ "$resolved" == */Cellar/* ]]; then
-      hint="brew uninstall $(cut -d/ -f1 <<<"${resolved#*/Cellar/}")"
-    else
-      hint="remove it with the tool that installed it"
-    fi
-    echo "  another $tool is on PATH at $other; mise's copy wins only where mise is active ($hint)"
+    [[ "$other" == "$resolved" || "$other" == */mise/* || "$seen" == *" $other "* ]] && continue
+    seen+="$other "
+    echo "  another $tool is on PATH at $other; mise's copy wins only where mise is active ($(removal_hint "$other"))"
   done < <(type -ap "$tool")
 done
 
