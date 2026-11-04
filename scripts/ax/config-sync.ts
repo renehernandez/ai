@@ -28,8 +28,9 @@ import {
   flattenManagedLeaves,
   parseToml,
   runCodexConfigValidator,
+  runMiseConfigValidator,
   updateTomlDocument,
-  validateWithCodex,
+  validateTomlCandidate,
 } from "./toml-config.ts";
 import {
   applyTransaction,
@@ -79,7 +80,7 @@ export type ManagedConfigSyncResult = {
   tools: Record<string, ManagedConfigToolReport>;
 };
 
-export type CodexConfigValidator = (candidateHome: string) => {
+export type TomlConfigValidator = (candidateHome: string) => {
   status: number | null;
   stdout?: string;
   stderr?: string;
@@ -93,7 +94,8 @@ export type ManagedConfigOptions = {
   home?: string;
   liveHome?: string;
   sourceVerified?: boolean;
-  validator?: CodexConfigValidator;
+  validator?: TomlConfigValidator;
+  miseValidator?: TomlConfigValidator;
 };
 
 export type ManagedLeaf = {
@@ -103,7 +105,7 @@ export type ManagedLeaf = {
 };
 
 type ResolvedToolConfig = {
-  name: "codex" | "pi" | "piModels" | "piClaudeBridge" | "paseo";
+  name: "codex" | "mise" | "pi" | "piModels" | "piClaudeBridge" | "paseo";
   target: string;
   home: string;
   leaves: ManagedLeaf[];
@@ -127,6 +129,7 @@ export type PreparedManagedConfigs = {
 const CODEX_TARGET = "~/.codex/config.toml";
 const CONFIG_TARGETS = {
   codex: CODEX_TARGET,
+  mise: "~/.config/mise/config.toml",
   pi: "~/.pi/agent/settings.json",
   piModels: "~/.pi/agent/models.json",
   piClaudeBridge: "~/.pi/agent/claude-bridge.json",
@@ -255,7 +258,7 @@ function prepareCore(
     const candidate =
       drift.length === 0
         ? (observed.content ?? "")
-        : tool.name === "codex"
+        : isToml(tool.name)
           ? updateTomlDocument(observed.content ?? "", parsed, tool.leaves)
           : updateJsonDocument(parsed, tool.leaves);
     const parsedCandidate = parseDocument(candidate, tool);
@@ -268,7 +271,15 @@ function prepareCore(
       );
     }
     if (tool.name === "codex")
-      validateWithCodex(candidate, input.validator ?? runCodexConfigValidator);
+      validateTomlCandidate(
+        candidate,
+        input.validator ?? runCodexConfigValidator,
+      );
+    if (tool.name === "mise")
+      validateTomlCandidate(
+        candidate,
+        input.miseValidator ?? runMiseConfigValidator,
+      );
     const report: ManagedConfigToolReport = {
       target: tool.target,
       managedPaths: tool.leaves.map((leaf) => leaf.path.join(".")),
@@ -320,10 +331,9 @@ function resolveToolConfigs(input: ManagedConfigOptions): ResolvedToolConfig[] {
     }
     const target = join(home, expectedTarget.slice(2));
     assertTargetSafe(target, home);
-    const leaves =
-      name === "codex"
-        ? flattenManagedLeaves(name, declaration.managed)
-        : resolveJsonPaths(name, declaration, home);
+    const leaves = isToml(name)
+      ? flattenManagedLeaves(name, declaration.managed)
+      : resolveJsonPaths(name, declaration, home);
     if (leaves.length === 0) {
       throw new Error(`managed_config_empty: ${name}`);
     }
@@ -336,9 +346,13 @@ function parseDocument(
   content: string,
   tool: ResolvedToolConfig,
 ): Record<string, unknown> {
-  return tool.name === "codex"
+  return isToml(tool.name)
     ? parseToml(content, tool.target)
     : parseJsonDocument(content, tool.target);
+}
+
+function isToml(name: string): boolean {
+  return name === "codex" || name === "mise";
 }
 
 function compareLeaves(

@@ -13,6 +13,7 @@
     "charter:validate": "tsx scripts/charter-validate.ts",
     "charter:validate-range": "tsx scripts/charter-range-validate.ts",
     "eval:skills-rules": "vitest --config vitest.evals.config.ts run",
+    "pi:packages-install": "tsx scripts/pi-packages-install.ts",
     "skills:corpus-report": "tsx scripts/skill-corpus-report.ts",
     "skills:validate": "tsx scripts/skill-validate.ts",
     "test": "node --import tsx --test tests/unit/*.test.ts tests/integration/*.test.ts",
@@ -26,7 +27,7 @@
     "vitest": "^4.1.10",
     "vitest-evals": "0.15.0"
   },
-  "packageManager": "pnpm@11.5.3",
+  "packageManager": "pnpm@12.16.1",
   "dependencies": {
     "commander": "^15.0.0",
     "smol-toml": "^1.7.0"

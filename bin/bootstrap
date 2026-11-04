@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# Sets up or refreshes the AI toolchain on macOS from this repository's clean
+# main checkout. Safe to re-run. Versions live in Brewfile, mise.toml, and
+# ax.config.json; this script only runs their owners in order.
+set -euo pipefail
+
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+step="argument parsing"
+
+usage() {
+  cat <<EOF
+Usage: bin/bootstrap <profile>
+
+Installs the Brewfile, the repo and global mise tools, and Pi packages, then
+runs AX sync and validation for <profile> (a key of "profiles" in
+ax.config.json, for example "personal" or "work").
+EOF
+}
+
+fail() {
+  echo "bootstrap: $*" >&2
+  exit 1
+}
+
+begin() {
+  step="$1"
+  printf '\n==> %s\n' "$step"
+}
+
+trap 'echo "bootstrap failed during: $step" >&2' ERR
+
+case "${1:-}" in
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  "")
+    usage >&2
+    exit 1
+    ;;
+esac
+profile="$1"
+[[ $# -eq 1 ]] || fail "expected exactly one profile argument"
+[[ "$profile" =~ ^[a-z0-9-]+$ ]] || fail "invalid profile name: $profile"
+plutil -extract "profiles.$profile" json -o - "$repo/ax.config.json" >/dev/null 2>&1 ||
+  fail "unknown profile \"$profile\"; see \"profiles\" in ax.config.json"
+
+begin "Homebrew bundle"
+command -v brew >/dev/null || fail "Homebrew is required: https://brew.sh"
+brew bundle --file "$repo/Brewfile"
+
+begin "Repository tools and setup"
+mise trust "$repo/mise.toml"
+mise -C "$repo" install
+mise -C "$repo" run setup
+
+begin "AX shim and runtime sync"
+mise -C "$repo" exec -- pnpm ax shim install
+mise -C "$repo" exec -- pnpm ax sync --profile "$profile"
+
+begin "Global mise tools"
+mise -C "$HOME" install
+
+begin "Pi packages"
+mise -C "$repo" exec -- pnpm run pi:packages-install
+
+begin "Validation"
+mise -C "$repo" exec -- pnpm ax validate
+for tool in node pnpm pi openspec; do
+  managed="$(mise -C "$HOME" which "$tool")"
+  printf '%s %s (%s)\n' "$tool" "$(mise -C "$HOME" exec -- "$tool" --version)" "$managed"
+  while IFS= read -r other; do
+    [[ "$other" == "$managed" || "$other" == */mise/* ]] && continue
+    resolved="$(realpath "$other")"
+    if [[ "$resolved" == */lib/node_modules/* ]]; then
+      # Scoped packages keep two path segments: @scope/name.
+      segments=1
+      [[ "${resolved#*/lib/node_modules/}" == @* ]] && segments=2
+      hint="npm uninstall -g $(cut -d/ -f"1-$segments" <<<"${resolved#*/lib/node_modules/}")"
+    elif [[ "$resolved" == */Cellar/* ]]; then
+      hint="brew uninstall $(cut -d/ -f1 <<<"${resolved#*/Cellar/}")"
+    else
+      hint="remove it with the tool that installed it"
+    fi
+    echo "  another $tool is on PATH at $other; mise's copy wins only where mise is active ($hint)"
+  done < <(type -ap "$tool")
+done
+
+step="completion"
+cat <<EOF
+
+Bootstrap complete for profile "$profile".
+Remaining manual steps:
+  - Restart Paseo so it picks up the new PATH.
+  - Sign in where needed: claude (Claude Code), codex login, and Pi's /login.
+EOF

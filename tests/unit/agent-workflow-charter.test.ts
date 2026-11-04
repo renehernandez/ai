@@ -103,6 +103,10 @@ test("GREEN canonical-ownership: the charter validation gate runs from the nativ
     "tsx scripts/skill-corpus-report.ts",
   );
   assert.equal(
+    packageJson.scripts["pi:packages-install"],
+    "tsx scripts/pi-packages-install.ts",
+  );
+  assert.equal(
     packageJson.scripts["eval:skills-rules"],
     "vitest --config vitest.evals.config.ts run",
   );
