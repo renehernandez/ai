@@ -244,14 +244,22 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
   );
 });
 
-test("GREEN skill-rule-evals: consult planners advise read-only without gating and never change the plan themselves", () => {
+test("GREEN skill-rule-evals: consult planners advise without shell or edits, without gating and never change the plan themselves", () => {
   const contract = read(
     "skills/paseo-orchestration/references/paseo-workflow.md",
   );
   assert.match(contract, /## Consult planners/);
   assert.match(
     contract,
-    /no shell, no edits, no Paseo tools, and launch no workers/,
+    /no shell, no\s+edits, no Paseo tools, and launch no workers/,
+  );
+  assert.match(
+    contract,
+    /research-only use is an instruction, not an\s+enforced read-only boundary/,
+  );
+  assert.match(
+    contract,
+    /naming `tick` for an ambiguous planner and\s+`retry-launch` for an undelivered one/,
   );
   assert.match(
     contract,

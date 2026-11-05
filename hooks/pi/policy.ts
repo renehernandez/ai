@@ -37,7 +37,7 @@ export type Contract = {
 };
 export const readTools = ["read", "grep", "find", "ls"];
 export const writeTools = [...readTools, "bash", "edit", "write", "mcp"];
-// Consult planners advise read-only; `planner` without a suffix is the orchestrator alias.
+// Consult planners get no shell, edit, or write tools; their user-configured MCP stays available. `planner` without a suffix is the orchestrator alias.
 export const consultTools = [...readTools, "mcp"];
 
 export function parseContract(value: unknown): Contract {

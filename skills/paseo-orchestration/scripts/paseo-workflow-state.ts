@@ -644,6 +644,20 @@ export function consulting(state: Workflow, now = Date.now()) {
     .filter(({ kind }) => kind === "consult")
     .map(({ name }) => name);
 }
+// Every current consult worker not yet complete or degraded, with the action that clears it.
+export function unsettledConsult(state: Workflow) {
+  return workers(state)
+    .filter(
+      ({ kind, worker }) =>
+        kind === "consult" &&
+        worker.status !== "complete" &&
+        worker.status !== "degraded",
+    )
+    .map(
+      ({ name, worker }) =>
+        `${name} (${worker.status}; run \`${worker.status === "undelivered" ? "retry-launch" : "tick"}\`)`,
+    );
+}
 function openQuestions(
   state: Workflow,
   phase: Phase | "hosted",
@@ -1683,10 +1697,10 @@ export async function transition(path: string, action: string, input: Input) {
         };
       }
     } else if (action === "finish") {
-      const running = consulting(state);
+      const unsettled = unsettledConsult(state);
       requireThat(
-        !running.length,
-        `Finish waits for running consults to be recorded: ${running.join(", ")}`,
+        !unsettled.length,
+        `Finish waits for the current consult to settle: ${unsettled.join(", ")}`,
       );
       verdict(state, "hosted", "finish");
       const current = state.orchestration === "planner-v2";

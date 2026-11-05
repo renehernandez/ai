@@ -3918,7 +3918,7 @@ test("RED pi-paseo-workflow: consult refusals record nothing", async () => {
   const running = await readFile(f.path, "utf8");
   await assert.rejects(
     dispatchConsult(f.path, { briefPath }, f.transport),
-    /still in flight: consult:planner-astra, consult:planner-fable/,
+    /has not settled: consult:planner-astra \(running; run `tick`\), consult:planner-fable/,
   );
   assert.equal(await readFile(f.path, "utf8"), running);
   assert.equal(runs(f), 2);
@@ -4060,6 +4060,32 @@ test("RED pi-paseo-workflow: an undelivered planner gets one retry-launch, and a
   assert.deepEqual(first.recorded, ["consult:planner-fable: undelivered"]);
   assert.equal(actionOf(first), "retry-launch");
   const lost = plannerAgent(await f.read(), "planner-fable");
+  // An undelivered planner, before or after its automatic retry, is never replaced or abandoned.
+  const refusesUndelivered = async () => {
+    const unsettled =
+      /consult:planner-fable \(undelivered; run `retry-launch`\)/;
+    await assert.rejects(
+      dispatchConsult(
+        f.path,
+        { briefPath: await consultBrief(f) },
+        f.transport,
+      ),
+      unsettled,
+    );
+    await assert.rejects(
+      transition(f.path, "finish", hostedReceipt),
+      unsettled,
+    );
+  };
+  await refusesUndelivered();
+  const saved = await readFile(f.path, "utf8");
+  const spent = await f.read();
+  const fable = spent.consult?.sessions["planner-fable"];
+  assert.ok(fable);
+  fable.attempts = [{ ...fable }];
+  await writeFile(f.path, JSON.stringify(spent));
+  await refusesUndelivered();
+  await writeFile(f.path, saved);
   await retryLaunch(
     f.path,
     { worker: "consult:planner-fable", agentId: lost },
@@ -4167,7 +4193,7 @@ test("RED pi-paseo-workflow: a running consult holds finish and cleanup until an
   ]);
   await assert.rejects(
     transition(f.path, "finish", hostedReceipt),
-    /Finish waits for running consults to be recorded: consult:planner-astra/,
+    /Finish waits for the current consult to settle: consult:planner-astra/,
   );
   await assert.rejects(
     cleanup(
@@ -4181,6 +4207,31 @@ test("RED pi-paseo-workflow: a running consult holds finish and cleanup until an
       f.transport,
     ),
     /in flight: consult:planner-astra/,
+  );
+  // Past the timeout but before a tick settles it, the ambiguous consult still holds finish, cleanup, and consult.
+  const pastDue = await f.read();
+  const astra = pastDue.consult?.sessions["planner-astra"];
+  assert.ok(astra);
+  astra.sentAt = new Date(Date.now() - 601_000).toISOString();
+  await writeFile(f.path, JSON.stringify(pastDue));
+  const unticked = /consult:planner-astra \(ambiguous; run `tick`\)/;
+  await assert.rejects(transition(f.path, "finish", hostedReceipt), unticked);
+  await assert.rejects(
+    cleanup(
+      f.path,
+      {
+        authorizationSource: "User authorized cleanup.",
+        head: heads.first,
+        reason: "Abandon.",
+      },
+      orchestrator,
+      f.transport,
+    ),
+    unticked,
+  );
+  await assert.rejects(
+    dispatchConsult(f.path, { briefPath: await consultBrief(f) }, f.transport),
+    unticked,
   );
   // Past the timeout, an undecidable delivery is not a gate: tick stops the planner and records degraded.
   const session = f.sessions.get(agent);

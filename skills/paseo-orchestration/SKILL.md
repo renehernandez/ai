@@ -35,7 +35,8 @@ node <skill-dir>/scripts/paseo-workflow.ts STATE ACTION INPUT.json
 
 When you want a second opinion, or the user asks for one ("ask Fable",
 "consult Astra"), write a consult brief and run `consult`. The Astra and Fable
-planners advise read-only and never gate progression. Only your own revision
+planners advise without shell, edit, write, or Paseo tools and never gate
+progression; their MCP access is limited to research by instruction only. Only your own revision
 changes the plan, and it still needs a fresh planning round.
 
 The contract's runner interface lists every action and its input. When a

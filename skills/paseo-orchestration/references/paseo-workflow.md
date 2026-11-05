@@ -286,16 +286,18 @@ reviewed, degraded, waived, and repaired heads accurately.
 
 ## Consult planners
 
-Two read-only planners give advice: Astra (`planner-astra`, GPT-6 Astra) and
+Two planners give advice: Astra (`planner-astra`, GPT-6 Astra) and
 Fable (`planner-fable`, Fable 5.1 through the pinned Claude bridge). Both run at
-medium thinking. They read, search, and list files, and use MCP only for
-research. They have no shell, no edits, no Paseo tools, and launch no workers.
+medium thinking. They read, search, and list files. They have no shell, no
+edits, no Paseo tools, and launch no workers. MCP servers from the user's own
+MCP configuration stay available; research-only use is an instruction, not an
+enforced read-only boundary.
 The orchestrator dispatches a consult when it chooses or when the user asks, for
 example "ask Fable", "consult Astra", or "get both planners' take". Planners do
 not review and do not write plans. Advice may inform the plan, but only the
 orchestrator's own revision changes it, and that revision still needs a fresh
 planning round. The planner profiles can also be opened manually in Paseo as
-standalone read-only consultants.
+standalone consultants.
 
 The orchestrator writes a consult brief that holds the question, the
 constraints, and the repository paths to read. `consult` snapshots the brief and
@@ -323,7 +325,10 @@ same turn. Running consults never block `review`, `handoff`, or `repair`, and
 never require triage, fallback assessment, or a waiver. When only consults are
 in flight, `nextStep` names the ready phase step and lists them as
 `consulting`. They still count as monitored work: the heartbeat stays armed
-until each is recorded, and `finish` and `cleanup` refuse while one runs. An
+until each is recorded, and `finish` and `cleanup` refuse while one runs.
+`consult`, `finish`, and `cleanup` also refuse until every current planner is
+`complete` or `degraded`, naming `tick` for an ambiguous planner and
+`retry-launch` for an undelivered one. An
 undelivered planner gets the one automatic `retry-launch`, and a second
 non-delivery degrades it. An ambiguous planner past the reviewer timeout is not
 a gate: the runner stops it and records `degraded`. `adopt` refuses planners.
@@ -463,7 +468,7 @@ is the only full-state read.
 | `policy` | `deliveryPolicy` with provider/repository identity, independent CI and reviewer status, source, and source fingerprint. Unknown policy blocks handoff. |
 | `order` | `op` (add/amend/retire), stable `id`, `constraint` except on retire, and `authorizationSource`. |
 | `review` | `phase` and `artifactPath`; optional implementation `head`, which must equal the worktree head the runner reads. The artifact includes the exact diff/base or complete plan and original evidence references. Dispatches one round and returns; a later round needs a revised plan or a repaired head. Optional `workspaceId`; when no exact workspace exists, explicit `registerWorkspace: true` and optional `projectId` register the canonical cwd locally. |
-| `consult` | `briefPath` and optional `planners` (`planner-astra`, `planner-fable`; default both, distinct, nonempty). Launches one fresh read-only planner per name and returns; advice is recorded by `tick` and never gates. Refuses on a finished workflow, a state without planner routes, or a current consult still in flight. Accepts the same optional workspace fields as `review`. |
+| `consult` | `briefPath` and optional `planners` (`planner-astra`, `planner-fable`; default both, distinct, nonempty). Launches one fresh planner per name and returns; advice is recorded by `tick` and never gates. Refuses on a finished workflow, a state without planner routes, or a current consult with a planner not yet `complete` or `degraded`. Accepts the same optional workspace fields as `review`. |
 | `tick` | No input. Records completions and one hosted probe, renews or deletes the heartbeat, and returns the compact result. |
 | `triage` | `phase`, `decisions` containing each finding's `id`, `action` (fix/dismiss/question) and `reason`; for each degraded reviewer, `assessments` with its `role` and complete per-lens `outcomes` using the review outcome shape. |
 | `waiver` | `phase`, exact current `target`, exact `requestedAction`, nonempty `failedGates`, and `reason`. Records failed evidence without granting the action itself. |
