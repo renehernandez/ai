@@ -178,6 +178,16 @@ limits, and require separately scoped acceptance for terminal actions.
   `main`; each stacked descendant targets its immediate predecessor branch
   until that predecessor merges and the child retargets. Do not push `main` or
   publish directly to it without explicit user authorization.
+- For this repository only, a non-removal PR/MR targets at most 15 changed
+  files and 1,500 changed lines (additions plus deletions) across its complete
+  effective diff. Above either target, the plan records why another safe
+  semantic split is impractical. A forecast or measured diff above 30 files or
+  3,000 changed lines returns to Plan unless the user approved a semantic
+  exception bound to the named artifact, accepted outcome, and unsafe-to-split
+  rationale. These numbers override the general 10-file/500-line target and
+  15-file/1,000-line cap here only. The 50-file hard cap for non-removal final
+  MRs, the removal-only exemption, and the POC exemption still apply;
+  [git-and-review.md](rules/git-and-review.md) owns everything else.
 - When a remote has several push URLs, publish only to the selected provider URL
   or a provider-specific remote; never publish to every destination implicitly.
 - Finish inspects only hosted gates required by resolved repository policy; a not-required gate is not passed or waived. For the work profile's Fullscript GitLab route, apply
