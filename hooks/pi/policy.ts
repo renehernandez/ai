@@ -25,6 +25,8 @@ export const roles = [
   "review-glm",
   "review-deepseek",
   "review-astra",
+  "planner-astra",
+  "planner-fable",
 ];
 export type Contract = {
   role: string;
@@ -35,6 +37,8 @@ export type Contract = {
 };
 export const readTools = ["read", "grep", "find", "ls"];
 export const writeTools = [...readTools, "bash", "edit", "write", "mcp"];
+// Consult planners get no shell, edit, or write tools; their user-configured MCP stays available. `planner` without a suffix is the orchestrator alias.
+export const consultTools = [...readTools, "mcp"];
 
 export function parseContract(value: unknown): Contract {
   const c = value as Contract;
@@ -57,7 +61,8 @@ export function parseContract(value: unknown): Contract {
 }
 
 export function allowedTools(role: string): string[] {
-  return role.startsWith("review-") ? readTools : writeTools;
+  if (role.startsWith("review-")) return readTools;
+  return role.startsWith("planner-") ? consultTools : writeTools;
 }
 
 const paseoValueOptions = new Set(["-o", "--format", "--host", "--home"]);
@@ -456,6 +461,12 @@ export function toolDenial(
   if (name === "mcp" && input.action !== undefined)
     return "MCP configuration and authentication actions require explicit operator handling";
   const mcpTool = nestedMcp ? name : name === "mcp" ? input.tool : undefined;
+  if (
+    role.startsWith("planner-") &&
+    ((typeof mcpTool === "string" && /^(?:mcp__)?paseo_/u.test(mcpTool)) ||
+      (name === "mcp" && input.server === "paseo"))
+  )
+    return `Consult planner policy: Paseo MCP tools are unavailable for fixed role ${role}; planners only advise the orchestrator`;
   if (
     typeof mcpTool === "string" &&
     /(?:^|[^a-z])(?:create_agent|update_agent|respond_to_permission)$/u.test(

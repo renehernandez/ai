@@ -53,7 +53,7 @@ test("Opus is the subscription-backed default and four focused reviewers span So
   assert.deepEqual(
     bridge.find((entry) => entry.path.join(".") === "provider.forceTwoHundredK")
       ?.value,
-    ["claude-opus-5-5", "claude-sonnet-5-5"],
+    ["claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1"],
   );
   const profiles = config.runtime.configs.paseo.managedPaths.find(
     (entry) => entry.path.join(".") === "daemon.agentProfiles",
@@ -87,7 +87,7 @@ test("Opus is the subscription-backed default and four focused reviewers span So
     assert.deepEqual(provider.paseoTools, { enabled: false });
   }
   const orchestrators = profiles.filter(
-    (profile) => !/Review|Implement/u.test(profile.name),
+    (profile) => !/Review|Implement|Consult Planner/u.test(profile.name),
   );
   assert.deepEqual(orchestrators, [
     {
@@ -121,6 +121,54 @@ test("Opus is the subscription-backed default and four focused reviewers span So
   assert.equal(env.CLAUDE_CODE_USE_BEDROCK, undefined);
 });
 
+const plannerRoutes = [
+  ["ax-planner-astra", "Astra · Consult Planner", "openai-codex/gpt-6-astra"],
+  [
+    "ax-planner-fable",
+    "Fable · Consult Planner",
+    "claude-bridge/claude-fable-5-1",
+  ],
+];
+
+test("Astra and Fable consult planners have fixed medium routes without Paseo tools", () => {
+  const entries = config.runtime.configs.paseo.managedPaths;
+  const profiles = entries.find(
+    (entry) => entry.path.join(".") === "daemon.agentProfiles",
+  ).value;
+  assert.deepEqual(
+    profiles
+      .filter((profile) => profile.name.includes("Consult Planner"))
+      .map((profile) => [
+        profile.id,
+        profile.name,
+        profile.model,
+        profile.provider === profile.id && profile.thinkingOptionId,
+      ]),
+    plannerRoutes.map((route) => [...route, "medium"]),
+  );
+  const providers = Object.fromEntries(
+    entries
+      .filter(
+        (entry) => entry.path.slice(0, 2).join(".") === "agents.providers",
+      )
+      .map((entry) => [entry.path[2], entry.value]),
+  );
+  for (const [id, label, model] of plannerRoutes) {
+    const provider = providers[id];
+    assert.equal(provider.label, label);
+    assert.deepEqual(provider.command.slice(2), [
+      id.slice(3),
+      ...model.split("/"),
+      "medium",
+    ]);
+    assert.deepEqual(
+      provider.models.map((entry) => entry.id),
+      [model],
+    );
+    assert.deepEqual(provider.paseoTools, { enabled: false });
+  }
+});
+
 test("Paseo hosted relay is explicit and keeps pairing identity machine-local", () => {
   const relay = Object.fromEntries(
     config.runtime.configs.paseo.managedPaths
@@ -146,7 +194,7 @@ test("one Orchestrator profile offers Opus and Astra while worker roles keep one
   const providers = entries.filter(
     (entry) => entry.path.slice(0, 2).join(".") === "agents.providers",
   );
-  assert.equal(providers.length, 7);
+  assert.equal(providers.length, 9);
   const [orchestrator, ...workers] = providers;
   assert.deepEqual(orchestrator.path, [
     "agents",

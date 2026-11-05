@@ -21,11 +21,13 @@ import {
   bindWorkspace,
   cleanup,
   collectReviews,
+  dispatchConsult,
   dispatchReview,
   initialize,
   loopStatus,
   main,
   monitor,
+  parseConsult,
   parseReview,
   requireOrchestratorCaller,
   retryLaunch,
@@ -86,6 +88,18 @@ const heads = {
 };
 const reportEnvelope = (report: Record<string, unknown>) =>
   `AX_REPORT_BEGIN${JSON.stringify(report)}AX_REPORT_END`;
+const consultAdvice = {
+  summary: "Two viable shapes.",
+  recommendation: "Prefer the smaller change.",
+  options: ["Small change", "Larger refactor"],
+  risks: ["Scope creep"],
+  questions: [],
+};
+const consultEnvelope = (
+  fingerprint: string,
+  advice: Record<string, unknown> = consultAdvice,
+) =>
+  `AX_CONSULT_BEGIN${JSON.stringify({ fingerprint, ...advice })}AX_CONSULT_END`;
 const implementerReport = (head: string) => ({
   branch: "feature",
   head,
@@ -113,6 +127,8 @@ async function fixture(
     "review-quality",
     "review-architecture",
     "review-contract",
+    "planner-astra",
+    "planner-fable",
   ];
   const config = {
     agents: {
@@ -252,6 +268,8 @@ async function fixture(
         `Implemented and committed through native hooks. Head: ${reportedHead}.\n${reportEnvelope(implementerReport(reportedHead))}`
       );
     const state = JSON.parse(await readFile(path, "utf8")) as Workflow;
+    if (session.provider.startsWith("ax-planner-"))
+      return consultEnvelope(state.consult?.fingerprint ?? "");
     const phase = session.prompt.includes("this planning")
       ? "planning"
       : "implementation";
@@ -2317,7 +2335,13 @@ test("RED pi-paseo-workflow: managed workers cannot run orchestrator actions", a
     input,
     JSON.stringify({ phase: "planning", artifactPath: f.artifactPath }),
   );
-  for (const role of ["implementer", "review-correctness", "unknown"])
+  for (const role of [
+    "implementer",
+    "review-correctness",
+    "planner-astra",
+    "planner-fable",
+    "unknown",
+  ])
     await assert.rejects(
       main([f.path, "review", input], {
         AX_PI_CONTRACT: JSON.stringify({ role }),
@@ -2360,6 +2384,8 @@ test("GREEN pi-paseo-workflow: init needs no orchestrator route, and orchestrato
   assert.equal(state.orchestration, "planner-v2");
   assert.deepEqual(Object.keys(state.routes).sort(), [
     "implementer",
+    "planner-astra",
+    "planner-fable",
     "review-architecture",
     "review-contract",
     "review-correctness",
@@ -3354,6 +3380,8 @@ async function cleanupFixture(
     "review-quality",
     "review-architecture",
     "review-contract",
+    "planner-astra",
+    "planner-fable",
   ];
   await writeFile(
     configPath,
@@ -3766,4 +3794,503 @@ test("RED pi-paseo-workflow: a failed cleanup step stops without retry and repor
   } finally {
     await chmod(sealed, 0o700);
   }
+});
+
+const planners = ["consult:planner-astra", "consult:planner-fable"];
+async function consultBrief(f: { dir: string }) {
+  const path = join(f.dir, "consult-brief.md");
+  await writeFile(
+    path,
+    "Question: which delivery shape fits? Read skills/paseo-orchestration.",
+  );
+  return path;
+}
+const plannerAgent = (
+  state: Workflow,
+  role: "planner-astra" | "planner-fable",
+) => state.consult?.sessions[role]?.agentId ?? "";
+const consultStatuses = (state: Workflow) =>
+  Object.values(state.consult?.sessions ?? {}).map((session) => session.status);
+
+test("GREEN pi-paseo-workflow: consult launches both planners concurrently on a sorted fingerprint and tick records their advice", async () => {
+  const f = await fixture();
+  const briefPath = await consultBrief(f);
+  await transition(f.path, "order", {
+    op: "add",
+    id: "scope",
+    constraint: "Stay inside the runner.",
+    authorizationSource: "User said so.",
+  });
+  await dispatchConsult(
+    f.path,
+    { briefPath, planners: ["planner-fable", "planner-astra"] },
+    f.transport,
+  );
+  const state = await f.read();
+  const brief = await readFile(briefPath, "utf8");
+  assert.deepEqual(state.consult?.planners, ["planner-astra", "planner-fable"]);
+  assert.equal(
+    state.consult?.fingerprint,
+    createHash("sha256")
+      .update(
+        JSON.stringify({ brief, planners: ["planner-astra", "planner-fable"] }),
+      )
+      .digest("hex"),
+  );
+  assert.equal(await readFile(state.consult?.brief.path ?? "", "utf8"), brief);
+  assert.deepEqual(consultStatuses(state), ["running", "running"]);
+  assert.equal(runs(f), 2);
+  for (const role of ["planner-astra", "planner-fable"] as const) {
+    const session = f.sessions.get(plannerAgent(state, role));
+    assert.equal(session?.provider, `ax-${role}`);
+    assert.match(session?.prompt ?? "", /^Assignment digest: [a-f0-9]{64}/);
+    assert.ok(session?.prompt.includes(state.consult?.brief.path ?? "-"));
+    assert.match(session?.prompt ?? "", /AX_CONSULT_BEGIN/);
+    assert.match(session?.prompt ?? "", /- scope: Stay inside the runner\./);
+  }
+  const ticked = await f.step();
+  assert.deepEqual(ticked.recorded.sort(), [
+    "consult:planner-astra: complete",
+    "consult:planner-fable: complete",
+  ]);
+  const recorded = await f.read();
+  for (const role of ["planner-astra", "planner-fable"] as const)
+    assert.deepEqual(recorded.consult?.sessions[role]?.advice, consultAdvice);
+  // Complete advice never yields triage or a user gate.
+  assert.equal(actionOf(ticked), "review");
+  assert.equal("consulting" in ticked, false);
+  assert.equal(f.heartbeats.size, 0);
+
+  // A second consult archives the first.
+  await dispatchConsult(
+    f.path,
+    { briefPath, planners: ["planner-fable"] },
+    f.transport,
+  );
+  const second = await f.read();
+  assert.equal(second.priorConsults?.length, 1);
+  assert.equal(
+    second.priorConsults?.[0].fingerprint,
+    recorded.consult?.fingerprint,
+  );
+  assert.deepEqual(Object.keys(second.consult?.sessions ?? {}), [
+    "planner-fable",
+  ]);
+  await assert.rejects(
+    adopt(
+      f.path,
+      {
+        worker: "consult:planner-fable",
+        agentId: plannerAgent(second, "planner-fable"),
+        branch: "feature",
+        head: heads.first,
+      },
+      f.transport,
+      worktrees.get(f.path),
+    ),
+    /not an adoptable worker/,
+  );
+});
+
+test("RED pi-paseo-workflow: consult refusals record nothing", async () => {
+  const f = await fixture();
+  const briefPath = await consultBrief(f);
+  const before = await readFile(f.path, "utf8");
+  for (const [planners, message] of [
+    [[], /nonempty list of distinct names/],
+    [["planner-astra", "planner-astra"], /distinct names/],
+    [["planner-sol"], /planner-astra, planner-fable/],
+    [["planner"], /distinct names/],
+  ] as const)
+    await assert.rejects(
+      dispatchConsult(
+        f.path,
+        { briefPath, planners: [...planners] },
+        f.transport,
+      ),
+      message,
+    );
+  assert.equal(await readFile(f.path, "utf8"), before);
+  assert.equal(runs(f), 0);
+
+  await dispatchConsult(f.path, { briefPath }, f.transport);
+  for (const session of f.sessions.values()) session.status = "running";
+  const running = await readFile(f.path, "utf8");
+  await assert.rejects(
+    dispatchConsult(f.path, { briefPath }, f.transport),
+    /has not settled: consult:planner-astra \(running; run `tick`\), consult:planner-fable/,
+  );
+  assert.equal(await readFile(f.path, "utf8"), running);
+  assert.equal(runs(f), 2);
+
+  const g = await fixture();
+  const finished = await g.read();
+  finished.finished = "Finished elsewhere.";
+  await writeFile(g.path, JSON.stringify(finished));
+  await assert.rejects(
+    dispatchConsult(g.path, { briefPath }, g.transport),
+    /already finished/,
+  );
+  assert.equal(runs(g), 0);
+});
+
+test("GREEN pi-paseo-workflow: a state initialized before planner routes keeps working and only consult refuses, naming init", async () => {
+  const f = await fixture();
+  const legacy = await f.read();
+  const routes = legacy.routes as Partial<Workflow["routes"]>;
+  delete routes["planner-astra"];
+  delete routes["planner-fable"];
+  await writeFile(f.path, JSON.stringify(legacy));
+  const status = await captureStdout(() => main([f.path, "status"], {}));
+  assert.equal(JSON.parse(status).routes["planner-astra"], undefined);
+  assert.equal("kind" in (JSON.parse(status).handoff ?? {}), false);
+  await f.review("planning");
+  await f.accept();
+  assert.equal(actionOf(await f.step()), "review");
+  const launches = runs(f);
+  const before = await readFile(f.path, "utf8");
+  await assert.rejects(
+    dispatchConsult(f.path, { briefPath: await consultBrief(f) }, f.transport),
+    /no planner routes; run `init`/,
+  );
+  assert.equal(await readFile(f.path, "utf8"), before);
+  assert.equal(runs(f), launches);
+  // Persisted workers carry no kind; it is derived on every read.
+  assert.ok(!JSON.stringify(await f.read()).includes('"kind"'));
+});
+
+test("RED pi-paseo-workflow: init fails naming a missing planner provider", async () => {
+  const f = await fixture();
+  delete f.config.agents.providers["ax-planner-fable"];
+  assert.throws(
+    () => routesFromConfig(f.config),
+    /Missing managed provider ax-planner-fable/,
+  );
+  await writeFile(f.configPath, JSON.stringify(f.config));
+  await assert.rejects(
+    initialize(join(f.dir, "next", "state.json"), {
+      cwd: f.dir,
+      configPath: f.configPath,
+    }),
+    /Missing managed provider ax-planner-fable/,
+  );
+});
+
+test("RED pi-paseo-workflow: malformed, mismatched, timed-out, and erroring consults degrade without gating", async () => {
+  const f = await fixture();
+  const briefPath = await consultBrief(f);
+  await dispatchConsult(f.path, { briefPath }, f.transport);
+  const state = await f.read();
+  f.replies.set(
+    plannerAgent(state, "planner-astra"),
+    "Advice without an envelope.",
+  );
+  f.replies.set(
+    plannerAgent(state, "planner-fable"),
+    consultEnvelope("0".repeat(64)),
+  );
+  const ticked = await f.step();
+  assert.deepEqual(ticked.recorded.sort(), [
+    "consult:planner-astra: degraded (advice unavailable)",
+    "consult:planner-fable: degraded (advice unavailable)",
+  ]);
+  const degraded = await f.read();
+  assert.match(
+    degraded.consult?.sessions["planner-astra"]?.error ?? "",
+    /Missing or ambiguous final consult envelope/,
+  );
+  assert.match(
+    degraded.consult?.sessions["planner-fable"]?.error ?? "",
+    /fingerprint mismatch/,
+  );
+  assert.equal(actionOf(ticked), "review");
+
+  const g = await fixture();
+  await dispatchConsult(g.path, { briefPath }, g.transport);
+  const running = await g.read();
+  const astra = plannerAgent(running, "planner-astra");
+  const fable = plannerAgent(running, "planner-fable");
+  const session = g.sessions.get(astra);
+  assert.ok(session);
+  session.status = "running";
+  const erroring: Transport = async (args, timeout, env) => {
+    if (args[0] === "inspect" && args.at(-1) === fable)
+      throw new Error("provider unavailable");
+    return g.transport(args, timeout, env);
+  };
+  const timedOut = await g.step(erroring, undefined, later(601_000));
+  assert.deepEqual(timedOut.recorded.sort(), [
+    "consult:planner-astra: degraded (advice unavailable)",
+    "consult:planner-fable: degraded (advice unavailable)",
+  ]);
+  const after = await g.read();
+  assert.match(
+    after.consult?.sessions["planner-astra"]?.error ?? "",
+    /Planner exceeded the 600s timeout/,
+  );
+  assert.match(
+    after.consult?.sessions["planner-fable"]?.error ?? "",
+    /provider unavailable/,
+  );
+  assert.ok(g.calls.some((args) => args[0] === "stop" && args[1] === astra));
+  assert.equal(actionOf(timedOut), "review");
+});
+
+test("RED pi-paseo-workflow: an undelivered planner gets one retry-launch, and a second non-delivery degrades it", async () => {
+  const f = await fixture();
+  await dispatchConsult(
+    f.path,
+    { briefPath: await consultBrief(f), planners: ["planner-fable"] },
+    f.transport,
+  );
+  const neverBegan = () => {
+    for (const [id, session] of f.sessions) {
+      session.prompt = "Start inertly.";
+      f.replies.set(id, startupReply);
+    }
+  };
+  neverBegan();
+  // Inside the timeout a planner still at its startup reply stays in flight.
+  const waiting = await f.step();
+  assert.deepEqual(consultStatuses(await f.read()), ["running"]);
+  assert.deepEqual(waiting.result === "changed" && waiting.consulting, [
+    "consult:planner-fable",
+  ]);
+  const first = await f.step(f.transport, undefined, later(601_000));
+  assert.deepEqual(first.recorded, ["consult:planner-fable: undelivered"]);
+  assert.equal(actionOf(first), "retry-launch");
+  const lost = plannerAgent(await f.read(), "planner-fable");
+  // An undelivered planner, before or after its automatic retry, is never replaced or abandoned.
+  const refusesUndelivered = async () => {
+    const unsettled =
+      /consult:planner-fable \(undelivered; run `retry-launch`\)/;
+    await assert.rejects(
+      dispatchConsult(
+        f.path,
+        { briefPath: await consultBrief(f) },
+        f.transport,
+      ),
+      unsettled,
+    );
+    await assert.rejects(
+      transition(f.path, "finish", hostedReceipt),
+      unsettled,
+    );
+  };
+  await refusesUndelivered();
+  const saved = await readFile(f.path, "utf8");
+  const spent = await f.read();
+  const fable = spent.consult?.sessions["planner-fable"];
+  assert.ok(fable);
+  fable.attempts = [{ ...fable }];
+  await writeFile(f.path, JSON.stringify(spent));
+  await refusesUndelivered();
+  await writeFile(f.path, saved);
+  await retryLaunch(
+    f.path,
+    { worker: "consult:planner-fable", agentId: lost },
+    f.transport,
+    async () => {
+      throw new Error("Planners have no worktree baseline");
+    },
+  );
+  const relaunched = await f.read();
+  assert.deepEqual(consultStatuses(relaunched), ["running"]);
+  assert.notEqual(plannerAgent(relaunched, "planner-fable"), lost);
+  neverBegan();
+  const second = await f.step(f.transport, undefined, later(601_000));
+  assert.deepEqual(second.recorded, [
+    "consult:planner-fable: degraded (advice unavailable)",
+  ]);
+  assert.equal(actionOf(second), "review");
+  assert.equal(runs(f), 2);
+});
+
+test("GREEN pi-paseo-workflow: running consults never block review, handoff, or repair, but keep the heartbeat armed", async () => {
+  const f = await fixture();
+  await dispatchConsult(
+    f.path,
+    { briefPath: await consultBrief(f) },
+    f.transport,
+  );
+  const consultAgents = [...f.sessions.keys()];
+  for (const id of consultAgents) {
+    const session = f.sessions.get(id);
+    if (session) session.status = "running";
+  }
+  await dispatchFixtureReview(
+    f.path,
+    { phase: "planning", artifactPath: f.artifactPath },
+    f.transport,
+  );
+  const reviewed = await f.step();
+  assert.equal(reviewed.recorded.length, 4);
+  assert.equal(actionOf(reviewed), "triage");
+  assert.deepEqual(
+    reviewed.result === "changed" && reviewed.consulting,
+    planners,
+  );
+  assert.equal(f.heartbeats.size, 1);
+  assert.ok(reviewed.heartbeat);
+  await transition(f.path, "triage", { phase: "planning", decisions: [] });
+  const acceptance = nextStep(await f.read());
+  assert.equal(acceptance.result, "awaiting-user");
+  assert.deepEqual(
+    acceptance.result === "awaiting-user" && acceptance.consulting,
+    planners,
+  );
+  await handoff(
+    f.path,
+    { briefPath: f.artifactPath, planResolution: "Settled." },
+    f.transport,
+  );
+  const implementer = (await f.read()).handoff?.agentId ?? "";
+  const implementing = f.sessions.get(implementer);
+  assert.ok(implementing);
+  implementing.status = "running";
+  const busy = await f.step();
+  assert.equal(busy.result, "unchanged");
+  assert.deepEqual(busy.result === "unchanged" && busy.inFlight, ["handoff"]);
+  implementing.status = "idle";
+  assert.equal(actionOf(await f.step()), "review");
+  await findingRound(f);
+  f.reportHead(heads.repaired);
+  await dispatchRepair(
+    f.path,
+    { phase: "implementation", briefPath: f.repairBrief },
+    f.transport,
+  );
+  assert.equal(
+    (await f.read()).repairs.implementation?.session?.status,
+    "running",
+  );
+  assert.deepEqual(consultStatuses(await f.read()), ["running", "running"]);
+});
+
+test("RED pi-paseo-workflow: a running consult holds finish and cleanup until an ambiguous one is stopped and degraded past the timeout", async () => {
+  const f = await fixture();
+  await f.review("planning");
+  await f.accept();
+  await f.review("implementation");
+  await transition(f.path, "publication", hostedReceipt);
+  assert.equal(
+    actionOf(await f.step(f.transport, probeReturning("completed"))),
+    "finish",
+  );
+  await dispatchConsult(
+    f.path,
+    { briefPath: await consultBrief(f), planners: ["planner-astra"] },
+    failingSend(f, false),
+  );
+  const ambiguous = await f.read();
+  assert.deepEqual(consultStatuses(ambiguous), ["ambiguous"]);
+  const agent = plannerAgent(ambiguous, "planner-astra");
+  // Within the timeout the monitored consult holds the finish step, which would refuse it.
+  assert.deepEqual(nextStep(ambiguous), {
+    result: "unchanged",
+    inFlight: ["consult:planner-astra"],
+  });
+  await assert.rejects(
+    transition(f.path, "finish", hostedReceipt),
+    /Finish waits for the current consult to settle: consult:planner-astra/,
+  );
+  await assert.rejects(
+    cleanup(
+      f.path,
+      {
+        authorizationSource: "User authorized cleanup.",
+        head: heads.first,
+        reason: "Abandon.",
+      },
+      orchestrator,
+      f.transport,
+    ),
+    /in flight: consult:planner-astra/,
+  );
+  // Past the timeout but before a tick settles it, the ambiguous consult still holds finish, cleanup, and consult.
+  const pastDue = await f.read();
+  const astra = pastDue.consult?.sessions["planner-astra"];
+  assert.ok(astra);
+  astra.sentAt = new Date(Date.now() - 601_000).toISOString();
+  await writeFile(f.path, JSON.stringify(pastDue));
+  assert.equal(actionOf(nextStep(pastDue)), "tick");
+  const unticked = /consult:planner-astra \(ambiguous; run `tick`\)/;
+  await assert.rejects(transition(f.path, "finish", hostedReceipt), unticked);
+  await assert.rejects(
+    cleanup(
+      f.path,
+      {
+        authorizationSource: "User authorized cleanup.",
+        head: heads.first,
+        reason: "Abandon.",
+      },
+      orchestrator,
+      f.transport,
+    ),
+    unticked,
+  );
+  await assert.rejects(
+    dispatchConsult(f.path, { briefPath: await consultBrief(f) }, f.transport),
+    unticked,
+  );
+  // Past the timeout, an undecidable delivery is not a gate: tick stops the planner and records degraded.
+  const session = f.sessions.get(agent);
+  assert.ok(session);
+  session.status = "paused";
+  const stopped = await f.step(f.transport, undefined, later(601_000));
+  assert.deepEqual(stopped.recorded, [
+    "consult:planner-astra: degraded (advice unavailable)",
+  ]);
+  assert.ok(f.calls.some((args) => args[0] === "stop" && args[1] === agent));
+  assert.equal(actionOf(stopped), "finish");
+  assert.equal(
+    (await transition(f.path, "finish", hostedReceipt)).finished,
+    hostedReceipt.evidence,
+  );
+  await assert.rejects(
+    dispatchConsult(f.path, { briefPath: await consultBrief(f) }, f.transport),
+    /already finished/,
+  );
+});
+
+test("consult envelope requires summary, recommendation, and string lists, keeps an optional draft, and binds the fingerprint", () => {
+  const fingerprint = "c".repeat(64);
+  assert.deepEqual(
+    parseConsult(
+      `Prose first.\n${consultEnvelope(fingerprint)}\nThanks.`,
+      fingerprint,
+    ),
+    consultAdvice,
+  );
+  assert.equal(
+    parseConsult(
+      consultEnvelope(fingerprint, { ...consultAdvice, draft: "# Plan" }),
+      fingerprint,
+    ).draft,
+    "# Plan",
+  );
+  for (const advice of [
+    { ...consultAdvice, summary: "" },
+    { ...consultAdvice, recommendation: undefined },
+    { ...consultAdvice, options: undefined },
+    { ...consultAdvice, risks: [""] },
+    { ...consultAdvice, questions: "none" },
+    { ...consultAdvice, draft: " " },
+  ])
+    assert.throws(
+      () => parseConsult(consultEnvelope(fingerprint, advice), fingerprint),
+      /Malformed consult advice/,
+    );
+  assert.throws(
+    () => parseConsult(consultEnvelope("d".repeat(64)), fingerprint),
+    /fingerprint mismatch/,
+  );
+  assert.throws(
+    () =>
+      parseConsult(
+        `${consultEnvelope(fingerprint)}${consultEnvelope(fingerprint)}`,
+        fingerprint,
+      ),
+    /ambiguous final consult envelope/,
+  );
 });

@@ -30,6 +30,7 @@ import {
   nonempty,
   requireThat,
   type Transport,
+  unsettledConsult,
   type Workflow,
 } from "./paseo-workflow-state.ts";
 
@@ -226,14 +227,23 @@ export async function cleanup(
       /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(input.head),
     "Cleanup requires the user's authorization source and the expected full worktree head",
   );
-  const pending = inFlight(JSON.parse(await readFile(path, "utf8")));
+  const saved = JSON.parse(await readFile(path, "utf8"));
+  const pending = inFlight(saved);
   requireThat(
     !pending.length,
     `Cleanup refuses while work is in flight: ${pending.join(", ")}`,
   );
+  const unsettled = unsettledConsult(saved);
+  requireThat(
+    !unsettled.length,
+    `Cleanup waits for the current consult to settle: ${unsettled.join(", ")}`,
+  );
   await syncHeartbeat(path, caller, transport);
   const targets = await locked(path, async (state) => {
-    requireThat(!inFlight(state).length, "Work started before cleanup");
+    requireThat(
+      !inFlight(state).length && !unsettledConsult(state).length,
+      "Work started before cleanup",
+    );
     requireThat(
       state.finished || nonempty(input.reason),
       "Cleanup of an unfinished workflow requires a reason for abandoning it",

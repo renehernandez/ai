@@ -20,7 +20,9 @@ export type Role =
   | "review-correctness"
   | "review-quality"
   | "review-architecture"
-  | "review-contract";
+  | "review-contract"
+  | PlannerRole;
+export type PlannerRole = "planner-astra" | "planner-fable";
 export type Lens = { id: string; objective: string; [key: string]: unknown };
 export type Route = { provider: string; model: string; thinking: string };
 export type Outcome = {
@@ -37,6 +39,21 @@ export type ImplementerReport = {
   deviations: string[];
   risks: string[];
   uncommitted: string[];
+};
+// A consult planner's parsed advice envelope.
+export type Advice = {
+  summary: string;
+  recommendation: string;
+  options: string[];
+  risks: string[];
+  questions: string[];
+  draft?: string;
+};
+export type Consult = {
+  fingerprint: string;
+  brief: Snapshot;
+  planners: PlannerRole[];
+  sessions: Partial<Record<PlannerRole, Review>>;
 };
 export type LaunchInspection = {
   cwd: string;
@@ -77,6 +94,7 @@ export type Review = {
   releasedAt?: string;
   outcomes?: Record<string, Outcome>;
   report?: ImplementerReport;
+  advice?: Advice;
   error?: string;
   // Implementer worktree at the original reservation; a relaunch requires it unchanged.
   baseline?: WorktreeState;
@@ -100,8 +118,12 @@ export type Heartbeat = {
 };
 export type Step =
   | { result: "unchanged"; inFlight: string[] }
-  | { result: "changed"; next: { action: string; detail: string } }
-  | { result: "awaiting-user"; gate: string }
+  | {
+      result: "changed";
+      next: { action: string; detail: string };
+      consulting?: string[];
+    }
+  | { result: "awaiting-user"; gate: string; consulting?: string[] }
   | { result: "finished" };
 export type Snapshot = { path: string; sha256: string };
 export type WorkspaceBinding = { id: string; cwd: string };
@@ -241,6 +263,9 @@ export type Workflow = {
   assessments: Partial<Record<Phase, FallbackAssessment[]>>;
   waivers: Waiver[];
   handoff?: Review & { brief: Snapshot; planResolution: Snapshot };
+  // Advisory planner consults; they never gate phase progression.
+  consult?: Consult;
+  priorConsults?: Consult[];
   repairs: Partial<Record<"implementation" | "hosted", Repair>>;
   deliveryPolicy?: DeliveryPolicy;
   publication?: Receipt;
@@ -300,12 +325,14 @@ export type Transport = (
   timeoutMs: number,
   env?: Record<string, string>,
 ) => Promise<string>;
+export const plannerRoles: PlannerRole[] = ["planner-astra", "planner-fable"];
 export const roles: Role[] = [
   "implementer",
   "review-correctness",
   "review-quality",
   "review-architecture",
   "review-contract",
+  ...plannerRoles,
 ];
 const focusedReviewRoles: Role[] = [
   "review-correctness",
@@ -439,9 +466,67 @@ export function ordersBlock(state: Workflow) {
     ? `Standing orders (effective set; follow each verbatim):\n${orders.map((order) => `- ${order.id}: ${order.constraint}`).join("\n")}`
     : "Standing orders: none recorded.";
 }
+export type WorkerKind = "implementer" | "review" | "consult";
+// The one owner of per-kind worker behavior; call sites read it instead of inferring from phase or role prefix.
+export const capabilities: Record<
+  WorkerKind,
+  {
+    // Writes the worktree, so a relaunch requires the reservation baseline unchanged.
+    baseline: boolean;
+    conflictWatch: boolean;
+    // Launch, inspection, timeout, or report failure records degraded instead of failed.
+    degrades: boolean;
+    retriesLaunchFailure: boolean;
+    degradesAfterRetry: boolean;
+    adoptable: boolean;
+    degradesWhenAmbiguousPastTimeout: boolean;
+    blocksProgression: boolean;
+    // Names the consequence of degraded evidence in tick lines.
+    degradedNote?: string;
+  }
+> = {
+  implementer: {
+    baseline: true,
+    conflictWatch: true,
+    degrades: false,
+    retriesLaunchFailure: false,
+    degradesAfterRetry: false,
+    adoptable: true,
+    degradesWhenAmbiguousPastTimeout: false,
+    blocksProgression: true,
+  },
+  review: {
+    baseline: false,
+    conflictWatch: false,
+    degrades: true,
+    retriesLaunchFailure: true,
+    degradesAfterRetry: true,
+    adoptable: false,
+    degradesWhenAmbiguousPastTimeout: false,
+    blocksProgression: true,
+    degradedNote: "reduced independence",
+  },
+  consult: {
+    baseline: false,
+    conflictWatch: false,
+    degrades: true,
+    retriesLaunchFailure: true,
+    degradesAfterRetry: true,
+    adoptable: false,
+    degradesWhenAmbiguousPastTimeout: true,
+    blocksProgression: false,
+    degradedNote: "advice unavailable",
+  },
+};
+export function degradedLine(kind: WorkerKind) {
+  const note = capabilities[kind].degradedNote;
+  return `degraded${note ? ` (${note})` : ""}`;
+}
 export type Worker = {
   name: string;
   role: Role;
+  // Derived from the slot the worker occupies; never persisted.
+  kind: WorkerKind;
   phase?: Phase;
   worker: Review;
 };
@@ -451,13 +536,20 @@ export function workers(state: Workflow): Worker[] {
     entries.push({
       name: "handoff",
       role: "implementer",
+      kind: "implementer",
       worker: state.handoff,
     });
   for (const phase of ["planning", "implementation"] as Phase[])
     for (const role of reviewRoles[phase]) {
       const review = state.rounds[phase]?.reviews[role];
       if (review)
-        entries.push({ name: `${phase}:${role}`, role, phase, worker: review });
+        entries.push({
+          name: `${phase}:${role}`,
+          role,
+          kind: "review",
+          phase,
+          worker: review,
+        });
     }
   for (const phase of ["implementation", "hosted"] as const) {
     const session = state.repairs[phase]?.session;
@@ -465,6 +557,17 @@ export function workers(state: Workflow): Worker[] {
       entries.push({
         name: `${phase}-repair`,
         role: "implementer",
+        kind: "implementer",
+        worker: session,
+      });
+  }
+  for (const role of plannerRoles) {
+    const session = state.consult?.sessions[role];
+    if (session)
+      entries.push({
+        name: `consult:${role}`,
+        role,
+        kind: "consult",
         worker: session,
       });
   }
@@ -509,21 +612,51 @@ export function requireNoConflict(state: Workflow) {
     "A delivery conflict stops new dispatch until adopt or an authorized retry-launch resolves it",
   );
 }
+function inFlightWorkers(state: Workflow, now: number) {
+  return workers(state).filter(
+    ({ worker }) =>
+      worker.status === "reserved" ||
+      worker.status === "running" ||
+      (worker.status === "ambiguous" && !pastTimeout(state, worker, now)) ||
+      (worker.status === "conflict" && !worker.conflictReports),
+  );
+}
+const hostedInFlight = (state: Workflow) =>
+  state.hostedMonitor && state.hosted?.status === "waiting" ? ["hosted"] : [];
+// Monitored work: the heartbeat, tick monitoring, loop status, finish, and cleanup wait for all of it.
 export function inFlight(state: Workflow, now = Date.now()) {
   return [
-    ...workers(state)
-      .filter(
-        ({ worker }) =>
-          worker.status === "reserved" ||
-          worker.status === "running" ||
-          (worker.status === "ambiguous" && !pastTimeout(state, worker, now)) ||
-          (worker.status === "conflict" && !worker.conflictReports),
-      )
-      .map(({ name }) => name),
-    ...(state.hostedMonitor && state.hosted?.status === "waiting"
-      ? ["hosted"]
-      : []),
+    ...inFlightWorkers(state, now).map(({ name }) => name),
+    ...hostedInFlight(state),
   ];
+}
+// Blocking work: only kinds that block phase progression hold the next step.
+export function blockingInFlight(state: Workflow, now = Date.now()) {
+  return [
+    ...inFlightWorkers(state, now)
+      .filter(({ kind }) => capabilities[kind].blocksProgression)
+      .map(({ name }) => name),
+    ...hostedInFlight(state),
+  ];
+}
+export function consulting(state: Workflow, now = Date.now()) {
+  return inFlightWorkers(state, now)
+    .filter(({ kind }) => kind === "consult")
+    .map(({ name }) => name);
+}
+// Every current consult worker not yet complete or degraded, with the action that clears it.
+export function unsettledConsult(state: Workflow) {
+  return workers(state)
+    .filter(
+      ({ kind, worker }) =>
+        kind === "consult" &&
+        worker.status !== "complete" &&
+        worker.status !== "degraded",
+    )
+    .map(
+      ({ name, worker }) =>
+        `${name} (${worker.status}; run \`${worker.status === "undelivered" ? "retry-launch" : "tick"}\`)`,
+    );
 }
 function openQuestions(
   state: Workflow,
@@ -573,14 +706,19 @@ export const gates = {
 };
 // Ambiguous, undelivered, and conflicted workers name their recovery before any phase step.
 function deliveryStep(state: Workflow): Step | undefined {
-  for (const { name, phase, worker } of workers(state)) {
+  for (const { name, kind, worker } of workers(state)) {
+    const can = capabilities[kind];
     if (worker.status === "conflict")
       return {
         result: "awaiting-user",
         gate: gates.conflict(name, worker.conflictReports ?? []),
       };
-    if (worker.status === "ambiguous")
-      return { result: "awaiting-user", gate: gates.ambiguous(name, !phase) };
+    // An ambiguous consult past the timeout is not a gate; the next tick stops it and records degraded.
+    if (worker.status === "ambiguous" && !can.degradesWhenAmbiguousPastTimeout)
+      return {
+        result: "awaiting-user",
+        gate: gates.ambiguous(name, can.adoptable),
+      };
     if (worker.status === "undelivered")
       return worker.attempts?.length
         ? { result: "awaiting-user", gate: gates.spent(name) }
@@ -595,8 +733,32 @@ function deliveryStep(state: Workflow): Step | undefined {
 }
 export function nextStep(state: Workflow, now = Date.now()): Step {
   if (state.finished) return { result: "finished" };
-  const pending = inFlight(state, now);
+  const pending = blockingInFlight(state, now);
   if (pending.length) return { result: "unchanged", inFlight: pending };
+  const step = phaseStep(state);
+  const running = consulting(state, now);
+  // Finish refuses an unsettled consult, so nextStep never names it then.
+  const unsettled = unsettledConsult(state);
+  if (
+    step.result === "changed" &&
+    step.next.action === "finish" &&
+    unsettled.length
+  )
+    return running.length
+      ? { result: "unchanged", inFlight: running }
+      : {
+          result: "changed",
+          next: {
+            action: "tick",
+            detail: `Settle the current consult before finish: ${unsettled.join(", ")}`,
+          },
+        };
+  return running.length &&
+    (step.result === "changed" || step.result === "awaiting-user")
+    ? { ...step, consulting: running }
+    : step;
+}
+function phaseStep(state: Workflow): Step {
   const delivery = deliveryStep(state);
   if (delivery) return delivery;
   const changed = (action: string, detail: string): Step => ({
@@ -1551,6 +1713,11 @@ export async function transition(path: string, action: string, input: Input) {
         };
       }
     } else if (action === "finish") {
+      const unsettled = unsettledConsult(state);
+      requireThat(
+        !unsettled.length,
+        `Finish waits for the current consult to settle: ${unsettled.join(", ")}`,
+      );
       verdict(state, "hosted", "finish");
       const current = state.orchestration === "planner-v2";
       requireThat(

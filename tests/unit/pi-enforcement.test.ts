@@ -294,6 +294,99 @@ test("each focused reviewer is read-only without MCP and only Sonnet loads the C
   );
 });
 
+test("consult planners have read tools plus MCP and no shell, fixed to one route, and only Fable loads the Claude bridge", () => {
+  for (const [role, provider, model] of [
+    ["planner-astra", "openai-codex", "gpt-6-astra"],
+    ["planner-fable", "claude-bridge", "claude-fable-5-1"],
+  ]) {
+    const fixed = [role, provider, model, "medium"];
+    const { contract, args } = launchArguments([...fixed, "--mode", "rpc"]);
+    assert.deepEqual(route({ contract, args }), fixed);
+    assert.equal(args.at(-1), "read,grep,find,ls,mcp", role);
+    assert.ok(args.includes("npm:pi-mcp-adapter@7.0.0"), role);
+    assert.equal(
+      args.includes("npm:pi-claude-bridge@0.9.3"),
+      provider === "claude-bridge",
+      role,
+    );
+    for (const tail of [
+      ["--model", "claude-bridge/claude-opus-5-5"],
+      ["--thinking", "high"],
+      ["--provider", "anthropic"],
+    ])
+      assert.throws(
+        () => launchArguments([...fixed, "--mode", "rpc", ...tail]),
+        /override rejected/,
+        `${role} ${tail.join(" ")}`,
+      );
+    for (const name of ["bash", "edit", "write"])
+      assert.match(
+        toolDenial(role, name, { command: "ls", path: "x" }, process.cwd()) ??
+          "",
+        new RegExp(`unavailable for fixed role ${role}`),
+      );
+    assert.equal(
+      toolDenial(role, "read", { path: "README.md" }, process.cwd()),
+      undefined,
+    );
+    assert.equal(
+      toolDenial(role, "mcp", { search: "docs" }, process.cwd()),
+      undefined,
+    );
+    assert.match(
+      toolDenial(role, "mcp", { action: "install" }, process.cwd()) ?? "",
+      /explicit operator handling/,
+    );
+    const paseo = /Paseo MCP tools are unavailable/;
+    for (const tool of [
+      "paseo_send_agent_prompt",
+      "paseo_kill_agent",
+      "mcp__paseo__create_agent",
+    ])
+      assert.match(
+        toolDenial(role, "mcp", { tool }, process.cwd()) ?? "",
+        paseo,
+        tool,
+      );
+    for (const [name, input] of [
+      ["mcp__paseo__paseo_create_terminal", {}],
+      ["mcp", { server: "paseo" }],
+    ] as const)
+      assert.match(
+        toolDenial(role, name, input, process.cwd()) ?? "",
+        paseo,
+        name,
+      );
+    assert.equal(
+      toolDenial(role, "mcp__context7__query-docs", {}, process.cwd()),
+      undefined,
+    );
+  }
+  // Orchestrator and implementer MCP behavior is unchanged.
+  for (const role of ["planner", "implementer"])
+    assert.equal(
+      toolDenial(role, "mcp", { tool: "paseo_list_agents" }, process.cwd()),
+      undefined,
+    );
+  assert.equal(
+    launchArguments([
+      "planner",
+      "claude-bridge",
+      "claude-opus-5-5",
+      "medium",
+      "--mode",
+      "rpc",
+    ]).args.at(-1),
+    "read,grep,find,ls,bash,edit,write,mcp",
+  );
+  const env = launchEnvironment("claude-bridge", {
+    ANTHROPIC_API_KEY: "secret",
+    CLAUDE_CODE_USE_FOUNDRY: "1",
+  });
+  assert.equal(env.ANTHROPIC_API_KEY, undefined);
+  assert.equal(env.CLAUDE_CODE_USE_FOUNDRY, undefined);
+});
+
 test("runtime model and thinking drift and unsupported reviewer tools are denied", () => {
   assert.equal(
     runtimeDenial(
@@ -888,7 +981,7 @@ test("subprocess RPC waits for adapter handshake and filters role mutations", ()
 });
 
 test("Paseo MCP config reaches the pinned adapter only for nonreview roles", () => {
-  for (const role of ["planner", "implementer"]) {
+  for (const role of ["planner", "implementer", "planner-astra"]) {
     for (const tail of [
       ["--mcp-config", "/tmp/paseo mcp.json"],
       ["--mcp-config=/tmp/paseo mcp.json"],
