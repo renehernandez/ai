@@ -246,9 +246,10 @@ at medium thinking. Ask the orchestrator to "ask Fable", "consult Astra", or
 "get both planners' take"; it runs the runner's `consult` action and folds the
 advice into its own plan revision. Consults never block progress. You can also
 open either planner profile in Paseo as a standalone consultant.
-Planners read files and have no shell, edit, write, or Paseo tools. MCP servers
-from your own MCP configuration stay available; research-only use is an
-instruction, not an enforced read-only boundary.
+Planners read files and have no shell, edit, write, or Paseo tools: Paseo does
+not inject its tools for planner providers, and the planner policy denies Paseo
+MCP calls. Other MCP servers from your own MCP configuration stay available;
+research-only use is an instruction, not an enforced read-only boundary.
 
 Managed launches require Node 26, Pi on PATH, and the synchronized mandatory
 adapter. Nonreview roles explicitly load the pinned MCP adapter, and Claude-model

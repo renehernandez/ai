@@ -737,6 +737,22 @@ export function nextStep(state: Workflow, now = Date.now()): Step {
   if (pending.length) return { result: "unchanged", inFlight: pending };
   const step = phaseStep(state);
   const running = consulting(state, now);
+  // Finish refuses an unsettled consult, so nextStep never names it then.
+  const unsettled = unsettledConsult(state);
+  if (
+    step.result === "changed" &&
+    step.next.action === "finish" &&
+    unsettled.length
+  )
+    return running.length
+      ? { result: "unchanged", inFlight: running }
+      : {
+          result: "changed",
+          next: {
+            action: "tick",
+            detail: `Settle the current consult before finish: ${unsettled.join(", ")}`,
+          },
+        };
   return running.length &&
     (step.result === "changed" || step.result === "awaiting-user")
     ? { ...step, consulting: running }

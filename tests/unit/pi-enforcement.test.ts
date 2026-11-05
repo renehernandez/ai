@@ -337,20 +337,37 @@ test("consult planners have read tools plus MCP and no shell, fixed to one route
       toolDenial(role, "mcp", { action: "install" }, process.cwd()) ?? "",
       /explicit operator handling/,
     );
-    assert.match(
-      toolDenial(
-        role,
-        "mcp",
-        { tool: "mcp__paseo__create_agent" },
-        process.cwd(),
-      ) ?? "",
-      /bounded workflow runner/,
-    );
-    assert.match(
-      toolDenial(role, "mcp__paseo__create_agent", {}, process.cwd()) ?? "",
-      /bounded workflow runner/,
+    const paseo = /Paseo MCP tools are unavailable/;
+    for (const tool of [
+      "paseo_send_agent_prompt",
+      "paseo_kill_agent",
+      "mcp__paseo__create_agent",
+    ])
+      assert.match(
+        toolDenial(role, "mcp", { tool }, process.cwd()) ?? "",
+        paseo,
+        tool,
+      );
+    for (const [name, input] of [
+      ["mcp__paseo__paseo_create_terminal", {}],
+      ["mcp", { server: "paseo" }],
+    ] as const)
+      assert.match(
+        toolDenial(role, name, input, process.cwd()) ?? "",
+        paseo,
+        name,
+      );
+    assert.equal(
+      toolDenial(role, "mcp__context7__query-docs", {}, process.cwd()),
+      undefined,
     );
   }
+  // Orchestrator and implementer MCP behavior is unchanged.
+  for (const role of ["planner", "implementer"])
+    assert.equal(
+      toolDenial(role, "mcp", { tool: "paseo_list_agents" }, process.cwd()),
+      undefined,
+    );
   assert.equal(
     launchArguments([
       "planner",

@@ -462,6 +462,12 @@ export function toolDenial(
     return "MCP configuration and authentication actions require explicit operator handling";
   const mcpTool = nestedMcp ? name : name === "mcp" ? input.tool : undefined;
   if (
+    role.startsWith("planner-") &&
+    ((typeof mcpTool === "string" && /^(?:mcp__)?paseo_/u.test(mcpTool)) ||
+      (name === "mcp" && input.server === "paseo"))
+  )
+    return `Consult planner policy: Paseo MCP tools are unavailable for fixed role ${role}; planners only advise the orchestrator`;
+  if (
     typeof mcpTool === "string" &&
     /(?:^|[^a-z])(?:create_agent|update_agent|respond_to_permission)$/u.test(
       mcpTool,

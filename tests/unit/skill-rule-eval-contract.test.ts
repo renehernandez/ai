@@ -253,6 +253,7 @@ test("GREEN skill-rule-evals: consult planners advise without shell or edits, wi
     contract,
     /no shell, no\s+edits, no Paseo tools, and launch no workers/,
   );
+  assert.match(contract, /the planner policy denies Paseo MCP calls/);
   assert.match(
     contract,
     /research-only use is an instruction, not an\s+enforced read-only boundary/,

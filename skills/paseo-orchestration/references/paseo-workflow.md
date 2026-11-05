@@ -289,9 +289,10 @@ reviewed, degraded, waived, and repaired heads accurately.
 Two planners give advice: Astra (`planner-astra`, GPT-6 Astra) and
 Fable (`planner-fable`, Fable 5.1 through the pinned Claude bridge). Both run at
 medium thinking. They read, search, and list files. They have no shell, no
-edits, no Paseo tools, and launch no workers. MCP servers from the user's own
-MCP configuration stay available; research-only use is an instruction, not an
-enforced read-only boundary.
+edits, no Paseo tools, and launch no workers. Paseo does not inject its tools
+for planner providers, and the planner policy denies Paseo MCP calls. Other
+MCP servers from the user's own MCP configuration stay available;
+research-only use is an instruction, not an enforced read-only boundary.
 The orchestrator dispatches a consult when it chooses or when the user asks, for
 example "ask Fable", "consult Astra", or "get both planners' take". Planners do
 not review and do not write plans. Advice may inform the plan, but only the

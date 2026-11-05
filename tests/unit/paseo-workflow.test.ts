@@ -4185,12 +4185,11 @@ test("RED pi-paseo-workflow: a running consult holds finish and cleanup until an
   const ambiguous = await f.read();
   assert.deepEqual(consultStatuses(ambiguous), ["ambiguous"]);
   const agent = plannerAgent(ambiguous, "planner-astra");
-  // Within the timeout the consult is monitored but does not hold the finish step.
-  const step = nextStep(ambiguous);
-  assert.equal(actionOf(step), "finish");
-  assert.deepEqual(step.result === "changed" && step.consulting, [
-    "consult:planner-astra",
-  ]);
+  // Within the timeout the monitored consult holds the finish step, which would refuse it.
+  assert.deepEqual(nextStep(ambiguous), {
+    result: "unchanged",
+    inFlight: ["consult:planner-astra"],
+  });
   await assert.rejects(
     transition(f.path, "finish", hostedReceipt),
     /Finish waits for the current consult to settle: consult:planner-astra/,
@@ -4214,6 +4213,7 @@ test("RED pi-paseo-workflow: a running consult holds finish and cleanup until an
   assert.ok(astra);
   astra.sentAt = new Date(Date.now() - 601_000).toISOString();
   await writeFile(f.path, JSON.stringify(pastDue));
+  assert.equal(actionOf(nextStep(pastDue)), "tick");
   const unticked = /consult:planner-astra \(ambiguous; run `tick`\)/;
   await assert.rejects(transition(f.path, "finish", hostedReceipt), unticked);
   await assert.rejects(
