@@ -18,6 +18,7 @@ export type Phase = "planning" | "implementation";
 export type Role =
   | "implementer"
   | "review-correctness"
+  | "review-quality"
   | "review-architecture"
   | "review-contract";
 export type Lens = { id: string; objective: string; [key: string]: unknown };
@@ -206,7 +207,8 @@ export type ArchivedHostedBatch = {
 };
 export type Workflow = {
   version: 1;
-  reviewMode?: "sol-focused-v1";
+  // `sol-focused-v1` marks the earlier three-Sol roster; only `focused-v2` states may continue.
+  reviewMode?: "sol-focused-v1" | "focused-v2";
   orchestration?: "planner-v1" | "planner-v2";
   standingOrders?: StandingOrderChange[];
   heartbeat?: Heartbeat;
@@ -301,21 +303,24 @@ export type Transport = (
 export const roles: Role[] = [
   "implementer",
   "review-correctness",
+  "review-quality",
+  "review-architecture",
+  "review-contract",
+];
+const focusedReviewRoles: Role[] = [
+  "review-correctness",
+  "review-quality",
   "review-architecture",
   "review-contract",
 ];
 export const reviewRoles: Record<Phase, Role[]> = {
-  planning: ["review-correctness", "review-architecture", "review-contract"],
-  implementation: [
-    "review-correctness",
-    "review-architecture",
-    "review-contract",
-  ],
+  planning: focusedReviewRoles,
+  implementation: focusedReviewRoles,
 };
 const lensOwners: Record<Phase, Partial<Record<string, Role>>> = {
   planning: {
     "implementation-readiness": "review-correctness",
-    "edge-cases-and-risk": "review-correctness",
+    "edge-cases-and-risk": "review-quality",
     "code-simplifier": "review-architecture",
     "refactoring-opportunities": "review-architecture",
     "delivery-shape": "review-contract",
@@ -323,7 +328,7 @@ const lensOwners: Record<Phase, Partial<Record<string, Role>>> = {
   implementation: {
     "diff-review": "review-correctness",
     "code-simplifier": "review-architecture",
-    "code-quality-review": "review-architecture",
+    "code-quality-review": "review-quality",
     deslop: "review-architecture",
     scrutinize: "review-contract",
   },
@@ -353,8 +358,8 @@ export function assignReviewLenses(phase: Phase, lenses: Lens[]) {
 }
 export function requireCurrentReviewMode(state: Workflow) {
   requireThat(
-    state.reviewMode === "sol-focused-v1",
-    "Legacy workflow state is read-only and cannot continue under the focused Sol review roster",
+    state.reviewMode === "focused-v2",
+    "Legacy workflow state is read-only and cannot continue under the current four-reviewer roster (Sol correctness, Sonnet quality, Terra architecture, Sonnet contract)",
   );
 }
 export function requireOrchestration(state: Workflow) {
@@ -883,7 +888,7 @@ export async function initialize(
   );
   const state: Workflow = {
     version: 1,
-    reviewMode: "sol-focused-v1",
+    reviewMode: "focused-v2",
     orchestration: "planner-v2",
     standingOrders: [],
     cwd: resolve(input.cwd),

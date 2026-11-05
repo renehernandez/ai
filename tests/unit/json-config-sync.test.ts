@@ -96,7 +96,7 @@ function options(root: string) {
               {
                 path: ["daemon", "agentProfiles"],
                 value: [
-                  { id: "implementer", model: "openai-codex/gpt-5.6-sol" },
+                  { id: "implementer", model: "openai-codex/gpt-6.1-sol" },
                 ],
               },
             ],

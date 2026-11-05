@@ -104,7 +104,7 @@
           },
           {
             "path": ["provider", "forceTwoHundredK"],
-            "value": ["claude-opus-5-5"]
+            "value": ["claude-opus-5-5", "claude-sonnet-5-5"]
           },
           { "path": ["provider", "strictMcpConfig"], "value": true },
           { "path": ["provider", "autoMemoryEnabled"], "value": false }
@@ -240,21 +240,28 @@
                 "id": "ax-review-correctness",
                 "name": "Sol · Correctness Review",
                 "provider": "ax-review-correctness",
-                "model": "openai-codex/gpt-5.6-sol",
+                "model": "openai-codex/gpt-6.1-sol",
+                "thinkingOptionId": "medium"
+              },
+              {
+                "id": "ax-review-quality",
+                "name": "Sonnet · Risk & Quality Review",
+                "provider": "ax-review-quality",
+                "model": "claude-bridge/claude-sonnet-5-5",
                 "thinkingOptionId": "medium"
               },
               {
                 "id": "ax-review-architecture",
-                "name": "Sol · Architecture Review",
+                "name": "Terra · Architecture Review",
                 "provider": "ax-review-architecture",
-                "model": "openai-codex/gpt-5.6-sol",
+                "model": "openai-codex/gpt-6.1-terra",
                 "thinkingOptionId": "medium"
               },
               {
                 "id": "ax-review-contract",
-                "name": "Sol · Contract Review",
+                "name": "Sonnet · Contract Review",
                 "provider": "ax-review-contract",
-                "model": "openai-codex/gpt-5.6-sol",
+                "model": "claude-bridge/claude-sonnet-5-5",
                 "thinkingOptionId": "medium"
               }
             ]
@@ -338,13 +345,38 @@
                 "~/.agents/hooks/pi/launch.ts",
                 "review-correctness",
                 "openai-codex",
-                "gpt-5.6-sol",
+                "gpt-6.1-sol",
                 "medium"
               ],
               "models": [
                 {
-                  "id": "openai-codex/gpt-5.6-sol",
-                  "label": "Sol",
+                  "id": "openai-codex/gpt-6.1-sol",
+                  "label": "GPT-6.1 Sol",
+                  "isDefault": true,
+                  "thinkingOptions": [{ "id": "medium", "label": "Medium" }]
+                }
+              ],
+              "paseoTools": { "enabled": false }
+            }
+          },
+          {
+            "path": ["agents", "providers", "ax-review-quality"],
+            "expandHome": true,
+            "value": {
+              "extends": "pi",
+              "label": "Sonnet · Risk & Quality Review",
+              "command": [
+                "node",
+                "~/.agents/hooks/pi/launch.ts",
+                "review-quality",
+                "claude-bridge",
+                "claude-sonnet-5-5",
+                "medium"
+              ],
+              "models": [
+                {
+                  "id": "claude-bridge/claude-sonnet-5-5",
+                  "label": "Claude Sonnet 5.5",
                   "isDefault": true,
                   "thinkingOptions": [{ "id": "medium", "label": "Medium" }]
                 }
@@ -357,19 +389,19 @@
             "expandHome": true,
             "value": {
               "extends": "pi",
-              "label": "Sol · Architecture Review",
+              "label": "Terra · Architecture Review",
               "command": [
                 "node",
                 "~/.agents/hooks/pi/launch.ts",
                 "review-architecture",
                 "openai-codex",
-                "gpt-5.6-sol",
+                "gpt-6.1-terra",
                 "medium"
               ],
               "models": [
                 {
-                  "id": "openai-codex/gpt-5.6-sol",
-                  "label": "Sol",
+                  "id": "openai-codex/gpt-6.1-terra",
+                  "label": "GPT-6.1 Terra",
                   "isDefault": true,
                   "thinkingOptions": [{ "id": "medium", "label": "Medium" }]
                 }
@@ -382,19 +414,19 @@
             "expandHome": true,
             "value": {
               "extends": "pi",
-              "label": "Sol · Contract Review",
+              "label": "Sonnet · Contract Review",
               "command": [
                 "node",
                 "~/.agents/hooks/pi/launch.ts",
                 "review-contract",
-                "openai-codex",
-                "gpt-5.6-sol",
+                "claude-bridge",
+                "claude-sonnet-5-5",
                 "medium"
               ],
               "models": [
                 {
-                  "id": "openai-codex/gpt-5.6-sol",
-                  "label": "Sol",
+                  "id": "claude-bridge/claude-sonnet-5-5",
+                  "label": "Claude Sonnet 5.5",
                   "isDefault": true,
                   "thinkingOptions": [{ "id": "medium", "label": "Medium" }]
                 }
