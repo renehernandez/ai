@@ -505,6 +505,28 @@ test("AI repo Finish policy routes personal GitHub and work GitLab separately", 
   );
 });
 
+test("AI repo overrides the general change-size limits for this repository only", () => {
+  const repoAgents = readFileSync("AGENTS.md", "utf-8").replace(/\s+/g, " ");
+  const gitRules = readFileSync("rules/git-and-review.md", "utf-8").replace(
+    /\s+/g,
+    " ",
+  );
+
+  assert.match(
+    repoAgents,
+    /For this repository only.*at most 15 changed files and 1,500 changed lines/,
+  );
+  assert.match(
+    repoAgents,
+    /above 30 files or 3,000 changed lines returns to Plan/,
+  );
+  assert.match(repoAgents, /50-file hard cap/);
+  assert.match(
+    gitRules,
+    /More than 15 files or 1,000 changed lines returns to Plan/,
+  );
+});
+
 test("AI repo converges the main worktree and live AX runtime after every merge", () => {
   const repoAgents = readFileSync("AGENTS.md", "utf-8");
 

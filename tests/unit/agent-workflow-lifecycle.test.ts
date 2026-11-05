@@ -37,6 +37,19 @@ test("GREEN authority: managed Pi workflow keeps Ready publication separate from
   );
 });
 
+test("RED authority: the general size rule does not adopt this repository's limits", () => {
+  const policy = read("rules/git-and-review.md");
+  assert.doesNotMatch(policy, /3,000 changed lines/);
+  assert.doesNotMatch(policy, /1,500 changed lines/);
+});
+
+test("GREEN authority: the general size rule keeps its own cap outside this repository", () => {
+  assert.match(
+    read("rules/git-and-review.md"),
+    /More than 15 files or 1,000 changed\s+lines returns to Plan/,
+  );
+});
+
 test("GREEN authority: the managed orchestrator works through runner ticks and workers stop at their report", () => {
   const workflow = read(
     "skills/paseo-orchestration/references/paseo-workflow.md",
