@@ -12,7 +12,11 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import enforcement from "../../hooks/pi/enforcement.ts";
-import { launchArguments, rpcDenial } from "../../hooks/pi/launch.ts";
+import {
+  launchArguments,
+  launchEnvironment,
+  rpcDenial,
+} from "../../hooks/pi/launch.ts";
 import {
   findDependencyChange,
   parseContract,
@@ -59,14 +63,14 @@ test("managed arguments preserve Paseo extensions and enforce the fixed route", 
   const implementation = launchArguments([
     "implementer",
     "openai-codex",
-    "gpt-5.6-sol",
+    "gpt-6.1-sol",
     "medium",
     "--mode",
     "rpc",
   ]);
   assert.ok(implementation.args.includes("npm:pi-mcp-adapter@7.0.0"));
   for (const tail of [
-    ["--model", "gpt-5.6-sol"],
+    ["--model", "gpt-6.1-sol"],
     ["--thinking=high"],
     ["--provider", "anthropic"],
     ["--tools", "bash"],
@@ -127,7 +131,7 @@ test("the orchestrator launches on the listed route Paseo selects, Opus by defau
     assert.equal(result.args.at(-1), "read,grep,find,ls,bash,edit,write,mcp");
   }
   for (const [tail, message] of [
-    [["--model", "openai-codex/gpt-5.6-sol"], /Model override/],
+    [["--model", "openai-codex/gpt-6.1-sol"], /Model override/],
     [["--model", "gpt-6-astra", "--thinking", "high"], /Thinking override/],
     [["--thinking", "low"], /Thinking override/],
     [["--provider", "anthropic"], /Provider override/],
@@ -168,7 +172,7 @@ test("the orchestrator launches on the listed route Paseo selects, Opus by defau
       provider: "claude-bridge",
       modelId: "claude-opus-5-5",
     },
-    { type: "set_model", provider: "openai-codex", modelId: "gpt-5.6-sol" },
+    { type: "set_model", provider: "openai-codex", modelId: "gpt-6.1-sol" },
     { type: "set_thinking_level", level: "high" },
     { type: "cycle_model" },
     { type: "cycle_thinking_level" },
@@ -203,7 +207,10 @@ test("implementer, reviewer, and planner alias routes stay single and fixed", ()
   for (const fixed of [
     ["implementer", "claude-bridge", "claude-opus-5-5", "medium"],
     ["planner", "claude-bridge", "claude-opus-5-5", "medium"],
-    ["review-correctness", "openai-codex", "gpt-5.6-sol", "medium"],
+    ["review-correctness", "openai-codex", "gpt-6.1-sol", "medium"],
+    ["review-quality", "claude-bridge", "claude-sonnet-5-5", "medium"],
+    ["review-architecture", "openai-codex", "gpt-6.1-terra", "medium"],
+    ["review-contract", "claude-bridge", "claude-sonnet-5-5", "medium"],
   ]) {
     assert.deepEqual(
       route(launchArguments([...fixed, "--mode", "rpc"])),
@@ -228,6 +235,63 @@ test("implementer, reviewer, and planner alias routes stay single and fixed", ()
       ]),
     );
   }
+});
+
+test("each focused reviewer is read-only without MCP and only Sonnet loads the Claude bridge", () => {
+  for (const [role, provider, model] of [
+    ["review-correctness", "openai-codex", "gpt-6.1-sol"],
+    ["review-quality", "claude-bridge", "claude-sonnet-5-5"],
+    ["review-architecture", "openai-codex", "gpt-6.1-terra"],
+    ["review-contract", "claude-bridge", "claude-sonnet-5-5"],
+  ]) {
+    const { contract, args } = launchArguments([
+      role,
+      provider,
+      model,
+      "medium",
+      "--mode",
+      "rpc",
+    ]);
+    assert.equal(contract.role, role);
+    assert.equal(args.at(-1), "read,grep,find,ls", role);
+    assert.ok(!args.some((v) => v.includes("pi-mcp-adapter")), role);
+    assert.equal(
+      args.includes("npm:pi-claude-bridge@0.9.3"),
+      provider === "claude-bridge",
+      role,
+    );
+    assert.throws(
+      () =>
+        launchArguments([
+          role,
+          provider,
+          model,
+          "medium",
+          "--mode",
+          "rpc",
+          "--mcp-config",
+          "/tmp/mcp.json",
+        ]),
+      /Unsupported managed Pi argument/,
+      role,
+    );
+  }
+  const env = launchEnvironment("claude-bridge", {
+    ANTHROPIC_AUTH_TOKEN: "secret",
+    CLAUDE_CODE_USE_VERTEX: "1",
+  });
+  assert.equal(env.ANTHROPIC_AUTH_TOKEN, undefined);
+  assert.equal(env.CLAUDE_CODE_USE_VERTEX, undefined);
+  for (const name of ["bash", "edit", "write", "mcp", "mcp__paseo__run"])
+    assert.match(
+      toolDenial("review-quality", name, { command: "ls" }, process.cwd()) ??
+        "",
+      /unavailable for fixed role review-quality/,
+    );
+  assert.equal(
+    toolDenial("review-quality", "read", { path: "README.md" }, process.cwd()),
+    undefined,
+  );
 });
 
 test("runtime model and thinking drift and unsupported reviewer tools are denied", () => {
@@ -689,7 +753,7 @@ test("compound denial applies to agent shell calls, not a person's own commands"
     const implementer = parseContract({
       ...contract,
       role: "implementer",
-      model: "gpt-5.6-sol",
+      model: "gpt-6.1-sol",
       thinking: "medium",
     });
     process.env.AX_PI_CONTRACT = JSON.stringify(implementer);
@@ -832,7 +896,7 @@ test("Paseo MCP config reaches the pinned adapter only for nonreview roles", () 
       const result = launchArguments([
         role,
         "openai-codex",
-        "gpt-5.6-sol",
+        "gpt-6.1-sol",
         "medium",
         "--mode",
         "rpc",
@@ -848,7 +912,7 @@ test("Paseo MCP config reaches the pinned adapter only for nonreview roles", () 
         launchArguments([
           role,
           "openai-codex",
-          "gpt-5.6-sol",
+          "gpt-6.1-sol",
           "medium",
           "--mode",
           "rpc",

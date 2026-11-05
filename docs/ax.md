@@ -208,8 +208,11 @@ paseo reload
 
 Use `work` instead of `personal` for work instructions. Both profiles default
 planning and implementation to exact-model Opus 5.5 through the pinned Claude
-subscription bridge. Astra remains a selectable orchestrator model. Three
-focused Sol sessions provide automatic reviews. Paseo applies provider/profile
+subscription bridge. Astra remains a selectable orchestrator model. Four
+focused reviewer sessions provide automatic reviews at medium thinking: GPT-6.1
+Sol for correctness, Sonnet 5.5 for risk and quality, GPT-6.1 Terra for
+architecture, and Sonnet 5.5 for contract alignment. Sonnet reviewers use the
+same pinned Claude bridge as Opus, stay read-only, and receive no MCP. Paseo applies provider/profile
 changes to new sessions; existing sessions keep their launch configuration.
 Read its reload result before assuming changes were applied.
 

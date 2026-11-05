@@ -66,11 +66,13 @@ inline fallback assessment for that review group's assigned lenses before
 advancing. Uncertain implementer launch, missing session identity, corrupt state,
 snapshot failure, or ownership-transfer failure remains a hard blocker.
 
-The orchestrator starts each planning review round with three fresh Sol
-sessions: correctness and risk, architecture and simplification, and contract
-alignment. Each session reads the whole plan but reports only its immutable lens
-assignment. Keep all three reports and the architecture group's distinct
-code-simplifier outcome. Deduplicate findings only after preserving each report.
+Each review round uses four fresh reviewer sessions on two model families, all
+at medium thinking: GPT-6.1 Sol for correctness, Sonnet 5.5 for risk and
+quality, GPT-6.1 Terra for architecture and simplification, and Sonnet 5.5 for
+contract alignment. The orchestrator starts each planning review round with
+those four sessions. Each session reads the whole plan but reports only its
+immutable lens assignment. Keep all four reports and the architecture group's
+distinct code-simplifier outcome. Deduplicate findings only after preserving each report.
 When triage keeps a `fix`, the orchestrator revises the plan and the changed
 plan receives a fresh round. Handoff requires a clean planning verdict: no open
 question and no unwaived fix. The runner refuses a round on an unchanged plan.
@@ -235,7 +237,7 @@ not in pasted prompts.
 ## Review every head
 
 After a tick records the implementer's report, dispatch one parallel round with
-three fresh Sol sessions. The runner reads the workflow worktree's branch and
+the four fresh reviewer sessions. The runner reads the workflow worktree's branch and
 head with `git rev-parse` and binds the round to that committed head, whoever
 produced it; a caller head that differs, a short SHA, or a SHA named only in
 prose never binds. Uncommitted files are recorded as evidence and are not
@@ -243,9 +245,12 @@ reviewed. The runner refuses a round while an implementer or repair is in
 flight. A completed repair's head must still equal the verified head from its
 report envelope. A worker whose last reply is still its inert startup reply has
 not begun the assignment; it stays in flight until the reviewer timeout, when
-the delivery evaluator decides. Correctness covers diff
-correctness and risk; architecture covers quality, simplification, and deslop;
-contract alignment scrutinizes verification, requirements, and documentation.
+the delivery evaluator decides. Planning lenses go to correctness
+(implementation readiness), quality (edge cases and risk), architecture
+(code-simplifier and refactoring opportunities), and contract (delivery shape).
+Implementation lenses go to correctness (diff review), quality (code-quality
+review), architecture (code-simplifier and deslop), and contract (scrutinize
+of verification, requirements, and documentation).
 Assign conditional security and production risk to correctness,
 structural migration/data concerns to architecture, and evidence or documentation
 concerns to contract alignment. Every required lens is assigned exactly once.
@@ -472,14 +477,17 @@ stops recovery; bookkeeping reconciliation neither launches reviewers nor
 grants terminal authority.
 
 New runner states carry the head-keyed planner orchestration marker, identify
-the focused Sol roster, and store one immutable lens snapshot per review group.
+the four-reviewer roster (`focused-v2`), and store one immutable lens snapshot
+per review group. States written under the earlier three-Sol roster
+(`sol-focused-v1`) stay readable through `status`; `tick` and every dispatch
+refuse them with a message naming the current roster.
 States written with the earlier single-round planner marker stay readable
 through `status`; `tick` and every dispatch refuse them, and nothing migrates
 them. States created before orchestration remain readable through `status` and
 keep their recorded `collect`, `monitor`, and transition actions, but `tick`
 and every dispatch refuse them explicitly; `collect` and `monitor` refuse orchestrated
 states. States created by the former mixed-model roster remain read-only and are
-never reinterpreted as Sol evidence.
+never reinterpreted as current-roster evidence.
 
 The runner stores review artifacts, lens definitions and handoff content in
 private read-only snapshots beside its state. Launch prompts carry snapshot paths

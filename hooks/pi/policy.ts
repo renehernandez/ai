@@ -19,6 +19,7 @@ export const roles = [
   "planner",
   "implementer",
   "review-correctness",
+  "review-quality",
   "review-architecture",
   "review-contract",
   "review-glm",

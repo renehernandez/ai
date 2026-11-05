@@ -5,7 +5,30 @@ import { launchArguments, launchEnvironment } from "../../hooks/pi/launch.ts";
 
 const config = JSON.parse(readFileSync("ax.config.json", "utf8"));
 
-test("Opus is the subscription-backed default and Sol owns three focused reviews", () => {
+const reviewRoutes = [
+  [
+    "ax-review-correctness",
+    "Sol · Correctness Review",
+    "openai-codex/gpt-6.1-sol",
+  ],
+  [
+    "ax-review-quality",
+    "Sonnet · Risk & Quality Review",
+    "claude-bridge/claude-sonnet-5-5",
+  ],
+  [
+    "ax-review-architecture",
+    "Terra · Architecture Review",
+    "openai-codex/gpt-6.1-terra",
+  ],
+  [
+    "ax-review-contract",
+    "Sonnet · Contract Review",
+    "claude-bridge/claude-sonnet-5-5",
+  ],
+];
+
+test("Opus is the subscription-backed default and four focused reviewers span Sol, Sonnet, and Terra", () => {
   const pi = Object.fromEntries(
     config.runtime.configs.pi.managedPaths.map((entry) => [
       entry.path.join("."),
@@ -27,22 +50,42 @@ test("Opus is the subscription-backed default and Sol owns three focused reviews
     )?.value,
     false,
   );
+  assert.deepEqual(
+    bridge.find((entry) => entry.path.join(".") === "provider.forceTwoHundredK")
+      ?.value,
+    ["claude-opus-5-5", "claude-sonnet-5-5"],
+  );
   const profiles = config.runtime.configs.paseo.managedPaths.find(
     (entry) => entry.path.join(".") === "daemon.agentProfiles",
   ).value;
-  assert.equal(
-    profiles.filter((profile) => profile.name.includes("Review")).length,
-    3,
-  );
-  assert.ok(
+  assert.deepEqual(
     profiles
       .filter((profile) => profile.name.includes("Review"))
-      .every(
-        (profile) =>
-          profile.model === "openai-codex/gpt-5.6-sol" &&
-          profile.thinkingOptionId === "medium",
-      ),
+      .map((profile) => [
+        profile.id,
+        profile.name,
+        profile.model,
+        profile.provider === profile.id && profile.thinkingOptionId,
+      ]),
+    reviewRoutes.map((route) => [...route, "medium"]),
   );
+  const providers = Object.fromEntries(
+    config.runtime.configs.paseo.managedPaths
+      .filter(
+        (entry) => entry.path.slice(0, 2).join(".") === "agents.providers",
+      )
+      .map((entry) => [entry.path[2], entry.value]),
+  );
+  for (const [id, label, model] of reviewRoutes) {
+    const provider = providers[id];
+    assert.equal(provider.label, label);
+    assert.deepEqual(provider.command.slice(2), [
+      id.slice(3),
+      ...model.split("/"),
+      "medium",
+    ]);
+    assert.deepEqual(provider.paseoTools, { enabled: false });
+  }
   const orchestrators = profiles.filter(
     (profile) => !/Review|Implement/u.test(profile.name),
   );
@@ -103,7 +146,7 @@ test("one Orchestrator profile offers Opus and Astra while worker roles keep one
   const providers = entries.filter(
     (entry) => entry.path.slice(0, 2).join(".") === "agents.providers",
   );
-  assert.equal(providers.length, 6);
+  assert.equal(providers.length, 7);
   const [orchestrator, ...workers] = providers;
   assert.deepEqual(orchestrator.path, [
     "agents",

@@ -42,6 +42,7 @@ import {
   type WorktreeReader,
 } from "../../skills/paseo-orchestration/scripts/paseo-workflow.ts";
 import {
+  assignReviewLenses,
   gates,
   locked,
   nextStep,
@@ -109,6 +110,7 @@ async function fixture(
   const roles = [
     "implementer",
     "review-correctness",
+    "review-quality",
     "review-architecture",
     "review-contract",
   ];
@@ -356,7 +358,11 @@ function withReviewOutcome(
 function fallbackAssessment(
   state: Workflow,
   phase: "planning" | "implementation",
-  role: "review-correctness" | "review-architecture" | "review-contract",
+  role:
+    | "review-correctness"
+    | "review-quality"
+    | "review-architecture"
+    | "review-contract",
 ) {
   return {
     role,
@@ -431,8 +437,8 @@ test("GREEN pi-paseo-workflow: deliberate focused handoff reaches Ready once wit
   );
   assert.deepEqual(finished.handoff?.brief, reviewed.handoff?.brief);
   assert.equal((await f.read()).finished, receipt.evidence);
-  assert.equal(f.calls.filter((args) => args[0] === "run").length, 7);
-  assert.equal(new Set(f.sessions.keys()).size, 7);
+  assert.equal(f.calls.filter((args) => args[0] === "run").length, 9);
+  assert.equal(new Set(f.sessions.keys()).size, 9);
   assert.ok(
     f.calls
       .filter((args) => args[0] === "run")
@@ -645,6 +651,61 @@ test("legacy mixed-model workflow state remains inspectable but cannot continue"
   );
 });
 
+test("GREEN pi-paseo-workflow: init records the four-reviewer roster and assigns both canonical catalogs to it", async () => {
+  const f = await fixture();
+  const state = await f.read();
+  assert.equal(state.reviewMode, "focused-v2");
+  assert.deepEqual(state.routes["review-quality"], {
+    provider: "ax-review-quality",
+    model: "openai-codex/model-review-quality",
+    thinking: "low",
+  });
+  const ids = (phase: "planning" | "implementation") =>
+    Object.fromEntries(
+      Object.entries(assignReviewLenses(phase, state.lenses[phase])).map(
+        ([role, lenses]) => [role, lenses.map((lens) => lens.id)],
+      ),
+    );
+  assert.deepEqual(ids("planning"), {
+    "review-correctness": ["implementation-readiness"],
+    "review-quality": ["edge-cases-and-risk"],
+    "review-architecture": ["code-simplifier", "refactoring-opportunities"],
+    "review-contract": ["delivery-shape"],
+  });
+  assert.deepEqual(ids("implementation"), {
+    "review-correctness": ["diff-review"],
+    "review-quality": ["code-quality-review"],
+    "review-architecture": ["code-simplifier", "deslop"],
+    "review-contract": ["scrutinize"],
+  });
+  delete f.config.agents.providers["ax-review-quality"];
+  assert.throws(
+    () => routesFromConfig(f.config),
+    /Missing managed provider ax-review-quality/,
+  );
+});
+
+test("RED pi-paseo-workflow: a three-Sol roster state stays readable through status but tick and dispatch refuse it", async () => {
+  const f = await fixture();
+  const legacy = await f.read();
+  legacy.reviewMode = "sol-focused-v1";
+  await writeFile(f.path, JSON.stringify(legacy));
+  const status = await captureStdout(() => main([f.path, "status"], {}));
+  assert.equal(JSON.parse(status).reviewMode, "sol-focused-v1");
+  const roster =
+    /current four-reviewer roster \(Sol correctness, Sonnet quality, Terra architecture, Sonnet contract\)/;
+  await assert.rejects(f.step(), roster);
+  await assert.rejects(
+    dispatchFixtureReview(
+      f.path,
+      { phase: "planning", artifactPath: f.artifactPath },
+      f.transport,
+    ),
+    roster,
+  );
+  assert.equal(runs(f), 0);
+});
+
 async function captureStdout(run: () => Promise<void>) {
   const write = process.stdout.write;
   let output = "";
@@ -735,7 +796,7 @@ test("RED pi-paseo-workflow: an untriaged round cannot be replaced by another re
   );
   assert.deepEqual((await f.read()).rounds.planning?.artifact, reserved);
   assert.equal(await readFile(reserved.path, "utf8"), originalArtifact);
-  assert.equal(f.calls.filter((args) => args[0] === "run").length, 3);
+  assert.equal(f.calls.filter((args) => args[0] === "run").length, 4);
 });
 
 test("parallel phase callers reserve each reviewer only once", async () => {
@@ -750,7 +811,7 @@ test("parallel phase callers reserve each reviewer only once", async () => {
     ),
   );
   assert.equal(results.filter((item) => item.status === "rejected").length, 1);
-  assert.equal(f.calls.filter((args) => args[0] === "run").length, 3);
+  assert.equal(f.calls.filter((args) => args[0] === "run").length, 4);
   assert.ok(
     Object.values((await f.read()).rounds.planning?.reviews ?? {}).every(
       (review) => review.status === "running",
@@ -779,6 +840,7 @@ test("reviewer launch and response failures become degraded evidence without ret
     decisions: [],
     assessments: [
       fallbackAssessment(degraded, "planning", "review-correctness"),
+      fallbackAssessment(degraded, "planning", "review-quality"),
       fallbackAssessment(degraded, "planning", "review-architecture"),
       fallbackAssessment(degraded, "planning", "review-contract"),
     ],
@@ -845,7 +907,7 @@ test("scoped waivers preserve failed evidence, bind the current target, and do n
   const state = await f.read();
   const target = state.rounds.planning?.fingerprint;
   assert.ok(target);
-  const blocked = ["review-correctness:edge-cases-and-risk:blocked"];
+  const blocked = ["review-quality:edge-cases-and-risk:blocked"];
   await transition(f.path, "triage", {
     phase: "planning",
     decisions: blocked.map((id) => ({
@@ -889,7 +951,7 @@ test("scoped waivers preserve failed evidence, bind the current target, and do n
   const waived = await f.read();
   assert.deepEqual(waived.waivers?.[0]?.failedGates, blocked);
   assert.equal(
-    waived.rounds.planning?.reviews["review-correctness"].outcomes?.[
+    waived.rounds.planning?.reviews["review-quality"].outcomes?.[
       "edge-cases-and-risk"
     ].status,
     "blocked",
@@ -954,7 +1016,7 @@ test("GREEN pi-paseo-workflow: a zero send exit releases the worker whatever Pas
     );
     assert.deepEqual(
       reviews.map((review) => review.status),
-      ["running", "running", "running"],
+      ["running", "running", "running", "running"],
     );
     // `status` shows what Paseo returned and which Paseo version took the dispatch.
     for (const review of reviews) {
@@ -1052,10 +1114,12 @@ test("RED pi-paseo-workflow: a released reviewer that never began is retried onc
     "undelivered",
     "undelivered",
     "undelivered",
+    "undelivered",
   ]);
   assert.equal(actionOf(first), "retry-launch");
   for (const role of [
     "review-correctness",
+    "review-quality",
     "review-architecture",
     "review-contract",
   ]) {
@@ -1066,10 +1130,16 @@ test("RED pi-paseo-workflow: a released reviewer that never began is retried onc
       f.transport,
     );
   }
-  assert.deepEqual(statuses(await f.read()), ["running", "running", "running"]);
+  assert.deepEqual(statuses(await f.read()), [
+    "running",
+    "running",
+    "running",
+    "running",
+  ]);
   neverBegan();
   const second = await f.step(f.transport, undefined, later(601_000));
   assert.deepEqual(statuses(await f.read()), [
+    "degraded",
     "degraded",
     "degraded",
     "degraded",
@@ -1081,7 +1151,7 @@ test("RED pi-paseo-workflow: a released reviewer that never began is retried onc
   );
   assert.ok(second.recorded.every((line) => /reduced independence/.test(line)));
   // One automatic retry per reviewer, never a third session.
-  assert.equal(runs(f), 6);
+  assert.equal(runs(f), 8);
 });
 
 test("RED pi-paseo-workflow: retry-launch needs established non-delivery and an unchanged worktree, and a spent retry needs user authorization", async () => {
@@ -1117,7 +1187,7 @@ test("RED pi-paseo-workflow: retry-launch needs established non-delivery and an 
   f.tree.uncommitted = ["?? stray.ts"];
   await assert.rejects(relaunch({ agentId: first }));
   f.tree.uncommitted = [];
-  assert.equal(runs(f), 4);
+  assert.equal(runs(f), 5);
   await relaunch({ agentId: first }, failingSend(f, false));
   const second = (await f.read()).handoff?.agentId ?? "";
   const spent = await f.step(f.transport, undefined, later(61_000));
@@ -1410,7 +1480,7 @@ test("GREEN pi-paseo-workflow: a transient wait error during inert startup still
     triaged.rounds.planning?.reviews["review-contract"].status,
     "complete",
   );
-  assert.equal(runs(f), 3);
+  assert.equal(runs(f), 4);
 });
 
 test("RED pi-paseo-workflow: a reviewer still at its startup reply keeps its round in flight until the timeout", async () => {
@@ -1430,7 +1500,12 @@ test("RED pi-paseo-workflow: a reviewer still at its startup reply keeps its rou
   const waiting = await f.step(f.transport, undefined, later(300_000));
   assert.equal(waiting.result, "unchanged");
   await assert.rejects(dispatch());
-  assert.deepEqual(statuses(await f.read()), ["running", "running", "running"]);
+  assert.deepEqual(statuses(await f.read()), [
+    "running",
+    "running",
+    "running",
+    "running",
+  ]);
 });
 
 test("GREEN pi-paseo-workflow: every awaiting-user gate names the supported action that clears it", () => {
@@ -2089,7 +2164,7 @@ test("large plan, implementation and handoff use private snapshots with bounded 
   await verify(handed.planResolution, planResolution);
   await f.step(transport);
   await review("implementation");
-  assert.equal(f.calls.filter((args) => args[0] === "run").length, 7);
+  assert.equal(f.calls.filter((args) => args[0] === "run").length, 9);
   await assert.rejects(
     handoff(f.path, { briefPath: f.artifactPath, planResolution }, transport),
     /already dispatched/,
@@ -2127,7 +2202,7 @@ test("GREEN pi-paseo-workflow: ticks carry an unattended run from implementation
   await syncHeartbeat(f.path, orchestrator, f.transport);
   const launches = runs(f);
   const reviewed = await f.step();
-  assert.equal(reviewed.recorded.length, 3);
+  assert.equal(reviewed.recorded.length, 4);
   assert.equal(reviewed.result === "changed" && reviewed.next.action, "triage");
   assert.equal(runs(f), launches);
   assert.equal(f.heartbeats.size, 0);
@@ -2147,6 +2222,7 @@ test("GREEN pi-paseo-workflow: a tick with busy workers is quiet and never dispa
     result: "unchanged",
     inFlight: [
       "planning:review-correctness",
+      "planning:review-quality",
       "planning:review-architecture",
       "planning:review-contract",
     ],
@@ -2287,6 +2363,7 @@ test("GREEN pi-paseo-workflow: init needs no orchestrator route, and orchestrato
     "review-architecture",
     "review-contract",
     "review-correctness",
+    "review-quality",
   ]);
   // A state initialized before the rename also recorded the orchestrator's own route.
   await writeFile(
@@ -2857,10 +2934,10 @@ test("RED pi-paseo-workflow: ticks never start another review round or repair ba
     undefined,
     () => Date.now() + 601_000,
   );
-  assert.equal(timedOut.recorded.length, 3);
+  assert.equal(timedOut.recorded.length, 4);
   assert.equal(timedOut.result === "changed" && timedOut.next.action, "triage");
   assert.equal(runs(f), launches);
-  assert.equal(f.calls.filter((args) => args[0] === "stop").length, 3);
+  assert.equal(f.calls.filter((args) => args[0] === "stop").length, 4);
   const degraded = await f.read();
   assert.ok(
     Object.values(degraded.rounds.planning?.reviews ?? {}).every(
@@ -2905,7 +2982,7 @@ test("RED pi-paseo-workflow: an idle worker that has not begun its assignment st
       (review) => review.status === "running",
     ),
   );
-  assert.equal((await f.step()).recorded.length, 3);
+  assert.equal((await f.step()).recorded.length, 4);
 });
 
 test("RED pi-paseo-workflow: review binds the worktree head and repair completion binds the repair report head", async () => {
@@ -2984,7 +3061,7 @@ test("GREEN pi-paseo-workflow: inspection errors degrade reviewers and keep impl
     return f.transport(args, timeout, env);
   };
   const degraded = await f.step(unavailable);
-  assert.equal(degraded.recorded.length, 3);
+  assert.equal(degraded.recorded.length, 4);
   assert.ok(
     Object.values((await f.read()).rounds.planning?.reviews ?? {}).every(
       (review) =>
@@ -3274,6 +3351,7 @@ async function cleanupFixture(
   const roles = [
     "implementer",
     "review-correctness",
+    "review-quality",
     "review-architecture",
     "review-contract",
   ];

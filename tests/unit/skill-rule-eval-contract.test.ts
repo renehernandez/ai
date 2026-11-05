@@ -72,6 +72,20 @@ const cloudflareSkills = (
   }
 ).skills.flatMap(({ names }) => names);
 
+// The normative Pi/Paseo contract names the four-reviewer roster and no longer claims three Sol reviewers.
+function assertFourReviewerContract(workflow: string) {
+  assert.doesNotMatch(workflow, /three fresh Sol|focused Sol roster/);
+  assert.match(
+    workflow,
+    /four fresh reviewer sessions on two model families[\s\S]*GPT-6\.1 Sol for correctness, Sonnet 5\.5 for risk and\s+quality, GPT-6\.1 Terra for architecture and simplification, and Sonnet 5\.5 for\s+contract alignment/,
+  );
+  assert.match(workflow, /Keep all four reports/);
+  assert.match(
+    workflow,
+    /earlier three-Sol roster\s+\(`sol-focused-v1`\) stay readable through `status`; `tick` and every dispatch\s+refuse them/,
+  );
+}
+
 test("RED skill-rule-evals: an unmanaged visual skill has no evaluation coverage", () => {
   assert.deepEqual(simulatedCoverageGap("unregistered-visual-skill"), [
     "unregistered-visual-skill",
@@ -86,6 +100,7 @@ test("GREEN skill-rule-evals: Show Me participates in managed skill coverage", (
 test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", () => {
   const groups = assignReviewLenses("planning", [
     { id: "implementation-readiness", objective: "ready" },
+    { id: "edge-cases-and-risk", objective: "risk" },
     { id: "code-simplifier", objective: "simple" },
     { id: "delivery-shape", objective: "shape" },
     { id: "security-review", objective: "secure" },
@@ -94,10 +109,18 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
   ]);
   assert.deepEqual(Object.keys(groups), [
     "review-correctness",
+    "review-quality",
     "review-architecture",
     "review-contract",
   ]);
-  assert.equal(Object.values(groups).flat().length, 6);
+  assert.equal(Object.values(groups).flat().length, 7);
+  assert.deepEqual(
+    groups["review-quality"].map((lens) => lens.id),
+    ["edge-cases-and-risk"],
+  );
+  assertFourReviewerContract(
+    read("skills/paseo-orchestration/references/paseo-workflow.md"),
+  );
   assert.equal(groups["review-correctness"].at(-1)?.id, "security-review");
   assert.equal(groups["review-architecture"].at(-1)?.id, "migration-data");
   assert.equal(groups["review-contract"].at(-1)?.id, "docs-alignment-review");
@@ -231,6 +254,15 @@ test("RED skill-rule-evals: Paseo workspace binding rejects a wrong directory", 
       requireOrchestration({
         version: 1,
         reviewMode: "sol-focused-v1",
+        orchestration: "planner-v2",
+      } as never),
+    /cannot continue under the current four-reviewer roster/u,
+  );
+  assert.throws(
+    () =>
+      requireOrchestration({
+        version: 1,
+        reviewMode: "focused-v2",
       } as never),
     /predates planner orchestration/u,
   );
@@ -238,7 +270,7 @@ test("RED skill-rule-evals: Paseo workspace binding rejects a wrong directory", 
     () =>
       requireOrchestration({
         version: 1,
-        reviewMode: "sol-focused-v1",
+        reviewMode: "focused-v2",
         orchestration: "planner-v1",
       } as never),
     /predates planner orchestration with head-keyed review/u,
