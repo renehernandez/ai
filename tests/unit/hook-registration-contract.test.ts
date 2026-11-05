@@ -7,17 +7,22 @@ import {
   renderHookRegistrationDocument,
 } from "../../scripts/ax/hook-registration.ts";
 
-test("RED hook-registration: MCP and Pi runtime configuration, including the in-process Paseo dispatch, orchestrator write, git, dependency, nested MCP, and read-only reviewer tool policies, agent shell discipline, and pinned package configs, are not hook targets", () => {
+test("RED hook-registration: MCP and Pi runtime configuration, including the in-process Paseo dispatch, orchestrator write, git, dependency, nested MCP, read-only reviewer, and read-only consult planner tool policies, agent shell discipline, and pinned package configs, are not hook targets", () => {
   for (const target of ["claude", "codex"] as const)
-    assert.throws(
-      () =>
-        assertRegistrationTargetSafe({
-          path: "/tmp/isolated-home/.pi/agent/extensions/review-quality-policy.json",
-          target,
-          home: "/tmp/isolated-home",
-        }),
-      /hook_registration_target_invalid/u,
-    );
+    for (const policy of [
+      "review-quality-policy.json",
+      "planner-astra-policy.json",
+      "planner-fable-policy.json",
+    ])
+      assert.throws(
+        () =>
+          assertRegistrationTargetSafe({
+            path: `/tmp/isolated-home/.pi/agent/extensions/${policy}`,
+            target,
+            home: "/tmp/isolated-home",
+          }),
+        /hook_registration_target_invalid/u,
+      );
   for (const config of [
     ".pi/agent/mcp-adapter.json",
     ".pi/agent/claude-bridge.json",

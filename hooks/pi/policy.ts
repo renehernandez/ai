@@ -25,6 +25,8 @@ export const roles = [
   "review-glm",
   "review-deepseek",
   "review-astra",
+  "planner-astra",
+  "planner-fable",
 ];
 export type Contract = {
   role: string;
@@ -35,6 +37,8 @@ export type Contract = {
 };
 export const readTools = ["read", "grep", "find", "ls"];
 export const writeTools = [...readTools, "bash", "edit", "write", "mcp"];
+// Consult planners advise read-only; `planner` without a suffix is the orchestrator alias.
+export const consultTools = [...readTools, "mcp"];
 
 export function parseContract(value: unknown): Contract {
   const c = value as Contract;
@@ -57,7 +61,8 @@ export function parseContract(value: unknown): Contract {
 }
 
 export function allowedTools(role: string): string[] {
-  return role.startsWith("review-") ? readTools : writeTools;
+  if (role.startsWith("review-")) return readTools;
+  return role.startsWith("planner-") ? consultTools : writeTools;
 }
 
 const paseoValueOptions = new Set(["-o", "--format", "--host", "--home"]);

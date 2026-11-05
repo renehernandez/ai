@@ -240,9 +240,18 @@ Sol reviews, publishes, and follows hosted feedback. A Paseo heartbeat wakes it
 while work is in flight, so you do not need to ask for status. You do not
 choose a model each time a reviewer or implementation worker starts.
 
+Two read-only consult planners, **Astra · Consult Planner** (GPT-6 Astra) and
+**Fable · Consult Planner** (Fable 5.1 through the Claude bridge), give advice
+at medium thinking. Ask the orchestrator to "ask Fable", "consult Astra", or
+"get both planners' take"; it runs the runner's `consult` action and folds the
+advice into its own plan revision. Consults never block progress. You can also
+open either planner profile in Paseo as a standalone read-only consultant.
+Planners read files and use MCP for research, but have no shell, edits, or
+Paseo tools.
+
 Managed launches require Node 26, Pi on PATH, and the synchronized mandatory
-adapter. Nonreview roles explicitly load the pinned MCP adapter, and Opus roles also
-load the pinned bridge despite disabled extension discovery; a first launch can
+adapter. Nonreview roles explicitly load the pinned MCP adapter, and Claude-model
+roles (Opus, Sonnet, and Fable) also load the pinned bridge despite disabled extension discovery; a first launch can
 require package download. Bridge authentication remains in the operator's
 Claude profile. AX does not manage credentials, enable paid extra usage, or
 permit API-key, gateway, Bedrock, Vertex, or Foundry environment redirects.

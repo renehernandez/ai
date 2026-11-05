@@ -244,6 +244,34 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
   );
 });
 
+test("GREEN skill-rule-evals: consult planners advise read-only without gating and never change the plan themselves", () => {
+  const contract = read(
+    "skills/paseo-orchestration/references/paseo-workflow.md",
+  );
+  assert.match(contract, /## Consult planners/);
+  assert.match(
+    contract,
+    /no shell, no edits, no Paseo tools, and launch no workers/,
+  );
+  assert.match(
+    contract,
+    /only the\s+orchestrator's own revision changes it, and that revision still needs a fresh\s+planning round/,
+  );
+  assert.match(contract, /Consults are advisory and create no gates/);
+  assert.match(contract, /`finish` and `cleanup` refuse while one runs/);
+  assert.match(contract, /`adopt` refuses planners/);
+  assert.match(contract, /AX_CONSULT_BEGIN[\s\S]*AX_CONSULT_END/);
+  assert.match(contract, /\| `consult` \| `briefPath` and optional `planners`/);
+  assert.match(
+    read("skills/paseo-orchestration/SKILL.md"),
+    /\("ask Fable",\s+"consult Astra"\), write a consult brief and run `consult`/,
+  );
+  assert.match(
+    read("docs/ax.md"),
+    /\*\*Astra · Consult Planner\*\*[\s\S]*\*\*Fable · Consult Planner\*\*/,
+  );
+});
+
 test("RED skill-rule-evals: Paseo workspace binding rejects a wrong directory", async () => {
   assert.throws(
     () => requireCurrentReviewMode({ version: 1 } as never),

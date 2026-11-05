@@ -104,7 +104,11 @@
           },
           {
             "path": ["provider", "forceTwoHundredK"],
-            "value": ["claude-opus-5-5", "claude-sonnet-5-5"]
+            "value": [
+              "claude-opus-5-5",
+              "claude-sonnet-5-5",
+              "claude-fable-5-1"
+            ]
           },
           { "path": ["provider", "strictMcpConfig"], "value": true },
           { "path": ["provider", "autoMemoryEnabled"], "value": false }
@@ -262,6 +266,20 @@
                 "name": "Sonnet · Contract Review",
                 "provider": "ax-review-contract",
                 "model": "claude-bridge/claude-sonnet-5-5",
+                "thinkingOptionId": "medium"
+              },
+              {
+                "id": "ax-planner-astra",
+                "name": "Astra · Consult Planner",
+                "provider": "ax-planner-astra",
+                "model": "openai-codex/gpt-6-astra",
+                "thinkingOptionId": "medium"
+              },
+              {
+                "id": "ax-planner-fable",
+                "name": "Fable · Consult Planner",
+                "provider": "ax-planner-fable",
+                "model": "claude-bridge/claude-fable-5-1",
                 "thinkingOptionId": "medium"
               }
             ]
@@ -427,6 +445,56 @@
                 {
                   "id": "claude-bridge/claude-sonnet-5-5",
                   "label": "Claude Sonnet 5.5",
+                  "isDefault": true,
+                  "thinkingOptions": [{ "id": "medium", "label": "Medium" }]
+                }
+              ],
+              "paseoTools": { "enabled": false }
+            }
+          },
+          {
+            "path": ["agents", "providers", "ax-planner-astra"],
+            "expandHome": true,
+            "value": {
+              "extends": "pi",
+              "label": "Astra · Consult Planner",
+              "command": [
+                "node",
+                "~/.agents/hooks/pi/launch.ts",
+                "planner-astra",
+                "openai-codex",
+                "gpt-6-astra",
+                "medium"
+              ],
+              "models": [
+                {
+                  "id": "openai-codex/gpt-6-astra",
+                  "label": "Astra",
+                  "isDefault": true,
+                  "thinkingOptions": [{ "id": "medium", "label": "Medium" }]
+                }
+              ],
+              "paseoTools": { "enabled": false }
+            }
+          },
+          {
+            "path": ["agents", "providers", "ax-planner-fable"],
+            "expandHome": true,
+            "value": {
+              "extends": "pi",
+              "label": "Fable · Consult Planner",
+              "command": [
+                "node",
+                "~/.agents/hooks/pi/launch.ts",
+                "planner-fable",
+                "claude-bridge",
+                "claude-fable-5-1",
+                "medium"
+              ],
+              "models": [
+                {
+                  "id": "claude-bridge/claude-fable-5-1",
+                  "label": "Claude Fable 5.1",
                   "isDefault": true,
                   "thinkingOptions": [{ "id": "medium", "label": "Medium" }]
                 }

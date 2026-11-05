@@ -294,6 +294,82 @@ test("each focused reviewer is read-only without MCP and only Sonnet loads the C
   );
 });
 
+test("consult planners are read-only with MCP, fixed to one route, and only Fable loads the Claude bridge", () => {
+  for (const [role, provider, model] of [
+    ["planner-astra", "openai-codex", "gpt-6-astra"],
+    ["planner-fable", "claude-bridge", "claude-fable-5-1"],
+  ]) {
+    const fixed = [role, provider, model, "medium"];
+    const { contract, args } = launchArguments([...fixed, "--mode", "rpc"]);
+    assert.deepEqual(route({ contract, args }), fixed);
+    assert.equal(args.at(-1), "read,grep,find,ls,mcp", role);
+    assert.ok(args.includes("npm:pi-mcp-adapter@7.0.0"), role);
+    assert.equal(
+      args.includes("npm:pi-claude-bridge@0.9.3"),
+      provider === "claude-bridge",
+      role,
+    );
+    for (const tail of [
+      ["--model", "claude-bridge/claude-opus-5-5"],
+      ["--thinking", "high"],
+      ["--provider", "anthropic"],
+    ])
+      assert.throws(
+        () => launchArguments([...fixed, "--mode", "rpc", ...tail]),
+        /override rejected/,
+        `${role} ${tail.join(" ")}`,
+      );
+    for (const name of ["bash", "edit", "write"])
+      assert.match(
+        toolDenial(role, name, { command: "ls", path: "x" }, process.cwd()) ??
+          "",
+        new RegExp(`unavailable for fixed role ${role}`),
+      );
+    assert.equal(
+      toolDenial(role, "read", { path: "README.md" }, process.cwd()),
+      undefined,
+    );
+    assert.equal(
+      toolDenial(role, "mcp", { search: "docs" }, process.cwd()),
+      undefined,
+    );
+    assert.match(
+      toolDenial(role, "mcp", { action: "install" }, process.cwd()) ?? "",
+      /explicit operator handling/,
+    );
+    assert.match(
+      toolDenial(
+        role,
+        "mcp",
+        { tool: "mcp__paseo__create_agent" },
+        process.cwd(),
+      ) ?? "",
+      /bounded workflow runner/,
+    );
+    assert.match(
+      toolDenial(role, "mcp__paseo__create_agent", {}, process.cwd()) ?? "",
+      /bounded workflow runner/,
+    );
+  }
+  assert.equal(
+    launchArguments([
+      "planner",
+      "claude-bridge",
+      "claude-opus-5-5",
+      "medium",
+      "--mode",
+      "rpc",
+    ]).args.at(-1),
+    "read,grep,find,ls,bash,edit,write,mcp",
+  );
+  const env = launchEnvironment("claude-bridge", {
+    ANTHROPIC_API_KEY: "secret",
+    CLAUDE_CODE_USE_FOUNDRY: "1",
+  });
+  assert.equal(env.ANTHROPIC_API_KEY, undefined);
+  assert.equal(env.CLAUDE_CODE_USE_FOUNDRY, undefined);
+});
+
 test("runtime model and thinking drift and unsupported reviewer tools are denied", () => {
   assert.equal(
     runtimeDenial(
@@ -888,7 +964,7 @@ test("subprocess RPC waits for adapter handshake and filters role mutations", ()
 });
 
 test("Paseo MCP config reaches the pinned adapter only for nonreview roles", () => {
-  for (const role of ["planner", "implementer"]) {
+  for (const role of ["planner", "implementer", "planner-astra"]) {
     for (const tail of [
       ["--mcp-config", "/tmp/paseo mcp.json"],
       ["--mcp-config=/tmp/paseo mcp.json"],

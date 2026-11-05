@@ -284,6 +284,56 @@ repairs past the bound, starts a fourth round, or downgrades findings to pass.
 Only a user-authorized `continuation` opens another bounded batch. Identify the
 reviewed, degraded, waived, and repaired heads accurately.
 
+## Consult planners
+
+Two read-only planners give advice: Astra (`planner-astra`, GPT-6 Astra) and
+Fable (`planner-fable`, Fable 5.1 through the pinned Claude bridge). Both run at
+medium thinking. They read, search, and list files, and use MCP only for
+research. They have no shell, no edits, no Paseo tools, and launch no workers.
+The orchestrator dispatches a consult when it chooses or when the user asks, for
+example "ask Fable", "consult Astra", or "get both planners' take". Planners do
+not review and do not write plans. Advice may inform the plan, but only the
+orchestrator's own revision changes it, and that revision still needs a fresh
+planning round. The planner profiles can also be opened manually in Paseo as
+standalone read-only consultants.
+
+The orchestrator writes a consult brief that holds the question, the
+constraints, and the repository paths to read. `consult` snapshots the brief and
+records a fingerprint over the brief and the sorted planner list. It then
+launches one fresh session per named planner, concurrently, through the normal
+launch path: inert start, route verification, assignment digest, a send that
+never repeats, and standing orders. Each planner returns exactly one envelope:
+
+```text
+AX_CONSULT_BEGIN
+{"fingerprint":"...","summary":"...","recommendation":"...",
+ "options":["..."],"risks":["..."],"questions":["..."],"draft":"optional"}
+AX_CONSULT_END
+```
+
+`summary` and `recommendation` are nonempty strings. `options`, `risks`, and
+`questions` are lists of nonempty strings and may be empty. An optional `draft`
+is a nonempty string. The fingerprint must match the consult.
+
+Consults are advisory and create no gates. A tick records a valid envelope as
+`complete` with its advice, such as `consult:planner-fable: complete`. A
+malformed envelope, fingerprint mismatch, timeout, or provider error records
+`degraded (advice unavailable)`; the orchestrator reports it to the user in the
+same turn. Running consults never block `review`, `handoff`, or `repair`, and
+never require triage, fallback assessment, or a waiver. When only consults are
+in flight, `nextStep` names the ready phase step and lists them as
+`consulting`. They still count as monitored work: the heartbeat stays armed
+until each is recorded, and `finish` and `cleanup` refuse while one runs. An
+undelivered planner gets the one automatic `retry-launch`, and a second
+non-delivery degrades it. An ambiguous planner past the reviewer timeout is not
+a gate: the runner stops it and records `degraded`. `adopt` refuses planners.
+
+There is one current consult. A new `consult` refuses while a current planner
+is in flight; otherwise it archives the previous consult to `priorConsults`.
+Consults do not count against review rounds or bounds and are allowed in any
+phase before `finish`. A state initialized before planner routes existed
+refuses `consult`, naming `init`; every other action on it is unchanged.
+
 ## Publish and follow hosted feedback
 
 The orchestrator uses Finish and Change Request Create to publish the
@@ -377,6 +427,7 @@ The managed Pi wrapper fixes role/model/effort, selecting the orchestrator's
 route from its allowlist at launch, and waits for the mandatory
 adapter before forwarding the first prompt. The adapter enforces role identity
 and tool policy during work. Reviewers can only read, search and list files.
+Consult planners can read, search, and list files, and use MCP.
 Existing force-push and deletion policies govern supported shell calls.
 MCP is available to nonreview roles through the pinned adapter; unrestricted
 script dispatch and direct agent-creation operations are excluded.
@@ -412,6 +463,7 @@ is the only full-state read.
 | `policy` | `deliveryPolicy` with provider/repository identity, independent CI and reviewer status, source, and source fingerprint. Unknown policy blocks handoff. |
 | `order` | `op` (add/amend/retire), stable `id`, `constraint` except on retire, and `authorizationSource`. |
 | `review` | `phase` and `artifactPath`; optional implementation `head`, which must equal the worktree head the runner reads. The artifact includes the exact diff/base or complete plan and original evidence references. Dispatches one round and returns; a later round needs a revised plan or a repaired head. Optional `workspaceId`; when no exact workspace exists, explicit `registerWorkspace: true` and optional `projectId` register the canonical cwd locally. |
+| `consult` | `briefPath` and optional `planners` (`planner-astra`, `planner-fable`; default both, distinct, nonempty). Launches one fresh read-only planner per name and returns; advice is recorded by `tick` and never gates. Refuses on a finished workflow, a state without planner routes, or a current consult still in flight. Accepts the same optional workspace fields as `review`. |
 | `tick` | No input. Records completions and one hosted probe, renews or deletes the heartbeat, and returns the compact result. |
 | `triage` | `phase`, `decisions` containing each finding's `id`, `action` (fix/dismiss/question) and `reason`; for each degraded reviewer, `assessments` with its `role` and complete per-lens `outcomes` using the review outcome shape. |
 | `waiver` | `phase`, exact current `target`, exact `requestedAction`, nonempty `failedGates`, and `reason`. Records failed evidence without granting the action itself. |
