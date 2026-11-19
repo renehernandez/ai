@@ -33,7 +33,7 @@ import {
 } from "../../evals/skills-rules/scenarios.ts";
 import { read } from "../../scripts/charter-validator-reader.ts";
 import {
-  bindWorkspace,
+  bindOrchestrator,
   parseReport,
   parseReview,
 } from "../../skills/paseo-orchestration/scripts/paseo-workflow.ts";
@@ -65,6 +65,30 @@ const verifiedReport = {
 
 const reportWithHead = (head: string) =>
   `AX_REPORT_BEGIN${JSON.stringify({ ...verifiedReport, head })}AX_REPORT_END`;
+
+const orchestratedState = (cwd: string) => ({
+  version: 1,
+  cwd,
+  transport: "herdr-core",
+  reviewMode: "focused-v2",
+  orchestration: "planner-v2",
+});
+
+// A herdr-core transport that answers only `hc get --json t0` for the orchestrator terminal.
+const fakeTerminal = (state: string) => async (args: string[]) => {
+  assert.deepEqual(args, ["get", "--json", "t0"]);
+  return JSON.stringify({
+    address: "t0",
+    cwd: "/work",
+    argv: ["node", "launch.ts", "orchestrator"],
+    state,
+    status: { app: "pi", state: "idle" },
+    turn: 1,
+    reported: true,
+    parent: null,
+    labels: { "herdr.space": "s1", "herdr.tab": "tab1", other: "x" },
+  });
+};
 
 const cloudflareSkills = (
   axConfig.blocks.cloudflare as {
@@ -286,7 +310,7 @@ test("GREEN skill-rule-evals: consult planners advise without shell or edits, wi
   );
 });
 
-test("RED skill-rule-evals: Paseo workspace binding rejects a wrong directory", async () => {
+test("RED skill-rule-evals: orchestrator binding rejects a terminal that is not live", async () => {
   assert.throws(
     () => requireCurrentReviewMode({ version: 1 } as never),
     /Legacy workflow state is read-only/u,
@@ -295,6 +319,16 @@ test("RED skill-rule-evals: Paseo workspace binding rejects a wrong directory", 
     () =>
       requireOrchestration({
         version: 1,
+        reviewMode: "focused-v2",
+        orchestration: "planner-v2",
+      } as never),
+    /written by the Paseo runner/u,
+  );
+  assert.throws(
+    () =>
+      requireOrchestration({
+        version: 1,
+        transport: "herdr-core",
         reviewMode: "sol-focused-v1",
         orchestration: "planner-v2",
       } as never),
@@ -304,6 +338,7 @@ test("RED skill-rule-evals: Paseo workspace binding rejects a wrong directory", 
     () =>
       requireOrchestration({
         version: 1,
+        transport: "herdr-core",
         reviewMode: "focused-v2",
       } as never),
     /predates planner orchestration/u,
@@ -312,6 +347,7 @@ test("RED skill-rule-evals: Paseo workspace binding rejects a wrong directory", 
     () =>
       requireOrchestration({
         version: 1,
+        transport: "herdr-core",
         reviewMode: "focused-v2",
         orchestration: "planner-v1",
       } as never),
@@ -345,57 +381,38 @@ test("RED skill-rule-evals: Paseo workspace binding rejects a wrong directory", 
     read("skills/paseo-orchestration/references/paseo-workflow.md"),
     /uncertain assignment response blocks release|"sent"|has\s+not begun the assignment and stays in flight\./,
   );
-  const directory = mkdtempSync(join(tmpdir(), "paseo-binding-red-"));
+  const directory = mkdtempSync(join(tmpdir(), "herdr-binding-red-"));
   const statePath = join(directory, "state.json");
-  writeFileSync(statePath, JSON.stringify({ version: 1, cwd: directory }));
+  writeFileSync(statePath, JSON.stringify(orchestratedState(directory)));
   try {
     await assert.rejects(
-      bindWorkspace(statePath, { workspaceId: "wrong" }, async () =>
-        JSON.stringify([{ workspaceId: "wrong", cwd: "/other" }]),
-      ),
-      /does not match canonical cwd/,
+      bindOrchestrator(statePath, undefined, fakeTerminal("live")),
+      /requires the caller's HC_TERMINAL_ID/,
     );
-    assert.equal(
-      JSON.parse(readFileSync(statePath, "utf8")).workspace,
-      undefined,
-    );
-    let lists = 0;
     await assert.rejects(
-      bindWorkspace(statePath, { registerWorkspace: true }, async (args) => {
-        if (args[1] === "create") throw new Error("lost response");
-        lists++;
-        if (lists === 1) return "[]";
-        throw new Error("inspection failed");
-      }),
-      /inspection failed/,
+      bindOrchestrator(statePath, "t0", fakeTerminal("ended")),
+      /Orchestrator terminal t0 is not live/,
     );
     assert.equal(
-      JSON.parse(readFileSync(statePath, "utf8")).workspaceRegistration.status,
-      "uncertain",
+      JSON.parse(readFileSync(statePath, "utf8")).orchestrator,
+      undefined,
     );
   } finally {
     rmSync(directory, { recursive: true });
   }
 });
 
-test("GREEN skill-rule-evals: Paseo workspace binding records one exact directory", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "paseo-binding-green-"));
+test("GREEN skill-rule-evals: orchestrator binding records the live caller and its space and tab", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "herdr-binding-green-"));
   const statePath = join(directory, "state.json");
-  writeFileSync(statePath, JSON.stringify({ version: 1, cwd: directory }));
+  writeFileSync(statePath, JSON.stringify(orchestratedState(directory)));
   try {
-    await bindWorkspace(statePath, {}, async () =>
-      JSON.stringify([{ workspaceId: "exact", cwd: directory }]),
-    );
+    await bindOrchestrator(statePath, "t0", fakeTerminal("live"));
     const state = JSON.parse(readFileSync(statePath, "utf8"));
-    assert.deepEqual(state.workspace, {
-      id: "exact",
-      cwd: directory,
+    assert.deepEqual(state.orchestrator, {
+      id: "t0",
+      labels: { "herdr.space": "s1", "herdr.tab": "tab1" },
     });
-    assert.equal(state.workspaceRegistration, undefined);
-    assert.match(
-      read("skills/paseo-orchestration/references/paseo-workflow.md"),
-      /inert assignment[\s\S]*verifies cwd/,
-    );
   } finally {
     rmSync(directory, { recursive: true });
   }

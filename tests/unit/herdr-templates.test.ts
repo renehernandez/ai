@@ -41,8 +41,8 @@ test("herdr-core templates are generated from routes.json and launch on a listed
       [node, launcher],
       ["node", "~/.agents/hooks/pi/launch.ts"],
     );
-    const { contract, rpc } = launchArguments(argv, table);
-    assert.equal(rpc, false);
+    const { contract, args } = launchArguments(argv, table);
+    assert.ok(!args.includes("--mode"));
     return `${contract.role} ${contract.provider}/${contract.model}:${contract.thinking}`;
   });
   assert.deepEqual(selected, [

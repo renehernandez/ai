@@ -108,8 +108,6 @@ test("Opus is the subscription-backed default and four focused reviewers span So
     "claude-bridge",
     "claude-opus-5-5",
     "medium",
-    "--mode",
-    "rpc",
   ]);
   assert.ok(launch.args.includes("npm:pi-claude-bridge@0.9.3"));
   assert.ok(launch.args.includes("--no-extensions"));

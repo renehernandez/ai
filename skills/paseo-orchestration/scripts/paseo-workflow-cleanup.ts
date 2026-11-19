@@ -6,7 +6,7 @@ import {
   realpath,
   rm,
 } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import {
   basename,
   dirname,
@@ -16,23 +16,22 @@ import {
   resolve,
   sep,
 } from "node:path";
-import {
-  git,
-  listWorkspaces,
-  matchingWorkspace,
-  paseo,
-  readWorktree,
-  syncHeartbeat,
-} from "./paseo-workflow-io.ts";
+import { git, herdr, readWorktree, tickPrompt } from "./paseo-workflow-io.ts";
 import {
   inFlight,
   locked,
   nonempty,
+  requireHerdrTransport,
   requireThat,
   type Transport,
   unsettledConsult,
   type Workflow,
 } from "./paseo-workflow-state.ts";
+import {
+  labelledTerminals,
+  stopChain,
+  syncTicker,
+} from "./paseo-workflow-ticker.ts";
 
 export type CleanupInput = {
   authorizationSource: string;
@@ -45,7 +44,7 @@ export type CleanupTarget = {
   reason?: string;
 };
 export type CleanupReceipt = Record<
-  "worktree" | "workspace" | "scratch",
+  "terminals" | "worktree" | "scratch",
   CleanupTarget
 >;
 
@@ -55,36 +54,14 @@ function strictlyBelow(root: string, path: string) {
   const rest = relative(root, path);
   return rest !== "" && rest.split(sep)[0] !== ".." && !isAbsolute(rest);
 }
+const within = (root: string, path: string) =>
+  resolve(path) === root || strictlyBelow(root, resolve(path));
 async function exists(path: string) {
   return access(path).then(
     () => true,
     () => false,
   );
 }
-
-// Paseo lists agents with a home-relative cwd; archived agents are excluded by default.
-async function busyAgents(
-  cwd: string,
-  transport: Transport,
-): Promise<{ id: string; status: string }[]> {
-  const rows = JSON.parse(
-    await transport(["ls", "--global", "--json"], 30_000),
-  );
-  requireThat(
-    Array.isArray(rows) &&
-      rows.every(
-        (row) => nonempty(row.id) && nonempty(row.cwd) && nonempty(row.status),
-      ),
-    "Paseo returned an invalid agent list",
-  );
-  return (rows as { id: string; cwd: string; status: string }[]).filter(
-    (row) =>
-      resolve(row.cwd.replace(/^~(?=$|\/)/, homedir())) === cwd &&
-      row.status !== "idle" &&
-      row.status !== "closed",
-  );
-}
-
 async function insideGitRepository(path: string) {
   try {
     await git(path, ["rev-parse", "--git-dir"]);
@@ -123,7 +100,7 @@ async function requireOnlyThisWorkflow(directory: string, statePath: string) {
     return (
       top === name ||
       top === `${name}.lock` ||
-      top.startsWith(".paseo-snapshot-") ||
+      top.startsWith(".ax-snapshot-") ||
       (!rest.length &&
         top.startsWith(`${name}.`) &&
         /^\d+\.tmp$/.test(top.slice(name.length + 1)))
@@ -176,18 +153,19 @@ async function scratchTarget(
   return { status: "remaining", target: real };
 }
 
-// A Paseo worktree workspace owns its linked worktree: archiving it removes the directory and its Git registration.
-async function worktreeTargets(
+// Removes a linked worktree only when it is clean at the expected head, no other live terminal works inside it, and the caller stands outside it.
+async function worktreeTarget(
   cwd: string,
-  workspace: { id: string; isolation?: string },
   head: string,
-): Promise<Pick<CleanupReceipt, "worktree" | "workspace">> {
+  callerId: string | undefined,
+  callerCwd: string,
+  transport: Transport,
+): Promise<CleanupTarget & { root?: string }> {
   const skip = (reason: string) => ({
-    worktree: { status: "skipped" as const, target: cwd, reason },
-    workspace: { status: "skipped" as const, target: workspace.id, reason },
+    status: "skipped" as const,
+    target: cwd,
+    reason,
   });
-  if (workspace.isolation !== "worktree")
-    return skip("local-checkout workspace");
   const [gitDir, commonDir] = (
     await git(cwd, [
       "rev-parse",
@@ -199,27 +177,81 @@ async function worktreeTargets(
     .trim()
     .split("\n");
   if (gitDir === commonDir) return skip("main checkout");
+  if (basename(commonDir) !== ".git")
+    return skip(`common Git directory ${commonDir} has no main checkout`);
   const observed = await readWorktree(cwd);
+  if (observed.head !== head)
+    return skip(`worktree is at ${observed.head}, not the expected ${head}`);
+  if (observed.uncommitted.length)
+    return skip(`uncommitted changes: ${observed.uncommitted.join(", ")}`);
+  if (within(cwd, callerCwd))
+    return skip("the caller's working directory is inside the worktree");
+  const listed = JSON.parse(await transport(["ls", "--json"], 30_000));
   requireThat(
-    observed.head === head,
-    `Worktree ${cwd} is at ${observed.head}, not the expected head ${head}`,
+    Array.isArray(listed?.terminals),
+    "herdr-core returned an invalid terminal list",
   );
-  requireThat(
-    !observed.uncommitted.length,
-    `Worktree ${cwd} has uncommitted changes: ${observed.uncommitted.join(", ")}`,
-  );
-  return {
-    worktree: { status: "remaining", target: cwd },
-    workspace: { status: "remaining", target: workspace.id },
-  };
+  const occupants = (listed.terminals as { address: string; cwd?: string }[])
+    .filter(
+      (row) =>
+        row.address !== callerId && nonempty(row.cwd) && within(cwd, row.cwd),
+    )
+    .map((row) => row.address);
+  if (occupants.length)
+    return skip(`live terminals work inside it: ${occupants.join(", ")}`);
+  return { status: "remaining", target: cwd, root: dirname(commonDir) };
 }
 
-// Removes the workflow's own linked worktree, Paseo workspace, and scratch folder after validating every target.
+// Kills the workflow's labelled terminals, children before parents, then removes them; the caller is never touched.
+async function removeTerminals(
+  state: Workflow,
+  callerId: string | undefined,
+  transport: Transport,
+): Promise<CleanupTarget> {
+  const target = `ax.workflow=${state.workflowId}`;
+  const listed = (await labelledTerminals(state.workflowId, transport)).filter(
+    (terminal) => terminal.address !== callerId,
+  );
+  const depth = (address: string, seen = new Set<string>()): number => {
+    const parent = listed.find((item) => item.address === address)?.parent;
+    if (!parent || seen.has(parent)) return 0;
+    seen.add(parent);
+    return 1 + depth(parent, seen);
+  };
+  const ordered = [...listed].sort(
+    (a, b) => depth(b.address) - depth(a.address),
+  );
+  for (const terminal of ordered)
+    await transport(["kill", "--json", terminal.address], 30_000);
+  // A ticker started with --rm is already gone once killed.
+  for (const terminal of ordered)
+    await transport(["rm", "--json", terminal.address], 30_000).catch(
+      (error) => {
+        if (!/not_found/.test(`${error?.stdout ?? ""} ${error}`)) throw error;
+      },
+    );
+  const left = (await labelledTerminals(state.workflowId, transport)).filter(
+    (terminal) => terminal.address !== callerId,
+  );
+  requireThat(
+    !left.length,
+    `Terminals still live after removal: ${left.map((item) => item.address).join(", ")}`,
+  );
+  return ordered.length
+    ? {
+        status: "removed",
+        target,
+        reason: ordered.map((item) => item.address).join(", "),
+      }
+    : { status: "skipped", target, reason: "no labelled terminals" };
+}
+
+// Removes the workflow's terminals, its linked worktree when safe, and its scratch folder after validating every target.
 export async function cleanup(
   path: string,
   input: CleanupInput,
-  caller: { agentId?: string },
-  transport: Transport = paseo,
+  caller: { terminalId?: string; cwd?: string },
+  transport: Transport = herdr,
   tempRoots: string[] = defaultTempRoots(),
 ): Promise<{ targets: CleanupReceipt }> {
   requireThat(
@@ -228,6 +260,7 @@ export async function cleanup(
     "Cleanup requires the user's authorization source and the expected full worktree head",
   );
   const saved = JSON.parse(await readFile(path, "utf8"));
+  requireHerdrTransport(saved);
   const pending = inFlight(saved);
   requireThat(
     !pending.length,
@@ -238,8 +271,10 @@ export async function cleanup(
     !unsettled.length,
     `Cleanup waits for the current consult to settle: ${unsettled.join(", ")}`,
   );
-  await syncHeartbeat(path, caller, transport);
-  const targets = await locked(path, async (state) => {
+  await syncTicker(path, caller.terminalId, transport, (state) =>
+    tickPrompt(path, state),
+  );
+  const { targets, worktreeRoot } = await locked(path, async (state) => {
     requireThat(
       !inFlight(state).length && !unsettledConsult(state).length,
       "Work started before cleanup",
@@ -248,61 +283,45 @@ export async function cleanup(
       state.finished || nonempty(input.reason),
       "Cleanup of an unfinished workflow requires a reason for abandoning it",
     );
-    requireThat(state.workspace, "Cleanup requires a recorded workspace");
-    const cwd = resolve(state.cwd);
-    const rows = await listWorkspaces(transport);
-    const binding = matchingWorkspace(rows, cwd);
-    requireThat(
-      binding?.id === state.workspace.id,
-      `Recorded workspace ${state.workspace.id} no longer resolves uniquely for ${cwd}`,
+    const scratch = await scratchTarget(path, state, tempRoots);
+    // The chain's stop marker lands before any kill, so no successor outlives cleanup.
+    await stopChain(path, state, transport);
+    const terminals = await removeTerminals(
+      state,
+      caller.terminalId,
+      transport,
     );
-    const busy = await busyAgents(cwd, transport);
-    // The calling orchestrator may run inside the workspace; archiving would close it mid-action.
-    const selfHosted =
-      busy.length > 0 && busy.every((agent) => agent.id === caller.agentId);
-    requireThat(
-      !busy.length || selfHosted,
-      `Agents are still running in workspace ${binding.id}: ${busy.map((agent) => `${agent.id} (${agent.status})`).join(", ")}`,
+    const { root, ...worktree } = await worktreeTarget(
+      resolve(state.cwd),
+      input.head,
+      caller.terminalId,
+      resolve(caller.cwd ?? process.cwd()),
+      transport,
     );
-    const workspace = rows.find((row) => row.workspaceId === binding.id);
-    const reason = `the calling orchestrator session runs in this workspace; archive workspace ${binding.id} from Paseo when done`;
-    const receipt: CleanupReceipt = {
-      ...(selfHosted
-        ? {
-            worktree: { status: "skipped", target: cwd, reason },
-            workspace: { status: "skipped", target: binding.id, reason },
-          }
-        : await worktreeTargets(
-            cwd,
-            { id: binding.id, isolation: workspace?.isolation },
-            input.head,
-          )),
-      scratch: await scratchTarget(path, state, tempRoots),
-    };
     state.cleanup = {
       authorizationSource: input.authorizationSource,
       head: input.head,
       ...(input.reason ? { reason: input.reason } : {}),
       startedAt: new Date().toISOString(),
     };
-    return receipt;
+    return {
+      targets: { terminals, worktree, scratch } as CleanupReceipt,
+      worktreeRoot: root,
+    };
   });
   const stop = (step: string, error: unknown) =>
     new Error(
       `Cleanup stopped at ${step} without retry: ${String(error)}\n${JSON.stringify({ targets })}`,
     );
-  if (targets.workspace.status === "remaining") {
+  if (targets.worktree.status === "remaining" && worktreeRoot) {
+    // Plain removal: Git itself refuses a dirty or locked worktree, and no branch is deleted.
     try {
-      await transport(
-        ["workspace", "archive", targets.workspace.target],
-        60_000,
-      );
+      await git(worktreeRoot, ["worktree", "remove", targets.worktree.target]);
     } catch (error) {
-      throw stop("workspace archive", error);
+      throw stop("worktree removal", error);
     }
-    targets.workspace.status = "removed";
     if (await exists(targets.worktree.target))
-      throw stop("worktree removal", "archive left the worktree in place");
+      throw stop("worktree removal", "git left the worktree in place");
     targets.worktree.status = "removed";
   }
   if (targets.scratch.status === "remaining") {

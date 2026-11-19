@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import {
   chmodSync,
   cpSync,
@@ -12,11 +12,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import enforcement from "../../hooks/pi/enforcement.ts";
-import {
-  launchArguments,
-  launchEnvironment,
-  rpcDenial,
-} from "../../hooks/pi/launch.ts";
+import { launchArguments, launchEnvironment } from "../../hooks/pi/launch.ts";
 import {
   findDependencyChange,
   parseContract,
@@ -31,8 +27,6 @@ const baseArgs = [
   "openai-codex",
   "gpt-6.1-sol",
   "medium",
-  "--mode",
-  "rpc",
 ];
 const contract = parseContract({
   role: "review-astra",
@@ -65,8 +59,6 @@ test("managed arguments preserve Paseo extensions and enforce the fixed route", 
     "claude-bridge",
     "claude-opus-5-5",
     "medium",
-    "--mode",
-    "rpc",
   ]);
   assert.ok(implementation.args.includes("npm:pi-mcp-adapter@7.0.0"));
   for (const tail of [
@@ -81,12 +73,14 @@ test("managed arguments preserve Paseo extensions and enforce the fixed route", 
     assert.throws(() => launchArguments([...baseArgs, ...tail]));
   }
   assert.throws(() => launchArguments(["unknown", ...baseArgs.slice(1)]));
-  // Without --mode the launcher runs Pi interactively in a herdr-core terminal.
-  const interactive = launchArguments(baseArgs.slice(0, 4));
-  assert.equal(interactive.rpc, false);
+  // The launcher runs Pi only interactively in a herdr-core terminal; RPC mode is refused.
+  const interactive = launchArguments(baseArgs);
   assert.ok(!interactive.args.includes("--mode"));
   assert.ok(interactive.args.includes("--no-approve"));
-  assert.equal(launchArguments(baseArgs).rpc, true);
+  assert.throws(
+    () => launchArguments([...baseArgs, "--mode", "rpc"]),
+    /Unsupported managed Pi argument: --mode/,
+  );
   assert.throws(
     () =>
       launchArguments([
@@ -132,12 +126,7 @@ test("the orchestrator launches on the listed route Paseo selects, Opus by defau
     [["--model=gpt-6-astra"], astra],
     [["--provider", "openai-codex"], astra],
   ] as const) {
-    const result = launchArguments([
-      ...orchestratorRoutes,
-      "--mode",
-      "rpc",
-      ...tail,
-    ]);
+    const result = launchArguments([...orchestratorRoutes, ...tail]);
     assert.deepEqual(route(result), expected, tail.join(" "));
     const at = result.args.indexOf("--model");
     assert.deepEqual(result.args.slice(at - 2, at + 4), [
@@ -164,53 +153,24 @@ test("the orchestrator launches on the listed route Paseo selects, Opus by defau
     [["--model", "claude-opus-5-5", "--model", "gpt-6-astra"], /Model/],
   ] as const)
     assert.throws(
-      () => launchArguments([...orchestratorRoutes, "--mode", "rpc", ...tail]),
+      () => launchArguments([...orchestratorRoutes, ...tail]),
       message,
       tail.join(" "),
     );
   for (const argv of [
-    ["orchestrator", "--mode", "rpc"],
-    [
-      "orchestrator",
-      "claude-bridge",
-      "claude-opus-5-5",
-      "medium",
-      "--mode",
-      "rpc",
-    ],
-    ["orchestrator", "claude-bridge/claude-opus-5-5", "--mode", "rpc"],
-    ["orchestrator", "claude-bridge/claude-opus-5-5:fast", "--mode", "rpc"],
-    [...orchestratorRoutes, "--mode", "rpc", "a prompt"],
+    ["orchestrator"],
+    ["orchestrator", "claude-bridge", "claude-opus-5-5", "medium"],
+    ["orchestrator", "claude-bridge/claude-opus-5-5"],
+    ["orchestrator", "claude-bridge/claude-opus-5-5:fast"],
+    [...orchestratorRoutes, "a prompt"],
   ])
     assert.throws(() => launchArguments(argv), argv.join(" "));
 
   const chosen = launchArguments([
     ...orchestratorRoutes,
-    "--mode",
-    "rpc",
     "--model",
     "openai-codex/gpt-6-astra",
   ]).contract;
-  for (const request of [
-    {
-      type: "set_model",
-      provider: "claude-bridge",
-      modelId: "claude-opus-5-5",
-    },
-    { type: "set_model", provider: "openai-codex", modelId: "gpt-6.1-sol" },
-    { type: "set_thinking_level", level: "high" },
-    { type: "cycle_model" },
-    { type: "cycle_thinking_level" },
-  ])
-    assert.ok(rpcDenial(chosen, request, process.cwd()), request.type);
-  assert.equal(
-    rpcDenial(
-      chosen,
-      { type: "set_model", provider: "openai-codex", modelId: "gpt-6-astra" },
-      process.cwd(),
-    ),
-    undefined,
-  );
   assert.ok(
     runtimeDenial(
       chosen,
@@ -237,17 +197,14 @@ test("implementer, reviewer, and planner alias routes stay single and fixed", ()
     ["review-architecture", "openai-codex", "gpt-6.1-terra", "medium"],
     ["review-contract", "claude-bridge", "claude-sonnet-5-5", "medium"],
   ]) {
-    assert.deepEqual(
-      route(launchArguments([...fixed, "--mode", "rpc"])),
-      fixed,
-    );
+    assert.deepEqual(route(launchArguments([...fixed])), fixed);
     for (const tail of [
       ["--model", "openai-codex/gpt-6-astra"],
       ["--thinking", "high"],
       ["--provider", "anthropic"],
     ])
       assert.throws(
-        () => launchArguments([...fixed, "--mode", "rpc", ...tail]),
+        () => launchArguments([...fixed, ...tail]),
         /override rejected/,
       );
     assert.throws(() =>
@@ -255,8 +212,6 @@ test("implementer, reviewer, and planner alias routes stay single and fixed", ()
         fixed[0],
         "claude-bridge/claude-opus-5-5:medium",
         "openai-codex/gpt-6-astra:medium",
-        "--mode",
-        "rpc",
       ]),
     );
   }
@@ -274,8 +229,6 @@ test("each focused reviewer is read-only without MCP and only Sonnet loads the C
       provider,
       model,
       "medium",
-      "--mode",
-      "rpc",
     ]);
     assert.equal(contract.role, role);
     assert.equal(args.at(-1), "read,grep,find,ls", role);
@@ -292,8 +245,6 @@ test("each focused reviewer is read-only without MCP and only Sonnet loads the C
           provider,
           model,
           "medium",
-          "--mode",
-          "rpc",
           "--mcp-config",
           "/tmp/mcp.json",
         ]),
@@ -325,7 +276,7 @@ test("consult planners have read tools plus MCP and no shell, fixed to one route
     ["planner-fable", "claude-bridge", "claude-fable-5-1"],
   ]) {
     const fixed = [role, provider, model, "medium"];
-    const { contract, args } = launchArguments([...fixed, "--mode", "rpc"]);
+    const { contract, args } = launchArguments([...fixed]);
     assert.deepEqual(route({ contract, args }), fixed);
     assert.equal(args.at(-1), "read,grep,find,ls,mcp", role);
     assert.ok(args.includes("npm:pi-mcp-adapter@7.0.0"), role);
@@ -340,7 +291,7 @@ test("consult planners have read tools plus MCP and no shell, fixed to one route
       ["--provider", "anthropic"],
     ])
       assert.throws(
-        () => launchArguments([...fixed, "--mode", "rpc", ...tail]),
+        () => launchArguments([...fixed, ...tail]),
         /override rejected/,
         `${role} ${tail.join(" ")}`,
       );
@@ -399,8 +350,6 @@ test("consult planners have read tools plus MCP and no shell, fixed to one route
       "claude-bridge",
       "claude-opus-5-5",
       "medium",
-      "--mode",
-      "rpc",
     ]).args.at(-1),
     "read,grep,find,ls,bash,edit,write,mcp",
   );
@@ -504,13 +453,6 @@ test("runtime model and thinking drift and unsupported reviewer tools are denied
       process.cwd(),
     ),
     undefined,
-  );
-  assert.ok(
-    rpcDenial(
-      contract,
-      { type: "set_model", provider: contract.provider, modelId: "other" },
-      process.cwd(),
-    ),
   );
 });
 
@@ -1022,12 +964,11 @@ function fixture(): { root: string; launcher: string; env: NodeJS.ProcessEnv } {
     fake,
     `#!${process.execPath}
 const fs = require('node:fs');
-const readline = require('node:readline');
 if (process.env.FAKE_PI_MODE === 'no-handshake') { setTimeout(() => process.exit(0), 30); }
 else {
  const c = JSON.parse(process.env.AX_PI_CONTRACT);
  fs.writeSync(3, JSON.stringify({ready:true,nonce:c.nonce})+'\\n');
- readline.createInterface({input:process.stdin}).on('line', line => process.stdout.write(JSON.stringify({received:JSON.parse(line)})+'\\n'));
+ setTimeout(() => process.exit(0), 30);
 }
 `,
   );
@@ -1044,44 +985,21 @@ else {
   };
 }
 
-test("subprocess RPC waits for adapter handshake and filters role mutations", () => {
+test("interactive launch waits for the adapter handshake and fails closed without it", () => {
   const f = fixture();
   try {
-    const commands = [
-      { id: "state", type: "get_state" },
-      {
-        id: "model",
-        type: "set_model",
-        provider: contract.provider,
-        modelId: "other",
-      },
-      { id: "effort", type: "set_thinking_level", level: "high" },
-      { id: "bash", type: "bash", command: "touch should-not-exist" },
-    ];
     const result = spawnSync(process.execPath, [f.launcher, ...baseArgs], {
       env: f.env,
-      input: `${commands.map((v) => JSON.stringify(v)).join("\n")}\n`,
       encoding: "utf8",
       timeout: 5000,
     });
     assert.equal(result.status, 0, result.stderr);
-    const output = result.stdout
-      .trim()
-      .split("\n")
-      .map((v) => JSON.parse(v));
-    assert.deepEqual(
-      output.filter((v) => v.received).map((v) => v.received.id),
-      ["state"],
-    );
-    assert.equal(output.filter((v) => v.success === false).length, 3);
     const missing = spawnSync(process.execPath, [f.launcher, ...baseArgs], {
       env: { ...f.env, FAKE_PI_MODE: "no-handshake" },
-      input: '{"type":"prompt","message":"must not run"}\n',
       encoding: "utf8",
       timeout: 5000,
     });
     assert.equal(missing.status, 78, missing.stderr);
-    assert.equal(missing.stdout, "");
     assert.match(missing.stderr, /without mandatory adapter/u);
     rmSync(join(f.root, "hooks/pi/enforcement.ts"));
     const absent = spawnSync(process.execPath, [f.launcher, ...baseArgs], {
@@ -1105,14 +1023,14 @@ test("Paseo MCP config reaches the pinned adapter only for nonreview roles", () 
       ["--mcp-config", "/tmp/paseo mcp.json"],
       ["--mcp-config=/tmp/paseo mcp.json"],
     ]) {
-      const result = launchArguments([...fixed, "--mode", "rpc", ...tail]);
+      const result = launchArguments([...fixed, ...tail]);
       const index = result.args.indexOf("--mcp-config");
       assert.notEqual(index, -1);
       assert.equal(result.args[index + 1], "/tmp/paseo mcp.json");
       assert.ok(result.args.includes("npm:pi-mcp-adapter@7.0.0"));
     }
     assert.throws(
-      () => launchArguments([...fixed, "--mode", "rpc", "--mcp-config"]),
+      () => launchArguments([...fixed, "--mcp-config"]),
       /Missing value/,
     );
   }
@@ -1123,8 +1041,6 @@ test("Paseo MCP config reaches the pinned adapter only for nonreview roles", () 
         "openai-codex",
         "gpt-6.1-sol",
         "medium",
-        "--mode",
-        "rpc",
         "--mcp-config",
         "/tmp/mcp.json",
       ]),
@@ -1183,102 +1099,6 @@ test("adapter injects the canonical workflow section once and retains other prom
     else process.env.AX_PI_CONTRACT = savedContract;
     if (savedWorkflow === undefined) delete process.env.AX_PI_WORKFLOW_FILE;
     else process.env.AX_PI_WORKFLOW_FILE = savedWorkflow;
-    rmSync(f.root, { recursive: true, force: true });
-  }
-});
-
-test("installed Pi RPC loads the adapter and rejects model changes", {
-  skip: process.env.AX_PI_LIVE_RPC_TEST !== "1",
-}, async () => {
-  const f = fixture();
-  const child = spawn(
-    process.execPath,
-    [
-      f.launcher,
-      ...baseArgs,
-      "--offline",
-      "--no-session",
-      "--no-context-files",
-      "--no-skills",
-      "--no-prompt-templates",
-    ],
-    {
-      env: { ...process.env, PI_CODING_AGENT_DIR: join(f.root, "agent") },
-      stdio: ["pipe", "pipe", "pipe"],
-    },
-  );
-  try {
-    const responses: Record<string, unknown>[] = [];
-    let buffer = "";
-    let stderr = "";
-    child.stderr.on("data", (v) => {
-      stderr += v.toString();
-    });
-    await new Promise<void>((resolvePromise, reject) => {
-      const timer = setTimeout(
-        () => reject(new Error(`Pi RPC timeout: ${stderr}`)),
-        20_000,
-      );
-      child.on("exit", (code) => {
-        clearTimeout(timer);
-        reject(new Error(`Pi exited ${code}: ${stderr}`));
-      });
-      child.stdout.on("data", (data) => {
-        buffer += data.toString();
-        while (buffer.includes("\n")) {
-          const newline = buffer.indexOf("\n");
-          const line = buffer.slice(0, newline);
-          buffer = buffer.slice(newline + 1);
-          const response = JSON.parse(line);
-          if (response.type === "response") responses.push(response);
-          if (responses.length === 2) {
-            clearTimeout(timer);
-            resolvePromise();
-          }
-        }
-      });
-      child.stdin.write(
-        '{"id":"state","type":"get_state"}\n{"id":"change","type":"set_model","provider":"openai-codex","modelId":"wrong"}\n',
-      );
-    });
-    assert.equal(responses.find((v) => v.id === "change")?.success, false);
-    const state = responses.find((v) => v.id === "state") as {
-      data: { model: { id: string }; thinkingLevel: string };
-    };
-    assert.equal(state.data.model.id, contract.model);
-    assert.equal(state.data.thinkingLevel, "low");
-    const driftExtension = join(f.root, "drift.ts");
-    writeFileSync(
-      driftExtension,
-      'export default function(pi) { pi.on("session_start", () => pi.setThinkingLevel("high")); }',
-    );
-    const drift = spawnSync(
-      process.execPath,
-      [
-        f.launcher,
-        ...baseArgs,
-        "--offline",
-        "--no-session",
-        "--no-context-files",
-        "--no-skills",
-        "--no-prompt-templates",
-        "-e",
-        driftExtension,
-      ],
-      {
-        env: {
-          ...process.env,
-          PI_CODING_AGENT_DIR: join(f.root, "drift-agent"),
-        },
-        input: '{"type":"prompt","message":"must not reach inference"}\n',
-        encoding: "utf8",
-        timeout: 20_000,
-      },
-    );
-    assert.equal(drift.status, 78, drift.stderr);
-    assert.match(drift.stderr, /does not match the fixed role/u);
-  } finally {
-    child.kill();
     rmSync(f.root, { recursive: true, force: true });
   }
 });

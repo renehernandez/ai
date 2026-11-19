@@ -1,22 +1,20 @@
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cleanup } from "./paseo-workflow-cleanup.ts";
 import {
   digest,
+  hcVersion,
+  herdr,
   type Inspection,
-  inspectSession,
+  inspectTerminal,
   lastReply,
   lifecycle,
-  listWorkspaces,
-  matchingWorkspace,
   observe,
-  paseo,
-  paseoVersion,
   readProbe,
   readWorktree,
-  syncHeartbeat,
-  timeline,
+  receivedAssignment,
+  tickPrompt,
   type WorktreeReader,
 } from "./paseo-workflow-io.ts";
 import {
@@ -33,7 +31,6 @@ import {
   hostedBatch,
   type ImplementerReport,
   implementationCycle,
-  inFlight,
   initialize,
   type Lens,
   locked,
@@ -51,7 +48,7 @@ import {
   type Review,
   type Role,
   receipt,
-  requireCurrentReviewMode,
+  requireHerdrTransport,
   requireNoConflict,
   requireOrchestration,
   requireThat,
@@ -67,12 +64,16 @@ import {
   type WorktreeState,
   workers,
 } from "./paseo-workflow-state.ts";
+import {
+  loopStatus,
+  syncTicker,
+  type TickerStatus,
+} from "./paseo-workflow-ticker.ts";
 
 export { cleanup } from "./paseo-workflow-cleanup.ts";
 export {
-  paseo,
+  herdr,
   readWorktree,
-  syncHeartbeat,
   tickPrompt,
   type Worktree,
   type WorktreeReader,
@@ -80,154 +81,112 @@ export {
 export {
   assertActionGateDisposition,
   initialize,
-  routesFromConfig,
+  routesFromTable,
   type Transport,
   transition,
   type Workflow,
 } from "./paseo-workflow-state.ts";
+export {
+  loopStatus,
+  syncTicker,
+  tickerStep,
+} from "./paseo-workflow-ticker.ts";
 
-// A quiet session is idle, or closed by a daemon restart.
-function requireRoute(
-  state: Workflow,
-  role: Role,
-  agentId: string,
-  actual: Inspection,
-) {
+// The fixed launcher argv for a role; `hc get` must show exactly this program.
+function launchArgv(state: Workflow, role: Role, session: string | undefined) {
   const route = state.routes[role];
   requireThat(
-    actual.id === agentId &&
+    state.launcher && session,
+    "Launch needs the recorded launcher and session path",
+  );
+  return [
+    "node",
+    state.launcher,
+    role,
+    route.provider,
+    route.model,
+    route.thinking,
+    "--session",
+    session,
+  ];
+}
+// A verified terminal reports program status, sits in the workflow cwd, carries its labels, and runs the fixed route; callers check its lifecycle.
+function requireTerminal(
+  state: Workflow,
+  role: Role,
+  worker: Pick<Review, "agentId" | "session">,
+  actual: Inspection,
+) {
+  requireThat(
+    actual.id === worker.agentId &&
       actual.cwd === state.cwd &&
-      actual.provider === route.provider &&
-      actual.model === route.model &&
-      actual.thinking === route.thinking &&
-      lifecycle(actual.status) === "quiet" &&
-      !actual.archived &&
-      !actual.pendingPermissions.length,
-    "Session cwd, identity, route, effort or status differs from its verified route",
+      JSON.stringify(actual.argv) ===
+        JSON.stringify(launchArgv(state, role, worker.session)) &&
+      actual.reported &&
+      actual.labels["ax.workflow"] === state.workflowId &&
+      actual.labels["ax.role"] === role,
+    "Terminal cwd, identity, route, labels or status reporting differs from its verified launch",
   );
 }
 const launchInspection = (actual: Inspection) => ({
   cwd: actual.cwd,
-  provider: actual.provider,
-  model: actual.model,
-  thinking: actual.thinking,
+  argv: actual.argv,
   status: actual.status,
+  turn: actual.turn,
 });
 
-type WorkspaceOptions = {
-  workspaceId?: string;
-  registerWorkspace?: boolean;
-  projectId?: string;
-};
-export async function bindWorkspace(
+// Records the dispatching orchestrator's live terminal; workers start as its children in its Herdr space and tab.
+export async function bindOrchestrator(
   path: string,
-  input: WorkspaceOptions = {},
-  transport: Transport = paseo,
+  callerId: string | undefined,
+  transport: Transport = herdr,
 ) {
-  const state = JSON.parse(await readFile(path, "utf8")) as Workflow;
-  const cwd = resolve(state.cwd);
-  const requestedId = input.workspaceId ?? state.workspace?.id;
-  let binding = matchingWorkspace(
-    await listWorkspaces(transport),
-    cwd,
-    requestedId,
+  requireThat(
+    nonempty(callerId),
+    "Dispatch requires the caller's HC_TERMINAL_ID: run the orchestrator in a herdr-core terminal",
   );
-  if (!binding) {
-    requireThat(
-      input.registerWorkspace,
-      `No Paseo workspace exists for canonical cwd ${cwd}; explicit local registration is required`,
-    );
-    await locked(path, (current) => {
-      requireThat(
-        !current.workspaceRegistration,
-        "Workspace registration is already reserved or uncertain; inspect provider state",
-      );
-      current.workspaceRegistration = { status: "reserved", cwd };
-    });
-    const args = [
-      "workspace",
-      "create",
-      "--isolation",
-      "local",
-      "--path",
-      cwd,
-      ...(input.projectId ? ["--project", input.projectId] : []),
-      "--json",
-    ];
-    let returnedId: string | undefined;
-    try {
-      const created = JSON.parse(await transport(args, 60_000));
-      requireThat(
-        nonempty(created.workspaceId),
-        "Paseo workspace creation returned no identity",
-      );
-      returnedId = created.workspaceId;
-    } catch (error) {
-      await locked(path, (current) => {
-        current.workspaceRegistration = {
-          status: "uncertain",
-          cwd,
-          error: String(error),
-        };
-      });
-      const inspected = matchingWorkspace(await listWorkspaces(transport), cwd);
-      if (!inspected)
-        throw new Error(
-          `Workspace creation response is uncertain and no unique matching workspace was found: ${String(error)}`,
-        );
-      returnedId = inspected.id;
-    }
-    try {
-      binding = matchingWorkspace(
-        await listWorkspaces(transport),
-        cwd,
-        returnedId,
-      );
-      requireThat(binding, "Created workspace could not be verified");
-    } catch (error) {
-      await locked(path, (current) => {
-        current.workspaceRegistration = {
-          status: "uncertain",
-          cwd,
-          error: String(error),
-        };
-      });
-      throw error;
-    }
-  }
-  await locked(path, (current) => {
-    requireThat(resolve(current.cwd) === cwd, "Workflow cwd changed");
-    if (current.workspace)
-      requireThat(
-        current.workspace.id === binding.id && current.workspace.cwd === cwd,
-        "Workflow workspace binding changed",
-      );
-    current.workspace = binding;
-    delete current.workspaceRegistration;
+  const actual = await inspectTerminal(callerId, transport);
+  requireThat(
+    actual.id === callerId && actual.state === "live",
+    `Orchestrator terminal ${callerId} is not live`,
+  );
+  const labels = Object.fromEntries(
+    ["herdr.space", "herdr.tab"].flatMap((key) =>
+      nonempty(actual.labels[key]) ? [[key, actual.labels[key]]] : [],
+    ),
+  );
+  await locked(path, (state) => {
+    requireOrchestration(state);
+    state.orchestrator = { id: callerId, labels };
   });
-  return binding;
 }
 
-function launchArgs(state: Workflow, role: Role) {
-  const route = state.routes[role];
-  requireThat(state.workspace, "Verified workspace binding is required");
+function runArgs(state: Workflow, role: Role, worker: Review) {
+  requireThat(
+    state.orchestrator && worker.name,
+    "Dispatch requires a bound orchestrator terminal",
+  );
+  const labels = {
+    ...state.orchestrator.labels,
+    "ax.workflow": state.workflowId ?? "",
+    "ax.role": role,
+  };
   return [
     "run",
-    "--background",
+    "--bg",
     "--json",
-    "--provider",
-    route.provider,
-    "--model",
-    route.model,
-    "--thinking",
-    route.thinking,
-    "--workspace",
-    state.workspace.id,
+    "--name",
+    worker.name,
     "--cwd",
     state.cwd,
-    "--title",
-    `AX ${role}`,
-    "Start inertly. Do not read task files, edit, review, or launch workers. Wait for a verified follow-up assignment.",
+    "--parent",
+    state.orchestrator.id,
+    ...Object.entries(labels).flatMap(([key, value]) => [
+      "--label",
+      `${key}=${value}`,
+    ]),
+    "--",
+    ...launchArgv(state, role, worker.session),
   ];
 }
 async function launch(
@@ -238,29 +197,42 @@ async function launch(
   locate: (state: Workflow) => Review,
   transport: Transport,
 ) {
-  let state = JSON.parse(await readFile(path, "utf8")) as Workflow;
   const { degrades, retriesLaunchFailure } = capabilities[kind];
-  const body = `${prompt}\n\n${ordersBlock(state)}`;
+  const initial = await readState(path);
+  const body = `${prompt}\n\n${ordersBlock(initial)}`;
   const assignmentDigest = digest(body);
   const assignment = (
     await createSnapshots(path, {
       "assignment.md": `Assignment digest: ${assignmentDigest}\n\n${body}`,
     })
   )["assignment.md"];
-  await locked(path, (current) => {
-    Object.assign(locate(current), { assignment, assignmentDigest });
+  const state = await locked(path, (current) => {
+    const launches = (current.launches ?? 0) + 1;
+    const name = `ax-${role}-${current.workflowId?.slice(0, 4)}${launches}`;
+    current.launches = launches;
+    Object.assign(locate(current), {
+      assignment,
+      assignmentDigest,
+      name,
+      session: resolve(
+        current.scratch ?? dirname(path),
+        "sessions",
+        `${name}.jsonl`,
+      ),
+    });
+    return structuredClone(current);
   });
+  const reserved = locate(state);
   let sending = false;
   try {
-    await bindWorkspace(path, { workspaceId: state.workspace?.id }, transport);
-    state = JSON.parse(await readFile(path, "utf8")) as Workflow;
     const response = JSON.parse(
-      await transport(launchArgs(state, role), 60_000),
+      await transport(runArgs(state, role, reserved), 60_000),
     );
     requireThat(
-      nonempty(response.agentId),
-      "Paseo did not return an agent ID; inspect its state before recovery",
+      nonempty(response.address),
+      "herdr-core did not return a terminal address; inspect `hc ls` before recovery",
     );
+    const agentId: string = response.address;
     await locked(path, (current) => {
       const target = locate(current);
       requireThat(
@@ -270,49 +242,56 @@ async function launch(
       requireThat(
         !workers(current).some(
           ({ worker }) =>
-            worker !== target && worker.agentId === response.agentId,
+            worker !== target &&
+            (worker.agentId === agentId ||
+              worker.attempts?.some((item) => item.agentId === agentId)),
         ),
-        "Paseo reused a recorded session identity",
+        "herdr-core reused a recorded terminal address",
       );
-      Object.assign(target, {
-        agentId: response.agentId,
-        launchStatus: "identity-recorded",
-      });
+      Object.assign(target, { agentId, launchStatus: "identity-recorded" });
     });
     const waiting = JSON.parse(
       await observe(
         transport,
-        ["wait", "--json", "--timeout", "60", response.agentId],
+        ["wait", "--json", "--timeout", "60", agentId],
         70_000,
       ),
     );
     requireThat(
-      waiting.status === "idle" && waiting.agentId === response.agentId,
-      `Inert startup did not become idle: ${waiting.status}`,
+      waiting.status === "idle" && waiting.terminal === agentId,
+      `Inert startup did not become idle: ${waiting.status ?? waiting.reason}`,
     );
-    const actual = await inspectSession(response.agentId, transport);
-    requireRoute(state, role, response.agentId, actual);
-    const startupReply = await lastReply(response.agentId, transport);
-    const version = await paseoVersion(transport);
+    const actual = await inspectTerminal(agentId, transport);
+    requireTerminal(
+      state,
+      role,
+      { agentId, session: reserved.session },
+      actual,
+    );
+    requireThat(
+      lifecycle(actual) === "quiet" && actual.parent === state.orchestrator?.id,
+      `Terminal ${agentId} is not an idle child of orchestrator ${state.orchestrator?.id}`,
+    );
+    const version = await hcVersion(transport);
     await locked(path, (current) => {
       Object.assign(locate(current), {
         launchStatus: "verified",
-        startupReplySha256: digest(startupReply),
+        startupTurn: actual.turn,
         inspection: launchInspection(actual),
-        paseoVersion: version,
+        hcVersion: version,
         sentAt: new Date().toISOString(),
       });
     });
     sending = true;
-    // A zero exit means Paseo accepted the message; the body is recorded, never interpreted.
+    // A zero exit means herdr-core typed the line into the idle terminal; its output is recorded, never interpreted.
     const output = await transport(
       [
         "send",
-        response.agentId,
-        "--prompt-file",
-        assignment.path,
-        "--no-wait",
+        "--if",
+        "idle",
         "--json",
+        agentId,
+        `Assignment digest: ${assignmentDigest}. Your immutable assignment is ${assignment.path}; read all of it with read, including subsequent chunks, and follow it exactly.`,
       ],
       30_000,
     );
@@ -328,7 +307,7 @@ async function launch(
     });
   } catch (error) {
     if (sending) {
-      // Paseo may still have queued the message; only delivery evidence decides.
+      // herdr-core may still have typed the line; only delivery evidence decides.
       await locked(path, (current) => {
         Object.assign(locate(current), {
           status: "ambiguous",
@@ -338,8 +317,8 @@ async function launch(
       });
       return;
     }
-    const failed = locate(JSON.parse(await readFile(path, "utf8")));
-    // A reviewer or planner with a known identity that failed before send retries once in a fresh session.
+    const failed = locate(await readState(path));
+    // A reviewer or planner with a known identity that failed before send retries once in a fresh terminal.
     if (retriesLaunchFailure && failed.agentId && !failed.attempts?.length) {
       await stopQuietly(failed.agentId, transport);
       await locked(path, (current) => {
@@ -384,14 +363,13 @@ export async function dispatchReview(
     phase: Phase;
     artifactPath: string;
     head?: string;
-  } & WorkspaceOptions,
-  transport = paseo,
+  },
+  transport = herdr,
   worktree: WorktreeReader = readWorktree,
 ) {
   const phase = phaseOf(input.phase);
   const initial = JSON.parse(await readFile(path, "utf8")) as Workflow;
   requireOrchestration(initial);
-  await bindWorkspace(path, input, transport);
   const artifact = await readFile(input.artifactPath, "utf8");
   requireThat(
     nonempty(artifact),
@@ -537,8 +515,8 @@ function freshTarget(
 // Launches advisory planners on an orchestrator brief; consults never gate phase progression.
 export async function dispatchConsult(
   path: string,
-  input: { briefPath: string; planners?: string[] } & WorkspaceOptions,
-  transport: Transport = paseo,
+  input: { briefPath: string; planners?: string[] },
+  transport: Transport = herdr,
 ) {
   const requested = input.planners ?? plannerRoles;
   requireThat(
@@ -569,7 +547,6 @@ export async function dispatchConsult(
     nonempty(brief),
     "A nonempty orchestrator consult brief is required",
   );
-  await bindWorkspace(path, input, transport);
   const fingerprint = digest(JSON.stringify({ brief, planners }));
   const state = await locked(path, async (state) => {
     refuse(state);
@@ -717,7 +694,7 @@ export function parseConsult(text: string, fingerprint: string): Advice {
 async function stopQuietly(agentId: string | undefined, transport: Transport) {
   if (!agentId) return;
   try {
-    await transport(["stop", agentId], 30_000);
+    await transport(["kill", "--json", agentId], 30_000);
   } catch {
     /* The failed worker remains blocked even if stopping is unavailable. */
   }
@@ -736,11 +713,18 @@ async function recordCompletion(
   const worker = locate(state);
   let result: Partial<Review>;
   try {
-    requireThat(worker.agentId, "Running worker has no session ID");
-    requireRoute(state, role, worker.agentId, actual);
-    const report = await lastReply(worker.agentId, transport);
-    // A quiet worker still showing its inert startup reply has not begun the queued assignment.
-    if (digest(report) === worker.startupReplySha256) return "not-begun";
+    requireThat(worker.agentId, "Running worker has no terminal address");
+    requireTerminal(state, role, worker, actual);
+    const report = await lastReply(worker.session, transport);
+    // Without a readable reply, a quiet worker still at its startup turn has not begun; a later turn has not yet answered.
+    if (!report) {
+      requireThat(
+        lifecycle(actual) !== "ended" ||
+          actual.turn <= (worker.startupTurn ?? 0),
+        `Terminal ${worker.agentId} ended without a readable reply`,
+      );
+      return actual.turn > (worker.startupTurn ?? 0) ? "no-reply" : "not-begun";
+    }
     result = { status: "complete", ...(await interpret(report)) };
   } catch (error) {
     const { degrades } = capabilities[kind];
@@ -795,72 +779,18 @@ function recordReview(
     },
   );
 }
-export async function collectReviews(
-  path: string,
-  input: { phase: Phase },
-  transport = paseo,
-) {
-  const phase = phaseOf(input.phase);
-  const state = JSON.parse(await readFile(path, "utf8")) as Workflow;
-  requireCurrentReviewMode(state);
-  requireThat(
-    !state.orchestration,
-    "Orchestrated workflows record completions only through tick",
-  );
-  requireThat(!state.finished, "Workflow already finished");
-  const round = state.rounds[phase];
-  requireThat(round, "Review has not been dispatched");
-  await Promise.all(
-    reviewRoles[phase].map(async (role) => {
-      const review = round.reviews[role];
-      if (review.status !== "running") return;
-      let actual: Inspection;
-      try {
-        requireThat(review.agentId, "Running reviewer has no session ID");
-        const waiting = JSON.parse(
-          await transport(
-            [
-              "wait",
-              "--json",
-              "--timeout",
-              String(state.timeoutSeconds),
-              review.agentId,
-            ],
-            (state.timeoutSeconds + 10) * 1000,
-          ),
-        );
-        requireThat(
-          waiting.status === "idle" && waiting.agentId === review.agentId,
-          `Reviewer did not finish successfully: ${waiting.status}`,
-        );
-        actual = await inspectSession(review.agentId, transport);
-      } catch (error) {
-        await stopQuietly(review.agentId, transport);
-        await locked(path, (state) => {
-          Object.assign(roundOf(state, phase).reviews[role], {
-            status: "degraded",
-            error: String(error),
-          });
-        });
-        return;
-      }
-      await recordReview(path, state, phase, role, actual, transport);
-    }),
-  );
-}
 
 export async function handoff(
   path: string,
   input: {
     briefPath: string;
     planResolution: string;
-  } & WorkspaceOptions,
-  transport = paseo,
+  },
+  transport = herdr,
   worktree: WorktreeReader = readWorktree,
 ) {
   const initial = JSON.parse(await readFile(path, "utf8")) as Workflow;
   requireOrchestration(initial);
-  await bindWorkspace(path, input, transport);
   const brief = await readFile(input.briefPath, "utf8");
   requireThat(
     nonempty(brief) && nonempty(input.planResolution),
@@ -905,7 +835,10 @@ function implementerAssignment(opening: string, snapshots: string) {
   return `${opening} First read the complete immutable ${snapshots}, including subsequent chunks for large files. Stop if any snapshot is unavailable or unreadable; never substitute a changed original. Implement, run the named verification, and commit through native hooks. Issue one shell command per tool call, and never issue git mutations as parallel tool calls. End with a prose report of branch, head, commits, verification, deviations, and open risks, followed by exactly one final AX_REPORT_BEGIN JSON {"branch":"current branch","head":"full HEAD object ID: 40 hex characters, or 64 in SHA-256 repositories","commits":["sha subject"],"verification":["command and result"],"deviations":[],"risks":[]} AX_REPORT_END envelope, then stop. The runner verifies branch and head against the worktree; a missing, malformed, or mismatched envelope stops the workflow for the user. The orchestrator owns review dispatch, triage, publication, hosted follow-through, and any later repair; do not dispatch reviewers, start workers, push, publish, or merge.`;
 }
 
-function recoverableHandoff(state: Workflow, previousAgentId: string) {
+function recoverableHandoff(
+  state: Workflow,
+  previousAgentId: string,
+): state is Workflow & { handoff: NonNullable<Workflow["handoff"]> } {
   return (
     state.handoff?.agentId === previousAgentId &&
     (state.handoff.status === "running" || state.handoff.status === "failed") &&
@@ -920,7 +853,7 @@ function recoverableHandoff(state: Workflow, previousAgentId: string) {
 
 export async function retryMisroutedHandoff(
   path: string,
-  input: WorkspaceOptions & {
+  input: {
     previousAgentId: string;
     authorizationSource: string;
     branch: string;
@@ -928,7 +861,7 @@ export async function retryMisroutedHandoff(
     dirtyStatus: string[];
     noWritesEvidence: string;
   },
-  transport: Transport = paseo,
+  transport: Transport = herdr,
 ) {
   requireThat(
     nonempty(input.previousAgentId) &&
@@ -951,30 +884,25 @@ export async function retryMisroutedHandoff(
     !state.handoffRecovery,
     "Handoff recovery is already reserved; inspect the recorded attempt",
   );
-  requireThat(
-    recoverableHandoff(state, input.previousAgentId),
-    "Only an unused known implementation handoff is recoverable",
-  );
-  for (const snapshot of [state.handoff.brief, state.handoff.planResolution]) {
+  if (!recoverableHandoff(state, input.previousAgentId))
+    throw new Error(
+      "Only an unused known implementation handoff is recoverable",
+    );
+  const { handoff } = state;
+  for (const snapshot of [handoff.brief, handoff.planResolution]) {
     const content = await readFile(snapshot.path, "utf8");
     requireThat(
       digest(content) === snapshot.sha256,
       "Immutable handoff snapshot is missing or changed",
     );
   }
-  const actual = JSON.parse(
-    await transport(["inspect", "--json", input.previousAgentId], 30_000),
-  );
-  const route = state.routes.implementer;
+  const actual = await inspectTerminal(input.previousAgentId, transport);
   requireThat(
-    actual.Id === input.previousAgentId &&
-      actual.Status === "idle" &&
-      actual.Cwd !== state.cwd &&
-      actual.Provider === route.provider &&
-      actual.Model === route.model &&
-      actual.Thinking === route.thinking &&
-      !actual.Archived &&
-      !actual.PendingPermissions?.length,
+    actual.id === input.previousAgentId &&
+      lifecycle(actual) === "quiet" &&
+      actual.cwd !== state.cwd &&
+      JSON.stringify(actual.argv) ===
+        JSON.stringify(launchArgv(state, "implementer", handoff.session)),
     "Original handoff is not an inactive verified misroute",
   );
   const {
@@ -989,14 +917,13 @@ export async function retryMisroutedHandoff(
         JSON.stringify([...input.dirtyStatus].sort()),
     "Recovery target branch, head, or dirty inventory drifted",
   );
-  await bindWorkspace(path, input, transport);
   const shouldLaunch = await locked(path, (current) => {
     if (current.handoffRecovery?.previousAgentId === input.previousAgentId)
       return false;
-    requireThat(
-      recoverableHandoff(current, input.previousAgentId),
-      "Handoff eligibility changed before recovery reservation",
-    );
+    if (!recoverableHandoff(current, input.previousAgentId))
+      throw new Error(
+        "Handoff eligibility changed before recovery reservation",
+      );
     current.history ??= [];
     const previous = structuredClone(current.handoff);
     current.history.push({
@@ -1013,13 +940,7 @@ export async function retryMisroutedHandoff(
       failedHandoff: {
         previousAgentId: input.previousAgentId,
         error: "Known session launched outside the accepted canonical cwd",
-        inspection: {
-          cwd: actual.Cwd,
-          provider: actual.Provider,
-          model: actual.Model,
-          thinking: actual.Thinking,
-          status: actual.Status,
-        },
+        inspection: launchInspection(actual),
         authorizationSource: input.authorizationSource,
         target: {
           cwd: current.cwd,
@@ -1085,7 +1006,7 @@ export async function adopt(
     head: string;
     authorizationSource?: string;
   },
-  transport: Transport = paseo,
+  transport: Transport = herdr,
   worktree: WorktreeReader = readWorktree,
 ) {
   requireThat(
@@ -1132,13 +1053,15 @@ export async function adopt(
       nonempty(input.authorizationSource),
     "Both conflicted sessions reported the worktree head; adopt needs an authorizationSource naming the user's choice",
   );
-  const actual = await inspectSession(input.agentId, transport);
-  requireRoute(state, "implementer", input.agentId, actual);
-  const reply = await lastReply(input.agentId, transport);
+  const actual = await inspectTerminal(input.agentId, transport);
+  requireTerminal(state, "implementer", attempt, actual);
+  // An ended terminal can write nothing further, so its recorded reply is as final as an idle one's.
   requireThat(
-    digest(reply) !== attempt.startupReplySha256,
-    "The session still shows its startup reply",
+    ["quiet", "ended"].includes(lifecycle(actual)),
+    "The session is not quiet; adopt waits for it",
   );
+  const reply = await lastReply(attempt.session, transport);
+  requireThat(nonempty(reply), "The session has no reply yet");
   const report = await verifiedReport(reply, state.cwd, worktree);
   requireThat(
     report.branch === input.branch && report.head === input.head,
@@ -1199,7 +1122,7 @@ export async function adopt(
 export async function retryLaunch(
   path: string,
   input: { worker: string; agentId: string; authorizationSource?: string },
-  transport: Transport = paseo,
+  transport: Transport = herdr,
   worktree: WorktreeReader = readWorktree,
   now = Date.now,
 ) {
@@ -1282,7 +1205,7 @@ export async function dispatchRepair(
     briefPath: string;
     targetBase?: string;
   },
-  transport: Transport = paseo,
+  transport: Transport = herdr,
   worktree: WorktreeReader = readWorktree,
 ) {
   requireThat(
@@ -1384,93 +1307,6 @@ function hostedOutput(
   return output;
 }
 
-export async function monitor(
-  path: string,
-  input: { probeCommand: string[]; deadlineMs?: number; pollMs?: number },
-  probe: Transport = readProbe,
-  sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms)),
-  now = Date.now,
-) {
-  requireThat(
-    Array.isArray(input.probeCommand) &&
-      input.probeCommand.length > 0 &&
-      input.probeCommand.every(nonempty),
-    "Finish-owned read-only probe argv required",
-  );
-  const deadlineMs = input.deadlineMs ?? 30 * 60_000;
-  const pollMs = input.pollMs ?? 15_000;
-  requireThat(
-    Number.isInteger(deadlineMs) &&
-      deadlineMs > 0 &&
-      deadlineMs <= 3_600_000 &&
-      Number.isInteger(pollMs) &&
-      pollMs > 0 &&
-      pollMs <= 60_000,
-    "Monitor deadline must be <=1h and polling <=60s",
-  );
-  const { publication, policy } = await locked(path, (state) => {
-    requireCurrentReviewMode(state);
-    requireThat(
-      !state.orchestration,
-      "Orchestrated workflows probe hosted gates only through tick",
-    );
-    requireThat(!state.finished, "Workflow already finished");
-    requireThat(
-      state.publication && !state.hosted,
-      "Monitor requires publication and may run only once",
-    );
-    requireThat(
-      state.deliveryPolicy?.ci === "required" ||
-        state.deliveryPolicy?.reviewer === "required",
-      "Hosted monitor is not required by delivery policy",
-    );
-    state.hosted = { ...state.publication, status: "waiting", findings: [] };
-    return { publication: state.publication, policy: state.deliveryPolicy };
-  });
-  const deadline = now() + deadlineMs;
-  while (now() < deadline) {
-    try {
-      const output = hostedOutput(
-        JSON.parse(
-          await probe(input.probeCommand, Math.min(30_000, deadline - now())),
-        ),
-        publication,
-        policy,
-      );
-      await locked(path, (state) => {
-        state.hosted = output;
-      });
-      if (output.status !== "waiting") return output;
-    } catch (error) {
-      return locked(path, (state) => {
-        state.hosted = {
-          ...publication,
-          ready: null,
-          status: "failed",
-          findings: [],
-          evidence: String(error),
-        };
-        return state.hosted;
-      });
-    }
-    await sleep(Math.min(pollMs, Math.max(0, deadline - now())));
-  }
-  return locked(path, (state) => {
-    state.hosted = {
-      ...publication,
-      status: "timed-out",
-      findings: [],
-      evidence: "Hosted monitor deadline elapsed; no pass inferred",
-    };
-    return state.hosted;
-  });
-}
-
-export function loopStatus(state: Workflow, now = Date.now) {
-  if (!state.heartbeat) return inFlight(state).length ? "unarmed" : "idle";
-  return Date.parse(state.heartbeat.expiresAt) <= now() ? "expired" : "armed";
-}
-
 async function probeHosted(path: string, probe: Transport, now: () => number) {
   const state = JSON.parse(await readFile(path, "utf8")) as Workflow;
   const { hostedMonitor, publication } = state;
@@ -1514,8 +1350,8 @@ async function probeHosted(path: string, probe: Transport, now: () => number) {
 // Records finished workers and one hosted probe without blocking or dispatching, then names the next step.
 export async function tick(
   path: string,
-  input: { agentId?: string },
-  transport: Transport = paseo,
+  input: { terminalId?: string },
+  transport: Transport = herdr,
   probe: Transport = readProbe,
   now = Date.now,
   worktree: WorktreeReader = readWorktree,
@@ -1560,16 +1396,16 @@ export async function tick(
       };
       let actual: Inspection;
       try {
-        actual = await inspectSession(worker.agentId, transport);
+        actual = await inspectTerminal(worker.agentId, transport);
       } catch (error) {
-        // Reviewers and planners degrade as collect did; an implementer stays in flight so a transient error cannot fail it.
+        // Reviewers and planners degrade; an implementer stays in flight so a transient error cannot fail it.
         if (can.degrades) await degrade(String(error));
         else recorded.push(`${name}: inspect failed: ${String(error)}`);
         return;
       }
       const elapsed = now() - Date.parse(worker.releasedAt ?? "");
       const timedOut = elapsed > state.timeoutSeconds * 1000;
-      const activity = lifecycle(actual.status);
+      const activity = lifecycle(actual);
       if (activity === "active") {
         if (can.degrades && timedOut)
           await degrade(
@@ -1601,8 +1437,16 @@ export async function tick(
                     report: await verifiedReport(text, state.cwd, worktree),
                   }),
             );
+      // A finished turn whose reply is not yet readable stays in flight; a reviewer or planner past the timeout degrades.
+      if (done === "no-reply") {
+        if (can.degrades && timedOut)
+          await degrade(
+            `${kind === "consult" ? "Planner" : "Reviewer"} wrote no readable reply within the ${state.timeoutSeconds}s timeout`,
+          );
+        return;
+      }
       if (done === "not-begun") {
-        // A released worker still at its startup reply past the timeout needs a delivery decision.
+        // A released worker still at its startup turn past the timeout needs a delivery decision.
         if (timedOut) {
           const line = await settleDelivery(
             path,
@@ -1625,8 +1469,14 @@ export async function tick(
   );
   if (await probeHosted(path, probe, now))
     recorded.push(`hosted: ${(await readState(path)).hosted?.status}`);
-  const heartbeat = await syncHeartbeat(path, input, transport, now);
-  return { ...nextStep(await readState(path), now()), recorded, heartbeat };
+  const ticker = await syncTicker(
+    path,
+    input.terminalId,
+    transport,
+    (current) => tickPrompt(path, current),
+    now,
+  );
+  return { ...nextStep(await readState(path), now()), recorded, ticker };
 }
 
 const locator = (name: string) => (current: Workflow) => {
@@ -1640,20 +1490,20 @@ async function evaluateDelivery(
   transport: Transport,
   now: number,
 ) {
-  requireThat(worker.agentId, "Delivery evaluation needs a session ID");
-  const actual = await inspectSession(worker.agentId, transport);
+  requireThat(worker.agentId, "Delivery evaluation needs a terminal address");
+  const actual = await inspectTerminal(worker.agentId, transport);
   const received =
     nonempty(worker.assignmentDigest) &&
-    (await timeline(worker.agentId, transport)).includes(
+    (await receivedAssignment(
+      worker.session,
       worker.assignmentDigest,
-    );
-  const reply = await lastReply(worker.agentId, transport);
+      transport,
+    ));
   return deliveryVerdict(
     {
-      lifecycle: lifecycle(actual.status),
-      archived: actual.archived,
+      lifecycle: lifecycle(actual),
       received,
-      startupReply: digest(reply) === worker.startupReplySha256,
+      turnAdvanced: actual.turn > (worker.startupTurn ?? actual.turn),
     },
     worker.sentAt ?? worker.releasedAt,
     state.timeoutSeconds,
@@ -1721,7 +1571,7 @@ async function settleDelivery(
     Object.assign(target, {
       status: degraded ? "degraded" : "undelivered",
       error:
-        "Assignment was not delivered: the session stayed quiet at its startup reply past the queue window",
+        "Assignment was not delivered: the terminal stayed idle at its startup turn past the queue window",
     });
     return `${name}: ${degraded ? degradedLine(kind) : "undelivered"}`;
   });
@@ -1741,9 +1591,11 @@ async function watchSuperseded(
       !attempt.assignmentDigest
     )
       continue;
-    const received = await timeline(attempt.agentId, transport)
-      .then((text) => text.includes(attempt.assignmentDigest ?? ""))
-      .catch(() => false);
+    const received = await receivedAssignment(
+      attempt.session,
+      attempt.assignmentDigest,
+      transport,
+    ).catch(() => false);
     if (!received) continue;
     return locked(path, (current) => {
       const target = locator(name)(current);
@@ -1768,23 +1620,29 @@ async function observeConflict(
   const worker = locator(name)(state);
   if (worker.conflictReports) return undefined;
   const sessions = [
-    worker.agentId,
-    ...(worker.attempts ?? [])
-      .filter((attempt) => attempt.status === "conflict")
-      .map((attempt) => attempt.agentId),
-  ].filter(nonempty);
+    worker,
+    ...(worker.attempts ?? []).filter(
+      (attempt) => attempt.status === "conflict",
+    ),
+  ].filter((attempt) => nonempty(attempt.agentId));
   try {
-    for (const id of sessions)
-      if (lifecycle((await inspectSession(id, transport)).status) !== "quiet")
+    for (const { agentId } of sessions)
+      if (
+        lifecycle(await inspectTerminal(agentId ?? "", transport)) !== "quiet"
+      )
         return undefined;
   } catch (error) {
     return `${name}: conflict inspect failed: ${String(error)}`;
   }
   const reports: string[] = [];
-  for (const id of sessions)
+  for (const { agentId, session } of sessions)
     try {
-      await verifiedReport(await lastReply(id, transport), state.cwd, worktree);
-      reports.push(id);
+      await verifiedReport(
+        await lastReply(session, transport),
+        state.cwd,
+        worktree,
+      );
+      reports.push(agentId ?? "");
     } catch {
       /* A missing or mismatched report does not count toward the gate. */
     }
@@ -1820,7 +1678,7 @@ function compactResult(
   action: string,
   before: Workflow | undefined,
   after: Workflow,
-  heartbeat: Workflow["heartbeat"],
+  ticker: TickerStatus | undefined,
 ) {
   const keys = new Set([
     ...Object.keys(before ?? {}),
@@ -1828,7 +1686,8 @@ function compactResult(
   ]) as Set<keyof Workflow>;
   const recorded = [...keys].filter(
     (key) =>
-      key !== "heartbeat" &&
+      key !== "ticker" &&
+      key !== "tickerGenerations" &&
       JSON.stringify(before?.[key]) !== JSON.stringify(after[key]),
   );
   const previous = new Map(
@@ -1872,61 +1731,83 @@ function compactResult(
       ...(order ? { order } : {}),
     },
     ...(after.orchestration ? nextStep(after) : {}),
-    heartbeat,
+    ...(ticker ? { ticker } : {}),
   };
 }
 
-export async function main(args: string[], env = process.env) {
+// Actions that launch terminals; each records the caller's terminal as the workers' parent.
+const dispatchActions = new Set([
+  "review",
+  "consult",
+  "handoff",
+  "retry-handoff",
+  "retry-launch",
+  "repair",
+]);
+export async function main(
+  args: string[],
+  env = process.env,
+  transport: Transport = herdr,
+) {
   const [path, action, inputPath] = args;
   requireThat(
     path && action,
     "Usage: paseo-workflow.ts STATE ACTION [INPUT.json]",
   );
   const input = inputPath ? JSON.parse(await readFile(inputPath, "utf8")) : {};
-  const orchestrated =
-    action === "init" || (await readState(path)).orchestration !== undefined;
   if (action === "status") {
     const state = await readState(path);
-    if (state.orchestration && loopStatus(state) === "expired")
-      process.stderr.write(
-        `Orchestrator heartbeat expired at ${state.heartbeat?.expiresAt}; the next dispatch or tick re-arms it.\n`,
-      );
+    if (state.transport === "herdr-core") {
+      const loop = loopStatus(state);
+      if (loop === "expired" || loop === "unarmed")
+        process.stderr.write(
+          `Ticker chain ${loop === "expired" ? `expired at ${state.ticker?.expiresAt}` : "is not armed while work is in flight"}; the next dispatch or tick re-arms it.\n`,
+        );
+    }
     process.stdout.write(`${JSON.stringify(state, null, 2)}\n`);
     return;
   }
-  if (orchestrated) requireOrchestratorCaller(env);
-  const caller = { agentId: env.PASEO_AGENT_ID };
+  requireOrchestratorCaller(env);
+  if (action !== "init") requireHerdrTransport(await readState(path));
+  const caller = { terminalId: env.HC_TERMINAL_ID };
+  if (
+    dispatchActions.has(action) &&
+    (action !== "repair" || input.stage === "start")
+  )
+    await bindOrchestrator(path, caller.terminalId, transport);
   if (action === "tick") {
     process.stdout.write(
-      `${JSON.stringify({ action, ...(await tick(path, caller)) })}\n`,
+      `${JSON.stringify({ action, ...(await tick(path, caller, transport)) })}\n`,
     );
     return;
   }
   // Cleanup deletes the state with its scratch folder, so its receipt is the whole result line.
   if (action === "cleanup") {
     process.stdout.write(
-      `${JSON.stringify({ action, ...(await cleanup(path, input, caller)) })}\n`,
+      `${JSON.stringify({ action, ...(await cleanup(path, input, { ...caller, cwd: process.cwd() }, transport)) })}\n`,
     );
     return;
   }
   const before = action === "init" ? undefined : await readState(path);
   if (action === "init") await initialize(path, input);
-  else if (action === "review") await dispatchReview(path, input);
-  else if (action === "consult") await dispatchConsult(path, input);
-  else if (action === "collect") await collectReviews(path, input);
-  else if (action === "handoff") await handoff(path, input);
-  else if (action === "retry-handoff") await retryMisroutedHandoff(path, input);
-  else if (action === "adopt") await adopt(path, input);
-  else if (action === "retry-launch") await retryLaunch(path, input);
-  else if (action === "monitor") await monitor(path, input);
-  else if (action === "repair" && orchestrated && input.stage === "start")
-    await dispatchRepair(path, input);
+  else if (action === "review") await dispatchReview(path, input, transport);
+  else if (action === "consult") await dispatchConsult(path, input, transport);
+  else if (action === "handoff") await handoff(path, input, transport);
+  else if (action === "retry-handoff")
+    await retryMisroutedHandoff(path, input, transport);
+  else if (action === "adopt") await adopt(path, input, transport);
+  else if (action === "retry-launch") await retryLaunch(path, input, transport);
+  else if (action === "repair" && input.stage === "start")
+    await dispatchRepair(path, input, transport);
   else await transition(path, action, input);
-  const heartbeat = orchestrated
-    ? await syncHeartbeat(path, caller)
-    : undefined;
+  const ticker = await syncTicker(
+    path,
+    caller.terminalId,
+    transport,
+    (current) => tickPrompt(path, current),
+  );
   process.stdout.write(
-    `${JSON.stringify(compactResult(action, before, await readState(path), heartbeat))}\n`,
+    `${JSON.stringify(compactResult(action, before, await readState(path), ticker))}\n`,
   );
 }
 if (

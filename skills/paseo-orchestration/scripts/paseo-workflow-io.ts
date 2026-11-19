@@ -1,30 +1,40 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import {
-  inFlight,
-  locked,
   nonempty,
   ordersBlock,
-  requireThat,
   type Transport,
   type Workflow,
-  type WorkspaceBinding,
   type WorktreeState,
 } from "./paseo-workflow-state.ts";
 
-// Provider and Git access shared by the runner entrypoint and its cleanup action.
+// herdr-core and Git access shared by the runner entrypoint and its cleanup action.
 const execute = promisify(execFile);
-export const paseo: Transport = async (args, timeout, env) =>
-  (
-    await execute("paseo", args, {
-      timeout,
-      maxBuffer: 8 * 1024 * 1024,
-      ...(env ? { env: { ...process.env, ...env } } : {}),
-    })
-  ).stdout;
+// Session JSONL lives on this machine; reading it goes through the transport seam so a scripted fake can serve it.
+export const sessionCommand = "session-jsonl";
+async function readSessionFile(path: string) {
+  try {
+    return await readFile(path, "utf8");
+  } catch (error) {
+    // Pi creates the file with the first entry it writes; a missing file holds no reply yet.
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "";
+    throw error;
+  }
+}
+export const herdr: Transport = async (args, timeout, env) =>
+  args[0] === sessionCommand
+    ? readSessionFile(args[1])
+    : (
+        await execute("hc", args, {
+          timeout,
+          maxBuffer: 8 * 1024 * 1024,
+          ...(env ? { env: { ...process.env, ...env } } : {}),
+        })
+      ).stdout;
 export const readProbe: Transport = async (args, timeout) =>
   (
     await execute(args[0], args.slice(1), {
@@ -50,66 +60,141 @@ export async function observe(
     }
   }
 }
-export async function paseoVersion(transport: Transport) {
-  return (await observe(transport, ["--version"], 30_000)).trim();
+export async function hcVersion(transport: Transport) {
+  return (await observe(transport, ["-V"], 30_000)).trim();
 }
 export type Inspection = {
   id: string;
   cwd: string;
-  provider: string;
-  model: string;
-  thinking: string;
-  status: string;
-  archived: boolean;
-  pendingPermissions: unknown[];
+  argv: string[];
+  state: string;
+  // Pi's reported program status; null until the terminal confirms status reporting.
+  status: string | null;
+  turn: number;
+  reported: boolean;
+  parent: string | null;
+  labels: Record<string, string>;
 };
-// Decodes only the stable inspect fields and fails closed, naming the field and Paseo version.
-export async function inspectSession(
-  agentId: string,
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+// Decodes only the required `hc get` fields and fails closed, naming the field and the herdr-core version.
+export async function inspectTerminal(
+  id: string,
   transport: Transport,
 ): Promise<Inspection> {
   const raw = JSON.parse(
-    await observe(transport, ["inspect", "--json", agentId], 30_000),
+    await observe(transport, ["get", "--json", id], 30_000),
   );
-  const fields = {
-    id: ["Id", nonempty],
-    cwd: ["Cwd", nonempty],
-    provider: ["Provider", nonempty],
-    model: ["Model", nonempty],
-    thinking: ["Thinking", nonempty],
-    status: ["Status", nonempty],
-    archived: ["Archived", (value: unknown) => typeof value === "boolean"],
-    pendingPermissions: ["PendingPermissions", Array.isArray],
-  } as const;
-  for (const [field, valid] of Object.values(fields))
-    if (!valid(raw?.[field])) {
-      const version = await paseoVersion(transport).catch(() => "unknown");
+  const fields: [string, (value: unknown) => boolean][] = [
+    ["address", nonempty],
+    ["cwd", nonempty],
+    ["argv", (value) => Array.isArray(value) && value.every(nonempty)],
+    ["state", nonempty],
+    [
+      "status",
+      (value) => value === null || nonempty(isRecord(value) && value.state),
+    ],
+    ["turn", Number.isInteger],
+    ["reported", (value) => typeof value === "boolean"],
+    ["parent", (value) => value === null || nonempty(value)],
+    ["labels", isRecord],
+  ];
+  for (const [field, valid] of fields)
+    if (!isRecord(raw) || !(field in raw) || !valid(raw[field])) {
+      const version = await hcVersion(transport).catch(() => "unknown");
       throw new Error(
-        `Paseo ${version} inspect output lacks required field ${field}`,
+        `herdr-core ${version} get output lacks required field ${field}`,
       );
     }
-  return Object.fromEntries(
-    Object.entries(fields).map(([key, [field]]) => [key, raw[field]]),
-  ) as Inspection;
+  return {
+    id: raw.address,
+    cwd: raw.cwd,
+    argv: raw.argv,
+    state: raw.state,
+    status: raw.status?.state ?? null,
+    turn: raw.turn,
+    reported: raw.reported,
+    parent: raw.parent,
+    labels: raw.labels,
+  };
 }
-export function lifecycle(status: string) {
-  if (status === "initializing" || status === "running") return "active";
-  if (status === "idle" || status === "closed") return "quiet";
-  return status === "error" ? "errored" : "unknown";
+// A blocked program waits on a person's dialog, so it counts as still working.
+export function lifecycle(actual: Inspection) {
+  if (actual.state !== "live") return "ended";
+  if (actual.status === "working" || actual.status === "blocked")
+    return "active";
+  if (actual.status === "idle" || actual.status === "done") return "quiet";
+  return actual.status === "error" ? "errored" : "unknown";
 }
-export function lastReply(agentId: string, transport: Transport) {
-  return observe(
-    transport,
-    ["logs", "--filter", "assistant_message", "--tail", "1", agentId],
-    30_000,
+
+type SessionEntry = {
+  type?: string;
+  message?: {
+    role?: string;
+    content?: unknown;
+    stopReason?: string;
+    errorMessage?: string;
+  };
+};
+// An unparseable trailing line is a partial or cut-short write and is ignored; earlier damage fails closed.
+async function sessionEntries(path: string | undefined, transport: Transport) {
+  if (!path) return [];
+  const lines = (await observe(transport, [sessionCommand, path], 30_000))
+    .split("\n")
+    .filter((line) => line.trim());
+  return lines.flatMap((line, index): SessionEntry[] => {
+    try {
+      return [JSON.parse(line)];
+    } catch (error) {
+      if (index === lines.length - 1) return [];
+      throw new Error(
+        `Session ${path} line ${index + 1} is unreadable: ${error}`,
+      );
+    }
+  });
+}
+function messageText(content: unknown) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .filter((part) => part?.type === "text" && typeof part.text === "string")
+    .map((part) => part.text)
+    .join("");
+}
+const messagesOf = (entries: SessionEntry[], role: string) =>
+  entries.flatMap((entry) =>
+    entry.type === "message" && entry.message?.role === role
+      ? [entry.message]
+      : [],
+  );
+const messages = (entries: SessionEntry[], role: string) =>
+  messagesOf(entries, role).map((message) => messageText(message.content));
+// The last assistant message in the worker's session JSONL; empty until one is written. A turn that ended in a provider error throws.
+export async function lastReply(
+  session: string | undefined,
+  transport: Transport,
+) {
+  const last = messagesOf(
+    await sessionEntries(session, transport),
+    "assistant",
+  ).at(-1);
+  if (last?.stopReason === "error" || nonempty(last?.errorMessage))
+    throw new Error(
+      `Worker turn ended in error: ${last?.errorMessage ?? "no message"}`,
+    );
+  return last ? messageText(last.content) : "";
+}
+// Whether a user message in the session carries the assignment digest.
+export async function receivedAssignment(
+  session: string | undefined,
+  assignmentDigest: string,
+  transport: Transport,
+) {
+  return messages(await sessionEntries(session, transport), "user").some(
+    (text) => text.includes(assignmentDigest),
   );
 }
-// The session timeline, including each received prompt.
-export function timeline(agentId: string, transport: Transport) {
-  return observe(transport, ["logs", agentId], 30_000);
-}
 const runner = fileURLToPath(new URL("./paseo-workflow.ts", import.meta.url));
-const heartbeatLifetimeMs = 24 * 60 * 60_000;
 
 export type Worktree = WorktreeState;
 export type WorktreeReader = (cwd: string) => Promise<Worktree>;
@@ -135,122 +220,6 @@ export const readWorktree: WorktreeReader = async (cwd) => {
   };
 };
 
-export type WorkspaceRow = {
-  workspaceId: string;
-  cwd: string;
-  isolation?: string;
-  archived?: boolean;
-};
-
-export async function listWorkspaces(transport: Transport) {
-  const rows = JSON.parse(
-    await observe(transport, ["workspace", "ls", "--json"], 30_000),
-  );
-  requireThat(
-    Array.isArray(rows) &&
-      rows.every((row) => nonempty(row.workspaceId) && nonempty(row.cwd)),
-    "Paseo returned an invalid workspace list",
-  );
-  return rows as WorkspaceRow[];
-}
-export function matchingWorkspace(
-  rows: WorkspaceRow[],
-  cwd: string,
-  workspaceId?: string,
-): WorkspaceBinding | undefined {
-  const available = rows.filter((row) => !row.archived);
-  if (workspaceId) {
-    const row = available.find((item) => item.workspaceId === workspaceId);
-    requireThat(row, `Paseo workspace ${workspaceId} is missing or archived`);
-    requireThat(
-      resolve(row.cwd) === cwd,
-      `Paseo workspace ${workspaceId} does not match canonical cwd ${cwd}`,
-    );
-    return { id: row.workspaceId, cwd };
-  }
-  const matches = available.filter((row) => resolve(row.cwd) === cwd);
-  requireThat(
-    matches.length <= 1,
-    `Canonical cwd ${cwd} has ambiguous Paseo workspaces`,
-  );
-  return matches[0] ? { id: matches[0].workspaceId, cwd } : undefined;
-}
-
 export function tickPrompt(path: string, state: Workflow) {
   return `AX orchestration tick. Run \`node ${runner} ${resolve(path)} tick\` and take the next step it names in this turn. When the result is \`unchanged\`, end the turn with no user-visible message. Report to the user only on a completed phase, a new blocker, an open gate, or finish.\n\n${ordersBlock(state)}`;
-}
-
-async function deleteHeartbeat(
-  heartbeat: NonNullable<Workflow["heartbeat"]>,
-  transport: Transport,
-) {
-  try {
-    await transport(["heartbeat", "delete", heartbeat.id, "--json"], 30_000, {
-      PASEO_AGENT_ID: heartbeat.agentId,
-    });
-  } catch (error) {
-    // An expired or already deleted heartbeat is the desired end state.
-    if (!/not found/i.test(String(error))) throw error;
-  }
-}
-
-// Keeps one heartbeat on the caller while work is in flight, renewing it before half its lifetime passes.
-export async function syncHeartbeat(
-  path: string,
-  input: { agentId?: string },
-  transport: Transport = paseo,
-  now = Date.now,
-) {
-  return locked(path, async (state) => {
-    const current = state.heartbeat;
-    if (state.finished || !inFlight(state, now()).length) {
-      if (current) await deleteHeartbeat(current, transport);
-      delete state.heartbeat;
-      return undefined;
-    }
-    const agentId = input.agentId;
-    requireThat(
-      nonempty(agentId),
-      "Arming the orchestrator heartbeat requires the caller's PASEO_AGENT_ID",
-    );
-    const prompt = tickPrompt(path, state);
-    if (
-      current?.agentId === agentId &&
-      current.promptSha256 === digest(prompt) &&
-      Date.parse(current.expiresAt) - now() > heartbeatLifetimeMs / 2
-    )
-      return current;
-    const created = JSON.parse(
-      await transport(
-        [
-          "heartbeat",
-          "create",
-          "--cron",
-          "*/5 * * * *",
-          "--expires-in",
-          "24h",
-          "--name",
-          "ax-orchestrator-tick",
-          "--json",
-          prompt,
-        ],
-        30_000,
-        { PASEO_AGENT_ID: agentId },
-      ),
-    );
-    const target = String(created.target ?? "").replace(/^agent:/, "");
-    requireThat(
-      nonempty(created.id) && nonempty(target) && agentId.startsWith(target),
-      "Paseo heartbeat does not target the calling orchestrator session",
-    );
-    state.heartbeat = {
-      id: created.id,
-      agentId,
-      expiresAt: new Date(now() + heartbeatLifetimeMs).toISOString(),
-      promptSha256: digest(prompt),
-    };
-    // The replacement already exists; a stale predecessor expires on its own and extra ticks are idempotent.
-    if (current) await deleteHeartbeat(current, transport).catch(() => {});
-    return state.heartbeat;
-  });
 }

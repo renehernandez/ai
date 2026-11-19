@@ -4,13 +4,7 @@ import { accessSync, constants, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
-import {
-  allowedTools,
-  type Contract,
-  parseContract,
-  roles,
-  toolDenial,
-} from "./policy.ts";
+import { allowedTools, type Contract, parseContract, roles } from "./policy.ts";
 
 const directory = dirname(fileURLToPath(import.meta.url));
 const mcpPackage = "npm:pi-mcp-adapter@7.0.0";
@@ -128,7 +122,6 @@ export function launchArguments(
 ): {
   contract: Contract;
   args: string[];
-  rpc: boolean;
 } {
   const [role, ...rest] = argv;
   if (!roles.includes(role))
@@ -140,7 +133,6 @@ export function launchArguments(
     "--thinking": [],
   };
   const args: string[] = [];
-  let rpc = false;
   const valueFlags = new Set([
     "--session",
     "--session-dir",
@@ -164,20 +156,13 @@ export function launchArguments(
       args.push(flag);
       continue;
     }
-    if (
-      flag !== "--mode" &&
-      !Object.hasOwn(requested, flag) &&
-      !valueFlags.has(flag)
-    )
+    // Managed Pi runs only interactively in a herdr-core terminal, so --mode is unsupported.
+    if (!Object.hasOwn(requested, flag) && !valueFlags.has(flag))
       throw new Error(`Unsupported managed Pi argument: ${flag}`);
     const value = equals < 0 ? tail[++i] : token.slice(equals + 1);
     if (!value || value.startsWith("--"))
       throw new Error(`Missing value for ${flag}`);
-    if (flag === "--mode") {
-      // Without --mode, managed Pi runs interactively in a herdr-core terminal.
-      if (value !== "rpc") throw new Error("Managed Pi supports only RPC mode");
-      rpc = true;
-    } else if (Object.hasOwn(requested, flag)) requested[flag].push(value);
+    if (Object.hasOwn(requested, flag)) requested[flag].push(value);
     else args.push(flag, value);
   }
   const { provider, model, thinking } = selectRoute(routes, requested);
@@ -188,7 +173,6 @@ export function launchArguments(
     thinking,
     nonce: randomUUID(),
   });
-  if (rpc) args.push("--mode", "rpc");
   args.push(
     "--provider",
     provider,
@@ -197,7 +181,7 @@ export function launchArguments(
     "--thinking",
     thinking,
     "--no-extensions",
-    // RPC mode has no UI and never trusts the project; interactive mode answers the trust prompt the same way.
+    // Managed sessions never trust the project, which also skips the interactive trust prompt.
     "--no-approve",
   );
   if (provider === "claude-bridge") args.push("-e", claudeBridgePackage);
@@ -208,29 +192,7 @@ export function launchArguments(
     "--tools",
     allowedTools(role).join(","),
   );
-  return { contract, args, rpc };
-}
-
-export function rpcDenial(
-  contract: Contract,
-  request: Record<string, unknown>,
-  cwd: string,
-): string | undefined {
-  if (
-    request.type === "set_model" &&
-    (request.provider !== contract.provider ||
-      request.modelId !== contract.model)
-  )
-    return "Model override rejected";
-  if (
-    request.type === "set_thinking_level" &&
-    request.level !== contract.thinking
-  )
-    return "Thinking override rejected";
-  if (["cycle_model", "cycle_thinking_level"].includes(String(request.type)))
-    return "Fixed role model and thinking cannot be cycled";
-  if (request.type === "bash")
-    return toolDenial(contract.role, "bash", { command: request.command }, cwd);
+  return { contract, args };
 }
 
 function prepare(argv: string[]) {
@@ -250,114 +212,9 @@ function prepare(argv: string[]) {
   return { ...launch, env };
 }
 
-export function launch(argv: string[]): void {
-  const prepared = prepare(argv);
-  if (!prepared.rpc) {
-    launchInteractive(prepared);
-    return;
-  }
-  const { contract, args, env } = prepared;
-  const child = spawn("pi", args, {
-    env,
-    stdio: ["pipe", "pipe", "pipe", "pipe"],
-  });
-  let ready = false;
-  let failed = false;
-  let pending = "";
-  let inputEnded = false;
-  const timer = setTimeout(
-    () => fail("Mandatory Pi adapter initialization timed out"),
-    60_000,
-  );
-  function fail(message: string): void {
-    if (failed) return;
-    failed = true;
-    clearTimeout(timer);
-    process.stderr.write(`${message}\n`);
-    child.kill("SIGTERM");
-    setTimeout(() => child.kill("SIGKILL"), 1000).unref();
-    process.exitCode = 78;
-    input.close();
-    process.stdin.pause();
-  }
-  function send(line: string): void {
-    let request: Record<string, unknown>;
-    try {
-      request = JSON.parse(line);
-      if (
-        !request ||
-        typeof request !== "object" ||
-        typeof request.type !== "string"
-      )
-        throw new Error("Invalid RPC request");
-    } catch {
-      fail("Invalid Pi RPC input");
-      return;
-    }
-    const denial = rpcDenial(contract, request, process.cwd());
-    if (denial) {
-      process.stdout.write(
-        `${JSON.stringify({ id: request.id, type: "response", command: request.type, success: false, error: denial })}\n`,
-      );
-      return;
-    }
-    child.stdin.write(`${line}\n`);
-  }
-  const input = createInterface({ input: process.stdin });
-  input.on("line", (line) => {
-    if (failed) return;
-    if (ready) send(line);
-    else {
-      pending += `${line}\n`;
-      if (pending.length > 4 * 1024 * 1024)
-        fail("Pi startup input exceeded limit");
-    }
-  });
-  input.on("close", () => {
-    inputEnded = true;
-    if (ready) child.stdin.end();
-  });
-  const handshake = child.stdio[3];
-  if (!handshake || !("readable" in handshake))
-    throw new Error("Pi handshake channel unavailable");
-  createInterface({ input: handshake }).on("line", (line) => {
-    if (failed) return;
-    try {
-      const message = JSON.parse(line);
-      if (message.ready !== true || message.nonce !== contract.nonce)
-        throw new Error("Invalid handshake");
-      ready = true;
-      clearTimeout(timer);
-      for (const queued of pending.trimEnd().split("\n"))
-        if (queued) send(queued);
-      pending = "";
-      if (inputEnded) child.stdin.end();
-    } catch {
-      fail("Mandatory Pi adapter initialization failed");
-    }
-  });
-  child.stdout.pipe(process.stdout);
-  child.stderr.pipe(process.stderr);
-  child.stdin.on("error", () => fail("Pi RPC input channel closed"));
-  child.on("error", () => fail("Could not start managed Pi"));
-  child.on("exit", (code, signal) => {
-    clearTimeout(timer);
-    if (!ready && !failed)
-      fail("Pi exited without mandatory adapter initialization");
-    process.exitCode = failed ? 78 : (code ?? (signal ? 1 : 0));
-    input.close();
-    process.stdin.pause();
-  });
-  for (const signal of ["SIGINT", "SIGTERM"] as const)
-    process.on(signal, () => child.kill(signal));
-}
-
 // Interactive Pi owns the herdr-core terminal; the launcher only enforces the adapter handshake and relays signals.
-function launchInteractive({
-  contract,
-  args,
-  env,
-}: ReturnType<typeof prepare>): void {
+export function launch(argv: string[]): void {
+  const { contract, args, env } = prepare(argv);
   const child = spawn("pi", args, {
     env,
     stdio: ["inherit", "inherit", "inherit", "pipe"],

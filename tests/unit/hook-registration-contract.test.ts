@@ -7,10 +7,12 @@ import {
   renderHookRegistrationDocument,
 } from "../../scripts/ax/hook-registration.ts";
 
-test("RED hook-registration: MCP and Pi runtime configuration, including the in-process Paseo dispatch, herdr-core and Herdr app allow-lists, tracked route table, orchestrator write, git, dependency, nested MCP, read-only reviewer, and no-shell, no-Paseo-MCP consult planner tool policies, agent shell discipline, and pinned package configs, are not hook targets", () => {
+test("RED hook-registration: MCP and Pi runtime configuration, including the in-process Paseo dispatch, herdr-core and Herdr app allow-lists, interactive-only launcher, herdr-core ticker, tracked route table, orchestrator write, git, dependency, nested MCP, read-only reviewer, and no-shell, no-Paseo-MCP consult planner tool policies, agent shell discipline, and pinned package configs, are not hook targets", () => {
   for (const target of ["claude", "codex"] as const)
     for (const path of [
       ".agents/hooks/pi/routes.json",
+      ".agents/hooks/pi/launch.ts",
+      ".agents/skills/paseo-orchestration/scripts/paseo-workflow-ticker.ts",
       ".pi/agent/extensions/herdr-core-policy.json",
       ".config/herdr-core/templates/ax-orchestrator.md",
     ])
@@ -215,5 +217,22 @@ test("GREEN hook-registration: registration renders the declared hook", () => {
       },
     }),
     /block-delete-outside-cwd/u,
+  );
+  // The interactive Pi launcher starts managed terminals; it is never rendered as a harness hook.
+  assert.doesNotMatch(
+    renderHookRegistrationDocument({
+      path: "/tmp/nonexistent-hook-registration-settings.json",
+      declaration: {
+        id: "block-delete-outside-cwd",
+        event: "PreToolUse",
+        matcher: "^Bash$",
+        command: "pnpm exec tsx ~/.agents/hooks/block-delete-outside-cwd.ts",
+        targets: {
+          claude: "~/.claude/settings.json",
+          codex: "~/.codex/hooks.json",
+        },
+      },
+    }),
+    /hooks\/pi\/launch\.ts|--mode/u,
   );
 });
