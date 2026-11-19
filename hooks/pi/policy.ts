@@ -127,6 +127,107 @@ export function findPaseoDispatch(command: string): string | undefined {
   return undefined;
 }
 
+// herdr-core and the Herdr app are default-deny: only these read-only forms run for managed roles.
+const herdrAllowed: Record<string, string[][]> = {
+  hc: [
+    ["ls"],
+    ["get"],
+    ["read"],
+    ["wait"],
+    ["events"],
+    ["templates"],
+    ["schema"],
+    ["machine", "ls"],
+    ["file", "read"],
+    ["server", "status"],
+    ["--help"],
+    ["--skill"],
+    ["-V"],
+  ],
+  "herdr-app": [
+    ["ls"],
+    ["status"],
+    ["commands"],
+    ["shot"],
+    ["--help"],
+    ["--skill"],
+    ["--version"],
+  ],
+};
+herdrAllowed["herdr-core"] = herdrAllowed.hc;
+// Command words of either CLI outside its allow-list; a variable executable followed by one could conceal it.
+const herdrDeniedWords = new Set([
+  "run",
+  "attach",
+  "kill",
+  "rm",
+  "label",
+  "keep",
+  "send",
+  "keys",
+  "interrupt",
+  "put",
+  "exec",
+  "file",
+  "server",
+  "update",
+  "machine",
+  "do",
+  "check",
+  "feedback",
+]);
+
+function herdrForm(words: ShellWord[]): string | undefined {
+  const { words: unwrapped, splitCommand } = unwrap(words);
+  if (splitCommand)
+    return splitCommand.dynamic
+      ? "<dynamic split command>"
+      : findHerdrDenial(splitCommand.value);
+  if (unwrapped.length === 0) return undefined;
+  const executable = basename(unwrapped[0].value);
+  // A variable executable such as `$H run` could conceal either CLI.
+  if (unwrapped[0].dynamic && /[$`]/u.test(executable)) {
+    const next = unwrapped[1];
+    return !next || next.dynamic || herdrDeniedWords.has(next.value)
+      ? `${unwrapped[0].value} ${next?.value || ""}`.trim()
+      : undefined;
+  }
+  if (SHELLS.has(executable)) {
+    const flag = unwrapped.findIndex((word) => isShellCommandFlag(word.value));
+    const nested = flag >= 0 ? unwrapped[flag + 1] : undefined;
+    if (!nested) return undefined;
+    return nested.dynamic
+      ? "<dynamic shell payload>"
+      : findHerdrDenial(nested.value);
+  }
+  const forms = herdrAllowed[executable];
+  if (!forms) return undefined;
+  const args = unwrapped.slice(1);
+  const allowed = forms.some(
+    (form) =>
+      form.length <= args.length &&
+      form.every(
+        (word, index) => !args[index].dynamic && args[index].value === word,
+      ) &&
+      // Global flags stand alone; subcommands accept their own arguments.
+      (!form[0].startsWith("-") || args.length === form.length),
+  );
+  if (allowed) return undefined;
+  const shown = args
+    .slice(0, 2)
+    .map((word) => word.value || "<dynamic>")
+    .join(" ");
+  return shown ? `${executable} ${shown}` : executable;
+}
+
+export function findHerdrDenial(command: string): string | undefined {
+  for (const words of tokenize(command)) {
+    const denied = herdrForm(words);
+    if (denied) return denied;
+  }
+  return undefined;
+}
+
 // Nested shell `-c` and `env -S` payloads are checked like the outer command; an uninspectable one counts as compound.
 function compoundPayload(words: ShellWord[]): boolean {
   const { words: unwrapped, splitCommand } = unwrap(words);
@@ -428,6 +529,9 @@ export function shellDenial(
   if (deletion) return `Deletion policy: ${deletion.detail}`;
   if (denyCompound && findCompoundCommand(command))
     return "Shell discipline (rules/command-and-tools.md): compound commands are denied; issue one command per tool call without `&&`, `||`, `;`, pipes, background `&`, subshells, command substitution, or newline-separated commands";
+  const herdr = findHerdrDenial(command);
+  if (herdr)
+    return `herdr-core policy: \`${herdr}\` is not on the managed allow-list; the workflow runner is the only dispatcher. Allowed: hc ls, get, read, wait, events, templates, schema, machine ls, file read, server status, --help, --skill, -V; herdr-app ls, status, commands, shot, --help, --skill, --version`;
   if (!orchestrator) return undefined;
   const mutation = findOrchestratorGitMutation(command);
   if (mutation)

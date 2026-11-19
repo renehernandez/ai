@@ -27,10 +27,10 @@ import {
 const orchestratorRoles = ["orchestrator", "planner"];
 const writeRoles = [...orchestratorRoles, "implementer"];
 const baseArgs = [
-  "review-astra",
+  "review-correctness",
   "openai-codex",
-  "gpt-6-astra",
-  "low",
+  "gpt-6.1-sol",
+  "medium",
   "--mode",
   "rpc",
 ];
@@ -46,9 +46,9 @@ test("managed arguments preserve Paseo extensions and enforce the fixed route", 
   const result = launchArguments([
     ...baseArgs,
     "--model",
-    "openai-codex/gpt-6-astra",
+    "openai-codex/gpt-6.1-sol",
     "--thinking",
-    "low",
+    "medium",
     "-e",
     "/tmp/paseo.ts",
     "--session",
@@ -62,15 +62,15 @@ test("managed arguments preserve Paseo extensions and enforce the fixed route", 
   assert.ok(!result.args.some((v) => v.includes("pi-mcp-adapter")));
   const implementation = launchArguments([
     "implementer",
-    "openai-codex",
-    "gpt-6.1-sol",
+    "claude-bridge",
+    "claude-opus-5-5",
     "medium",
     "--mode",
     "rpc",
   ]);
   assert.ok(implementation.args.includes("npm:pi-mcp-adapter@7.0.0"));
   for (const tail of [
-    ["--model", "gpt-6.1-sol"],
+    ["--model", "gpt-6-astra"],
     ["--thinking=high"],
     ["--provider", "anthropic"],
     ["--tools", "bash"],
@@ -81,7 +81,32 @@ test("managed arguments preserve Paseo extensions and enforce the fixed route", 
     assert.throws(() => launchArguments([...baseArgs, ...tail]));
   }
   assert.throws(() => launchArguments(["unknown", ...baseArgs.slice(1)]));
-  assert.throws(() => launchArguments(baseArgs.slice(0, 4)));
+  // Without --mode the launcher runs Pi interactively in a herdr-core terminal.
+  const interactive = launchArguments(baseArgs.slice(0, 4));
+  assert.equal(interactive.rpc, false);
+  assert.ok(!interactive.args.includes("--mode"));
+  assert.ok(interactive.args.includes("--no-approve"));
+  assert.equal(launchArguments(baseArgs).rpc, true);
+  assert.throws(
+    () =>
+      launchArguments([
+        "review-correctness",
+        "openai-codex",
+        "gpt-6.1-sol",
+        "high",
+      ]),
+    /differ from routes.json/,
+  );
+  assert.throws(
+    () =>
+      launchArguments(baseArgs, {
+        "review-correctness": {
+          label: "x",
+          routes: ["openai-codex/gpt-6.1-terra:medium"],
+        },
+      }),
+    /differ from routes.json/,
+  );
 });
 
 const orchestratorRoutes = [
@@ -570,6 +595,91 @@ test("pure Paseo help and global version requests stay available, but never hide
       );
 });
 
+test("herdr-core and the Herdr app are default-deny allow-lists for every managed role", () => {
+  const cwd = process.cwd();
+  const allowed = [
+    "hc ls --json",
+    "hc ls --all --label ax.workflow=w1",
+    "hc get --json t1",
+    "hc read --lines 40 t1",
+    "hc wait t1 --timeout 10",
+    "hc events",
+    "hc templates",
+    "hc schema",
+    "hc machine ls",
+    "hc file read t1 notes.md",
+    "hc server status",
+    "hc --help",
+    "hc --skill",
+    "hc -V",
+    "herdr-core get --json t1",
+    "~/.local/bin/hc ls",
+    '"$HOME/.local/bin/hc" get t1',
+    "env HC_SESSION=x hc ls",
+    "sh -c 'hc ls --json'",
+    "herdr-app ls",
+    "herdr-app status",
+    "herdr-app commands",
+    "herdr-app shot /tmp/frame.png",
+    "herdr-app --help",
+    "herdr-app --skill",
+    "herdr-app --version",
+    '"$EDITOR" notes.md',
+  ];
+  const denied = [
+    "hc",
+    "hc run --bg -- pi",
+    "hc send t1 hello",
+    "hc keys t1 Enter",
+    "hc interrupt t1",
+    "hc kill t1",
+    "hc rm t1",
+    "hc label t1 a=b",
+    "hc keep t1",
+    "hc put t1 x",
+    "hc exec t1 ls",
+    "hc attach t1",
+    "hc file write t1 notes.md",
+    "hc file edit t1 notes.md",
+    "hc server stop",
+    "hc server restart",
+    "hc update",
+    "hc machine add box",
+    "hc frobnicate",
+    "hc --session x ls",
+    "hc --help run",
+    "hc $SUB t1",
+    "herdr-core run -- pi",
+    "/Users/me/.local/bin/hc send t1 x",
+    '"$H" interrupt t1',
+    "$H kill t1",
+    "$H",
+    "env -S 'hc kill t1'",
+    "sh -c 'hc run -- pi'",
+    'sh -c "$PAYLOAD"',
+    "herdr-app",
+    "herdr-app do new-tab",
+    "herdr-app check mods/x",
+    "herdr-app feedback text",
+    "herdr-app --frob ls",
+    "herdr-app open",
+  ];
+  for (const role of writeRoles) {
+    for (const command of allowed)
+      assert.equal(
+        toolDenial(role, "bash", { command }, cwd, "user"),
+        undefined,
+        `${role}: ${command}`,
+      );
+    for (const command of denied)
+      assert.match(
+        toolDenial(role, "bash", { command }, cwd, "user") ?? "",
+        /^herdr-core policy: .*the workflow runner is the only dispatcher/u,
+        `${role}: ${command}`,
+      );
+  }
+});
+
 test("write roles are denied compound shell commands, including nested shell payloads", () => {
   for (const command of [
     "git add a && git commit -m b",
@@ -811,7 +921,6 @@ test("the orchestrator and its planner alias cannot change dependencies, but kee
     "pnpm list",
     "npm view left-pad version",
     "echo 'pnpm add left-pad'",
-    '"$PM" exec vitest',
   ])
     for (const role of writeRoles)
       assert.equal(
@@ -819,8 +928,14 @@ test("the orchestrator and its planner alias cannot change dependencies, but kee
         undefined,
         command,
       );
-  // The Paseo policy separately denies a dynamic executable followed by `run`.
+  // The Paseo and herdr-core policies separately deny a dynamic executable followed by `run` or `exec`.
   assert.equal(findDependencyChange('"$PM" run test'), undefined);
+  assert.equal(findDependencyChange('"$PM" exec vitest'), undefined);
+  assert.match(
+    toolDenial("orchestrator", "bash", { command: '"$PM" exec vitest' }, cwd) ??
+      "",
+    /^herdr-core policy/u,
+  );
   for (const command of [
     ...denied.filter((command) => !command.includes("$")),
     '"$PM" --filter app add left-pad',
@@ -981,46 +1096,33 @@ test("subprocess RPC waits for adapter handshake and filters role mutations", ()
 });
 
 test("Paseo MCP config reaches the pinned adapter only for nonreview roles", () => {
-  for (const role of ["planner", "implementer", "planner-astra"]) {
+  for (const fixed of [
+    ["planner", "openai-codex", "gpt-6-astra", "medium"],
+    ["implementer", "claude-bridge", "claude-opus-5-5", "medium"],
+    ["planner-astra", "openai-codex", "gpt-6-astra", "medium"],
+  ]) {
     for (const tail of [
       ["--mcp-config", "/tmp/paseo mcp.json"],
       ["--mcp-config=/tmp/paseo mcp.json"],
     ]) {
-      const result = launchArguments([
-        role,
-        "openai-codex",
-        "gpt-6.1-sol",
-        "medium",
-        "--mode",
-        "rpc",
-        ...tail,
-      ]);
+      const result = launchArguments([...fixed, "--mode", "rpc", ...tail]);
       const index = result.args.indexOf("--mcp-config");
       assert.notEqual(index, -1);
       assert.equal(result.args[index + 1], "/tmp/paseo mcp.json");
       assert.ok(result.args.includes("npm:pi-mcp-adapter@7.0.0"));
     }
     assert.throws(
-      () =>
-        launchArguments([
-          role,
-          "openai-codex",
-          "gpt-6.1-sol",
-          "medium",
-          "--mode",
-          "rpc",
-          "--mcp-config",
-        ]),
+      () => launchArguments([...fixed, "--mode", "rpc", "--mcp-config"]),
       /Missing value/,
     );
   }
   assert.throws(
     () =>
       launchArguments([
-        "review-astra",
+        "review-correctness",
         "openai-codex",
-        "gpt-6-astra",
-        "low",
+        "gpt-6.1-sol",
+        "medium",
         "--mode",
         "rpc",
         "--mcp-config",

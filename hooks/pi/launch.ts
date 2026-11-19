@@ -38,8 +38,30 @@ export function launchEnvironment(
 }
 
 type Route = { provider: string; model: string; thinking: string };
+export type RouteTable = Record<string, { label: string; routes: string[] }>;
 
-function parseRoute(spec: string): Route {
+// The tracked route table installed beside the launcher; every launch must name a route it lists.
+export function readRoutes(path = join(directory, "routes.json")): RouteTable {
+  const table = JSON.parse(readFileSync(path, "utf8")) as RouteTable;
+  for (const [role, entry] of Object.entries(table ?? {})) {
+    if (
+      !roles.includes(role) ||
+      typeof entry?.label !== "string" ||
+      !Array.isArray(entry.routes) ||
+      entry.routes.length === 0 ||
+      (role !== "orchestrator" && entry.routes.length !== 1)
+    )
+      throw new Error(`Invalid managed route table entry: ${role}`);
+    entry.routes.forEach(parseRoute);
+  }
+  return table;
+}
+
+export function routeSpec(route: Route): string {
+  return `${route.provider}/${route.model}:${route.thinking}`;
+}
+
+export function parseRoute(spec: string): Route {
   const slash = spec.indexOf("/");
   const colon = spec.lastIndexOf(":");
   if (slash <= 0 || colon <= slash + 1 || colon === spec.length - 1)
@@ -52,18 +74,36 @@ function parseRoute(spec: string): Route {
 }
 
 // Only the orchestrator lists `provider/model:thinking` routes, the first being the default; every other role has one route.
-function launchRoutes(role: string, rest: string[]) {
+function launchRoutes(role: string, rest: string[], table: RouteTable) {
+  let routes: Route[];
+  let tail: string[];
   if (role !== "orchestrator") {
-    const [provider, model, thinking, ...tail] = rest;
-    return { routes: [{ provider, model, thinking }], tail };
+    const [provider, model, thinking, ...remaining] = rest;
+    routes = [{ provider, model, thinking }];
+    tail = remaining;
+  } else {
+    const count = rest.findIndex((token) => token.startsWith("-"));
+    const specs = count < 0 ? rest : rest.slice(0, count);
+    if (specs.length === 0) throw new Error("Missing orchestrator routes");
+    routes = specs.map(parseRoute);
+    tail = rest.slice(specs.length);
   }
-  const count = rest.findIndex((token) => token.startsWith("-"));
-  const specs = count < 0 ? rest : rest.slice(0, count);
-  if (specs.length === 0) throw new Error("Missing orchestrator routes");
-  return { routes: specs.map(parseRoute), tail: rest.slice(specs.length) };
+  // The `planner` alias names one of the orchestrator's routes.
+  const expected =
+    role === "planner"
+      ? table.orchestrator?.routes.filter(
+          (spec) => spec === routeSpec(routes[0]),
+        )
+      : table[role]?.routes;
+  if (
+    !expected?.length ||
+    JSON.stringify(routes.map(routeSpec)) !== JSON.stringify(expected)
+  )
+    throw new Error(`Launch routes for ${role} differ from routes.json`);
+  return { routes, tail };
 }
 
-// Paseo's launch model and thinking select one listed route; the session then stays on it.
+// A launch's model and thinking select one listed route; the session then stays on it.
 function selectRoute(routes: Route[], requested: Record<string, string[]>) {
   const byModel = routes.filter((route) =>
     requested["--model"].every((value) =>
@@ -82,14 +122,18 @@ function selectRoute(routes: Route[], requested: Record<string, string[]>) {
   return route;
 }
 
-export function launchArguments(argv: string[]): {
+export function launchArguments(
+  argv: string[],
+  table: RouteTable = readRoutes(),
+): {
   contract: Contract;
   args: string[];
+  rpc: boolean;
 } {
   const [role, ...rest] = argv;
   if (!roles.includes(role))
     throw new Error("Invalid mandatory Pi role contract");
-  const { routes, tail } = launchRoutes(role, rest);
+  const { routes, tail } = launchRoutes(role, rest, table);
   const requested: Record<string, string[]> = {
     "--model": [],
     "--provider": [],
@@ -130,12 +174,12 @@ export function launchArguments(argv: string[]): {
     if (!value || value.startsWith("--"))
       throw new Error(`Missing value for ${flag}`);
     if (flag === "--mode") {
-      if (value !== "rpc") throw new Error("Managed Pi requires RPC mode");
+      // Without --mode, managed Pi runs interactively in a herdr-core terminal.
+      if (value !== "rpc") throw new Error("Managed Pi supports only RPC mode");
       rpc = true;
     } else if (Object.hasOwn(requested, flag)) requested[flag].push(value);
     else args.push(flag, value);
   }
-  if (!rpc) throw new Error("Managed Pi requires --mode rpc");
   const { provider, model, thinking } = selectRoute(routes, requested);
   const contract = parseContract({
     role,
@@ -144,9 +188,8 @@ export function launchArguments(argv: string[]): {
     thinking,
     nonce: randomUUID(),
   });
+  if (rpc) args.push("--mode", "rpc");
   args.push(
-    "--mode",
-    "rpc",
     "--provider",
     provider,
     "--model",
@@ -154,6 +197,8 @@ export function launchArguments(argv: string[]): {
     "--thinking",
     thinking,
     "--no-extensions",
+    // RPC mode has no UI and never trusts the project; interactive mode answers the trust prompt the same way.
+    "--no-approve",
   );
   if (provider === "claude-bridge") args.push("-e", claudeBridgePackage);
   if (!role.startsWith("review-")) args.push("-e", mcpPackage);
@@ -163,7 +208,7 @@ export function launchArguments(argv: string[]): {
     "--tools",
     allowedTools(role).join(","),
   );
-  return { contract, args };
+  return { contract, args, rpc };
 }
 
 export function rpcDenial(
@@ -188,8 +233,8 @@ export function rpcDenial(
     return toolDenial(contract.role, "bash", { command: request.command }, cwd);
 }
 
-export function launch(argv: string[]): void {
-  const { contract, args } = launchArguments(argv);
+function prepare(argv: string[]) {
+  const launch = launchArguments(argv);
   const workflow = resolve(
     directory,
     "../../skills/paseo-orchestration/references/paseo-workflow.md",
@@ -197,12 +242,23 @@ export function launch(argv: string[]): void {
   accessSync(join(directory, "enforcement.ts"), constants.R_OK);
   if (!readFileSync(workflow, "utf8").trim())
     throw new Error("Mandatory Pi workflow is empty");
+  const env = {
+    ...launchEnvironment(launch.contract.provider),
+    AX_PI_CONTRACT: JSON.stringify(launch.contract),
+    AX_PI_WORKFLOW_FILE: workflow,
+  };
+  return { ...launch, env };
+}
+
+export function launch(argv: string[]): void {
+  const prepared = prepare(argv);
+  if (!prepared.rpc) {
+    launchInteractive(prepared);
+    return;
+  }
+  const { contract, args, env } = prepared;
   const child = spawn("pi", args, {
-    env: {
-      ...launchEnvironment(contract.provider),
-      AX_PI_CONTRACT: JSON.stringify(contract),
-      AX_PI_WORKFLOW_FILE: workflow,
-    },
+    env,
     stdio: ["pipe", "pipe", "pipe", "pipe"],
   });
   let ready = false;
@@ -293,6 +349,59 @@ export function launch(argv: string[]): void {
     process.stdin.pause();
   });
   for (const signal of ["SIGINT", "SIGTERM"] as const)
+    process.on(signal, () => child.kill(signal));
+}
+
+// Interactive Pi owns the herdr-core terminal; the launcher only enforces the adapter handshake and relays signals.
+function launchInteractive({
+  contract,
+  args,
+  env,
+}: ReturnType<typeof prepare>): void {
+  const child = spawn("pi", args, {
+    env,
+    stdio: ["inherit", "inherit", "inherit", "pipe"],
+  });
+  let ready = false;
+  let failed = false;
+  const timer = setTimeout(
+    () => fail("Mandatory Pi adapter initialization timed out"),
+    60_000,
+  );
+  function fail(message: string): void {
+    if (failed) return;
+    failed = true;
+    clearTimeout(timer);
+    process.stderr.write(`${message}\n`);
+    child.kill("SIGTERM");
+    setTimeout(() => child.kill("SIGKILL"), 1000).unref();
+    process.exitCode = 78;
+  }
+  const handshake = child.stdio[3];
+  if (!handshake || !("readable" in handshake))
+    throw new Error("Pi handshake channel unavailable");
+  createInterface({ input: handshake }).on("line", (line) => {
+    if (failed || ready) return;
+    try {
+      const message = JSON.parse(line);
+      if (message.ready !== true || message.nonce !== contract.nonce)
+        throw new Error("Invalid handshake");
+      ready = true;
+      clearTimeout(timer);
+    } catch {
+      fail("Mandatory Pi adapter initialization failed");
+    }
+  });
+  child.on("error", () => fail("Could not start managed Pi"));
+  child.on("exit", (code, signal) => {
+    clearTimeout(timer);
+    if (!ready && !failed)
+      fail("Pi exited without mandatory adapter initialization");
+    process.exitCode = failed ? 78 : (code ?? (signal ? 1 : 0));
+  });
+  // The terminal delivers Ctrl+C to Pi directly; hangup and termination are relayed.
+  process.on("SIGINT", () => {});
+  for (const signal of ["SIGHUP", "SIGTERM"] as const)
     process.on(signal, () => child.kill(signal));
 }
 

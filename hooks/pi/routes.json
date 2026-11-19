@@ -1,0 +1,43 @@
+{
+  "orchestrator": {
+    "label": "Orchestrator",
+    "routes": [
+      "claude-bridge/claude-opus-5-5:medium",
+      "openai-codex/gpt-6-astra:medium"
+    ]
+  },
+  "implementer": {
+    "label": "Opus 5.5 · Implement",
+    "routes": ["claude-bridge/claude-opus-5-5:medium"]
+  },
+  "review-correctness": {
+    "label": "Sol · Correctness Review",
+    "routes": ["openai-codex/gpt-6.1-sol:medium"]
+  },
+  "review-quality": {
+    "label": "Sonnet · Risk & Quality Review",
+    "routes": ["claude-bridge/claude-sonnet-5-5:medium"]
+  },
+  "review-architecture": {
+    "label": "Terra · Architecture Review",
+    "routes": ["openai-codex/gpt-6.1-terra:medium"]
+  },
+  "review-contract": {
+    "label": "Sonnet · Contract Review",
+    "routes": ["claude-bridge/claude-sonnet-5-5:medium"]
+  },
+  "planner-astra": {
+    "label": "Astra · Consult Planner",
+    "routes": ["openai-codex/gpt-6-astra:medium"]
+  },
+  "planner-fable": {
+    "label": "Fable · Consult Planner",
+    "routes": ["claude-bridge/claude-fable-5-1:medium"]
+  },
+  "review-deepseek": {
+    "label": "DeepSeek · Available",
+    "routes": [
+      "cloudflare-ai-gateway/workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731:medium"
+    ]
+  }
+}

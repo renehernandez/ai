@@ -520,6 +520,7 @@ const behaviorScenarioContracts = {
     greenName: "GREEN hook-registration:",
     owns: (change: Change) =>
       change.path === "hooks/README.md" ||
+      change.path === "hooks/pi/routes.json" ||
       (change.path.startsWith("hooks/") && change.path.endsWith(".ts")) ||
       change.path === "scripts/ax/hook-registration.ts" ||
       (change.path === "ax.config.json" &&

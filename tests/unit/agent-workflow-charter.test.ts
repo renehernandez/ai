@@ -86,6 +86,17 @@ test("Pi config changes require their transaction behavior scenarios", () => {
   assert.ok(errors.some((error) => error.includes("pi-paseo-config")));
 });
 
+test("the managed Pi route table requires its hook-registration behavior scenarios", () => {
+  const errors: string[] = [];
+  const changes = [
+    { path: "hooks/pi/routes.json", content: "{}", additions: "{}" },
+  ];
+  validateBehaviorContractCoverage(changes, changes, errors);
+  assert.deepEqual(errors, [
+    "hooks/pi/routes.json: contract hook-registration requires staged executable RED and GREEN scenarios in tests/unit/hook-registration-contract.test.ts",
+  ]);
+});
+
 test("GREEN canonical-ownership: the charter validation gate runs from the native behavior hook", () => {
   const packageJson = JSON.parse(read("package.json")) as {
     scripts: Record<string, string>;

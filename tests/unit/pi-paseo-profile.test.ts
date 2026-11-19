@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { launchArguments, launchEnvironment } from "../../hooks/pi/launch.ts";
+import {
+  launchArguments,
+  launchEnvironment,
+  readRoutes,
+} from "../../hooks/pi/launch.ts";
 
 const config = JSON.parse(readFileSync("ax.config.json", "utf8"));
 
@@ -234,6 +238,22 @@ test("one Orchestrator profile offers Opus and Astra while worker roles keep one
   assert.equal(orchestrator.expandHome, true);
   assert.ok(config.runtime.skillSymlinkTargets.includes("~/.pi/agent/skills"));
   assert.equal(config.runtime.instructionSymlinkTargets.pi, "~/.pi/agent");
+});
+
+test("tracked routes.json lists exactly the routes the managed providers launch", () => {
+  const table = readRoutes();
+  const providers = config.runtime.configs.paseo.managedPaths.filter(
+    (entry) => entry.path.slice(0, 2).join(".") === "agents.providers",
+  );
+  const launched = Object.fromEntries(
+    providers.map(({ value }) => {
+      const [, , role, ...rest] = value.command;
+      const routes =
+        role === "orchestrator" ? rest : [`${rest[0]}/${rest[1]}:${rest[2]}`];
+      return [role, { label: value.label, routes }];
+    }),
+  );
+  assert.deepEqual(table, launched);
 });
 
 test("Pi model overrides correct the live Gateway limit without managing credentials", () => {
