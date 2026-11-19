@@ -65,6 +65,9 @@
       ]
     },
     "configs": {
+      "herdrTemplates": {
+        "target": "~/.config/herdr-core/templates"
+      },
       "mise": {
         "target": "~/.config/mise/config.toml",
         "managed": {

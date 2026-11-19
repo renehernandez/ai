@@ -132,6 +132,11 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
     deepseek?.value.command[4],
     "workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731",
   );
+  assert.equal(
+    axConfig.runtime.configs.herdrTemplates.target,
+    "~/.config/herdr-core/templates",
+    "both profiles install the person-started herdr-core templates",
+  );
   assert.deepEqual(currentManagedSkillCoverageGaps(managedSkills), []);
   assert.ok(managedSkills.includes("paseo-orchestration"));
   assert.ok(managedSkills.includes("worker-handoff"));

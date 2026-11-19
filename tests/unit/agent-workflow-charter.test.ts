@@ -78,12 +78,18 @@ test("the universal charter governs every shared behavior surface", () => {
 });
 
 test("Pi config changes require their transaction behavior scenarios", () => {
-  const errors: string[] = [];
-  const changes = [
-    { path: "scripts/ax/config-sync.ts", content: "", additions: "" },
-  ];
-  validateBehaviorContractCoverage(changes, changes, errors);
-  assert.ok(errors.some((error) => error.includes("pi-paseo-config")));
+  for (const path of [
+    "scripts/ax/config-sync.ts",
+    "scripts/ax/herdr-templates.ts",
+  ]) {
+    const errors: string[] = [];
+    const changes = [{ path, content: "", additions: "" }];
+    validateBehaviorContractCoverage(changes, changes, errors);
+    assert.ok(
+      errors.some((error) => error.includes("pi-paseo-config")),
+      `${path} must require the managed-config scenarios`,
+    );
+  }
 });
 
 test("the managed Pi route table requires its hook-registration behavior scenarios", () => {

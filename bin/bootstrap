@@ -47,6 +47,31 @@ removal_hint() {
   fi
 }
 
+# herdr-core has no Homebrew formula; its vendor installer verifies the release
+# checksum and Apple code-signing identity. Bootstrap enforces a minimum only.
+hc_minimum="0.1.21"
+hc_installer="https://releases.herdr.dev/core/install.sh"
+
+# True when dotted version $1 is at least $2.
+version_at_least() {
+  local -a have want
+  IFS=. read -r -a have <<<"$1"
+  IFS=. read -r -a want <<<"$2"
+  local index
+  for index in 0 1 2; do
+    ((10#${have[index]:-0} > 10#${want[index]:-0})) && return 0
+    ((10#${have[index]:-0} < 10#${want[index]:-0})) && return 1
+  done
+  return 0
+}
+
+# Prints the installed herdr-core version, or nothing when hc is missing.
+hc_version() {
+  local output
+  output="$("$HOME/.local/bin/hc" -V 2>/dev/null)" || return 0
+  echo "${output##* }"
+}
+
 trap 'echo "bootstrap failed during: $step" >&2' ERR
 
 case "${1:-}" in
@@ -68,6 +93,25 @@ plutil -extract "profiles.$profile" json -o - "$repo/ax.config.json" >/dev/null 
 begin "Homebrew bundle"
 command -v brew >/dev/null || fail "Homebrew is required: https://brew.sh"
 brew bundle --file "$repo/Brewfile"
+
+begin "herdr-core"
+hc_current="$(hc_version)"
+if [[ -z "$hc_current" ]] || ! version_at_least "$hc_current" "$hc_minimum"; then
+  installer="$(mktemp -t herdr-core-install)"
+  curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+    --output "$installer" "$hc_installer" ||
+    fail "could not download the herdr-core installer from $hc_installer"
+  sh "$installer" || fail "the herdr-core installer failed; see its message above"
+  rm -f "$installer"
+  hc_current="$(hc_version)"
+fi
+[[ -n "$hc_current" ]] || fail "herdr-core is not installed at ~/.local/bin/hc"
+version_at_least "$hc_current" "$hc_minimum" ||
+  fail "herdr-core $hc_current is below the minimum $hc_minimum"
+[[ ":$PATH:" == *":$HOME/.local/bin:"* ]] ||
+  fail "~/.local/bin is not on PATH; add it to your shell profile, then re-run bootstrap"
+hc server status >/dev/null || fail "hc server status failed"
+echo "hc $hc_current (minimum $hc_minimum)"
 
 begin "Repository tools and setup"
 mise trust "$repo/mise.toml"
@@ -112,6 +156,8 @@ cat <<EOF
 
 Bootstrap complete for profile "$profile".
 Remaining manual steps:
-  - Restart Paseo so it picks up the new PATH.
+  - After a PATH change, run \`hc server restart\`; running terminals keep going.
+  - Open the Herdr app and start orchestrators from it, or run
+    \`hc run ax-orchestrator "task"\`.
   - Sign in where needed: claude (Claude Code), codex login, and Pi's /login.
 EOF

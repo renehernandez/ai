@@ -2,9 +2,11 @@
 import assert from "node:assert/strict";
 import {
   chmodSync,
+  copyFileSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   symlinkSync,
@@ -199,6 +201,69 @@ test("RED pi-paseo-config: invalid JSON leaves every target unchanged", (t) => {
   assert.throws(() => syncManagedConfigs(input), /json_invalid/);
   assert.equal(readFileSync(pi, "utf-8"), '{"defaultProvider":"old"}');
   assert.equal(readFileSync(mise, "utf-8"), '[tools]\nruby = "3.4.1"\n');
+});
+
+function templateOptions(t: TestContext) {
+  const input = fixture(t);
+  mkdirSync(join(input.sourceRoot, "hooks/pi"), { recursive: true });
+  copyFileSync(
+    join(import.meta.dirname, "../../hooks/pi/routes.json"),
+    join(input.sourceRoot, "hooks/pi/routes.json"),
+  );
+  return {
+    ...input,
+    config: {
+      ...input.config,
+      runtime: {
+        ...input.config.runtime,
+        configs: {
+          herdrTemplates: { target: "~/.config/herdr-core/templates" },
+        },
+      },
+    },
+  };
+}
+
+test("GREEN pi-paseo-config: config sync owns only the generated herdr-core ax templates and repairs their drift", (t) => {
+  const input = templateOptions(t);
+  const directory = join(input.home, ".config/herdr-core/templates");
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(join(directory, "reviewer.md"), "person-owned\n");
+  assert.equal(syncManagedConfigs(input).changedPaths.length, 4);
+  assert.equal(inspectManagedConfigs(input).ok, true);
+  assert.deepEqual(syncManagedConfigs(input).changedPaths, []);
+  assert.deepEqual(readdirSync(directory).sort(), [
+    "ax-orchestrator-gpt-6-astra.md",
+    "ax-orchestrator.md",
+    "ax-planner-astra.md",
+    "ax-planner-fable.md",
+    "reviewer.md",
+  ]);
+  const orchestrator = join(directory, "ax-orchestrator.md");
+  const generated = readFileSync(orchestrator, "utf8");
+  writeFileSync(orchestrator, "edited\n");
+  assert.deepEqual(inspectManagedConfigs(input).findings, [
+    "managed_config_drift: herdrTemplates/ax-orchestrator.md.content is different",
+  ]);
+  assert.deepEqual(syncManagedConfigs(input).changedPaths, [orchestrator]);
+  assert.equal(readFileSync(orchestrator, "utf8"), generated);
+  assert.equal(
+    readFileSync(join(directory, "reviewer.md"), "utf8"),
+    "person-owned\n",
+  );
+});
+
+test("RED pi-paseo-config: a symlinked herdr-core templates directory is refused", (t) => {
+  const input = templateOptions(t);
+  const elsewhere = join(input.home, "elsewhere");
+  mkdirSync(elsewhere, { recursive: true });
+  mkdirSync(join(input.home, ".config/herdr-core"), { recursive: true });
+  symlinkSync(elsewhere, join(input.home, ".config/herdr-core/templates"));
+  assert.throws(
+    () => syncManagedConfigs(input),
+    /managed_config_parent_invalid/,
+  );
+  assert.deepEqual(readdirSync(elsewhere), []);
 });
 
 test("Pi parent symlink escapes are rejected", (t) => {

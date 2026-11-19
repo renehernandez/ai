@@ -155,6 +155,7 @@ const behaviorScenarioContracts = {
       [
         "scripts/ax.ts",
         "scripts/ax/config-sync.ts",
+        "scripts/ax/herdr-templates.ts",
         "scripts/ax/runtime-sync.ts",
         "scripts/ax/source-snapshot.ts",
         "scripts/ax/json-config.ts",

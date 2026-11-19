@@ -23,22 +23,27 @@ bin/bootstrap personal
 Use `work` for the work profile. The script is safe to re-run and stops at the
 first failing step, naming it. In order, it:
 
-1. installs the `Brewfile`: mise, plus the Paseo, Claude Code, and Codex apps.
+1. installs the `Brewfile`: mise, plus the Herdr, Claude Code, and Codex apps.
    Homebrew does not pin these; they update to the latest release.
-2. installs this repository's mise tools and runs `mise run setup`.
-3. installs the `ax` shim and runs `ax sync --profile <profile>`. This also
+2. installs herdr-core (`hc`) into `~/.local/bin` with its vendor installer
+   when `hc` is missing or older than the recorded minimum. The installer
+   verifies the release checksum and Apple code-signing identity; bootstrap
+   downloads it to a temporary file instead of piping it into a shell. It then
+   requires `~/.local/bin` on PATH and a working `hc server status`.
+3. installs this repository's mise tools and runs `mise run setup`.
+4. installs the `ax` shim and runs `ax sync --profile <profile>`. This also
    writes the pinned Node, pnpm, Pi, and OpenSpec versions into
    `~/.config/mise/config.toml`.
-4. installs those global mise tools.
-5. installs Pi's configured packages and pre-downloads the managed launcher's
+5. installs those global mise tools.
+6. installs Pi's configured packages and pre-downloads the managed launcher's
    pinned extensions (`pnpm run pi:packages-install`).
-6. runs `ax validate` and checks that Node, pnpm, Pi, and OpenSpec run at
+7. runs `ax validate` and checks that Node, pnpm, Pi, and OpenSpec run at
    their pinned versions. It fails when another copy shadows a pin, such as a
    global npm package inside a mise Node install, and lists any other copy on
    PATH, each with a suggested removal command. It never uninstalls anything.
 
-Afterwards, restart Paseo so it picks up the new PATH, and sign in where
-needed: Claude Code, `codex login`, and Pi's `/login`. To change a version,
+Afterwards, run `hc server restart` after any PATH change (running terminals
+keep going), and sign in where needed: Claude Code, `codex login`, and Pi's `/login`. To change a version,
 edit its pin (`runtime.configs.mise` in `ax.config.json`, the repo
 `mise.toml`, or `packageManager`) and re-run bootstrap from `main`. pnpm is
 pinned in all three places; a unit test keeps them in agreement.
@@ -170,6 +175,14 @@ Pi settings, Pi model overrides and Paseo config use JSON `managedPaths` at
 Each entry names a path and value. An object or array at that path is replaced
 as a whole; other JSON values survive, although formatting may change.
 `expandHome: true` expands strings beginning with `~/` within that entry.
+
+`runtime.configs.herdrTemplates` owns the `ax-*.md` files in
+`~/.config/herdr-core/templates`: one orchestrator template per orchestrator
+route (`ax-orchestrator` on the default route) and one per consult planner.
+AX generates each from `hooks/pi/routes.json`, so a person can start
+`hc run ax-orchestrator "task"` on exactly a tracked route. Each template has
+an empty body, because herdr-core sends a nonempty body as a first prompt.
+Other templates in that folder are unowned.
 
 The tracked Paseo profile array and its `ax-` provider objects are AX-owned.
 Add or modify those profiles in source. Unrelated provider objects remain
