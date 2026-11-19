@@ -308,27 +308,30 @@ async function fixture(
       });
     }
     if (args[0] === "ls") {
-      const label = args[args.indexOf("--label") + 1];
-      const [key, value] = [
-        label.slice(0, label.indexOf("=")),
-        label.slice(label.indexOf("=") + 1),
-      ];
+      // Like herdr-core 0.1.21: rows carry no labels, and the `--label` filter matches nothing.
+      assert.ok(!args.includes("--label"), "hc ls --label matches nothing");
       return JSON.stringify({
         hidden_finished: 0,
-        terminals: [...sessions.entries(), ...tickers.entries()]
-          .filter(
-            ([, terminal]) =>
-              !terminal.removed &&
-              terminal.status !== "closed" &&
-              terminal.labels[key] === value,
-          )
-          .map(([address, terminal]) => ({
-            address,
-            name: terminal.name,
-            labels: terminal.labels,
-            parent: terminal.parent,
+        terminals: [
+          {
+            address: orchestrator.terminalId,
+            cwd: dir,
+            name: "orchestrator",
             state: "live",
-          })),
+          },
+          ...[...sessions.entries(), ...tickers.entries()]
+            .filter(
+              ([, terminal]) =>
+                !terminal.removed && terminal.status !== "closed",
+            )
+            .map(([address, terminal]) => ({
+              address,
+              cwd: terminal.cwd,
+              name: terminal.name,
+              parent: terminal.parent,
+              state: "live",
+            })),
+        ],
       });
     }
     const id = args.at(-1) ?? "";
@@ -3419,6 +3422,8 @@ test("GREEN pi-paseo-workflow: inspection errors degrade reviewers and keep impl
     return g.transport(args, timeout, env);
   });
   assert.equal(flaky.result, "unchanged");
+  // An unreadable terminal list never starts a possibly duplicate chain.
+  assert.equal(flaky.ticker?.status, "unarmed");
   assert.match(
     flaky.recorded[0],
     /handoff: inspect failed: .*daemon unavailable/,
@@ -3718,30 +3723,30 @@ async function cleanupFixture(
   const transport: Transport = async (args) => {
     calls.push(args);
     if (args[0] === "ls") {
-      const filter = args.includes("--label")
-        ? args[args.indexOf("--label") + 1]
-        : undefined;
+      // Like herdr-core 0.1.21: rows carry no labels, and the `--label` filter matches nothing.
+      assert.ok(!args.includes("--label"), "hc ls --label matches nothing");
       return JSON.stringify({
         hidden_finished: 0,
-        terminals: live()
-          .filter(
-            (terminal) =>
-              !filter ||
-              `ax.workflow=${terminal.labels["ax.workflow"]}` === filter,
-          )
-          .map(({ address, cwd, labels, parent }) => ({
-            address,
-            cwd,
-            labels,
-            parent,
-            state: "live",
-          })),
+        terminals: live().map(({ address, cwd, parent }) => ({
+          address,
+          cwd,
+          parent,
+          state: "live",
+        })),
       });
     }
     const terminal = terminals.find((item) => item.address === args.at(-1));
     if (!terminal || terminal.removed)
       throw Object.assign(new Error("Command failed"), {
         stdout: '{"error":{"kind":"not_found"}}',
+      });
+    if (args[0] === "get")
+      return JSON.stringify({
+        address: terminal.address,
+        cwd: terminal.cwd,
+        labels: terminal.labels,
+        parent: terminal.parent,
+        state: terminal.killed ? "finished" : "live",
       });
     if (args[0] === "kill") {
       if (fail.kill) throw new Error("hc core unavailable");
@@ -3840,8 +3845,14 @@ test("GREEN pi-paseo-workflow: authorized cleanup removes labelled terminals chi
     scratch: { status: "removed", target: c.scratch },
   });
   assert.deepEqual(c.killed(), ["t3", "t2", "t1"]);
-  assert.ok(!c.calls.some((args) => args.at(-1) === "t0" && args[0] !== "ls"));
-  assert.ok(!c.calls.some((args) => args.at(-1) === "t5"));
+  // The caller and the unlabelled t5 are read for their labels but never killed or removed.
+  for (const untouchedTerminal of ["t0", "t5"])
+    assert.ok(
+      !c.calls.some(
+        (args) =>
+          args.at(-1) === untouchedTerminal && ["kill", "rm"].includes(args[0]),
+      ),
+    );
   assert.equal(await c.present(c.tree), false);
   assert.equal(await c.present(c.scratch), false);
   assert.doesNotMatch(c.git(c.repository, ["worktree", "list"]), /tree/);

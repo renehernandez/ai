@@ -367,3 +367,57 @@ The implementer appends first proof 3's observations here during step 4:
 the exact parent-note text, how Pi handles a note typed mid-turn, whether an
 externally killed child notes its parent, and what happens to a ticker when
 its parent terminal is killed.
+
+Observed with `hc` 0.1.21 and Pi 1.5.0, under an isolated HOME and
+`HC_SESSION`, with a real managed Pi orchestrator launched through the
+launcher and a scripted local model:
+
+- Parent-note text. A child that exits on its own types
+  `<hc>t1d p3-child-exit exited (exit 0). Read: hc read t1d</hc>` into its
+  parent. Pi submits it as an ordinary user message and runs one turn.
+- Note typed mid-turn. Pi does not drop it. Pi queues it as a `Steering`
+  message while the turn runs and submits it as the next user turn once the
+  current turn ends; the session JSONL records it after the earlier reply.
+- Externally killed child. `hc kill` on a child still notes its parent:
+  `<hc>t1g p3-child-killed exited (signal 1). Read: hc read t1g</hc>`.
+- Ticker whose parent is killed. Children default to
+  `die_with_parent: true`. After `hc kill` on the parent, a `--rm` child
+  stays `live` briefly, then ends and is removed within about ten seconds;
+  `hc get` then returns `not_found`. A killed orchestrator therefore ends its
+  chain without a successor, and the ticker's parent check stays the backup.
+- `hc ls --json` rows carry `address`, `agent`, `cwd`, `name`, `state`,
+  `turn`, and, for children, `parent` and `status`, but no `labels`. The
+  `--label K=V` filter returned no terminals even for exact labels shown by
+  `hc get`. The runner therefore reads each live terminal's labels through
+  `hc get` and filters by `ax.workflow` itself.
+- `hc send` exits before Pi reports the new turn. `hc get` can still show
+  the previous `done` status and turn for several seconds after a send to an
+  idle Pi. A worker still at its startup reply within the 60-second queue
+  window stays undecided, so this gap does not misclassify delivery.
+- A reviewer killed by the runner's timeout shows `state: finished`,
+  `reason: killed`, and keeps its parent and labels in `hc get` until removed.
+- A nonzero exit adds the last screen lines to the note:
+  `<hc>t1k p3-pi-child exited (exit 78). Last lines:` followed by the lines
+  and `Read: hc read t1k</hc>`. An exit-0 note carries none of the child's
+  output.
+- A live agent child that finishes a turn sends no note. A managed Pi
+  implementer under the Pi orchestrator completed two turns (`status: done`,
+  `turn` 1 then 2), one sent from outside and one sent as the orchestrator
+  with `HC_TERMINAL_ID`, and no note reached the orchestrator. The `hc`
+  manual states that hc notifies a parent only when a child cannot report:
+  blocked, error, or exited. A child reports otherwise by its own
+  `hc send` to the parent, tagged `<hc from="t7 name">`.
+- A `--rm` child that exits types no note at all. An `echo` child started
+  with `--bg --rm --parent` on the orchestrator exited, was removed at once,
+  and no note reached the orchestrator; `hc read` then returns `not_found`.
+  Its stdout is gone.
+- `hc send` by terminal name returned `not_found` for a live child whose
+  `hc get` by address showed that name. The runner addresses terminals by
+  address only.
+
+These last two facts contradict the accepted contract. Wake-up assumes each
+ticker's exit notes the orchestrator, but every ticker runs with `--rm`, so
+no ticker note is typed. The end-to-end proof expects every worker
+completion to write a parent note, but a live worker that finishes its turn
+writes none, and reviewers have no shell to report with `hc send`. Under
+this plan's rule the implementer stopped here and returned to Plan.

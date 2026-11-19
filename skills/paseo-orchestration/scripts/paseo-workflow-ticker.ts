@@ -139,32 +139,47 @@ type Terminal = {
   parent: string | null;
 };
 // The workflow's live labelled terminals: workers and tickers.
+// herdr-core 0.1.21 `ls` rows carry no labels and its `--label` filter matches nothing, so each live terminal's labels come from `get`.
 export async function labelledTerminals(
   workflowId: string | undefined,
   transport: Transport,
 ): Promise<Terminal[]> {
   requireThat(nonempty(workflowId), "State has no workflow label");
-  const listed = JSON.parse(
-    await transport(
-      ["ls", "--json", "--label", `ax.workflow=${workflowId}`],
-      30_000,
-    ),
-  );
+  const listed = JSON.parse(await transport(["ls", "--json"], 30_000));
   requireThat(
     Array.isArray(listed?.terminals) &&
-      listed.terminals.every(
-        (row: Terminal) =>
-          nonempty(row?.address) &&
-          typeof row.labels === "object" &&
-          row.labels !== null,
-      ),
+      listed.terminals.every((row: Terminal) => nonempty(row?.address)),
     "herdr-core returned an invalid terminal list",
   );
-  return listed.terminals.map((row: Terminal) => ({
-    address: row.address,
-    labels: row.labels,
-    parent: row.parent ?? null,
-  }));
+  const terminals: Terminal[] = [];
+  for (const { address } of listed.terminals as Terminal[]) {
+    let terminal: Partial<Terminal>;
+    try {
+      terminal = JSON.parse(
+        await transport(["get", "--json", address], 30_000),
+      );
+    } catch (error) {
+      // A terminal that ended between `ls` and `get` is no longer live.
+      if (
+        /not_found/.test(
+          `${(error as { stdout?: unknown }).stdout ?? ""} ${error}`,
+        )
+      )
+        continue;
+      throw error;
+    }
+    requireThat(
+      typeof terminal?.labels === "object" && terminal.labels !== null,
+      `herdr-core get output for ${address} lacks labels`,
+    );
+    if (terminal.labels["ax.workflow"] === workflowId)
+      terminals.push({
+        address,
+        labels: terminal.labels,
+        parent: terminal.parent ?? null,
+      });
+  }
+  return terminals;
 }
 const isTicker = (terminal: Terminal) =>
   terminal.labels["ax.role"] === "ticker";
@@ -181,9 +196,10 @@ export async function stopChain(
   if (!state.ticker && (await readStopGeneration(stopFile)) >= generation)
     return;
   await writeAtomic(stopFile, String(generation));
+  // The stop marker alone ends the chain at its next wake-up, so the kill sweep is best-effort.
   for (let pass = 0; pass < 2; pass++)
     for (const terminal of (
-      await labelledTerminals(state.workflowId, transport)
+      await labelledTerminals(state.workflowId, transport).catch(() => [])
     ).filter(isTicker))
       await transport(["kill", "--json", terminal.address], 30_000).catch(
         () => {},
@@ -193,6 +209,7 @@ export async function stopChain(
 
 export type TickerStatus =
   | { status: "armed" | "re-armed"; generation: number; reason?: string }
+  | { status: "unarmed"; reason: string }
   | { status: "stopped" };
 
 // Keeps one live ticker chain on the caller while work is in flight, re-arming before half its lifetime passes.
@@ -213,9 +230,20 @@ export async function syncTicker(
       "Arming the ticker chain requires the caller's HC_TERMINAL_ID",
     );
     const current = state.ticker;
-    const live = (await labelledTerminals(state.workflowId, transport)).filter(
-      isTicker,
-    );
+    let live: Terminal[];
+    try {
+      live = (await labelledTerminals(state.workflowId, transport)).filter(
+        isTicker,
+      );
+    } catch (error) {
+      // An unobservable chain is kept, or left unarmed, rather than duplicated; the next tick looks again.
+      return current
+        ? { status: "armed" as const, generation: current.generation }
+        : {
+            status: "unarmed" as const,
+            reason: `terminal list unavailable: ${(error as Error).message}`,
+          };
+    }
     const alive =
       current &&
       live.some(

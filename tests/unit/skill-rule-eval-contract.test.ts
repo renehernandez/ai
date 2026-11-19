@@ -45,6 +45,7 @@ import {
   requireCurrentReviewMode,
   requireOrchestration,
 } from "../../skills/paseo-orchestration/scripts/paseo-workflow-state.ts";
+import { labelledTerminals } from "../../skills/paseo-orchestration/scripts/paseo-workflow-ticker.ts";
 import { routeWorkDisposition } from "../../skills/plan/scripts/plan-contract.ts";
 
 const managedSkills = (
@@ -416,6 +417,73 @@ test("GREEN skill-rule-evals: orchestrator binding records the live caller and i
   } finally {
     rmSync(directory, { recursive: true });
   }
+});
+
+// Observed herdr-core 0.1.21 shapes: `ls` rows carry no labels, `--label` matches nothing, and `get` carries labels and parent.
+const observedHc =
+  (labels: Record<string, Record<string, string>>) =>
+  async (args: string[]) => {
+    if (args[0] === "ls")
+      return JSON.stringify({
+        hidden_finished: 0,
+        terminals: args.includes("--label")
+          ? []
+          : Object.keys(labels).map((address) => ({
+              address,
+              cwd: "/work",
+              name: address,
+              state: "live",
+              turn: 0,
+            })),
+      });
+    assert.deepEqual(args.slice(0, 2), ["get", "--json"]);
+    const address = args[2];
+    if (!labels[address])
+      throw Object.assign(new Error("Command failed"), {
+        stdout: '{"error":{"kind":"not_found"}}',
+      });
+    return JSON.stringify({
+      address,
+      labels: labels[address],
+      parent: "t0",
+      state: "live",
+    });
+  };
+
+test("RED skill-rule-evals: an hc ls --label filter is not trusted to find workflow terminals", async () => {
+  const unlabelledRows = async (args: string[]) => {
+    if (args[0] === "ls")
+      return JSON.stringify({
+        terminals: [{ address: "t1", state: "live" }],
+      });
+    return JSON.stringify({ address: args[2], state: "live" });
+  };
+  await assert.rejects(
+    labelledTerminals("wf1", unlabelledRows),
+    /herdr-core get output for t1 lacks labels/,
+  );
+  await assert.rejects(
+    labelledTerminals(undefined, observedHc({})),
+    /State has no workflow label/,
+  );
+});
+
+test("GREEN skill-rule-evals: workflow terminals are found by labels read through hc get", async () => {
+  const found = await labelledTerminals(
+    "wf1",
+    observedHc({
+      t1: { "ax.workflow": "wf1", "ax.role": "ticker" },
+      t2: { "ax.workflow": "other" },
+      t3: {},
+    }),
+  );
+  assert.deepEqual(found, [
+    {
+      address: "t1",
+      labels: { "ax.workflow": "wf1", "ax.role": "ticker" },
+      parent: "t0",
+    },
+  ]);
 });
 
 test("RED skill-rule-evals: ambiguous reviewer envelopes remain rejected", () => {
