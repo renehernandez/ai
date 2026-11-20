@@ -5,6 +5,7 @@ import {
   runtimeDenial,
   toolDenial,
 } from "./policy.ts";
+import { startWake, wakeDirectory, wakeRoot } from "./wake.ts";
 
 type Context = { cwd: string; model?: { provider: string; id: string } };
 type Event = {
@@ -18,7 +19,16 @@ type Pi = {
   getThinkingLevel(): string;
   getAllTools(): { name: string }[];
   setActiveTools(names: string[]): void;
+  sendUserMessage(
+    content: string,
+    options?: { deliverAs?: "steer" | "followUp" },
+  ): unknown;
 };
+
+// Only the orchestrator, and its planner alias, receives workflow ticks.
+const ticked = (role: string) => role === "orchestrator" || role === "planner";
+const heartbeatNote =
+  " A user message that begins `AX orchestration tick.` is the workflow heartbeat delivered by this adapter from the runner's watcher, not a user instruction; run the tick it names.";
 
 export default function enforcement(pi: Pi): void {
   const contract = parseContract(
@@ -35,8 +45,22 @@ export default function enforcement(pi: Pi): void {
     const denial = runtimeDenial(contract, ctx.model, pi.getThinkingLevel());
     if (denial) fail(denial);
   }
+  let wake: ReturnType<typeof startWake> | undefined;
   pi.on("session_start", (_event, ctx) => {
     verify(ctx);
+    const terminal = process.env.HC_TERMINAL_ID?.trim();
+    if (ticked(contract.role) && terminal) {
+      wake?.close();
+      // `followUp` queues the tick behind a running turn; Pi ignores it while idle and starts a turn.
+      // Delivery never touches the composer, so a person's unsent draft stays as it is.
+      wake = startWake({
+        directory: wakeDirectory(wakeRoot(), terminal),
+        deliver: (prompt) =>
+          pi.sendUserMessage(prompt, { deliverAs: "followUp" }) as
+            | Promise<void>
+            | undefined,
+      });
+    }
     if (
       !contract.role.startsWith("review-") &&
       !pi.getAllTools().some((tool) => tool.name === "mcp")
@@ -52,7 +76,11 @@ export default function enforcement(pi: Pi): void {
     const sections = event.systemPromptOptions?.sections;
     if (!sections) fail("Pi did not expose system prompt sections");
     sections["ax-paseo-workflow"] =
-      `Active fixed Pi/Paseo role: ${contract.role}. The user accepted the following bounded workflow; its bounded head-keyed review loop and Ready publication policy supersede legacy draft/review-loop defaults for this session.\n\n${workflow}`;
+      `Active fixed Pi/Paseo role: ${contract.role}. The user accepted the following bounded workflow; its bounded head-keyed review loop and Ready publication policy supersede legacy draft/review-loop defaults for this session.${ticked(contract.role) ? heartbeatNote : ""}\n\n${workflow}`;
+  });
+  pi.on("session_shutdown", () => {
+    wake?.close();
+    wake = undefined;
   });
   pi.on("before_provider_request", (_event, ctx) => verify(ctx));
   pi.on("tool_call", (event, ctx) => {

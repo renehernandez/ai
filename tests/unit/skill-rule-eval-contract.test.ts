@@ -50,6 +50,7 @@ import {
   coalesceMs,
   createWatcher,
   labelledTerminals,
+  type WakeRequest,
 } from "../../skills/paseo-orchestration/scripts/watch.ts";
 import { routeWorkDisposition } from "../../skills/plan/scripts/plan-contract.ts";
 
@@ -492,22 +493,25 @@ test("GREEN skill-rule-evals: workflow terminals are found by labels read throug
 });
 
 // A watcher whose event stream opens after its worker already ended the turn; only the open sweep can see that change.
-async function openSweep(workerStatus: string) {
+async function openSweep(workerStatus: string, nonce: string | undefined) {
   const state = {
+    workflowId: "wf1",
     rounds: {},
     repairs: {},
     handoff: { status: "running", agentId: "t5" },
   } as unknown as Workflow;
   let clock = 0;
-  const sends: string[][] = [];
+  const sends: WakeRequest[] = [];
+  const hc: string[][] = [];
   const watcher = createWatcher(
     { state: "/tmp/state.json", orchestrator: "t0", generation: 1 },
     {
+      readNonce: async () => nonce,
+      writeRequest: async (_state, request) => {
+        sends.push(request);
+      },
       hc: async (args) => {
-        if (args[0] === "send") {
-          sends.push(args);
-          return "{}";
-        }
+        hc.push(args);
         const status = args.at(-1) === "t0" ? "idle" : workerStatus;
         return JSON.stringify({ state: "live", status: { state: status } });
       },
@@ -521,17 +525,27 @@ async function openSweep(workerStatus: string) {
   await watcher.onOpen();
   clock += coalesceMs;
   await watcher.step();
+  // The watcher only observes herdr-core; it never types into a terminal.
+  assert.ok(hc.every((args) => args[0] === "get"));
   return sends;
 }
 
 test("RED skill-rule-evals: a worker still working when the watcher stream opens queues no tick prompt", async () => {
-  assert.deepEqual(await openSweep("working"), []);
+  assert.deepEqual(await openSweep("working", "n1"), []);
 });
 
-test("GREEN skill-rule-evals: a worker that ended its turn before the watcher stream opened queues one tick prompt", async () => {
-  const sends = await openSweep("done");
+test("RED skill-rule-evals: without an orchestrator Pi session nonce the watcher writes no wake request", async () => {
+  assert.deepEqual(await openSweep("done", undefined), []);
+});
+
+test("GREEN skill-rule-evals: a worker that ended its turn before the watcher stream opened queues one wake request bound to the session nonce", async () => {
+  const sends = await openSweep("done", "n1");
   assert.equal(sends.length, 1);
-  assert.equal(sends[0]?.[2], "t0");
+  assert.deepEqual(
+    { ...sends[0], prompt: undefined },
+    { workflow: "wf1", nonce: "n1", generation: 1, n: 1, prompt: undefined },
+  );
+  assert.match(sends[0]?.prompt ?? "", /^AX orchestration tick\. Run `node /);
 });
 
 test("RED skill-rule-evals: ambiguous reviewer envelopes remain rejected", () => {

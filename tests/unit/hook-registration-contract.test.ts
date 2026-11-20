@@ -7,11 +7,13 @@ import {
   renderHookRegistrationDocument,
 } from "../../scripts/ax/hook-registration.ts";
 
-test("RED hook-registration: MCP and Pi runtime configuration, including the in-process Paseo dispatch, herdr-core and Herdr app allow-lists, interactive-only launcher, herdr-core workflow watcher, tracked route table, orchestrator write, git, dependency, nested MCP, read-only reviewer, and no-shell, no-Paseo-MCP consult planner tool policies, agent shell discipline, and pinned package configs, are not hook targets", () => {
+test("RED hook-registration: MCP and Pi runtime configuration, including the in-process Paseo dispatch, herdr-core and Herdr app allow-lists, interactive-only launcher, herdr-core workflow watcher, in-process wake-request delivery, tracked route table, orchestrator write, git, dependency, nested MCP, read-only reviewer, and no-shell, no-Paseo-MCP consult planner tool policies, agent shell discipline, and pinned package configs, are not hook targets", () => {
   for (const target of ["claude", "codex"] as const)
     for (const path of [
       ".agents/hooks/pi/routes.json",
       ".agents/hooks/pi/launch.ts",
+      ".agents/hooks/pi/wake.ts",
+      ".local/state/ax/wake/t8/session.json",
       ".agents/skills/paseo-orchestration/scripts/watch.ts",
       ".pi/agent/extensions/herdr-core-policy.json",
       ".config/herdr-core/templates/ax-orchestrator.md",
@@ -234,5 +236,22 @@ test("GREEN hook-registration: registration renders the declared hook", () => {
       },
     }),
     /hooks\/pi\/launch\.ts|--mode/u,
+  );
+  // Wake delivery runs inside the managed Pi extension; it is never rendered as a harness hook either.
+  assert.doesNotMatch(
+    renderHookRegistrationDocument({
+      path: "/tmp/nonexistent-hook-registration-settings.json",
+      declaration: {
+        id: "block-agent-force-push",
+        event: "PreToolUse",
+        matcher: "^Bash$",
+        command: "pnpm exec tsx ~/.agents/hooks/block-agent-force-push.ts",
+        targets: {
+          claude: "~/.claude/settings.json",
+          codex: "~/.codex/hooks.json",
+        },
+      },
+    }),
+    /hooks\/pi\/(?:wake|enforcement)\.ts/u,
   );
 });

@@ -179,6 +179,9 @@ function runArgs(state: Workflow, role: Role, worker: Review) {
     state.orchestrator.id,
     // Workers outlive a closed or crashed orchestrator; a new orchestrator in the same cwd resumes with a tick.
     "--outlive-parent",
+    // herdr-core's blocked, error, and exit notes would be typed into the orchestrator and submit a person's
+    // unsent draft; the watcher detects those states from the event stream instead.
+    "--no-notify",
     ...Object.entries(labels).flatMap(([key, value]) => [
       "--label",
       `${key}=${value}`,
@@ -1683,6 +1686,7 @@ function compactResult(
     (key) =>
       key !== "watcher" &&
       key !== "watcherGenerations" &&
+      key !== "wake" &&
       key !== "lastTickAt" &&
       JSON.stringify(before?.[key]) !== JSON.stringify(after[key]),
   );

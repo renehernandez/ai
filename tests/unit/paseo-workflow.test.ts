@@ -55,6 +55,7 @@ import {
 } from "../../skills/paseo-orchestration/scripts/paseo-workflow-state.ts";
 import {
   type RetiringMarker,
+  type WakeRequest,
   watchedAddresses,
   watchIntervalMs,
 } from "../../skills/paseo-orchestration/scripts/watch.ts";
@@ -2436,11 +2437,14 @@ test("GREEN pi-paseo-workflow: one watcher on the caller is started, kept, repla
   assert.ok(!started.includes("--outlive-parent"));
   assert.match(started.at(-4) ?? "", /watch\.ts$/);
   assert.deepEqual(started.slice(-3), [f.path, "t0", "1"]);
-  // Workers outlive the orchestrator.
-  const worker = f.calls.find(
-    (args) => args[0] === "run" && args.includes("ax.role=implementer"),
-  );
-  assert.ok(worker?.includes("--outlive-parent"));
+  // Workers outlive the orchestrator, and herdr-core types no note about them into it.
+  for (const role of ["implementer", "review-correctness"]) {
+    const worker = f.calls.find(
+      (args) => args[0] === "run" && args.includes(`ax.role=${role}`),
+    );
+    assert.ok(worker?.includes("--outlive-parent"), role);
+    assert.ok(worker?.includes("--no-notify"), role);
+  }
 
   const old = () => Date.now() + 13 * 60 * 60_000;
   const replaced = await syncWatcher(
@@ -2544,7 +2548,11 @@ test("GREEN pi-paseo-workflow: one watcher on the caller is started, kept, repla
 
 // Scripts one watcher against a fixture workflow with its handoff in flight, on a manual clock.
 async function watcherRun(
-  options: { orchestrator?: () => string; refuseSend?: () => boolean } = {},
+  options: {
+    orchestrator?: () => string;
+    refuseSend?: () => boolean;
+    nonce?: () => string | undefined;
+  } = {},
 ) {
   const f = await fixture();
   await f.review("planning");
@@ -2559,23 +2567,20 @@ async function watcherRun(
   const worker = state.handoff?.agentId ?? "";
   assert.ok(worker);
   let clock = Date.parse(state.lastTickAt ?? "");
-  const sends: string[][] = [];
+  const sends: WakeRequest[] = [];
   const hc: string[][] = [];
   const markers: RetiringMarker[] = [];
   let stop = 0;
   const watcher = createWatcher(
     { state: f.path, orchestrator: "t0", generation: 1 },
     {
+      readNonce: async () => (options.nonce ? options.nonce() : "nonce-1"),
+      writeRequest: async (_state, request) => {
+        if (options.refuseSend?.()) throw new Error("EACCES");
+        sends.push(request);
+      },
       hc: async (args) => {
         hc.push(args);
-        if (args[0] === "send") {
-          if (options.refuseSend?.())
-            throw Object.assign(new Error("Command failed"), {
-              stdout: '{"error":{"kind":"blocked"}}',
-            });
-          sends.push(args);
-          return '{"started":true}';
-        }
         if (args.at(-1) === "t0")
           return JSON.stringify({
             state: "live",
@@ -2641,9 +2646,19 @@ test("RED pi-paseo-workflow: worker changes and an interval during one long orch
   await w.advance(2000);
   assert.equal(w.sends.length, 1);
   const [send] = w.sends;
-  assert.deepEqual(send.slice(0, 3), ["send", "--json", "t0"]);
-  assert.match(send[3], /AX orchestration tick/);
-  assert.ok(!send.includes("--force"));
+  assert.deepEqual(
+    { ...send, prompt: undefined },
+    {
+      workflow: w.state.workflowId,
+      nonce: "nonce-1",
+      generation: 1,
+      n: 1,
+      prompt: undefined,
+    },
+  );
+  assert.match(send.prompt, /^AX orchestration tick\. Run `node /);
+  // Nothing is typed into any terminal.
+  assert.ok(w.hc.every((args) => args[0] === "get"));
   // The orchestrator is still in its turn: further changes and the interval send nothing more.
   await w.event(w.worker, "status", "blocked");
   await w.advance(10_000);
@@ -2672,7 +2687,7 @@ test("GREEN pi-paseo-workflow: the watcher skips a periodic prompt within the in
   await w.advance(watchIntervalMs);
   assert.equal(w.sends.length, 1);
   // The prompt carries the effective standing orders read from the state at send time.
-  assert.match(w.sends[0][3], /Standing orders/);
+  assert.match(w.sends[0].prompt, /Standing orders/);
 });
 
 test("RED pi-paseo-workflow: the watcher never types into a blocked orchestrator and sends once it unblocks", async () => {
@@ -2685,13 +2700,12 @@ test("RED pi-paseo-workflow: the watcher never types into a blocked orchestrator
   await w.event(w.worker, "turn");
   await w.advance(watchIntervalMs + 60_000);
   assert.equal(w.sends.length, 0);
-  assert.ok(!w.hc.some((args) => args[0] === "send"));
   // A status change on the orchestrator other than blocked releases the owed prompt.
   orchestratorState = "idle";
   await w.event("t0", "status", "idle");
   await w.advance(6000);
   assert.equal(w.sends.length, 1);
-  // A send herdr-core refuses because a dialog opened meanwhile stays owed and is never forced.
+  // A request that cannot be written stays owed.
   w.consume();
   refuse = true;
   await w.event(w.worker, "turn");
@@ -2701,7 +2715,11 @@ test("RED pi-paseo-workflow: the watcher never types into a blocked orchestrator
   await w.event("t0", "status", "working");
   await w.advance(6000);
   assert.equal(w.sends.length, 2);
-  assert.ok(w.hc.every((args) => !args.includes("--force")));
+  assert.deepEqual(
+    w.sends.map((request) => request.n),
+    [1, 3],
+  );
+  assert.ok(w.hc.every((args) => args[0] === "get"));
 });
 
 test("RED pi-paseo-workflow: a watcher stops at a newer stop generation and its lifetime, and a hang-up leaves a retiring marker", async () => {
@@ -2739,11 +2757,11 @@ test("RED pi-paseo-workflow: while the event stream is down the watcher polls wa
   const polled = createWatcher(
     { state: w.f.path, orchestrator: "t0", generation: 1 },
     {
+      readNonce: async () => "nonce-1",
+      writeRequest: async (_state, request) => {
+        w.sends.push(request);
+      },
       hc: async (args) => {
-        if (args[0] === "send") {
-          w.sends.push(args);
-          return "{}";
-        }
         return JSON.stringify({
           state: "live",
           status: { state: args.at(-1) === "t0" ? "idle" : status },
@@ -2818,13 +2836,12 @@ test("RED pi-paseo-workflow: a worker that finished before the watcher's stream 
   const quiet = createWatcher(
     { state: busy.f.path, orchestrator: "t0", generation: 1 },
     {
-      hc: async (args) => {
-        if (args[0] === "send") {
-          busy.sends.push(args);
-          return "{}";
-        }
-        return JSON.stringify({ state: "live", status: { state: "working" } });
+      readNonce: async () => "nonce-1",
+      writeRequest: async (_state, request) => {
+        busy.sends.push(request);
       },
+      hc: async () =>
+        JSON.stringify({ state: "live", status: { state: "working" } }),
       now: () => Date.parse(busy.state.lastTickAt ?? "") + 6000,
       readState: async () => structuredClone(busy.state),
       readStop: async () => 0,

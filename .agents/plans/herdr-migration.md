@@ -67,8 +67,9 @@ is never merged or synced partway.
    identity; `ax.workflow` and `ax.role` labels on every launch; deletion of
    Paseo workspace binding and registration; and removal of the launcher's
    RPC-only path. First proof 2, driven by a manually run tick.
-4. **Wake-up and cleanup.** The workflow watcher, label-based terminal
-   cleanup, and worktree cleanup. First proof 4's observations are appended
+4. **Wake-up and cleanup.** The workflow watcher, its wake requests and
+   their delivery by the managed extension (`hooks/pi/enforcement.ts`),
+   label-based terminal cleanup, and worktree cleanup. First proof 4's observations are appended
    to the `Observed herdr-core behavior` section below and committed before
    the watcher's change detection is written; the end-to-end proof closes
    this step. That section records facts only. It changes no accepted
@@ -81,9 +82,15 @@ is never merged or synced partway.
 Steps 1 to 3 are done on the branch (`1179734`, `5dea338`, `87c2b4a`), with
 the label-reading fix and first proof 3's observations in `d904dc0`. The
 first ticker-chain design for step 4 was contradicted by those observations
-and is replaced by the watcher below. The next implementer starts from
-`d904dc0` with step 4; it also adds `--outlive-parent` to worker launches
-(see Sessions).
+and is replaced by the watcher below. Step 4's watcher, `--outlive-parent`
+worker launches, and the first proof 4 and end-to-end observations are on
+the branch at `5ecf5dc` (`81b98c6`, `4f367af`, `22e5bc7`, `5ecf5dc`). The
+end-to-end proof showed that typing into the orchestrator terminal with
+`hc send` modifies and submits a person's unsent draft, so the next
+implementer starts from `5ecf5dc` and replaces terminal typing with
+in-process delivery through the managed Pi extension (see Wake-up), adds
+`--no-notify` to worker launches, finishes the end-to-end proof, then does
+step 5.
 
 ### Per-laptop precondition
 
@@ -190,7 +197,11 @@ unmerged and the plan returns to Plan.
 herdr-core types a parent note only when a child is blocked, errors, or
 exits, and a `--rm` child types none, so parent notes cannot wake the
 orchestrator (see `Observed herdr-core behavior`). One watcher process per
-workflow replaces the Paseo heartbeat and types the tick prompt itself.
+workflow replaces the Paseo heartbeat and decides when to tick. Nothing is
+typed into the orchestrator terminal: `hc send` and herdr-core parent notes
+both paste after a person's unsent draft and submit it (observed), so the
+tick prompt is delivered inside the orchestrator's Pi process by the managed
+extension, `hooks/pi/enforcement.ts`, and workers launch with `--no-notify`.
 
 - Lifetime: whenever a worker, consult planner, ambiguous delivery, or
   hosted gate is in flight, the runner keeps one watcher terminal, a child of
@@ -219,25 +230,63 @@ workflow replaces the Paseo heartbeat and types the tick prompt itself.
   window, a reviewer past its timeout, and a pending hosted gate are
   evaluated without user input. It skips a periodic tick when the state's
   `lastTickAt`, which every tick records, falls within the interval.
-- Delivery: the watcher sends the runner's fixed tick prompt, with the
-  effective standing orders, through `hc send <orchestrator address>`. A
-  prompt typed while the orchestrator is mid-turn is queued as Pi's next turn
-  (observed), so mid-turn sends stay allowed.
+- Delivery: the watcher never runs `hc send`. To tick, it writes a wake
+  request `{workflow, nonce, generation, n, prompt}` atomically (temporary file,
+  then rename) to `<wake root>/<orchestrator address>/<workflow id>.json`,
+  one file per workflow, so concurrent workflows ticking the same
+  orchestrator never overwrite each other's request. `generation` is the
+  watcher generation the runner records, which only grows (see Stop and
+  Recovery), and `n` counts requests within a generation, so a replacement
+  watcher's requests always order after its predecessor's. The wake root is
+  `$XDG_STATE_HOME/ax/wake` (default `~/.local/state/ax/wake`), created
+  with mode 0700. `prompt` is the runner's fixed tick prompt with the
+  effective standing orders. The orchestrator address is the one the state
+  records from the last dispatching or ticking caller's `HC_TERMINAL_ID`.
+- Extension: for the `orchestrator` role and its `planner` alias only,
+  `enforcement.ts` watches `<wake root>/$HC_TERMINAL_ID/` from session start
+  (`fs.watch` plus a 5-second poll as a backstop). At session start it
+  writes `<wake root>/$HC_TERMINAL_ID/session.json` with a fresh random
+  `nonce`. Each dispatching or ticking runner call reads that file and
+  records the nonce with the orchestrator address in the state, and deletes
+  any request file in that directory whose nonce differs. Before each
+  request the watcher re-reads `session.json` and uses its current nonce,
+  so a person who restarts Pi in the same orchestrator terminal keeps
+  automatic ticks; a scripted unit test covers that restart. The extension
+  ignores a request whose nonce is not its own. A leftover request from a
+  crashed or abandoned workflow, or a terminal with a reused address after a
+  core restart, is therefore never delivered, because its file is never
+  rewritten with the new session's nonce. It tracks the last
+  delivered `(generation, n)` per workflow file. On a request whose pair is
+  greater than that one, compared generation first, it calls
+  `pi.sendUserMessage(prompt, { deliverAs: "followUp" })` while Pi is
+  streaming, or `pi.sendUserMessage(prompt)` while idle; requests from
+  several workflows are each delivered once. Unconsumed-prompt and resend
+  decisions use the state's `lastTickAt`, so the extension writes no ack. It delivers only text that starts with the
+  runner's fixed tick-prompt line and ignores anything else; any process
+  running as this user can already type into the terminal, so the file adds
+  no new trust boundary. Other roles, and a session without
+  `HC_TERMINAL_ID`, do not watch. The orchestrator's injected system section
+  names this message as the workflow heartbeat, not a user instruction.
 - Blocked guard: the watcher reads the orchestrator's `hc get` status before
-  each send and skips the send while it is `blocked`, for example at a
-  permission prompt. `hc send` itself also refuses a blocked terminal unless
-  `--force` (`hc` manual, exit 9); the watcher never passes `--force`. A
-  skipped or refused send is retried at the next change or interval. A
-  scripted-`hc` unit test shows a blocked orchestrator gets no send and the
-  tick is sent after it unblocks. First proof 4 also records what `hc send`
-  does to a blocked Pi under `Observed herdr-core behavior`.
-- Draft guard, fail-closed: herdr-core holds sends while a person has an
-  unfinished draft, up to 60 seconds after their last key (`hc` manual,
-  `draft_wait`). The end-to-end proof leaves unsent composer text in the
-  idle orchestrator for longer than that window while the watcher sends, and
-  records whether the text is preserved, unmodified and unsubmitted. If it
-  is not preserved, automatic delivery is not enabled: the implementer stops
-  and returns to Plan. There is no weaker fallback.
+  each request and writes none while it is `blocked`, for example at a
+  permission prompt. A skipped request is retried at the next change or
+  interval. A scripted-`hc` unit test shows a blocked orchestrator gets no
+  request and gets one after it unblocks.
+- Draft guard, fail-closed: the next implementer's first commit is the
+  minimal extension delivery path (wake request writer and the extension
+  watch), which also removes the watcher's `hc send` path, so terminal
+  typing is never proven or shipped again. First proof 5 runs on that
+  commit and gates every later step-4 change. In a real managed Pi orchestrator under real `hc`,
+  unsent composer text sits for more than 60 seconds; a wake request is then
+  written while Pi is idle, and another while Pi is mid-turn. The text must
+  stay in the composer unmodified and unsubmitted both times, and each
+  request must run as its own turn. If the text is not preserved, automatic
+  delivery is not enabled: the implementer stops and returns to Plan. There
+  is no weaker fallback.
+- No terminal notes: workers, reviewers, and consult planners launch with
+  `--no-notify`, so herdr-core types no blocked, error, or exit note into
+  the orchestrator. The watcher already detects those states from the event
+  stream. The watcher itself keeps `--no-notify`.
 - Ticks stay idempotent under the
   state lock, so a duplicate or late tick changes nothing.
 - Stop: the runner first records a newer generation in a stop file in the
@@ -246,14 +295,14 @@ workflow replaces the Paseo heartbeat and types the tick prompt itself.
   exits.
 - Recovery: a watcher that receives a hang-up or termination signal while
   its generation is current first writes a retiring marker naming its
-  generation and terminal address to the scratch folder, then types one tick
-  prompt and exits. A tick treats a watcher whose generation has a retiring
+  generation and terminal address to the scratch folder, then writes one
+  wake request and exits. A tick treats a watcher whose generation has a retiring
   marker as absent even while its terminal is still live: it kills that
   terminal, records a newer generation, and starts exactly one replacement.
   A unit test runs the recovery tick before the old watcher exits and checks
   that exactly one watcher survives. If the orchestrator is `blocked` when
   the watcher is terminated, or the final send is refused or fails, the
-  blocked guard still holds: the watcher sends nothing, records
+  blocked guard still holds: the watcher writes no request, records
   `recoveryPending` in its retiring marker, and exits. Automatic recovery
   does not survive that case; `status` and every tick line report the
   missing watcher, and the next tick from the user or Herdr Mobile, which a
@@ -271,9 +320,10 @@ workflow replaces the Paseo heartbeat and types the tick prompt itself.
   watcher. A watcher also exits after 24 hours, the old heartbeat lifetime;
   a tick that finds its watcher older than 12 hours replaces it.
 - The watcher is a runner-owned process, not an agent tool call, so the
-  managed-role `hc` allow-list does not apply to it. The orchestrator's
-  injected system section names the watcher's tick prompt as the workflow
-  heartbeat, not a child report.
+  managed-role `hc` allow-list does not apply to it.
+- The one-unconsumed-prompt rule, periodic tick, recovery, stop, and orphan
+  rules above apply to wake requests the same way they applied to sends:
+  "send" and "type" there mean writing a wake request.
 
 ### Policy
 
@@ -299,7 +349,10 @@ workflow replaces the Paseo heartbeat and types the tick prompt itself.
 ### Cleanup
 
 - Cleanup stops the watcher as described above, then kills and removes
-  terminals carrying the workflow label, children before parents, and deletes the scratch folder
+  terminals carrying the workflow label, children before parents. An
+  `hc kill` that exits 3 with `not_found` counts as success, because a
+  `--rm` terminal is removed as it dies (observed); a unit test covers it.
+  Cleanup also deletes this workflow's wake request, and the scratch folder
   under today's guards. The caller's own `HC_TERMINAL_ID` is always excluded,
   even when it carries the workflow label. A unit test covers that case.
 - A Paseo-marked state refuses every action except `status`, including
@@ -347,6 +400,10 @@ New mechanisms, each justified:
   Homebrew formula or mise plugin and the app cask does not install it.
 - The workflow watcher, because herdr-core has no scheduler or heartbeat and
   types no parent note when a live agent finishes a turn.
+- Wake requests delivered by the existing managed extension, because typing
+  into a Pi terminal from outside joins and submits a person's draft, and
+  Pi's extension API (`pi.sendUserMessage`) queues a user message without
+  the composer. No new extension or package is added.
 - Session-JSONL reply reading, because reviewers have no write tool and no
   shell, so they cannot report through a file or `hc send`.
 
@@ -370,20 +427,26 @@ All live proofs run under an isolated HOME, `XDG_CONFIG_HOME`, and
 - First proof 3 (done in `d904dc0`): parent-note text, mid-turn handling,
   killed-child and killed-parent behavior, recorded under `Observed
   herdr-core behavior`.
-- First proof 4: under a real `hc` orchestrator terminal, a real managed Pi
-  child finishes a turn while `hc events --children-of <orchestrator> --json`
-  runs. The recorded result says whether an event reports the turn end, and
-  its exact shape, before the watcher's change detection is written.
+- First proof 4 (done in `4f367af`): the event stream reports turn ends,
+  blocked status, and `--outlive-parent` survival.
+- First proof 5: the draft guard described under Wake-up, through the
+  extension, on the first commit and before any other change. With unsent
+  text in the orchestrator, it also records that `--no-notify` terminals
+  type nothing into it when one blocks and then errors, one is killed with
+  `hc kill` (the runner's timeout and cleanup path), and one exits 0. If any
+  note still appears, the implementer stops and returns to Plan.
 - End-to-end proof: real managed Pi runs a planning workflow where a real
   implementer returns a valid `AX_REPORT` and a real reviewer returns a valid
-  review envelope. Each completion makes the watcher type the tick prompt
-  within one detection cycle, and that tick records it. With no worker in
-  flight, a pending hosted gate's periodic tick drives one probe. A third
-  worker that never stops working triggers no change; periodic ticks alone
-  time it out and record it degraded. One tick prompt is typed while the
-  orchestrator is mid-turn and runs as its next turn, and one is sent while
-  unsent composer text has sat in the idle orchestrator for more than 60
-  seconds; the text must survive unmodified and unsubmitted. The watcher is then
+  review envelope. Each completion makes the watcher write a wake request
+  within one detection cycle, the extension delivers it, and that tick
+  records it. With no worker in flight, a pending hosted gate's periodic tick
+  drives one probe, using a fake probe that returns complete evidence. A
+  third worker that never stops working triggers no change; with a reviewer
+  timeout shorter than Pi's five-minute stream limit, periodic ticks alone
+  time it out and record it degraded. One wake request arrives while the
+  orchestrator is mid-turn and runs as its next turn, and unsent composer
+  text left in the orchestrator throughout the proof survives unmodified and
+  unsubmitted. The watcher is then
   killed with `hc kill` with work in flight, and the recovery tick starts a
   replacement. Expected record: implementer and reviewer `complete` with the
   verified head, the hung worker `degraded`, one hosted probe recorded, the
@@ -391,13 +454,20 @@ All live proofs run under an isolated HOME, `XDG_CONFIG_HOME`, and
   `ax.workflow` terminals on a second label sweep.
 - Unit tests use a scripted `hc` fake for every delivery, conflict, adoption,
   watcher, and cleanup path that exists today, plus: a turn-end change
-  producing one send; a burst coalesced into one send; a periodic send
-  skipped after a recent tick; a stop file making an older watcher send
-  nothing; a hang-up without a stop sending one recovery tick; an event
-  stream that ends and is reopened; a refused send retried later; a tick with
+  producing one wake request; a burst coalesced into one request; a periodic
+  request skipped after a recent tick; a stop file making an older watcher
+  write nothing; a hang-up without a stop writing one recovery request; an
+  event stream that ends and is reopened; a blocked orchestrator getting no
+  request until it unblocks; the extension delivering a newer pair once,
+  ignoring a repeated pair and a non-tick prompt, using `followUp` while
+  streaming, and not watching for non-orchestrator roles; a replacement
+  watcher's first request (newer generation, `n` reset) delivered after its
+  predecessor's last; two workflows' pending requests to one orchestrator
+  both delivered; a leftover request carrying another session's nonce at the
+  same address not delivered, and deleted by the next runner call; a tick with
   work in flight and no live watcher starting one; watcher replacement after
-  12 hours; a session JSONL with a truncated trailing line; and cleanup with
-  a labelled caller.
+  12 hours; a session JSONL with a truncated trailing line; cleanup with
+  a labelled caller; and cleanup treating a `not_found` kill as success.
 - Policy tests cover each allowed `hc` and `herdr-app` form, representative
   denied forms, an unknown subcommand, an unknown leading option, dynamic
   executables, and nested shell payloads.
@@ -405,9 +475,15 @@ All live proofs run under an isolated HOME, `XDG_CONFIG_HOME`, and
   `.agents/plans/` and archived OpenSpec returns only intentional matches,
   such as the legacy-marker refusal and the retired-skill entry, listed in the
   report.
-- The PR runs lint, format, typecheck, unit tests, skill and charter
-  validation, native hooks, and `writing-skills` RED/GREEN scenarios for
-  changed contract text.
+- The PR runs lint, format, unit tests, skill and charter validation,
+  native hooks, and `writing-skills` RED/GREEN scenarios for changed
+  contract text. No TypeScript typecheck runs: the repository has no
+  `tsconfig.json` or `@types/node` (`tsc` fails with TS2688), and adding
+  them is a dependency change outside this plan. The report says so.
+- Proof hygiene: the implementer stops the leftover proof terminals in the
+  isolated `axproof4` session and removes their scratch under
+  `/private/tmp/ax-herdr-e2e.aZdVkm` before new proofs; it never touches the
+  user's live core.
 
 ## Cut-over per laptop
 
@@ -427,9 +503,13 @@ from then on, quit Paseo, run `brew uninstall --cask paseo`, and delete
 - Whether `hc events --children-of` reports an ordinary turn end is not yet
   observed. First proof 4 decides between the event stream and `hc get`
   polling; both are within this contract.
-- `hc send` from a child arrives tagged as a child report. The
-  orchestrator's system section names the watcher's prompt as the heartbeat,
-  and a tick is idempotent, so a mistaken or duplicate tick is harmless.
+- Pi's handling of `sendUserMessage` beside an unsent draft is not yet
+  observed. First proof 5 checks it before anything else is built, and a
+  failure returns to Plan.
+- The extension's wake-request watch also runs in a person's own
+  orchestrator sessions. It does nothing unless a request exists for that
+  terminal, and a tick is idempotent, so a mistaken or duplicate tick is
+  harmless.
 - An uncatchable kill of the watcher, or its termination while the
   orchestrator is blocked, stops automatic ticks until the next
   manual or mobile tick, which `status` and every tick line make visible.

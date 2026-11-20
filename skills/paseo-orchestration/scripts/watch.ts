@@ -1,6 +1,7 @@
 import { execFile, spawn } from "node:child_process";
 import { readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { homedir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -15,8 +16,10 @@ import {
   workers,
 } from "./paseo-workflow-state.ts";
 
-// herdr-core has no scheduler and types no parent note when a live agent finishes a turn,
-// so one watcher process per workflow follows `hc events` and types the tick prompt into the orchestrator itself.
+// herdr-core has no scheduler and types no parent note when a live agent finishes a turn, so one watcher
+// process per workflow follows `hc events` and decides when to tick. It never types into the orchestrator:
+// typing joins and submits a person's unsent draft. It writes a wake request that the orchestrator's
+// managed Pi extension (hooks/pi/wake.ts) delivers in-process.
 const execute = promisify(execFile);
 export const watchIntervalMs = 5 * 60_000;
 export const coalesceMs = 5_000;
@@ -24,9 +27,32 @@ export const resendMs = 15 * 60_000;
 export const pollMs = 15_000;
 export const watcherLifetimeMs = 24 * 60 * 60_000;
 export const replaceAfterMs = 12 * 60 * 60_000;
-// `hc send` holds a send while a person's draft is unfinished, up to its 60-second draft window.
-const sendTimeoutMs = 120_000;
 const watchScript = fileURLToPath(import.meta.url);
+
+// Mirrors hooks/pi/wake.ts, which the runner cannot import from its separately installed skill folder.
+export const wakeSessionFile = "session.json";
+export function wakeRoot(env: NodeJS.ProcessEnv = process.env) {
+  const state = env.XDG_STATE_HOME?.trim()
+    ? env.XDG_STATE_HOME
+    : join(env.HOME ?? homedir(), ".local", "state");
+  return resolve(state, "ax", "wake");
+}
+function requireAddress(address: string) {
+  requireThat(
+    /^[A-Za-z0-9_-]+$/u.test(address),
+    `Invalid herdr-core terminal address ${address}`,
+  );
+  return address;
+}
+export const wakeDirectory = (root: string, address: string) =>
+  join(root, requireAddress(address));
+export type WakeRequest = {
+  workflow: string;
+  nonce: string;
+  generation: number;
+  n: number;
+  prompt: string;
+};
 
 export type RetiringMarker = {
   generation: number;
@@ -132,7 +158,7 @@ export async function labelledTerminals(
 const isWatcher = (terminal: Terminal) =>
   terminal.labels["ax.role"] === "watcher";
 
-// Records the stop generation first, so a watcher older than it sends nothing, then kills watchers by label and sweeps once more.
+// Records the stop generation first, so a watcher older than it requests nothing, then kills watchers by label and sweeps once more.
 async function retireWatchers(
   path: string,
   state: Workflow,
@@ -216,6 +242,12 @@ export async function syncWatcher(
   now = Date.now,
 ): Promise<WatcherStatus> {
   return locked(path, async (state) => {
+    // The runner runs inside the orchestrator's Pi, so its environment names the extension's wake root.
+    if (nonempty(callerId))
+      state.wake = {
+        root: wakeRoot(),
+        address: requireAddress(callerId),
+      };
     if (state.finished || !inFlight(state, now()).length) {
       await stopWatcher(path, state, transport);
       return { status: "stopped" as const };
@@ -310,7 +342,12 @@ export type WatchConfig = {
   generation: number;
 };
 export type WatchDeps = {
+  // Read-only herdr-core observation; the watcher never sends.
   hc: (args: string[], timeoutMs: number) => Promise<string>;
+  // The orchestrator Pi session's current nonce, re-read before each request so a restarted Pi keeps its ticks.
+  readNonce: (state: Workflow) => Promise<string | undefined>;
+  // Writes this workflow's one wake request atomically.
+  writeRequest: (state: Workflow, request: WakeRequest) => Promise<void>;
   now: () => number;
   readState: () => Promise<Workflow>;
   readStop: () => Promise<number>;
@@ -329,9 +366,11 @@ export function createWatcher(config: WatchConfig, deps: WatchDeps) {
   const startedAt = deps.now();
   // The first change of the current burst; the burst is sent as one tick prompt once it is coalesceMs old.
   let changedAt: number | undefined;
-  // A skipped or refused send waits for the next change, the orchestrator unblocking, or the interval.
+  // A skipped or failed request waits for the next change, the orchestrator unblocking, or the interval.
   let owed = false;
   let lastSentAt: number | undefined;
+  // Requests within this generation; a replacement watcher's newer generation orders after every one of them.
+  let requests = 0;
   let lastPeriodicAt = startedAt;
   let polling = false;
   let lastPollAt = 0;
@@ -418,8 +457,8 @@ export function createWatcher(config: WatchConfig, deps: WatchDeps) {
     }
   }
 
-  // Types the tick prompt unless the orchestrator is blocked; never forced, so a dialog is never answered.
-  async function send(state: Workflow) {
+  // Writes a wake request unless the orchestrator is blocked, for example at a permission dialog.
+  async function requestTick(state: Workflow) {
     try {
       const orchestrator = JSON.parse(
         await deps.hc(["get", "--json", config.orchestrator], 30_000),
@@ -429,15 +468,16 @@ export function createWatcher(config: WatchConfig, deps: WatchDeps) {
         orchestrator?.status?.state === "blocked"
       )
         return false;
-      await deps.hc(
-        [
-          "send",
-          "--json",
-          config.orchestrator,
-          tickPrompt(config.state, state),
-        ],
-        sendTimeoutMs,
-      );
+      const nonce = await deps.readNonce(state);
+      if (!nonempty(nonce) || !nonempty(state.workflowId)) return false;
+      requests += 1;
+      await deps.writeRequest(state, {
+        workflow: state.workflowId,
+        nonce,
+        generation: config.generation,
+        n: requests,
+        prompt: tickPrompt(config.state, state),
+      });
     } catch {
       return false;
     }
@@ -471,7 +511,7 @@ export function createWatcher(config: WatchConfig, deps: WatchDeps) {
       now - lastSentAt < resendMs
     )
       return undefined;
-    owed = !(await send(state));
+    owed = !(await requestTick(state));
     return undefined;
   }
 
@@ -480,7 +520,7 @@ export function createWatcher(config: WatchConfig, deps: WatchDeps) {
     if ((await deps.readStop()) > config.generation) return "stopped";
     const marker = { generation: config.generation, terminal: deps.terminal };
     await deps.writeRetiring(marker);
-    if (await send(await deps.readState())) return "retired";
+    if (await requestTick(await deps.readState())) return "retired";
     await deps.writeRetiring({ ...marker, recoveryPending: true });
     return "recovery-pending";
   }
@@ -543,10 +583,23 @@ if (process.argv[1] && resolve(process.argv[1]) === watchScript) {
     orchestrator,
     generation: Number(generation),
   };
+  // The runner records the orchestrator's wake root, so this process need not share its environment.
+  const directory = (state: Workflow) =>
+    wakeDirectory(state.wake?.root ?? wakeRoot(), orchestrator);
   const watcher = createWatcher(config, {
     hc: async (args, timeout) =>
       (await execute("hc", args, { timeout, maxBuffer: 8 * 1024 * 1024 }))
         .stdout,
+    readNonce: async (state) => {
+      const text = await readOptional(join(directory(state), wakeSessionFile));
+      const nonce = text === undefined ? undefined : JSON.parse(text)?.nonce;
+      return typeof nonce === "string" ? nonce : undefined;
+    },
+    writeRequest: (state, request) =>
+      writeAtomic(
+        join(directory(state), `${request.workflow}.json`),
+        JSON.stringify(request),
+      ),
     now: Date.now,
     readState,
     readStop: () => readStopGeneration(stopFileOf(statePath, initial)),
@@ -579,7 +632,7 @@ if (process.argv[1] && resolve(process.argv[1]) === watchScript) {
     try {
       if (await watcher.step()) exit();
     } catch {
-      /* A transient read or send failure is retried at the next step. */
+      /* A transient read or write failure is retried at the next step. */
     } finally {
       busy = false;
     }

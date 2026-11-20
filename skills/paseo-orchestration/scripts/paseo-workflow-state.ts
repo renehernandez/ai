@@ -240,8 +240,10 @@ export type Workflow = {
   launches?: number;
   // The dispatching orchestrator's terminal; workers start as its children in the same Herdr space and tab.
   orchestrator?: { id: string; labels: Record<string, string> };
-  // The live watcher that types the tick prompt into the orchestrator while work is in flight.
+  // The live watcher that requests ticks of the orchestrator while work is in flight.
   watcher?: Watcher;
+  // Where the watcher writes wake requests for the last dispatching or ticking orchestrator terminal.
+  wake?: { root: string; address: string };
   // The newest watcher generation started; stopping records a newer one in the scratch stop file.
   watcherGenerations?: number;
   // When the latest tick began; the watcher skips a periodic prompt within the interval and holds one unconsumed prompt.
