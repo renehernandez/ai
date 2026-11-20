@@ -125,11 +125,11 @@ export type Step =
   | { result: "awaiting-user"; gate: string; consulting?: string[] }
   | { result: "finished" };
 export type Snapshot = { path: string; sha256: string };
-export type Ticker = {
+export type Watcher = {
   generation: number;
+  terminal: string;
   parent: string;
-  config: string;
-  expiresAt: string;
+  startedAt: string;
 };
 export type Decision = {
   id: string;
@@ -240,10 +240,12 @@ export type Workflow = {
   launches?: number;
   // The dispatching orchestrator's terminal; workers start as its children in the same Herdr space and tab.
   orchestrator?: { id: string; labels: Record<string, string> };
-  // The live ticker chain that wakes the orchestrator while work is in flight.
-  ticker?: Ticker;
-  // The newest ticker generation started; stopping a chain records it in the scratch stop file.
-  tickerGenerations?: number;
+  // The live watcher that types the tick prompt into the orchestrator while work is in flight.
+  watcher?: Watcher;
+  // The newest watcher generation started; stopping records a newer one in the scratch stop file.
+  watcherGenerations?: number;
+  // When the latest tick began; the watcher skips a periodic prompt within the interval and holds one unconsumed prompt.
+  lastTickAt?: string;
   standingOrders?: StandingOrderChange[];
   hostedMonitor?: { probeCommand: string[]; deadline: string };
   cwd: string;
@@ -633,7 +635,7 @@ function inFlightWorkers(state: Workflow, now: number) {
 }
 const hostedInFlight = (state: Workflow) =>
   state.hostedMonitor && state.hosted?.status === "waiting" ? ["hosted"] : [];
-// Monitored work: the ticker chain, tick monitoring, loop status, finish, and cleanup wait for all of it.
+// Monitored work: the watcher, tick monitoring, watcher status, finish, and cleanup wait for all of it.
 export function inFlight(state: Workflow, now = Date.now()) {
   return [
     ...inFlightWorkers(state, now).map(({ name }) => name),

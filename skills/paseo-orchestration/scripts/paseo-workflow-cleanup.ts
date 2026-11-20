@@ -16,7 +16,7 @@ import {
   resolve,
   sep,
 } from "node:path";
-import { git, herdr, readWorktree, tickPrompt } from "./paseo-workflow-io.ts";
+import { git, herdr, readWorktree } from "./paseo-workflow-io.ts";
 import {
   inFlight,
   locked,
@@ -27,11 +27,7 @@ import {
   unsettledConsult,
   type Workflow,
 } from "./paseo-workflow-state.ts";
-import {
-  labelledTerminals,
-  stopChain,
-  syncTicker,
-} from "./paseo-workflow-ticker.ts";
+import { labelledTerminals, stopWatcher, syncWatcher } from "./watch.ts";
 
 export type CleanupInput = {
   authorizationSource: string;
@@ -223,7 +219,7 @@ async function removeTerminals(
   );
   for (const terminal of ordered)
     await transport(["kill", "--json", terminal.address], 30_000);
-  // A ticker started with --rm is already gone once killed.
+  // A watcher started with --rm is already gone once killed.
   for (const terminal of ordered)
     await transport(["rm", "--json", terminal.address], 30_000).catch(
       (error) => {
@@ -271,9 +267,7 @@ export async function cleanup(
     !unsettled.length,
     `Cleanup waits for the current consult to settle: ${unsettled.join(", ")}`,
   );
-  await syncTicker(path, caller.terminalId, transport, (state) =>
-    tickPrompt(path, state),
-  );
+  await syncWatcher(path, caller.terminalId, transport);
   const { targets, worktreeRoot } = await locked(path, async (state) => {
     requireThat(
       !inFlight(state).length && !unsettledConsult(state).length,
@@ -284,8 +278,8 @@ export async function cleanup(
       "Cleanup of an unfinished workflow requires a reason for abandoning it",
     );
     const scratch = await scratchTarget(path, state, tempRoots);
-    // The chain's stop marker lands before any kill, so no successor outlives cleanup.
-    await stopChain(path, state, transport);
+    // The watcher goes first: its stop generation lands before any kill, so it types nothing during cleanup.
+    await stopWatcher(path, state, transport);
     const terminals = await removeTerminals(
       state,
       caller.terminalId,

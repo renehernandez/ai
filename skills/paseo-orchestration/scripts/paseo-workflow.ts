@@ -14,7 +14,6 @@ import {
   readProbe,
   readWorktree,
   receivedAssignment,
-  tickPrompt,
   type WorktreeReader,
 } from "./paseo-workflow-io.ts";
 import {
@@ -64,11 +63,7 @@ import {
   type WorktreeState,
   workers,
 } from "./paseo-workflow-state.ts";
-import {
-  loopStatus,
-  syncTicker,
-  type TickerStatus,
-} from "./paseo-workflow-ticker.ts";
+import { syncWatcher, type WatcherStatus, watcherStatus } from "./watch.ts";
 
 export { cleanup } from "./paseo-workflow-cleanup.ts";
 export {
@@ -87,10 +82,11 @@ export {
   type Workflow,
 } from "./paseo-workflow-state.ts";
 export {
-  loopStatus,
-  syncTicker,
-  tickerStep,
-} from "./paseo-workflow-ticker.ts";
+  createWatcher,
+  followEvents,
+  syncWatcher,
+  watcherStatus,
+} from "./watch.ts";
 
 // The fixed launcher argv for a role; `hc get` must show exactly this program.
 function launchArgv(state: Workflow, role: Role, session: string | undefined) {
@@ -181,6 +177,8 @@ function runArgs(state: Workflow, role: Role, worker: Review) {
     state.cwd,
     "--parent",
     state.orchestrator.id,
+    // Workers outlive a closed or crashed orchestrator; a new orchestrator in the same cwd resumes with a tick.
+    "--outlive-parent",
     ...Object.entries(labels).flatMap(([key, value]) => [
       "--label",
       `${key}=${value}`,
@@ -1356,8 +1354,11 @@ export async function tick(
   now = Date.now,
   worktree: WorktreeReader = readWorktree,
 ) {
-  const state = JSON.parse(await readFile(path, "utf8")) as Workflow;
-  requireOrchestration(state);
+  const state = await locked(path, (current) => {
+    requireOrchestration(current);
+    current.lastTickAt = new Date(now()).toISOString();
+    return structuredClone(current);
+  });
   const recorded: string[] = [];
   await Promise.all(
     workers(state).map(async ({ name, role, kind, phase, worker }) => {
@@ -1469,14 +1470,8 @@ export async function tick(
   );
   if (await probeHosted(path, probe, now))
     recorded.push(`hosted: ${(await readState(path)).hosted?.status}`);
-  const ticker = await syncTicker(
-    path,
-    input.terminalId,
-    transport,
-    (current) => tickPrompt(path, current),
-    now,
-  );
-  return { ...nextStep(await readState(path), now()), recorded, ticker };
+  const watcher = await syncWatcher(path, input.terminalId, transport, now);
+  return { ...nextStep(await readState(path), now()), recorded, watcher };
 }
 
 const locator = (name: string) => (current: Workflow) => {
@@ -1678,7 +1673,7 @@ function compactResult(
   action: string,
   before: Workflow | undefined,
   after: Workflow,
-  ticker: TickerStatus | undefined,
+  watcher: WatcherStatus | undefined,
 ) {
   const keys = new Set([
     ...Object.keys(before ?? {}),
@@ -1686,8 +1681,9 @@ function compactResult(
   ]) as Set<keyof Workflow>;
   const recorded = [...keys].filter(
     (key) =>
-      key !== "ticker" &&
-      key !== "tickerGenerations" &&
+      key !== "watcher" &&
+      key !== "watcherGenerations" &&
+      key !== "lastTickAt" &&
       JSON.stringify(before?.[key]) !== JSON.stringify(after[key]),
   );
   const previous = new Map(
@@ -1731,7 +1727,7 @@ function compactResult(
       ...(order ? { order } : {}),
     },
     ...(after.orchestration ? nextStep(after) : {}),
-    ...(ticker ? { ticker } : {}),
+    ...(watcher ? { watcher } : {}),
   };
 }
 
@@ -1758,10 +1754,10 @@ export async function main(
   if (action === "status") {
     const state = await readState(path);
     if (state.transport === "herdr-core") {
-      const loop = loopStatus(state);
-      if (loop === "expired" || loop === "unarmed")
+      const watching = await watcherStatus(path, state);
+      if (watching !== "idle" && watching !== "watching")
         process.stderr.write(
-          `Ticker chain ${loop === "expired" ? `expired at ${state.ticker?.expiresAt}` : "is not armed while work is in flight"}; the next dispatch or tick re-arms it.\n`,
+          `Workflow watcher is ${watching} while work is in flight; the next dispatch or tick starts one.\n`,
         );
     }
     process.stdout.write(`${JSON.stringify(state, null, 2)}\n`);
@@ -1800,14 +1796,9 @@ export async function main(
   else if (action === "repair" && input.stage === "start")
     await dispatchRepair(path, input, transport);
   else await transition(path, action, input);
-  const ticker = await syncTicker(
-    path,
-    caller.terminalId,
-    transport,
-    (current) => tickPrompt(path, current),
-  );
+  const watcher = await syncWatcher(path, caller.terminalId, transport);
   process.stdout.write(
-    `${JSON.stringify(compactResult(action, before, await readState(path), ticker))}\n`,
+    `${JSON.stringify(compactResult(action, before, await readState(path), watcher))}\n`,
   );
 }
 if (

@@ -20,10 +20,11 @@ import {
   assertActionGateDisposition,
   bindOrchestrator,
   cleanup,
+  createWatcher,
   dispatchConsult,
   dispatchReview,
+  followEvents,
   initialize,
-  loopStatus,
   main,
   parseConsult,
   parseReview,
@@ -33,14 +34,14 @@ import {
   routesFromTable,
   dispatchRepair as runnerDispatchRepair,
   handoff as runnerHandoff,
-  syncTicker,
+  syncWatcher,
   type Transport,
   tick,
-  tickerStep,
   tickPrompt,
   transition,
   type Workflow,
   type WorktreeReader,
+  watcherStatus,
 } from "../../skills/paseo-orchestration/scripts/paseo-workflow.ts";
 import { sessionCommand } from "../../skills/paseo-orchestration/scripts/paseo-workflow-io.ts";
 import {
@@ -49,6 +50,11 @@ import {
   locked,
   nextStep,
 } from "../../skills/paseo-orchestration/scripts/paseo-workflow-state.ts";
+import {
+  type RetiringMarker,
+  watchedAddresses,
+  watchIntervalMs,
+} from "../../skills/paseo-orchestration/scripts/watch.ts";
 
 // Each fixture's fake worktree stands in for `git rev-parse` when a round binds its head.
 const worktrees = new Map<string, WorktreeReader>();
@@ -199,9 +205,9 @@ async function fixture(
     "Objective: test the accepted behavior. Exact target evidence: test fixture.",
   );
   const calls: string[][] = [];
-  const tickerCalls: string[][] = [];
+  const watcherCalls: string[][] = [];
   const sessions = new Map<string, FakeTerminal>();
-  const tickers = new Map<string, FakeTerminal>();
+  const watchers = new Map<string, FakeTerminal>();
   let reportedHead = heads.first;
   let implementerReply: string | undefined;
   // Per-terminal last replies, as a session that stopped without reporting would show.
@@ -217,9 +223,9 @@ async function fixture(
   });
   worktrees.set(path, worktree);
   let addresses = 0;
-  let maxTickers = 0;
-  const liveTickers = () =>
-    [...tickers.values()].filter((terminal) => terminal.status !== "closed");
+  let maxWatchers = 0;
+  const liveWatchers = () =>
+    [...watchers.values()].filter((terminal) => terminal.status !== "closed");
   const replyOf = async (id: string, terminal: FakeTerminal) => {
     const override = replies.get(id);
     if (override !== undefined) return override;
@@ -245,15 +251,15 @@ async function fixture(
     !terminal.prompt.startsWith(inertPrompt) &&
     replies.get(id) !== startupReply;
   const lookup = (id: string) => {
-    const terminal = sessions.get(id) ?? tickers.get(id);
+    const terminal = sessions.get(id) ?? watchers.get(id);
     if (!terminal || terminal.removed) throw notFound(id);
     return terminal;
   };
   const transport: Transport = async (args, _timeout, _env) => {
-    const ticker =
-      args.includes("ax.role=ticker") ||
-      (["kill", "rm"].includes(args[0]) && tickers.has(args.at(-1) ?? ""));
-    (ticker ? tickerCalls : calls).push(args);
+    const watcher =
+      args.includes("ax.role=watcher") ||
+      (["kill", "rm"].includes(args[0]) && watchers.has(args.at(-1) ?? ""));
+    (watcher ? watcherCalls : calls).push(args);
     if (args[0] === "-V") return "hc 0.1.21\n";
     if (args[0] === sessionCommand) {
       const entry = [...sessions.entries()].find(
@@ -294,9 +300,9 @@ async function fixture(
           ? { session: argv[argv.indexOf("--session") + 1] }
           : {}),
       };
-      if (ticker) {
-        tickers.set(id, terminal);
-        maxTickers = Math.max(maxTickers, liveTickers().length);
+      if (watcher) {
+        watchers.set(id, terminal);
+        maxWatchers = Math.max(maxWatchers, liveWatchers().length);
       } else sessions.set(id, terminal);
       return JSON.stringify({
         address: id,
@@ -319,7 +325,7 @@ async function fixture(
             name: "orchestrator",
             state: "live",
           },
-          ...[...sessions.entries(), ...tickers.entries()]
+          ...[...sessions.entries(), ...watchers.entries()]
             .filter(
               ([, terminal]) =>
                 !terminal.removed && terminal.status !== "closed",
@@ -356,7 +362,8 @@ async function fixture(
     const terminal = lookup(id);
     if (args[0] === "kill") {
       terminal.status = "closed";
-      if (tickers.has(id)) tickers.delete(id);
+      // A --rm watcher is removed once killed.
+      if (watchers.has(id)) watchers.delete(id);
       return "{}";
     }
     if (args[0] === "rm") {
@@ -427,10 +434,10 @@ async function fixture(
     artifactPath,
     repairBrief,
     calls,
-    tickerCalls,
+    watcherCalls,
     sessions,
-    tickers: liveTickers,
-    maxTickers: () => maxTickers,
+    watchers: liveWatchers,
+    maxWatchers: () => maxWatchers,
     reportHead: (head: string) => {
       reportedHead = head;
     },
@@ -575,7 +582,7 @@ test("GREEN pi-paseo-workflow: deliberate focused handoff reaches Ready once wit
       .every((args) => !args.includes("--output-schema")),
   );
   assert.equal((await f.step()).result, "finished");
-  assert.equal(f.tickers().length, 0);
+  assert.equal(f.watchers().length, 0);
   await assert.rejects(
     dispatchFixtureReview(
       f.path,
@@ -1392,7 +1399,9 @@ async function conflictFixture() {
   assert.deepEqual(conflicted.result === "unchanged" && conflicted.inFlight, [
     "handoff",
   ]);
-  assert.ok((await f.read()).ticker);
+  assert.ok((await f.read()).watcher);
+  // The watcher follows both conflicted attempts, whichever finishes first.
+  assert.ok(watchedAddresses(await f.read()).has(old));
   await assert.rejects(
     dispatchFixtureReview(
       f.path,
@@ -2010,7 +2019,7 @@ test("hosted ticks probe once each and expire without inferring success", async 
   for (let index = 0; index < 2; index++)
     assert.equal((await f.step(f.transport, waiting)).result, "unchanged");
   assert.equal(probes, 2);
-  assert.equal(f.tickers().length, 1);
+  assert.equal(f.watchers().length, 1);
   const expired = await f.step(
     f.transport,
     waiting,
@@ -2019,7 +2028,7 @@ test("hosted ticks probe once each and expire without inferring success", async 
   assert.equal(probes, 2);
   assert.deepEqual(expired.recorded, ["hosted: timed-out"]);
   assert.equal(expired.result === "changed" && expired.next.action, "triage");
-  assert.equal(f.tickers().length, 0);
+  assert.equal(f.watchers().length, 0);
   assert.equal((await f.read()).hosted?.status, "timed-out");
   await transition(f.path, "triage", {
     phase: "hosted",
@@ -2345,7 +2354,7 @@ test("GREEN pi-paseo-workflow: ticks carry an unattended run from implementation
   assert.deepEqual(reported.recorded, [`handoff: complete at ${heads.first}`]);
   assert.equal(reported.result, "changed");
   assert.equal(reported.result === "changed" && reported.next.action, "review");
-  assert.deepEqual(reported.ticker, { status: "stopped" });
+  assert.deepEqual(reported.watcher, { status: "stopped" });
   assert.ok((await f.read()).handoff?.report);
   await dispatchFixtureReview(
     f.path,
@@ -2361,7 +2370,7 @@ test("GREEN pi-paseo-workflow: ticks carry an unattended run from implementation
   assert.equal(reviewed.recorded.length, 4);
   assert.equal(reviewed.result === "changed" && reviewed.next.action, "triage");
   assert.equal(runs(f), launches);
-  assert.equal(f.tickers().length, 0);
+  assert.equal(f.watchers().length, 0);
 });
 
 test("GREEN pi-paseo-workflow: a tick with busy workers is quiet and never dispatches", async () => {
@@ -2383,7 +2392,7 @@ test("GREEN pi-paseo-workflow: a tick with busy workers is quiet and never dispa
       "planning:review-contract",
     ],
     recorded: [],
-    ticker: { status: "armed", generation: 1 },
+    watcher: { status: "started", generation: 1 },
   });
   assert.equal(runs(f), launches);
   assert.match(
@@ -2392,7 +2401,7 @@ test("GREEN pi-paseo-workflow: a tick with busy workers is quiet and never dispa
   );
 });
 
-test("GREEN pi-paseo-workflow: one ticker chain on the caller is armed, renewed, re-armed after loss or expiry, and stopped when nothing is in flight", async () => {
+test("GREEN pi-paseo-workflow: one watcher on the caller is started, kept, replaced after loss, a caller change, retirement, or 12 hours, and stopped when nothing is in flight", async () => {
   const f = await fixture();
   await f.review("planning");
   await handoff(
@@ -2401,242 +2410,391 @@ test("GREEN pi-paseo-workflow: one ticker chain on the caller is armed, renewed,
     f.transport,
   );
   for (const session of f.sessions.values()) session.status = "running";
-  const prompt = (state: Workflow) => tickPrompt(f.path, state);
   await Promise.all([f.step(), f.step(), f.step()]);
-  assert.equal(f.tickers().length, 1);
-  assert.equal(f.maxTickers(), 1);
-  const first = (await f.read()).ticker;
+  assert.equal(f.watchers().length, 1);
+  assert.equal(f.maxWatchers(), 1);
+  const first = (await f.read()).watcher;
   assert.equal(first?.generation, 1);
   assert.equal(first?.parent, orchestrator.terminalId);
-  // The ticker runs in the scratch folder as the orchestrator's child, in its space and tab.
-  const [started] = f.tickerCalls.filter((args) => args[0] === "run");
+  assert.ok((await f.read()).lastTickAt);
+  // The watcher runs in the scratch folder as the orchestrator's child, in its space and tab, and dies with it.
+  const [started] = f.watcherCalls.filter((args) => args[0] === "run");
   assert.equal(started[started.indexOf("--cwd") + 1], f.dir);
   assert.equal(started[started.indexOf("--parent") + 1], "t0");
   for (const label of [
     "herdr.space=space-1",
     "herdr.tab=tab-1",
-    "ax.role=ticker",
+    "ax.role=watcher",
+    "ax.generation=1",
   ])
     assert.ok(started.includes(label), label);
-  assert.ok(started.includes("--rm"));
+  for (const flag of ["--rm", "--no-notify"])
+    assert.ok(started.includes(flag), flag);
+  assert.ok(!started.includes("--outlive-parent"));
+  assert.match(started.at(-4) ?? "", /watch\.ts$/);
+  assert.deepEqual(started.slice(-3), [f.path, "t0", "1"]);
+  // Workers outlive the orchestrator.
+  const worker = f.calls.find(
+    (args) => args[0] === "run" && args.includes("ax.role=implementer"),
+  );
+  assert.ok(worker?.includes("--outlive-parent"));
 
-  const halfway = () => Date.now() + 13 * 60 * 60_000;
-  const renewed = await syncTicker(
+  const old = () => Date.now() + 13 * 60 * 60_000;
+  const replaced = await syncWatcher(
     f.path,
     orchestrator.terminalId,
     f.transport,
-    prompt,
-    halfway,
+    old,
   );
-  assert.deepEqual(renewed, {
-    status: "re-armed",
+  assert.deepEqual(replaced, {
+    status: "started",
     generation: 2,
-    reason: "chain past half its lifetime",
+    reason: "watcher older than 12 hours",
   });
-  assert.equal(f.tickers().length, 1);
-  assert.equal(f.maxTickers(), 1);
+  assert.equal(f.watchers().length, 1);
+  assert.equal(f.maxWatchers(), 1);
+  // The stop generation silences every older watcher before the replacement starts.
   assert.equal(
-    (await readFile(join(f.dir, "ticker-stop"), "utf8")).trim(),
-    "1",
+    (await readFile(join(f.dir, "watcher-stop"), "utf8")).trim(),
+    "2",
   );
 
-  // A failed start leaves no live ticker, and the next tick re-arms.
+  // A failed start leaves no live watcher, and the next tick starts one.
   await assert.rejects(
-    syncTicker(
+    syncWatcher(
       f.path,
       orchestrator.terminalId,
       async (args, timeout, env) => {
         if (args[0] === "run") throw new Error("hc core unavailable");
         return f.transport(args, timeout, env);
       },
-      prompt,
-      () => Date.now() + 13 * 60 * 60_000 + 13 * 60 * 60_000,
+      () => Date.now() + 26 * 60 * 60_000,
     ),
     /hc core unavailable/,
   );
-  assert.equal(f.tickers().length, 0);
-  const rearmed = await f.step();
-  assert.equal(rearmed.result, "unchanged");
+  assert.equal(f.watchers().length, 0);
+  const restarted = await f.step();
+  assert.equal(restarted.result, "unchanged");
   assert.equal(
-    rearmed.ticker.status === "re-armed" && rearmed.ticker.reason,
-    "no live ticker",
+    restarted.watcher.status === "started" && restarted.watcher.reason,
+    "no live watcher",
   );
-  assert.equal(f.tickers().length, 1);
+  assert.equal(f.watchers().length, 1);
 
-  const expired = () => Date.now() + 25 * 60 * 60_000;
-  assert.equal(loopStatus(await f.read(), expired), "expired");
-  assert.equal(loopStatus(await f.read()), "armed");
+  assert.equal(
+    await watcherStatus(
+      f.path,
+      await f.read(),
+      () => Date.now() + 25 * 60 * 60_000,
+    ),
+    "expired",
+  );
+  assert.equal(await watcherStatus(f.path, await f.read()), "watching");
   await assert.rejects(
-    syncTicker(f.path, undefined, f.transport, prompt),
+    syncWatcher(f.path, undefined, f.transport),
     /HC_TERMINAL_ID/,
   );
-  const changed = await syncTicker(f.path, "t9", f.transport, prompt);
+  const changed = await syncWatcher(f.path, "t9", f.transport);
   assert.equal(
-    changed.status === "re-armed" && changed.reason,
+    changed.status === "started" && changed.reason,
     "orchestrator terminal changed",
   );
   await f.step();
-  assert.equal((await f.read()).ticker?.parent, orchestrator.terminalId);
+  assert.equal((await f.read()).watcher?.parent, orchestrator.terminalId);
 
-  // A standing-order change reaches the running chain's next note without a restart.
-  const generation = (await f.read()).ticker?.generation;
-  await transition(f.path, "order", {
-    op: "add",
-    id: "visibility",
-    constraint: "Keep the repository private.",
-    authorizationSource: "User message in this task",
-  });
-  const refreshed = await f.step();
-  assert.deepEqual(refreshed.ticker, { status: "armed", generation });
-  const config = JSON.parse(
-    await readFile((await f.read()).ticker?.config ?? "", "utf8"),
+  // A watcher that hung up while current leaves a marker; status reports it and the next tick replaces it.
+  const current = (await f.read()).watcher;
+  assert.ok(current);
+  const marker: RetiringMarker = {
+    generation: current.generation,
+    terminal: current.terminal,
+    recoveryPending: true,
+  };
+  await writeFile(
+    join(f.dir, `watcher-retiring-${current.generation}.json`),
+    JSON.stringify(marker),
   );
-  assert.match(config.prompt, /Keep the repository private/);
-  assert.equal(f.tickers().length, 1);
+  assert.equal(
+    await watcherStatus(f.path, await f.read()),
+    "missing (recovery pending)",
+  );
+  const recovered = await f.step();
+  assert.equal(
+    recovered.watcher.status === "started" && recovered.watcher.reason,
+    "watcher retired with recovery pending",
+  );
+  assert.equal(f.watchers().length, 1);
+  assert.equal(f.maxWatchers(), 1);
 
+  const generation = (await f.read()).watcher?.generation ?? 0;
   for (const session of f.sessions.values()) session.status = "idle";
   const stopped = await f.step();
-  assert.deepEqual(stopped.ticker, { status: "stopped" });
-  assert.equal(f.tickers().length, 0);
-  assert.equal((await f.read()).ticker, undefined);
-  assert.equal(loopStatus(await f.read()), "idle");
+  assert.deepEqual(stopped.watcher, { status: "stopped" });
+  assert.equal(f.watchers().length, 0);
+  assert.equal((await f.read()).watcher, undefined);
+  assert.equal(await watcherStatus(f.path, await f.read()), "idle");
   assert.equal(
-    (await readFile(join(f.dir, "ticker-stop"), "utf8")).trim(),
-    String(generation),
+    (await readFile(join(f.dir, "watcher-stop"), "utf8")).trim(),
+    String(generation + 1),
   );
 });
 
-const tickerConfig = {
-  generation: 2,
-  workflowId: "abcd1234",
-  stopFile: "/scratch/ticker-stop",
-  parent: "t0",
-  cwd: "/scratch",
-  labels: { "herdr.space": "space-1" },
-  expiresAt: 10_000,
-  intervalMs: 300_000,
-  prompt: "Run tick.",
-};
-// Scripts one ticker lifetime: each parent check answers from `parent`, and `stop` is read before and after it.
-function tickerDeps(options: {
-  parent: (Error | string)[];
-  stop?: number[];
-  now?: number;
-  successor?: Error;
-}) {
+// Scripts one watcher against a fixture workflow with its handoff in flight, on a manual clock.
+async function watcherRun(
+  options: { orchestrator?: () => string; refuseSend?: () => boolean } = {},
+) {
+  const f = await fixture();
+  await f.review("planning");
+  await handoff(
+    f.path,
+    { briefPath: f.artifactPath, planResolution: "Settled." },
+    f.transport,
+  );
+  for (const session of f.sessions.values()) session.status = "running";
+  await f.step();
+  const state = await f.read();
+  const worker = state.handoff?.agentId ?? "";
+  assert.ok(worker);
+  let clock = Date.parse(state.lastTickAt ?? "");
+  const sends: string[][] = [];
   const hc: string[][] = [];
-  const slept: number[] = [];
-  const stops = [...(options.stop ?? [0, 0])];
-  return {
-    hc,
-    slept,
-    deps: {
-      hc: async (args: string[]) => {
+  const markers: RetiringMarker[] = [];
+  let stop = 0;
+  const watcher = createWatcher(
+    { state: f.path, orchestrator: "t0", generation: 1 },
+    {
+      hc: async (args) => {
         hc.push(args);
-        if (args[0] === "run") {
-          if (options.successor) throw options.successor;
-          return '{"address":"t7"}';
+        if (args[0] === "send") {
+          if (options.refuseSend?.())
+            throw Object.assign(new Error("Command failed"), {
+              stdout: '{"error":{"kind":"blocked"}}',
+            });
+          sends.push(args);
+          return '{"started":true}';
         }
-        const answer = options.parent.shift();
-        if (answer instanceof Error) throw answer;
-        return answer ?? '{"state":"live"}';
+        if (args.at(-1) === "t0")
+          return JSON.stringify({
+            state: "live",
+            status: { state: options.orchestrator?.() ?? "working" },
+          });
+        return JSON.stringify({ state: "live", status: { state: "done" } });
       },
-      now: () => options.now ?? 0,
-      sleep: async (ms: number) => {
-        slept.push(ms);
+      now: () => clock,
+      readState: async () => structuredClone(state),
+      readStop: async () => stop,
+      writeRetiring: async (marker) => {
+        markers.push(marker);
       },
-      readStop: async () => stops.shift() ?? 0,
+      terminal: "t8",
+    },
+  );
+  const event = (terminal: string, type: string, status?: string) =>
+    watcher.onLine(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        method: "event",
+        params: {
+          terminal,
+          type,
+          data: status ? { status: { state: status } } : {},
+        },
+      }),
+    );
+  // Advances the clock in one-second steps, as the watcher process does.
+  const advance = async (ms: number) => {
+    for (const end = clock + ms; clock < end; ) {
+      clock += 1000;
+      const ended = await watcher.step();
+      if (ended) return ended;
+    }
+    return undefined;
+  };
+  return {
+    f,
+    state,
+    worker,
+    sends,
+    hc,
+    markers,
+    watcher,
+    event,
+    advance,
+    consume: () => {
+      state.lastTickAt = new Date(clock).toISOString();
+    },
+    stopAt: (generation: number) => {
+      stop = generation;
     },
   };
 }
 
-test("GREEN pi-paseo-workflow: a ticker sleeps one interval, then starts its labelled successor under the same parent", async () => {
-  const run = tickerDeps({ parent: ['{"state":"live"}'] });
-  assert.equal(
-    await tickerStep(tickerConfig, "/scratch/ticker-2.json", 4, run.deps),
-    "successor",
-  );
-  assert.equal(run.slept[0], 300_000);
-  const successor = run.hc.find((args) => args[0] === "run") ?? [];
-  assert.equal(
-    successor[successor.indexOf("--name") + 1],
-    "ax-tick-abcd1234-2-5",
-  );
-  assert.equal(successor[successor.indexOf("--parent") + 1], "t0");
-  for (const label of [
-    "herdr.space=space-1",
-    "ax.workflow=abcd1234",
-    "ax.role=ticker",
-    "ax.generation=2",
-  ])
-    assert.ok(successor.includes(label), label);
-  assert.deepEqual(successor.slice(-2), ["/scratch/ticker-2.json", "5"]);
+test("RED pi-paseo-workflow: worker changes and an interval during one long orchestrator turn queue exactly one tick prompt", async () => {
+  const w = await watcherRun();
+  await w.event(w.worker, "status", "done");
+  await w.event(w.worker, "turn");
+  await w.advance(4000);
+  assert.equal(w.sends.length, 0, "a burst coalesces for five seconds");
+  await w.advance(2000);
+  assert.equal(w.sends.length, 1);
+  const [send] = w.sends;
+  assert.deepEqual(send.slice(0, 3), ["send", "--json", "t0"]);
+  assert.match(send[3], /AX orchestration tick/);
+  assert.ok(!send.includes("--force"));
+  // The orchestrator is still in its turn: further changes and the interval send nothing more.
+  await w.event(w.worker, "status", "blocked");
+  await w.advance(10_000);
+  await w.event(w.worker, "finished");
+  await w.advance(watchIntervalMs + 10_000);
+  assert.equal(w.sends.length, 1);
+  // Unrelated terminals and the orchestrator's own turns are not worker changes.
+  await w.event("t42", "turn");
+  await w.event("t0", "turn");
+  // An unconsumed prompt counts as dropped after 15 minutes.
+  await w.advance(10 * 60_000);
+  assert.equal(w.sends.length, 2);
+  // Once a tick consumes the prompt, the next change sends again.
+  w.consume();
+  await w.event(w.worker, "status", "error");
+  await w.advance(6000);
+  assert.equal(w.sends.length, 3);
 });
 
-test("RED pi-paseo-workflow: transient parent-check failures never end the ticker chain; only not_found does", async () => {
-  const transient = tickerDeps({
-    parent: [
-      new Error("socket timeout"),
-      new Error("EPIPE"),
-      '{"state":"live"}',
-    ],
-  });
-  assert.equal(
-    await tickerStep(tickerConfig, "/c.json", 1, transient.deps),
-    "successor",
-  );
-  assert.deepEqual(transient.slept, [300_000, 1000, 2000]);
-  const unreachable = tickerDeps({
-    parent: [new Error("a"), new Error("b"), new Error("c")],
-  });
-  assert.equal(
-    await tickerStep(tickerConfig, "/c.json", 1, unreachable.deps),
-    "successor",
-  );
-  const gone = tickerDeps({
-    parent: [
-      Object.assign(new Error("Command failed"), {
-        stdout: '{"error":{"kind":"not_found"}}',
-      }),
-    ],
-  });
-  assert.equal(
-    await tickerStep(tickerConfig, "/c.json", 1, gone.deps),
-    "orphaned",
-  );
-  assert.ok(!gone.hc.some((args) => args[0] === "run"));
-  const exited = tickerDeps({ parent: ['{"state":"exited"}'] });
-  assert.equal(
-    await tickerStep(tickerConfig, "/c.json", 1, exited.deps),
-    "orphaned",
-  );
+test("GREEN pi-paseo-workflow: the watcher skips a periodic prompt within the interval of the last tick and sends one after it", async () => {
+  const w = await watcherRun();
+  await w.advance(watchIntervalMs / 2);
+  w.consume();
+  await w.advance(watchIntervalMs / 2 + 1000);
+  assert.equal(w.sends.length, 0);
+  await w.advance(watchIntervalMs);
+  assert.equal(w.sends.length, 1);
+  // The prompt carries the effective standing orders read from the state at send time.
+  assert.match(w.sends[0][3], /Standing orders/);
 });
 
-test("RED pi-paseo-workflow: a ticker honors the stop marker, including one recorded during the parent check, and the chain expiry", async () => {
-  for (const stop of [[2], [3], [0, 2]]) {
-    const run = tickerDeps({ parent: [], stop });
-    assert.equal(
-      await tickerStep(tickerConfig, "/c.json", 1, run.deps),
-      "stopped",
-    );
-    assert.ok(!run.hc.some((args) => args[0] === "run"));
-  }
-  // An older generation's stop marker does not stop a newer chain.
-  const older = tickerDeps({ parent: [], stop: [1, 1] });
-  assert.equal(
-    await tickerStep(tickerConfig, "/c.json", 1, older.deps),
-    "successor",
+test("RED pi-paseo-workflow: the watcher never types into a blocked orchestrator and sends once it unblocks", async () => {
+  let orchestratorState = "blocked";
+  let refuse = false;
+  const w = await watcherRun({
+    orchestrator: () => orchestratorState,
+    refuseSend: () => refuse,
+  });
+  await w.event(w.worker, "turn");
+  await w.advance(watchIntervalMs + 60_000);
+  assert.equal(w.sends.length, 0);
+  assert.ok(!w.hc.some((args) => args[0] === "send"));
+  // A status change on the orchestrator other than blocked releases the owed prompt.
+  orchestratorState = "idle";
+  await w.event("t0", "status", "idle");
+  await w.advance(6000);
+  assert.equal(w.sends.length, 1);
+  // A send herdr-core refuses because a dialog opened meanwhile stays owed and is never forced.
+  w.consume();
+  refuse = true;
+  await w.event(w.worker, "turn");
+  await w.advance(6000);
+  assert.equal(w.sends.length, 1);
+  refuse = false;
+  await w.event("t0", "status", "working");
+  await w.advance(6000);
+  assert.equal(w.sends.length, 2);
+  assert.ok(w.hc.every((args) => !args.includes("--force")));
+});
+
+test("RED pi-paseo-workflow: a watcher stops at a newer stop generation and its lifetime, and a hang-up leaves a retiring marker", async () => {
+  const stopped = await watcherRun();
+  stopped.stopAt(1);
+  assert.equal(await stopped.advance(2000), undefined);
+  stopped.stopAt(2);
+  assert.equal(await stopped.advance(2000), "stopped");
+  assert.equal(await stopped.watcher.retire(), "stopped");
+  assert.deepEqual(stopped.markers, []);
+
+  const expired = await watcherRun();
+  expired.consume();
+  assert.equal(await expired.advance(25 * 60 * 60_000), "expired");
+
+  const retired = await watcherRun();
+  assert.equal(await retired.watcher.retire(), "retired");
+  assert.deepEqual(retired.markers, [{ generation: 1, terminal: "t8" }]);
+  assert.equal(retired.sends.length, 1);
+
+  const pending = await watcherRun({ orchestrator: () => "blocked" });
+  assert.equal(await pending.watcher.retire(), "recovery-pending");
+  assert.deepEqual(pending.markers.at(-1), {
+    generation: 1,
+    terminal: "t8",
+    recoveryPending: true,
+  });
+  assert.equal(pending.sends.length, 0);
+});
+
+test("RED pi-paseo-workflow: while the event stream is down the watcher polls watched workers and reopens the stream with backoff", async () => {
+  const w = await watcherRun();
+  let status = "working";
+  let clock = Date.parse(w.state.lastTickAt ?? "");
+  const polled = createWatcher(
+    { state: w.f.path, orchestrator: "t0", generation: 1 },
+    {
+      hc: async (args) => {
+        if (args[0] === "send") {
+          w.sends.push(args);
+          return "{}";
+        }
+        return JSON.stringify({
+          state: "live",
+          status: { state: args.at(-1) === "t0" ? "idle" : status },
+          turn: status === "done" ? 2 : 1,
+        });
+      },
+      now: () => clock,
+      readState: async () => structuredClone(w.state),
+      readStop: async () => 0,
+      writeRetiring: async () => {},
+      terminal: "t8",
+    },
   );
-  const expired = tickerDeps({ parent: [], now: 10_000 });
-  assert.equal(
-    await tickerStep(tickerConfig, "/c.json", 1, expired.deps),
-    "expired",
+  const advance = async (ms: number) => {
+    for (const end = clock + ms; clock < end; ) {
+      clock += 1000;
+      await polled.step();
+    }
+  };
+  polled.setPolling(true);
+  await advance(20_000);
+  assert.equal(w.sends.length, 0);
+  status = "done";
+  await advance(25_000);
+  assert.equal(w.sends.length, 1);
+
+  const slept: number[] = [];
+  const polling: boolean[] = [];
+  const lines: string[] = [];
+  let opens = 0;
+  await followEvents(
+    () => {
+      opens++;
+      if (opens <= 2) throw new Error("hc events unavailable");
+      return (async function* () {
+        yield `${opens}`;
+      })();
+    },
+    {
+      onLine: async (line) => {
+        lines.push(line);
+      },
+      setPolling: (value) => {
+        polling.push(value);
+      },
+    },
+    async (ms) => {
+      slept.push(ms);
+    },
+    () => opens < 4,
   );
-  const failed = tickerDeps({ parent: [], successor: new Error("hc down") });
-  assert.equal(
-    await tickerStep(tickerConfig, "/c.json", 1, failed.deps),
-    "successor-failed",
-  );
+  assert.deepEqual(lines, ["3", "4"]);
+  assert.deepEqual(slept, [1000, 2000, 1000]);
+  assert.deepEqual(polling, [true, true, false, true, false]);
 });
 
 test("RED pi-paseo-workflow: managed workers cannot run orchestrator actions", async () => {
@@ -3138,7 +3296,7 @@ test("GREEN pi-paseo-workflow: assignments and tick prompts carry only the effec
   );
 });
 
-test("GREEN pi-paseo-workflow: contract questions and hosted user gates return awaiting-user and stop the ticker chain", async () => {
+test("GREEN pi-paseo-workflow: contract questions and hosted user gates return awaiting-user and stop the watcher", async () => {
   const f = await fixture();
   await dispatchFixtureReview(
     f.path,
@@ -3175,11 +3333,11 @@ test("GREEN pi-paseo-workflow: contract questions and hosted user gates return a
   await g.review("implementation");
   await transition(g.path, "publication", hostedReceipt);
   await g.step(g.transport, probeReturning("waiting"));
-  assert.equal(g.tickers().length, 1);
+  assert.equal(g.watchers().length, 1);
   const hosted = await g.step(g.transport, probeReturning("awaiting-user"));
   assert.equal(hosted.result, "awaiting-user");
-  assert.equal(g.tickers().length, 0);
-  assert.equal((await g.read()).ticker, undefined);
+  assert.equal(g.watchers().length, 0);
+  assert.equal((await g.read()).watcher, undefined);
 });
 
 test("GREEN pi-paseo-workflow: a repair batch launches one new verified implementer session", async () => {
@@ -3422,8 +3580,8 @@ test("GREEN pi-paseo-workflow: inspection errors degrade reviewers and keep impl
     return g.transport(args, timeout, env);
   });
   assert.equal(flaky.result, "unchanged");
-  // An unreadable terminal list never starts a possibly duplicate chain.
-  assert.equal(flaky.ticker?.status, "unarmed");
+  // An unreadable terminal list never starts a possibly duplicate watcher.
+  assert.equal(flaky.watcher?.status, "missing");
   assert.match(
     flaky.recorded[0],
     /handoff: inspect failed: .*daemon unavailable/,
@@ -3461,7 +3619,7 @@ test("GREEN pi-paseo-workflow: runner actions print one compact line and status 
     ids: { order: "visibility" },
     result: "changed",
     next: { action: "review", detail: "Dispatch the planning review round" },
-    ticker: { status: "stopped" },
+    watcher: { status: "stopped" },
   });
   await dispatchFixtureReview(
     f.path,
@@ -3484,7 +3642,7 @@ test("GREEN pi-paseo-workflow: runner actions print one compact line and status 
     ids: {},
     result: "awaiting-user",
     gate: gates.acceptance,
-    ticker: { status: "stopped" },
+    watcher: { status: "stopped" },
   });
   assert.doesNotMatch(triaged, /code-simplifier|outcomes|lenses/);
   const ticked = await captureStdout(() =>
@@ -3812,20 +3970,20 @@ type CleanupFixture = Awaited<ReturnType<typeof cleanupFixture>>;
 
 test("GREEN pi-paseo-workflow: authorized cleanup removes labelled terminals children first, never the caller, then the clean linked worktree and the scratch folder", async () => {
   const c = await cleanupFixture();
-  // A stale ticker chain is stopped by its marker and label before any other removal.
+  // A stale watcher is stopped by its stop generation and label before any other removal.
   c.terminals.push({
     address: "t3",
     cwd: c.scratch,
-    labels: { "ax.workflow": c.workflowId, "ax.role": "ticker" },
+    labels: { "ax.workflow": c.workflowId, "ax.role": "watcher" },
     parent: "t0",
   });
   await locked(c.path, (state) => {
-    state.tickerGenerations = 1;
-    state.ticker = {
+    state.watcherGenerations = 1;
+    state.watcher = {
       generation: 1,
+      terminal: "t3",
       parent: "t0",
-      config: join(c.scratch, "ticker-1.json"),
-      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      startedAt: new Date().toISOString(),
     };
   });
   // Runner-owned snapshots may quote workflow state without counting as another workflow.
@@ -4174,7 +4332,7 @@ test("GREEN pi-paseo-workflow: consult launches both planners concurrently on a 
   // Complete advice never yields triage or a user gate.
   assert.equal(actionOf(ticked), "review");
   assert.equal("consulting" in ticked, false);
-  assert.equal(f.tickers().length, 0);
+  assert.equal(f.watchers().length, 0);
 
   // A second consult archives the first.
   await dispatchConsult(
@@ -4419,7 +4577,7 @@ test("RED pi-paseo-workflow: an undelivered planner gets one retry-launch, and a
   assert.equal(runs(f), 2);
 });
 
-test("GREEN pi-paseo-workflow: running consults never block review, handoff, or repair, but keep the ticker chain armed", async () => {
+test("GREEN pi-paseo-workflow: running consults never block review, handoff, or repair, but keep the watcher running", async () => {
   const f = await fixture();
   await dispatchConsult(
     f.path,
@@ -4443,8 +4601,8 @@ test("GREEN pi-paseo-workflow: running consults never block review, handoff, or 
     reviewed.result === "changed" && reviewed.consulting,
     planners,
   );
-  assert.equal(f.tickers().length, 1);
-  assert.ok(reviewed.ticker);
+  assert.equal(f.watchers().length, 1);
+  assert.ok(reviewed.watcher);
   await transition(f.path, "triage", { phase: "planning", decisions: [] });
   const acceptance = nextStep(await f.read());
   assert.equal(acceptance.result, "awaiting-user");

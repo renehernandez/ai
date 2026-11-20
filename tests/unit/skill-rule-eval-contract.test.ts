@@ -45,7 +45,7 @@ import {
   requireCurrentReviewMode,
   requireOrchestration,
 } from "../../skills/paseo-orchestration/scripts/paseo-workflow-state.ts";
-import { labelledTerminals } from "../../skills/paseo-orchestration/scripts/paseo-workflow-ticker.ts";
+import { labelledTerminals } from "../../skills/paseo-orchestration/scripts/watch.ts";
 import { routeWorkDisposition } from "../../skills/plan/scripts/plan-contract.ts";
 
 const managedSkills = (
@@ -472,7 +472,7 @@ test("GREEN skill-rule-evals: workflow terminals are found by labels read throug
   const found = await labelledTerminals(
     "wf1",
     observedHc({
-      t1: { "ax.workflow": "wf1", "ax.role": "ticker" },
+      t1: { "ax.workflow": "wf1", "ax.role": "watcher" },
       t2: { "ax.workflow": "other" },
       t3: {},
     }),
@@ -480,7 +480,7 @@ test("GREEN skill-rule-evals: workflow terminals are found by labels read throug
   assert.deepEqual(found, [
     {
       address: "t1",
-      labels: { "ax.workflow": "wf1", "ax.role": "ticker" },
+      labels: { "ax.workflow": "wf1", "ax.role": "watcher" },
       parent: "t0",
     },
   ]);
