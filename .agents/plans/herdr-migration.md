@@ -502,3 +502,43 @@ writes none, and reviewers have no shell to report with `hc send`. Under
 this plan's rule the implementer stopped here and returned to Plan. The
 revised Wake-up section replaces the ticker chain with the workflow
 watcher, which types the tick prompt itself.
+
+First proof 4, observed with `hc` 0.1.21 and Pi 1.5.0 under an isolated
+HOME, `XDG_CONFIG_HOME`, and `HC_SESSION`, with a real managed Pi
+orchestrator and real managed Pi children launched through the launcher
+with `--outlive-parent`, and a scripted local model:
+
+- The event stream reports an ordinary turn end. While
+  `hc events --children-of <orchestrator> --json` and `hc events --json`
+  ran, a child that finished a turn produced, on both streams,
+  `{"type":"status","terminal":"t5","data":{"status":{"app":"pi","state":"working"},"reported":true,"records":{}}}`,
+  then the same shape with `"state":"done"`, then
+  `{"type":"turn","terminal":"t5","data":{"state":"done","turn":1}}`.
+  Each event arrives as a JSON-RPC notification
+  `{"jsonrpc":"2.0","method":"event","params":{...,"seq":N}}`. The stream
+  opens with one snapshot line `{"channel":null,"seq":N,"terminals":[...]}`
+  of `hc get`-shaped rows and interleaves
+  `{"method":"heartbeat","params":{"seq":N}}` lines. Other event types
+  seen: `created` (a full `hc get` row), `foreground`, `title`, and
+  `finished` (`exit_code`, `finished_ms`, `reason`, `signal`). The watcher
+  therefore follows the event stream, not `hc get` polling.
+- A blocked child appears on the stream as
+  `{"type":"status","data":{"status":{"app":"pi","kind":"permission","msg":"Proof dialog","state":"blocked"}}}`
+  and notes its parent:
+  `<hc>t6 p4-blockable is blocked (permission). See: hc read t6</hc>`. Pi
+  reports `blocked` while an extension dialog such as a confirm waits; a
+  proof-only extension opened one.
+- `hc send` to a blocked Pi types nothing. With or without `--if idle` it
+  exits 9 with
+  `{"error":{"kind":"blocked","message":"t6 is blocked (permission)","hint":"typing would answer its dialog; read its screen first (hc read t6), or --force"}}`;
+  the dialog stays open.
+- A finished turn again typed no note into the orchestrator, while a
+  child killed with `hc kill` did:
+  `<hc>t5 p4-child exited (exit 0). Read: hc read t5</hc>`.
+- `--outlive-parent` holds. `hc get` on such a child shows
+  `die_with_parent: false`. After `hc kill` on the orchestrator, the child
+  stayed `live` and `blocked`, kept `parent` pointing at the finished
+  orchestrator, and the `--children-of` stream stayed open.
+- Right after `hc kill` returned `state: finished`, one `hc ls --all` still
+  showed the killed terminal `live`; the next call showed it finished.
+  Readers treat a just-killed terminal's `ls` row as eventually consistent.
