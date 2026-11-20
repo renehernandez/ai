@@ -483,6 +483,7 @@ test("GREEN skill-rule-evals: workflow terminals are found by labels read throug
       address: "t1",
       labels: { "ax.workflow": "wf1", "ax.role": "watcher" },
       parent: "t0",
+      state: "live",
     },
   ]);
 });

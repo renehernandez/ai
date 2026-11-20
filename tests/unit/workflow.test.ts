@@ -4061,25 +4061,44 @@ async function cleanupFixture(
     killAddress?: string;
     rmAddress?: string;
     removedOnKill?: string;
+    // This 1-based `ls --all` read still shows removed terminals live, as herdr-core did right after a kill.
+    staleAllRead?: number;
   } = {};
-  const live = () =>
-    terminals.filter((terminal) => !terminal.killed && !terminal.removed);
+  // Until the next `ls`, `get` agrees with a stale `ls --all` read.
+  let stale = false;
+  let allReads = 0;
   const transport: Transport = async (args) => {
     calls.push(args);
     if (args[0] === "ls") {
-      // Like herdr-core 0.1.21: rows carry no labels, and the `--label` filter matches nothing.
+      // Like herdr-core 0.1.21: rows carry no labels, the `--label` filter matches nothing, and plain `ls` hides finished terminals.
       assert.ok(!args.includes("--label"), "hc ls --label matches nothing");
+      const all = args.includes("--all");
+      if (all) allReads++;
+      stale = all && allReads === fail.staleAllRead;
+      const rows = terminals.filter((terminal) =>
+        stale ? true : !terminal.removed && (all || !terminal.killed),
+      );
       return JSON.stringify({
-        hidden_finished: 0,
-        terminals: live().map(({ address, cwd, parent }) => ({
+        hidden_finished: all
+          ? 0
+          : terminals.filter((item) => item.killed && !item.removed).length,
+        terminals: rows.map(({ address, cwd, parent, killed, removed }) => ({
           address,
           cwd,
           parent,
-          state: "live",
+          state: killed && !removed && !stale ? "finished" : "live",
         })),
       });
     }
     const terminal = terminals.find((item) => item.address === args.at(-1));
+    if (args[0] === "get" && terminal?.removed && stale)
+      return JSON.stringify({
+        address: terminal.address,
+        cwd: terminal.cwd,
+        labels: terminal.labels,
+        parent: terminal.parent,
+        state: "live",
+      });
     if (!terminal || terminal.removed)
       throw Object.assign(new Error("Command failed"), {
         stdout: '{"error":{"kind":"not_found"}}',
@@ -4189,11 +4208,12 @@ test("GREEN pi-workflow: authorized cleanup removes labelled terminals children 
     await readFile(c.path, "utf8"),
   );
   const { targets } = await c.run();
+  // The watcher stop leaves t3 finished; terminal removal then removes it without a second kill.
   assert.deepEqual(targets, {
     terminals: {
       status: "removed",
       target: `ax.workflow=${c.workflowId}`,
-      reason: "t2, t1",
+      reason: "t2, t1, t3",
     },
     worktree: { status: "removed", target: c.tree },
     scratch: { status: "removed", target: c.scratch },
@@ -4230,6 +4250,64 @@ test("RED pi-workflow: cleanup counts a not_found kill of a terminal removed as 
     reason: "t2, t1, t3",
   });
   assert.deepEqual(c.killed(), ["t2", "t1", "t3"]);
+  assert.equal(targets.scratch.status, "removed");
+});
+
+test("RED pi-workflow: cleanup removes a finished labelled worker that plain hc ls hides, kills only live workers, and never touches the caller", async () => {
+  const c = await cleanupFixture();
+  // An exited worker or a reviewer killed at timeout: finished, hidden from plain `ls`, labels still visible through `get`.
+  c.terminals.push({
+    address: "t4",
+    cwd: c.scratch,
+    labels: { "ax.workflow": c.workflowId },
+    parent: "t0",
+    killed: true,
+  });
+  const { targets } = await c.run();
+  assert.equal(targets.terminals.status, "removed");
+  assert.match(targets.terminals.reason ?? "", /\bt4\b/);
+  assert.ok(c.terminals.find((item) => item.address === "t4")?.removed);
+  // Finished t4 gets rm without kill; live t1 and t2 keep kill then rm.
+  assert.deepEqual(c.killed(), ["t2", "t1"]);
+  for (const address of ["t1", "t2"]) {
+    const order = c.calls
+      .filter((args) => args.at(-1) === address)
+      .map((args) => args[0])
+      .filter((verb) => verb === "kill" || verb === "rm");
+    assert.deepEqual(order, ["kill", "rm"], address);
+  }
+  assert.ok(
+    c.calls.some((args) => args[0] === "rm" && args.at(-1) === "t4"),
+    "finished t4 is removed",
+  );
+  assert.ok(
+    !c.calls.some(
+      (args) => args.at(-1) === "t0" && ["kill", "rm"].includes(args[0]),
+    ),
+    "the caller is excluded",
+  );
+  // Enumeration and the final residual check include finished terminals.
+  const allReads = c.calls.filter(
+    (args) => args[0] === "ls" && args.includes("--all"),
+  );
+  assert.ok(allReads.length >= 2, "cleanup enumerates with hc ls --all");
+  assert.equal(targets.scratch.status, "removed");
+});
+
+test("RED pi-workflow: a just-removed terminal still read live once is re-read before cleanup reports it remaining", async () => {
+  const c = await cleanupFixture();
+  // The first `ls --all` read enumerates; the second, the residual check, is stale once.
+  c.fail.staleAllRead = 2;
+  const { targets } = await c.run();
+  assert.deepEqual(targets.terminals, {
+    status: "removed",
+    target: `ax.workflow=${c.workflowId}`,
+    reason: "t2, t1",
+  });
+  const allReads = c.calls.filter(
+    (args) => args[0] === "ls" && args.includes("--all"),
+  );
+  assert.equal(allReads.length, 3, "the stale residual read is retried once");
   assert.equal(targets.scratch.status, "removed");
 });
 

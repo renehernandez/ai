@@ -159,15 +159,19 @@ type Terminal = {
   address: string;
   labels: Record<string, string>;
   parent: string | null;
+  state?: string;
 };
-// The workflow's live labelled terminals: workers and the watcher.
-// herdr-core 0.1.21 `ls` rows carry no labels and its `--label` filter matches nothing, so each live terminal's labels come from `get`.
+// The workflow's live labelled terminals: workers and the watcher. With `all`, finished terminals that plain `ls` hides are included too.
+// herdr-core 0.1.21 `ls` rows carry no labels and its `--label` filter matches nothing, so each terminal's labels come from `get`.
 export async function labelledTerminals(
   workflowId: string | undefined,
   transport: Transport,
+  { all = false }: { all?: boolean } = {},
 ): Promise<Terminal[]> {
   requireThat(nonempty(workflowId), "State has no workflow label");
-  const listed = JSON.parse(await transport(["ls", "--json"], 30_000));
+  const listed = JSON.parse(
+    await transport(["ls", ...(all ? ["--all"] : []), "--json"], 30_000),
+  );
   requireThat(
     Array.isArray(listed?.terminals) &&
       listed.terminals.every((row: Terminal) => nonempty(row?.address)),
@@ -181,7 +185,7 @@ export async function labelledTerminals(
         await transport(["get", "--json", address], 30_000),
       );
     } catch (error) {
-      // A terminal that ended between `ls` and `get` is no longer live.
+      // A terminal removed between `ls` and `get` no longer exists.
       if (
         /not_found/.test(
           `${(error as { stdout?: unknown }).stdout ?? ""} ${error}`,
@@ -199,6 +203,7 @@ export async function labelledTerminals(
         address,
         labels: terminal.labels,
         parent: terminal.parent ?? null,
+        ...(nonempty(terminal.state) ? { state: terminal.state } : {}),
       });
   }
   return terminals;

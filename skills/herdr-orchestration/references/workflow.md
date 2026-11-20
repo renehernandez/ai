@@ -550,9 +550,13 @@ After the user authorizes cleanup, use `cleanup` instead of shell deletion.
 Before removing anything, the runner requires that nothing is in flight,
 validates the scratch folder, and saves the cleanup reservation in state. It
 then stops the watcher, deletes this
-workflow's wake request, and kills and removes every terminal carrying the
-workflow label, children before parents. A kill or removal that reports
-`not_found` counts as success, because a `--rm` terminal is removed as it dies.
+workflow's wake request, and removes every terminal carrying the workflow
+label, children before parents. It lists with `hc ls --all`, so finished
+workers and timed-out reviewers are removed too; only live terminals are
+killed first. A kill or removal that reports `not_found` counts as success,
+because a `--rm` terminal is removed as it dies. A just-killed terminal's row
+is eventually consistent, so the final check re-reads a residual before
+reporting it remaining.
 The caller's own `HC_TERMINAL_ID` is always excluded, even when it carries the
 workflow label. Once cleanup starts, every action except `status` refuses. The
 runner removes a linked worktree with plain `git worktree remove` only when it

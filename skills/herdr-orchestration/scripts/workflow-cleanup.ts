@@ -193,7 +193,7 @@ async function worktreeTarget(
   return { status: "remaining", target: cwd, root: dirname(commonDir) };
 }
 
-// Kills and removes each labelled terminal, children before parents, recording progress in `receipt`; the caller is never touched.
+// Kills each live labelled terminal and removes every labelled one, finished included, children before parents, recording progress in `receipt`; the caller is never touched.
 async function removeTerminals(
   state: Workflow,
   callerId: string | undefined,
@@ -201,9 +201,11 @@ async function removeTerminals(
   receipt: CleanupReceipt,
 ) {
   const target = receipt.terminals.target;
-  const listed = (await labelledTerminals(state.workflowId, transport)).filter(
-    (terminal) => terminal.address !== callerId,
-  );
+  const labelled = async () =>
+    (
+      await labelledTerminals(state.workflowId, transport, { all: true })
+    ).filter((terminal) => terminal.address !== callerId);
+  const listed = await labelled();
   const depth = (address: string, seen = new Set<string>()): number => {
     const parent = listed.find((item) => item.address === address)?.parent;
     if (!parent || seen.has(parent)) return 0;
@@ -222,19 +224,23 @@ async function removeTerminals(
     receipt.terminals.reason = `removed: ${removed.join(", ") || "none"}; remaining: ${remaining.join(", ")}`;
   };
   progress(ordered.map((item) => item.address));
-  for (const [index, { address }] of ordered.entries()) {
-    await transport(["kill", "--json", address], 30_000).catch(gone);
+  for (const [index, { address, state: status }] of ordered.entries()) {
+    if (status !== "finished")
+      await transport(["kill", "--json", address], 30_000).catch(gone);
     await transport(["rm", "--json", address], 30_000).catch(gone);
     removed.push(address);
     progress(ordered.slice(index + 1).map((item) => item.address));
   }
-  const left = (await labelledTerminals(state.workflowId, transport)).filter(
-    (terminal) => terminal.address !== callerId,
-  );
+  // A just-killed terminal's row is eventually consistent, so a residual is re-read with the observation backoff before it counts.
+  let left = await labelled();
+  for (let attempt = 1; left.length && attempt < 3; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 100 * attempt));
+    left = await labelled();
+  }
   if (left.length) {
     progress(left.map((item) => item.address));
     throw new Error(
-      `Terminals still live after removal: ${left.map((item) => item.address).join(", ")}`,
+      `Terminals still present after removal: ${left.map((item) => item.address).join(", ")}`,
     );
   }
   receipt.terminals = ordered.length
