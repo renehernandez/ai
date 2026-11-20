@@ -89,7 +89,11 @@ export {
 } from "./workflow-state.ts";
 
 // The fixed launcher argv for a role; `hc get` must show exactly this program.
-function launchArgv(state: Workflow, role: Role, session: string | undefined) {
+export function launchArgv(
+  state: Workflow,
+  role: Role,
+  session: string | undefined,
+) {
   const route = state.routes[role];
   requireThat(
     state.launcher && session,
@@ -1607,7 +1611,7 @@ async function watchSuperseded(
     });
   }
 }
-// Once both conflicted sessions are quiet, records which of them reported the worktree head.
+// Once both conflicted sessions are quiet or ended, records which of them reported the worktree head.
 async function observeConflict(
   path: string,
   state: Workflow,
@@ -1626,7 +1630,9 @@ async function observeConflict(
   try {
     for (const { agentId } of sessions)
       if (
-        lifecycle(await inspectTerminal(agentId ?? "", transport)) !== "quiet"
+        !["quiet", "ended"].includes(
+          lifecycle(await inspectTerminal(agentId ?? "", transport)),
+        )
       )
         return undefined;
   } catch (error) {

@@ -490,6 +490,8 @@ test("herdr-core and the Herdr app are default-deny allow-lists for every manage
     "herdr-app --skill",
     "herdr-app --version",
     '"$EDITOR" notes.md',
+    '"$EDITOR" --wait notes.md',
+    "$H --session x ls",
   ];
   const denied = [
     "hc",
@@ -519,6 +521,11 @@ test("herdr-core and the Herdr app are default-deny allow-lists for every manage
     '"$H" interrupt t1',
     "$H kill t1",
     "$H",
+    "$H --session x run --bg -- pi",
+    "$H --session=x run --bg -- pi",
+    "$H --session x --verbose -q send t1 hi",
+    '"$H" -q kill t1',
+    "$H --session x $SUB t1",
     "env -S 'hc kill t1'",
     "sh -c 'hc run -- pi'",
     'sh -c "$PAYLOAD"',
@@ -748,7 +755,7 @@ test("the orchestrator and its planner alias cannot change dependencies, but kee
     '"$PM" install left-pad',
     '"$PM" --filter app add left-pad',
     '"$PM" --prefix app install',
-    '"$PM" -r update',
+    '"$PM" -r up',
     "pnpm --unknown-option add left-pad",
     "npm --unknown value install",
     "pnpm --unknown=value run test",
@@ -793,19 +800,21 @@ test("the orchestrator and its planner alias cannot change dependencies, but kee
         undefined,
         command,
       );
-  // The herdr-core policy separately denies a dynamic executable followed by `run` or `exec`.
+  // The herdr-core policy separately denies a dynamic executable followed, even after options, by a herdr subcommand such as `run`, `exec`, or `update`.
   assert.equal(findDependencyChange('"$PM" run test'), undefined);
   assert.equal(findDependencyChange('"$PM" exec vitest'), undefined);
-  assert.match(
-    toolDenial("orchestrator", "bash", { command: '"$PM" exec vitest' }, cwd) ??
-      "",
-    /^herdr-core policy/u,
-  );
+  for (const role of writeRoles)
+    for (const command of ['"$PM" exec vitest', '"$PM" -r update'])
+      assert.match(
+        toolDenial(role, "bash", { command }, cwd) ?? "",
+        /^herdr-core policy/u,
+        `${role}: ${command}`,
+      );
   for (const command of [
     ...denied.filter((command) => !command.includes("$")),
     '"$PM" --filter app add left-pad',
     '"$PM" --prefix app install',
-    '"$PM" -r update',
+    '"$PM" -r up',
   ])
     assert.equal(
       toolDenial("implementer", "bash", { command }, cwd),

@@ -29,7 +29,7 @@ export const watcherLifetimeMs = 24 * 60 * 60_000;
 export const replaceAfterMs = 12 * 60 * 60_000;
 const watchScript = fileURLToPath(import.meta.url);
 
-// Mirrors hooks/pi/wake.ts, which the runner cannot import from its separately installed skill folder.
+// Mirrors hooks/pi/wake.ts, which the runner cannot import from its separately installed skill folder; tests/unit/herdr-contract.test.ts holds them in parity.
 export const wakeSessionFile = "session.json";
 export function wakeRoot(env: NodeJS.ProcessEnv = process.env) {
   const state = env.XDG_STATE_HOME?.trim()
@@ -57,6 +57,12 @@ export const wakeRequestFile = (
   wake: { root: string; address: string },
   workflowId: string,
 ) => join(wakeDirectory(wake.root, wake.address), `${workflowId}.json`);
+// Writes a workflow's one wake request atomically into the orchestrator's wake directory.
+export const writeWakeRequest = (directory: string, request: WakeRequest) =>
+  writeAtomic(
+    join(directory, `${request.workflow}.json`),
+    JSON.stringify(request),
+  );
 async function readJson(path: string) {
   try {
     const text = await readOptional(path);
@@ -630,10 +636,7 @@ if (process.argv[1] && resolve(process.argv[1]) === watchScript) {
         .stdout,
     readNonce: (state) => readSessionNonce(directory(state)),
     writeRequest: (state, request) =>
-      writeAtomic(
-        join(directory(state), `${request.workflow}.json`),
-        JSON.stringify(request),
-      ),
+      writeWakeRequest(directory(state), request),
     now: Date.now,
     readState,
     readStop: () => readStopGeneration(stopFileOf(statePath, initial)),

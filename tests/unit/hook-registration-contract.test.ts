@@ -7,11 +7,12 @@ import {
   renderHookRegistrationDocument,
 } from "../../scripts/ax/hook-registration.ts";
 
-test("RED hook-registration: MCP and Pi runtime configuration, including the herdr-core and Herdr app allow-lists, interactive-only launcher, herdr-core workflow watcher, in-process wake-request delivery, tracked route table, orchestrator write, git, dependency, nested MCP, read-only reviewer, and no-shell consult planner tool policies, agent shell discipline, and pinned package configs, are not hook targets", () => {
+test("RED hook-registration: MCP and Pi runtime configuration, including the herdr-core and Herdr app allow-lists with fail-closed dynamic executables, interactive-only launcher, herdr-core workflow watcher, in-process wake-request delivery, tracked route table, orchestrator write, git, dependency, nested MCP, read-only reviewer, and no-shell consult planner tool policies, agent shell discipline, and pinned package configs, are not hook targets", () => {
   for (const target of ["claude", "codex"] as const)
     for (const path of [
       ".agents/hooks/pi/routes.json",
       ".agents/hooks/pi/launch.ts",
+      ".agents/hooks/pi/policy.ts",
       ".agents/hooks/pi/wake.ts",
       ".local/state/ax/wake/t8/session.json",
       ".local/state/ax/wake/t8/wf1.json",

@@ -1438,6 +1438,17 @@ test("GREEN skill-rule-evals: session handoff, worker handoff, and orchestration
     /plain `git worktree remove` only when it\s+is clean at `head`, no live terminal other than the caller works inside it,\s+and the caller's own cwd is outside it/,
   );
   assert.match(workflow, /reports\s+`not_found` counts as success/);
+  // The reservation is saved before the first removal, so a failure part-way leaves a refusing state with its receipt.
+  assert.match(
+    workflow,
+    /validates the scratch folder, and saves the cleanup reservation in state\. It\s+then stops the watcher/,
+  );
+  assert.match(workflow, /the surviving state keeps that receipt/);
+  // The runner mirrors the wake protocol and route parsing it cannot import; one contract test holds them equal.
+  assert.match(
+    read("skills/herdr-orchestration/scripts/watch.ts"),
+    /Mirrors hooks\/pi\/wake\.ts[^\n]*tests\/unit\/herdr-contract\.test\.ts holds them in parity/,
+  );
   assert.doesNotMatch(workflow, /PASEO_AGENT_ID|workspace archive/);
   assert.doesNotMatch(workflow, /must therefore live outside the workflow/);
   assert.match(workflow, /with `worker-handoff`/);

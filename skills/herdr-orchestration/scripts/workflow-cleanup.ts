@@ -24,9 +24,12 @@ import {
 } from "./watch.ts";
 import { git, herdr, readWorktree } from "./workflow-io.ts";
 import {
+  type CleanupReceipt,
+  type CleanupTarget,
   inFlight,
   locked,
   nonempty,
+  recordCleanupReceipt,
   requireHerdrTransport,
   requireThat,
   type Transport,
@@ -34,20 +37,12 @@ import {
   type Workflow,
 } from "./workflow-state.ts";
 
+export type { CleanupReceipt, CleanupTarget };
 export type CleanupInput = {
   authorizationSource: string;
   head: string;
   reason?: string;
 };
-export type CleanupTarget = {
-  status: "removed" | "skipped" | "remaining";
-  target: string;
-  reason?: string;
-};
-export type CleanupReceipt = Record<
-  "terminals" | "worktree" | "scratch",
-  CleanupTarget
->;
 
 export const defaultTempRoots = () => [tmpdir(), "/tmp"];
 
@@ -203,13 +198,14 @@ async function worktreeTarget(
   return { status: "remaining", target: cwd, root: dirname(commonDir) };
 }
 
-// Kills the workflow's labelled terminals, children before parents, then removes them; the caller is never touched.
+// Kills and removes each labelled terminal, children before parents, recording progress in `receipt`; the caller is never touched.
 async function removeTerminals(
   state: Workflow,
   callerId: string | undefined,
   transport: Transport,
-): Promise<CleanupTarget> {
-  const target = `ax.workflow=${state.workflowId}`;
+  receipt: CleanupReceipt,
+) {
+  const target = receipt.terminals.target;
   const listed = (await labelledTerminals(state.workflowId, transport)).filter(
     (terminal) => terminal.address !== callerId,
   );
@@ -226,23 +222,28 @@ async function removeTerminals(
   const gone = (error: { stdout?: unknown }) => {
     if (!/not_found/.test(`${error?.stdout ?? ""} ${error}`)) throw error;
   };
-  for (const terminal of ordered)
-    await transport(["kill", "--json", terminal.address], 30_000).catch(gone);
-  for (const terminal of ordered)
-    await transport(["rm", "--json", terminal.address], 30_000).catch(gone);
+  const removed: string[] = [];
+  const progress = (remaining: string[]) => {
+    receipt.terminals.reason = `removed: ${removed.join(", ") || "none"}; remaining: ${remaining.join(", ")}`;
+  };
+  progress(ordered.map((item) => item.address));
+  for (const [index, { address }] of ordered.entries()) {
+    await transport(["kill", "--json", address], 30_000).catch(gone);
+    await transport(["rm", "--json", address], 30_000).catch(gone);
+    removed.push(address);
+    progress(ordered.slice(index + 1).map((item) => item.address));
+  }
   const left = (await labelledTerminals(state.workflowId, transport)).filter(
     (terminal) => terminal.address !== callerId,
   );
-  requireThat(
-    !left.length,
-    `Terminals still live after removal: ${left.map((item) => item.address).join(", ")}`,
-  );
-  return ordered.length
-    ? {
-        status: "removed",
-        target,
-        reason: ordered.map((item) => item.address).join(", "),
-      }
+  if (left.length) {
+    progress(left.map((item) => item.address));
+    throw new Error(
+      `Terminals still live after removal: ${left.map((item) => item.address).join(", ")}`,
+    );
+  }
+  receipt.terminals = ordered.length
+    ? { status: "removed", target, reason: removed.join(", ") }
     : { status: "skipped", target, reason: "no labelled terminals" };
 }
 
@@ -272,7 +273,8 @@ export async function cleanup(
     `Cleanup waits for the current consult to settle: ${unsettled.join(", ")}`,
   );
   await syncWatcher(path, caller.terminalId, transport);
-  const { targets, worktreeRoot } = await locked(path, async (state) => {
+  // Every check that can refuse runs first; the reservation is saved before the first removal, so later actions refuse.
+  const { state, targets } = await locked(path, async (state) => {
     requireThat(
       !inFlight(state).length && !unsettledConsult(state).length,
       "Work started before cleanup",
@@ -282,55 +284,67 @@ export async function cleanup(
       "Cleanup of an unfinished workflow requires a reason for abandoning it",
     );
     const scratch = await scratchTarget(path, state, tempRoots);
-    // The watcher goes first: its stop generation lands before any kill, so it types nothing during cleanup.
-    await stopWatcher(path, state, transport);
-    if (state.wake && nonempty(state.workflowId))
-      await rm(wakeRequestFile(state.wake, state.workflowId), { force: true });
-    const terminals = await removeTerminals(
-      state,
-      caller.terminalId,
-      transport,
-    );
-    const { root, ...worktree } = await worktreeTarget(
-      resolve(state.cwd),
-      input.head,
-      caller.terminalId,
-      resolve(caller.cwd ?? process.cwd()),
-      transport,
-    );
     state.cleanup = {
       authorizationSource: input.authorizationSource,
       head: input.head,
       ...(input.reason ? { reason: input.reason } : {}),
       startedAt: new Date().toISOString(),
     };
-    return {
-      targets: { terminals, worktree, scratch } as CleanupReceipt,
-      worktreeRoot: root,
+    const targets: CleanupReceipt = {
+      terminals: {
+        status: "remaining",
+        target: `ax.workflow=${state.workflowId}`,
+      },
+      worktree: { status: "remaining", target: resolve(state.cwd) },
+      scratch,
     };
+    return { state: structuredClone(state), targets };
   });
-  const stop = (step: string, error: unknown) =>
-    new Error(
-      `Cleanup stopped at ${step} without retry: ${String(error)}\n${JSON.stringify({ targets })}`,
-    );
-  if (targets.worktree.status === "remaining" && worktreeRoot) {
-    // Plain removal: Git itself refuses a dirty or locked worktree, and no branch is deleted.
+  let watcherStopped = false;
+  const step = async <T>(name: string, body: () => Promise<T>) => {
     try {
-      await git(worktreeRoot, ["worktree", "remove", targets.worktree.target]);
+      return await body();
     } catch (error) {
-      throw stop("worktree removal", error);
+      await recordCleanupReceipt(path, targets, watcherStopped).catch(() => {});
+      throw new Error(
+        `Cleanup stopped at ${name} without retry: ${String(error)}\n${JSON.stringify({ targets })}`,
+      );
     }
-    if (await exists(targets.worktree.target))
-      throw stop("worktree removal", "git left the worktree in place");
-    targets.worktree.status = "removed";
-  }
-  if (targets.scratch.status === "remaining") {
-    try {
+  };
+  await step("terminal removal", async () => {
+    // The watcher goes first: its stop generation lands before any kill, so it types nothing during cleanup.
+    await stopWatcher(path, state, transport);
+    watcherStopped = true;
+    if (state.wake && nonempty(state.workflowId))
+      await rm(wakeRequestFile(state.wake, state.workflowId), { force: true });
+    await removeTerminals(state, caller.terminalId, transport, targets);
+  });
+  const { root, ...worktree } = await step("worktree check", () =>
+    worktreeTarget(
+      resolve(state.cwd),
+      input.head,
+      caller.terminalId,
+      resolve(caller.cwd ?? process.cwd()),
+      transport,
+    ),
+  );
+  targets.worktree = worktree;
+  if (targets.worktree.status === "remaining" && root)
+    await step("worktree removal", async () => {
+      // Plain removal: Git itself refuses a dirty or locked worktree, and no branch is deleted.
+      await git(root, ["worktree", "remove", targets.worktree.target]);
+      if (await exists(targets.worktree.target))
+        throw new Error("git left the worktree in place");
+      targets.worktree.status = "removed";
+    });
+  // The state survives when its scratch folder is skipped or its deletion fails, so it keeps the receipt.
+  await step("receipt", () =>
+    recordCleanupReceipt(path, targets, watcherStopped),
+  );
+  if (targets.scratch.status === "remaining")
+    await step("scratch deletion", async () => {
       await rm(targets.scratch.target, { recursive: true });
-    } catch (error) {
-      throw stop("scratch deletion", error);
-    }
-    targets.scratch.status = "removed";
-  }
+      targets.scratch.status = "removed";
+    });
   return { targets };
 }

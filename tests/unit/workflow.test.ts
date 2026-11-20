@@ -1507,6 +1507,20 @@ test("RED pi-workflow: a superseded attempt that receives its assignment conflic
   assert.match(prompt, /partial\.ts/);
 });
 
+test("RED pi-workflow: conflict recovery records reports when the killed original has ended", async () => {
+  const ended = await conflictFixture();
+  // The undelivered original was killed before its replacement launched, so herdr-core reports it finished.
+  const session = ended.f.sessions.get(ended.old);
+  assert.ok(session);
+  session.status = "closed";
+  const gate = gateOf(await ended.f.step());
+  assert.match(gate, /`adopt`.*authorizationSource/);
+  assert.deepEqual(
+    [...((await ended.f.read()).handoff?.conflictReports ?? [])].sort(),
+    [ended.old, ended.replacement].sort(),
+  );
+});
+
 test("GREEN pi-workflow: adopt records a falsely failed handoff once and refuses mismatched evidence", async () => {
   const f = await fixture();
   await f.review("planning");
@@ -3981,7 +3995,12 @@ async function cleanupFixture(
     { address: "t5", cwd: base, labels: {}, parent: null },
   ];
   const calls: string[][] = [];
-  const fail: { kill?: boolean; removedOnKill?: string } = {};
+  const fail: {
+    kill?: boolean;
+    killAddress?: string;
+    rmAddress?: string;
+    removedOnKill?: string;
+  } = {};
   const live = () =>
     terminals.filter((terminal) => !terminal.killed && !terminal.removed);
   const transport: Transport = async (args) => {
@@ -4013,7 +4032,8 @@ async function cleanupFixture(
         state: terminal.killed ? "finished" : "live",
       });
     if (args[0] === "kill") {
-      if (fail.kill) throw new Error("hc core unavailable");
+      if (fail.kill || terminal.address === fail.killAddress)
+        throw new Error("hc core unavailable");
       // A --rm terminal is removed as it dies, so hc kill itself reports not_found.
       if (terminal.address === fail.removedOnKill) {
         terminal.removed = true;
@@ -4025,6 +4045,8 @@ async function cleanupFixture(
       return "{}";
     }
     assert.equal(args[0], "rm", args.join(" "));
+    if (terminal.address === fail.rmAddress)
+      throw new Error("hc core unavailable");
     terminal.removed = true;
     return "";
   };
@@ -4403,9 +4425,34 @@ test("RED pi-workflow: a failed cleanup step stops without retry and reports rem
         .at(-1) ?? "",
     ).targets;
 
+  // The reservation is saved before the first kill, so a later kill or rm failure leaves a receipt and a refusing state.
+  for (const failure of ["killAddress", "rmAddress"] as const) {
+    const partial = await cleanupFixture();
+    partial.fail[failure] = "t1";
+    const error = await partial.run().catch((caught) => caught);
+    assert.match(String(error), /stopped at terminal removal/, failure);
+    assert.match(String(error), /hc core unavailable/, failure);
+    const receipt = receiptOf(error);
+    assert.equal(receipt.terminals.status, "remaining", failure);
+    assert.match(receipt.terminals.reason, /removed: t2; remaining: t1/);
+    assert.equal(receipt.worktree.status, "remaining", failure);
+    assert.equal(receipt.scratch.status, "remaining", failure);
+    assert.ok(await partial.present(partial.tree));
+    const saved = JSON.parse(await readFile(partial.path, "utf8")) as Workflow;
+    assert.ok(saved.cleanup?.startedAt, failure);
+    assert.deepEqual(saved.cleanup?.receipt, receipt, failure);
+    await assert.rejects(
+      tick(partial.path, { terminalId: "t0" }, partial.transport),
+      /Cleanup already started/,
+    );
+    await assert.rejects(partial.run(), /already started/);
+  }
+
   const unkillable = await cleanupFixture();
   unkillable.fail.kill = true;
-  await assert.rejects(unkillable.run(), /hc core unavailable/);
+  const killError = await unkillable.run().catch((caught) => caught);
+  assert.match(String(killError), /stopped at terminal removal/);
+  assert.equal(receiptOf(killError).terminals.status, "remaining");
   assert.ok(await unkillable.present(unkillable.tree));
   assert.ok(await unkillable.present(unkillable.path));
 

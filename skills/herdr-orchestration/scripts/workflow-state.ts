@@ -225,6 +225,15 @@ export type ArchivedHostedBatch = {
   decisions?: Decision[];
   repair?: Repair;
 };
+export type CleanupTarget = {
+  status: "removed" | "skipped" | "remaining";
+  target: string;
+  reason?: string;
+};
+export type CleanupReceipt = Record<
+  "terminals" | "worktree" | "scratch",
+  CleanupTarget
+>;
 export type Workflow = {
   version: 1;
   // `sol-focused-v1` marks the earlier three-Sol roster; only `focused-v2` states may continue.
@@ -258,6 +267,8 @@ export type Workflow = {
     head: string;
     reason?: string;
     startedAt: string;
+    // Each target removed, skipped, or remaining once cleanup stopped or reached its last step.
+    receipt?: CleanupReceipt;
   };
   routes: Record<Role, Route>;
   lenses: Record<Phase, Lens[]>;
@@ -935,10 +946,7 @@ async function save(path: string, state: Workflow) {
   });
   await rename(temporary, path);
 }
-export async function locked<T>(
-  path: string,
-  update: (state: Workflow) => Promise<T> | T,
-): Promise<T> {
+async function withLock<T>(path: string, body: () => Promise<T>): Promise<T> {
   const lock = `${path}.lock`;
   for (let attempt = 0; ; attempt++) {
     try {
@@ -951,8 +959,22 @@ export async function locked<T>(
     }
   } // An uncertain/stale lock requires inspection, never automatic takeover.
   try {
-    const state: Workflow = JSON.parse(await readFile(path, "utf8"));
-    requireThat(state.version === 1, "Unsupported workflow state");
+    return await body();
+  } finally {
+    await rm(lock, { recursive: true });
+  }
+}
+async function readLocked(path: string) {
+  const state: Workflow = JSON.parse(await readFile(path, "utf8"));
+  requireThat(state.version === 1, "Unsupported workflow state");
+  return state;
+}
+export function locked<T>(
+  path: string,
+  update: (state: Workflow) => Promise<T> | T,
+): Promise<T> {
+  return withLock(path, async () => {
+    const state = await readLocked(path);
     // Cleanup is terminal: once recorded, every mutation refuses and only `status` may read the state.
     requireThat(
       !state.cleanup,
@@ -961,9 +983,21 @@ export async function locked<T>(
     const result = await update(state);
     await save(path, state);
     return result;
-  } finally {
-    await rm(lock, { recursive: true });
-  }
+  });
+}
+// The one write after the cleanup reservation: cleanup records its own receipt.
+export function recordCleanupReceipt(
+  path: string,
+  receipt: CleanupReceipt,
+  watcherStopped: boolean,
+) {
+  return withLock(path, async () => {
+    const state = await readLocked(path);
+    requireThat(state.cleanup, "Cleanup has no recorded reservation");
+    state.cleanup.receipt = structuredClone(receipt);
+    if (watcherStopped) delete state.watcher;
+    await save(path, state);
+  });
 }
 
 // Each worker role's one `provider/model:thinking` route, parsed the way the launcher parses it.

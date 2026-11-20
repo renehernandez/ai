@@ -126,7 +126,14 @@ function herdrForm(words: ShellWord[]): string | undefined {
   // A variable executable such as `$H run` could conceal either CLI.
   if (unwrapped[0].dynamic && /[$`]/u.test(executable)) {
     const next = unwrapped[1];
-    return !next || next.dynamic || herdrDeniedWords.has(next.value)
+    const concealed = (word: ShellWord) =>
+      word.dynamic || herdrDeniedWords.has(word.value);
+    // Leading options such as `$H --session x run` can push the subcommand to any later word, so every word must be provably harmless.
+    const denied =
+      !next ||
+      concealed(next) ||
+      (next.value.startsWith("-") && unwrapped.slice(2).some(concealed));
+    return denied
       ? `${unwrapped[0].value} ${next?.value || ""}`.trim()
       : undefined;
   }

@@ -545,8 +545,9 @@ snapshot, or reserved replacement stops recovery; do not hand-edit state, kill
 the old terminal, or create another attempt.
 
 After the user authorizes cleanup, use `cleanup` instead of shell deletion.
-Before removing anything, the runner requires that nothing is in flight and
-validates the scratch folder. It then stops the watcher, deletes this
+Before removing anything, the runner requires that nothing is in flight,
+validates the scratch folder, and saves the cleanup reservation in state. It
+then stops the watcher, deletes this
 workflow's wake request, and kills and removes every terminal carrying the
 workflow label, children before parents. A kill or removal that reports
 `not_found` counts as success, because a `--rm` terminal is removed as it dies.
@@ -561,7 +562,7 @@ temporary directory or `/tmp`, it still holds this state file, and it contains
 no Git metadata or other workflow state. States without that record skip the
 folder. Any failed check refuses the action with nothing removed. A failure
 after removal starts stops without retry and reports each target as removed,
-skipped, or remaining. Cleanup never forces removal and never deletes a
+skipped, or remaining; the surviving state keeps that receipt. Cleanup never forces removal and never deletes a
 branch.
 
 Every `awaiting-user` result names the action that clears it. Use `adopt`,
