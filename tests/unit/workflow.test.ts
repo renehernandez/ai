@@ -1,4 +1,4 @@
-// charter-contracts: pi-paseo-workflow
+// charter-contracts: pi-workflow
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -15,6 +15,13 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
+import {
+  type RetiringMarker,
+  type WakeRequest,
+  wakeRoot,
+  watchedAddresses,
+  watchIntervalMs,
+} from "../../skills/herdr-orchestration/scripts/watch.ts";
 import {
   adopt,
   assertActionGateDisposition,
@@ -42,27 +49,20 @@ import {
   type Workflow,
   type WorktreeReader,
   watcherStatus,
-} from "../../skills/paseo-orchestration/scripts/paseo-workflow.ts";
+} from "../../skills/herdr-orchestration/scripts/workflow.ts";
 import {
   lastReply,
   sessionCommand,
-} from "../../skills/paseo-orchestration/scripts/paseo-workflow-io.ts";
+} from "../../skills/herdr-orchestration/scripts/workflow-io.ts";
 import {
   assignReviewLenses,
   gates,
   locked,
   nextStep,
-} from "../../skills/paseo-orchestration/scripts/paseo-workflow-state.ts";
-import {
-  type RetiringMarker,
-  type WakeRequest,
-  wakeRoot,
-  watchedAddresses,
-  watchIntervalMs,
-} from "../../skills/paseo-orchestration/scripts/watch.ts";
+} from "../../skills/herdr-orchestration/scripts/workflow-state.ts";
 
 // Runner calls bind the caller's wake directory, so they never read or prune the person's own state.
-process.env.XDG_STATE_HOME = await mkdtemp(join(tmpdir(), "paseo-wake-state-"));
+process.env.XDG_STATE_HOME = await mkdtemp(join(tmpdir(), "herdr-wake-state-"));
 
 // Each fixture's fake worktree stands in for `git rev-parse` when a round binds its head.
 const worktrees = new Map<string, WorktreeReader>();
@@ -130,7 +130,7 @@ type FakeTerminal = {
   argv: string[];
   parent: string | null;
   labels: Record<string, string>;
-  // Paseo-style test vocabulary: running, idle, closed, error, or any unknown status.
+  // Fake vocabulary mapped onto herdr-core status: running, idle, closed, error, or any unknown status.
   status: string;
   prompt: string;
   session?: string;
@@ -187,7 +187,7 @@ async function fixture(
     reviewer: "required",
   },
 ) {
-  const dir = await mkdtemp(join(tmpdir(), "paseo-workflow-"));
+  const dir = await mkdtemp(join(tmpdir(), "herdr-workflow-"));
   const path = join(dir, "state.json");
   const routesPath = join(dir, "routes.json");
   const table: Record<string, { label: string; routes: string[] }> =
@@ -528,7 +528,7 @@ function fallbackAssessment(
   };
 }
 
-test("GREEN pi-paseo-workflow: deliberate focused handoff reaches Ready once without review loops", async () => {
+test("GREEN pi-workflow: deliberate focused handoff reaches Ready once without review loops", async () => {
   const f = await fixture();
   await f.review("planning");
   await handoff(
@@ -609,7 +609,7 @@ test("GREEN pi-paseo-workflow: deliberate focused handoff reaches Ready once wit
   );
 });
 
-test("GREEN pi-paseo-workflow: no hosted gates publishes without a fabricated reviewer", async () => {
+test("GREEN pi-workflow: no hosted gates publishes without a fabricated reviewer", async () => {
   const f = await fixture({ ci: "not-required", reviewer: "not-required" });
   await f.review("planning");
   await handoff(
@@ -637,7 +637,7 @@ test("GREEN pi-paseo-workflow: no hosted gates publishes without a fabricated re
   assert.equal(published.hosted?.status, "completed");
 });
 
-test("RED pi-paseo-workflow: unknown policy blocks handoff", async () => {
+test("RED pi-workflow: unknown policy blocks handoff", async () => {
   const f = await fixture({ ci: "unknown", reviewer: "not-required" });
   await f.review("planning");
   await assert.rejects(
@@ -658,7 +658,7 @@ test("RED pi-paseo-workflow: unknown policy blocks handoff", async () => {
   );
 });
 
-test("GREEN pi-paseo-workflow: authorized continuation preserves prior evidence", async () => {
+test("GREEN pi-workflow: authorized continuation preserves prior evidence", async () => {
   const f = await fixture();
   await f.review("planning");
   await handoff(
@@ -700,7 +700,7 @@ test("GREEN pi-paseo-workflow: authorized continuation preserves prior evidence"
   );
 });
 
-test("GREEN pi-paseo-workflow: dispatch binds the caller's live terminal, and workers start as its children in its space and tab", async () => {
+test("GREEN pi-workflow: dispatch binds the caller's live terminal, and workers start as its children in its space and tab", async () => {
   const f = await fixture();
   const bound = await f.read();
   assert.deepEqual(bound.orchestrator, {
@@ -747,7 +747,7 @@ test("GREEN pi-paseo-workflow: dispatch binds the caller's live terminal, and wo
   }
 });
 
-test("RED pi-paseo-workflow: a worker that is not the orchestrator's idle child is never sent its assignment", async () => {
+test("RED pi-workflow: a worker that is not the orchestrator's idle child is never sent its assignment", async () => {
   const f = await fixture();
   await dispatchFixtureReview(
     f.path,
@@ -768,7 +768,7 @@ test("RED pi-paseo-workflow: a worker that is not the orchestrator's idle child 
   );
 });
 
-test("RED pi-paseo-workflow: a Paseo-era state stays readable through status but every other action refuses it", async () => {
+test("RED pi-workflow: a Paseo-era state stays readable through status but every other action refuses it", async () => {
   const f = await fixture();
   const legacy = await f.read();
   delete legacy.transport;
@@ -827,7 +827,7 @@ test("legacy mixed-model workflow state remains inspectable but cannot continue"
   );
 });
 
-test("GREEN pi-paseo-workflow: init records the four-reviewer roster and assigns both canonical catalogs to it", async () => {
+test("GREEN pi-workflow: init records the four-reviewer roster and assigns both canonical catalogs to it", async () => {
   const f = await fixture();
   const state = await f.read();
   assert.equal(state.reviewMode, "focused-v2");
@@ -872,7 +872,7 @@ test("GREEN pi-paseo-workflow: init records the four-reviewer roster and assigns
   );
 });
 
-test("RED pi-paseo-workflow: a three-Sol roster state stays readable through status but tick and dispatch refuse it", async () => {
+test("RED pi-workflow: a three-Sol roster state stays readable through status but tick and dispatch refuse it", async () => {
   const f = await fixture();
   const legacy = await f.read();
   legacy.reviewMode = "sol-focused-v1";
@@ -908,7 +908,7 @@ async function captureStdout(run: () => Promise<void>) {
   return output;
 }
 
-test("GREEN pi-paseo-workflow: pre-orchestration state stays readable while tick is the only orchestrated advancement path", async () => {
+test("GREEN pi-workflow: pre-orchestration state stays readable while tick is the only orchestrated advancement path", async () => {
   const f = await fixture();
   await dispatchFixtureReview(
     f.path,
@@ -936,7 +936,7 @@ test("GREEN pi-paseo-workflow: pre-orchestration state stays readable while tick
   );
 });
 
-test("RED pi-paseo-workflow: an untriaged round cannot be replaced by another review of the phase", async () => {
+test("RED pi-workflow: an untriaged round cannot be replaced by another review of the phase", async () => {
   const f = await fixture();
   const originalArtifact = await readFile(f.artifactPath, "utf8");
   await dispatchFixtureReview(
@@ -1151,7 +1151,7 @@ test("uncertain implementer launch remains a hard blocker without retry", async 
   assert.equal((await f.read()).handoff?.status, "failed");
 });
 
-// Fails every send; `deliver` first lets the fake session receive the assignment, as a late Paseo queue flush would.
+// Fails every send; `deliver` first lets the fake session receive the assignment, as a late herdr-core write would.
 const failingSend =
   (f: { transport: Transport }, deliver: boolean): Transport =>
   async (args, timeout, env) => {
@@ -1171,7 +1171,7 @@ const statuses = (state: Workflow) =>
     (review) => review.status,
   );
 
-test("GREEN pi-paseo-workflow: a zero send exit releases the worker whatever herdr-core returns", async () => {
+test("GREEN pi-workflow: a zero send exit releases the worker whatever herdr-core returns", async () => {
   for (const body of [undefined, '{"status":"sent"}', "unrecognized body"]) {
     const f = await fixture();
     await dispatchFixtureReview(
@@ -1198,7 +1198,7 @@ test("GREEN pi-paseo-workflow: a zero send exit releases the worker whatever her
   }
 });
 
-test("RED pi-paseo-workflow: an ambiguous send is decided only by delivery evidence and never re-sent", async () => {
+test("RED pi-workflow: an ambiguous send is decided only by delivery evidence and never re-sent", async () => {
   const f = await fixture();
   await f.review("planning");
   await handoff(
@@ -1261,11 +1261,11 @@ test("RED pi-paseo-workflow: an ambiguous send is decided only by delivery evide
   assert.equal(relaunched.handoff?.status, "running");
   assert.notEqual(relaunched.handoff?.agentId, lost);
   assert.equal(relaunched.handoff?.attempts?.[0].agentId, lost);
-  // The only send to the lost session failed before reaching Paseo; nothing was re-sent.
+  // The only send to the lost session failed before reaching herdr-core; nothing was re-sent.
   assert.equal(sends(g, lost), 0);
 });
 
-test("RED pi-paseo-workflow: a released reviewer that never began is retried once, then degraded with reduced independence", async () => {
+test("RED pi-workflow: a released reviewer that never began is retried once, then degraded with reduced independence", async () => {
   const f = await fixture();
   await dispatchFixtureReview(
     f.path,
@@ -1325,7 +1325,7 @@ test("RED pi-paseo-workflow: a released reviewer that never began is retried onc
   assert.equal(runs(f), 8);
 });
 
-test("RED pi-paseo-workflow: retry-launch needs established non-delivery and an unchanged worktree, and a spent retry needs user authorization", async () => {
+test("RED pi-workflow: retry-launch needs established non-delivery and an unchanged worktree, and a spent retry needs user authorization", async () => {
   const f = await fixture();
   await f.review("planning");
   await handoff(
@@ -1424,7 +1424,7 @@ const withoutReport = (f: { replies: Map<string, string> }, ids: string[]) => {
   for (const id of ids) f.replies.set(id, "Stopped without a report.");
 };
 
-test("RED pi-paseo-workflow: a superseded attempt that receives its assignment conflicts until adopt or an authorized retry-launch resolves it", async () => {
+test("RED pi-workflow: a superseded attempt that receives its assignment conflicts until adopt or an authorized retry-launch resolves it", async () => {
   const both = await conflictFixture();
   const bothGate = gateOf(await both.f.step());
   assert.match(bothGate, /`adopt`.*authorizationSource/);
@@ -1507,7 +1507,7 @@ test("RED pi-paseo-workflow: a superseded attempt that receives its assignment c
   assert.match(prompt, /partial\.ts/);
 });
 
-test("GREEN pi-paseo-workflow: adopt records a falsely failed handoff once and refuses mismatched evidence", async () => {
+test("GREEN pi-workflow: adopt records a falsely failed handoff once and refuses mismatched evidence", async () => {
   const f = await fixture();
   await f.review("planning");
   await handoff(
@@ -1515,11 +1515,11 @@ test("GREEN pi-paseo-workflow: adopt records a falsely failed handoff once and r
     { briefPath: f.artifactPath, planResolution: "Settled." },
     f.transport,
   );
-  // The earlier runner recorded a delivered handoff as failed when Paseo answered `queued`.
+  // A runner can record a delivered handoff as failed when its send result is lost.
   await locked(f.path, (state) => {
     Object.assign(state.handoff ?? {}, {
       status: "failed",
-      error: "Error: Paseo did not confirm assignment delivery",
+      error: "Error: herdr-core did not confirm assignment delivery",
     });
   });
   const agentId = (await f.read()).handoff?.agentId ?? "";
@@ -1587,7 +1587,7 @@ test("GREEN pi-paseo-workflow: adopt records a falsely failed handoff once and r
   assert.deepEqual(await f.read(), adopted);
 });
 
-test("RED pi-paseo-workflow: a missing inspect field stops the launch before any send, naming the field and version", async () => {
+test("RED pi-workflow: a missing inspect field stops the launch before any send, naming the field and version", async () => {
   const f = await fixture();
   await f.review("planning");
   const before = f.calls.length;
@@ -1613,7 +1613,7 @@ test("RED pi-paseo-workflow: a missing inspect field stops the launch before any
   assert.equal((await f.read()).handoff?.status, "failed");
 });
 
-test("GREEN pi-paseo-workflow: a planning-bound continuation binds the planning fingerprint before any implementation head", async () => {
+test("GREEN pi-workflow: a planning-bound continuation binds the planning fingerprint before any implementation head", async () => {
   const f = await fixture();
   await f.review("planning");
   const fingerprint = (await f.read()).rounds.planning?.fingerprint;
@@ -1634,7 +1634,7 @@ test("GREEN pi-paseo-workflow: a planning-bound continuation binds the planning 
   assert.equal(actionOf(await f.step()), "review");
 });
 
-test("GREEN pi-paseo-workflow: a transient wait error during inert startup still releases the round", async () => {
+test("GREEN pi-workflow: a transient wait error during inert startup still releases the round", async () => {
   const f = await fixture();
   const failedOnce = new Set<string>();
   await dispatchReview(
@@ -1661,7 +1661,7 @@ test("GREEN pi-paseo-workflow: a transient wait error during inert startup still
   assert.equal(runs(f), 4);
 });
 
-test("RED pi-paseo-workflow: a reviewer still at its startup reply keeps its round in flight until the timeout", async () => {
+test("RED pi-workflow: a reviewer still at its startup reply keeps its round in flight until the timeout", async () => {
   const f = await fixture();
   const dispatch = () =>
     dispatchReview(
@@ -1686,7 +1686,7 @@ test("RED pi-paseo-workflow: a reviewer still at its startup reply keeps its rou
   ]);
 });
 
-test("GREEN pi-paseo-workflow: every awaiting-user gate names the supported action that clears it", () => {
+test("GREEN pi-workflow: every awaiting-user gate names the supported action that clears it", () => {
   const actions =
     /`(tick|adopt|retry-launch|retry-handoff|continuation|triage|waiver|handoff)`|Finish/;
   const texts = Object.values(gates).flatMap((gate) =>
@@ -1934,7 +1934,7 @@ test("review reports reject duplicate findings and contradictory pass outcomes",
   );
 });
 
-test("GREEN pi-paseo-workflow: a hosted repair head gets a fresh local round and republication before finish", async () => {
+test("GREEN pi-workflow: a hosted repair head gets a fresh local round and republication before finish", async () => {
   const f = await fixture();
   await f.review("planning");
   await f.accept("No findings.");
@@ -2350,7 +2350,7 @@ test("large plan, implementation and handoff use private snapshots with bounded 
 const runs = (f: { calls: string[][] }) =>
   f.calls.filter((args) => args[0] === "run").length;
 
-test("GREEN pi-paseo-workflow: ticks carry an unattended run from implementation report to triage", async () => {
+test("GREEN pi-workflow: ticks carry an unattended run from implementation report to triage", async () => {
   const f = await fixture();
   await f.review("planning");
   await handoff(
@@ -2381,7 +2381,7 @@ test("GREEN pi-paseo-workflow: ticks carry an unattended run from implementation
   assert.equal(f.watchers().length, 0);
 });
 
-test("GREEN pi-paseo-workflow: a tick with busy workers is quiet and never dispatches", async () => {
+test("GREEN pi-workflow: a tick with busy workers is quiet and never dispatches", async () => {
   const f = await fixture();
   await dispatchFixtureReview(
     f.path,
@@ -2409,7 +2409,7 @@ test("GREEN pi-paseo-workflow: a tick with busy workers is quiet and never dispa
   );
 });
 
-test("GREEN pi-paseo-workflow: one watcher on the caller is started, kept, replaced after loss, a caller change, retirement, or 12 hours, and stopped when nothing is in flight", async () => {
+test("GREEN pi-workflow: one watcher on the caller is started, kept, replaced after loss, a caller change, retirement, or 12 hours, and stopped when nothing is in flight", async () => {
   const f = await fixture();
   await f.review("planning");
   await handoff(
@@ -2641,7 +2641,7 @@ async function watcherRun(
   };
 }
 
-test("RED pi-paseo-workflow: worker changes and an interval during one long orchestrator turn queue exactly one tick prompt", async () => {
+test("RED pi-workflow: worker changes and an interval during one long orchestrator turn queue exactly one tick prompt", async () => {
   const w = await watcherRun();
   await w.event(w.worker, "status", "done");
   await w.event(w.worker, "turn");
@@ -2682,7 +2682,7 @@ test("RED pi-paseo-workflow: worker changes and an interval during one long orch
   assert.equal(w.sends.length, 3);
 });
 
-test("GREEN pi-paseo-workflow: a person who restarts Pi in the orchestrator terminal keeps automatic ticks bound to the new session nonce", async () => {
+test("GREEN pi-workflow: a person who restarts Pi in the orchestrator terminal keeps automatic ticks bound to the new session nonce", async () => {
   let nonce: string | undefined = "nonce-1";
   const w = await watcherRun({ nonce: () => nonce });
   await w.event(w.worker, "turn");
@@ -2707,7 +2707,7 @@ test("GREEN pi-paseo-workflow: a person who restarts Pi in the orchestrator term
   );
 });
 
-test("GREEN pi-paseo-workflow: the watcher skips a periodic prompt within the interval of the last tick and sends one after it", async () => {
+test("GREEN pi-workflow: the watcher skips a periodic prompt within the interval of the last tick and sends one after it", async () => {
   const w = await watcherRun();
   await w.advance(watchIntervalMs / 2);
   w.consume();
@@ -2719,7 +2719,7 @@ test("GREEN pi-paseo-workflow: the watcher skips a periodic prompt within the in
   assert.match(w.sends[0].prompt, /Standing orders/);
 });
 
-test("RED pi-paseo-workflow: the watcher never types into a blocked orchestrator and sends once it unblocks", async () => {
+test("RED pi-workflow: the watcher never types into a blocked orchestrator and sends once it unblocks", async () => {
   let orchestratorState = "blocked";
   let refuse = false;
   const w = await watcherRun({
@@ -2751,7 +2751,7 @@ test("RED pi-paseo-workflow: the watcher never types into a blocked orchestrator
   assert.ok(w.hc.every((args) => args[0] === "get"));
 });
 
-test("RED pi-paseo-workflow: a watcher stops at a newer stop generation and its lifetime, and a hang-up leaves a retiring marker", async () => {
+test("RED pi-workflow: a watcher stops at a newer stop generation and its lifetime, and a hang-up leaves a retiring marker", async () => {
   const stopped = await watcherRun();
   stopped.stopAt(1);
   assert.equal(await stopped.advance(2000), undefined);
@@ -2779,7 +2779,7 @@ test("RED pi-paseo-workflow: a watcher stops at a newer stop generation and its 
   assert.equal(pending.sends.length, 0);
 });
 
-test("RED pi-paseo-workflow: while the event stream is down the watcher polls watched workers and reopens the stream with backoff", async () => {
+test("RED pi-workflow: while the event stream is down the watcher polls watched workers and reopens the stream with backoff", async () => {
   const w = await watcherRun();
   let status = "working";
   let clock = Date.parse(w.state.lastTickAt ?? "");
@@ -2853,7 +2853,7 @@ test("RED pi-paseo-workflow: while the event stream is down the watcher polls wa
   assert.equal(opened, 2);
 });
 
-test("RED pi-paseo-workflow: a worker that finished before the watcher's stream opened still queues one tick prompt", async () => {
+test("RED pi-workflow: a worker that finished before the watcher's stream opened still queues one tick prompt", async () => {
   const w = await watcherRun();
   // The scripted worker already reports done, as reviewers finishing during their own dispatch do.
   await w.watcher.onOpen();
@@ -2883,7 +2883,7 @@ test("RED pi-paseo-workflow: a worker that finished before the watcher's stream 
   assert.equal(busy.sends.length, 0);
 });
 
-test("RED pi-paseo-workflow: a session JSONL with a truncated trailing line yields the last complete reply, and earlier damage fails closed", async () => {
+test("RED pi-workflow: a session JSONL with a truncated trailing line yields the last complete reply, and earlier damage fails closed", async () => {
   const header = JSON.stringify({ type: "session", version: 3, id: "t1" });
   const reply = sessionLine("assistant", "Complete reply.");
   const cut = sessionLine("assistant", "Cut short").slice(0, 30);
@@ -2903,7 +2903,7 @@ test("RED pi-paseo-workflow: a session JSONL with a truncated trailing line yiel
   );
 });
 
-test("RED pi-paseo-workflow: managed workers cannot run orchestrator actions", async () => {
+test("RED pi-workflow: managed workers cannot run orchestrator actions", async () => {
   const f = await fixture();
   const input = join(f.dir, "review-input.json");
   await writeFile(
@@ -2954,7 +2954,7 @@ test("RED pi-paseo-workflow: managed workers cannot run orchestrator actions", a
   assert.equal(JSON.parse(status).orchestration, "planner-v2");
 });
 
-test("GREEN pi-paseo-workflow: init needs no orchestrator route, and orchestrator and planner callers keep existing planner-v2 states working", async () => {
+test("GREEN pi-workflow: init needs no orchestrator route, and orchestrator and planner callers keep existing planner-v2 states working", async () => {
   const f = await fixture();
   const state = await f.read();
   assert.equal(state.orchestration, "planner-v2");
@@ -3056,7 +3056,7 @@ const hostedProbe =
   async () =>
     JSON.stringify({ ...hostedReceipt, head, status: "completed", findings });
 
-test("GREEN pi-paseo-workflow: every repaired head gets a fresh implementation round until one is clean", async () => {
+test("GREEN pi-workflow: every repaired head gets a fresh implementation round until one is clean", async () => {
   const f = await fixture();
   await f.review("planning");
   await f.accept();
@@ -3085,7 +3085,7 @@ test("GREEN pi-paseo-workflow: every repaired head gets a fresh implementation r
   });
 });
 
-test("RED pi-paseo-workflow: a repair that reports no new head stops for the user instead of looping", async () => {
+test("RED pi-workflow: a repair that reports no new head stops for the user instead of looping", async () => {
   const f = await fixture();
   await f.review("planning");
   await f.accept();
@@ -3107,7 +3107,7 @@ test("RED pi-paseo-workflow: a repair that reports no new head stops for the use
   );
 });
 
-test("RED pi-paseo-workflow: a third implementation round with fixes stops for the user until a continuation", async () => {
+test("RED pi-workflow: a third implementation round with fixes stops for the user until a continuation", async () => {
   const f = await fixture();
   await f.review("planning");
   await f.accept();
@@ -3156,7 +3156,7 @@ test("RED pi-paseo-workflow: a third implementation round with fixes stops for t
   assert.equal(await nextAction(f), "repair");
 });
 
-test("GREEN pi-paseo-workflow: planning fixes need a revised plan and a fresh planning round before handoff", async () => {
+test("GREEN pi-workflow: planning fixes need a revised plan and a fresh planning round before handoff", async () => {
   const f = await fixture();
   await f.step();
   await dispatchFixtureReview(
@@ -3209,7 +3209,7 @@ test("GREEN pi-paseo-workflow: planning fixes need a revised plan and a fresh pl
   assert.equal((await f.read()).handoff?.status, "complete");
 });
 
-test("GREEN pi-paseo-workflow: hosted repair rounds use the hosted budget after implementation used all three rounds", async () => {
+test("GREEN pi-workflow: hosted repair rounds use the hosted budget after implementation used all three rounds", async () => {
   const f = await fixture();
   await f.review("planning");
   await f.accept();
@@ -3241,7 +3241,7 @@ test("GREEN pi-paseo-workflow: hosted repair rounds use the hosted budget after 
   assert.equal(await nextAction(f), "publication");
 });
 
-test("GREEN pi-paseo-workflow: a moved target base is reconciled by a fresh implementer and re-reviewed", async () => {
+test("GREEN pi-workflow: a moved target base is reconciled by a fresh implementer and re-reviewed", async () => {
   const f = await fixture();
   await f.review("planning");
   await f.accept();
@@ -3292,7 +3292,7 @@ test("GREEN pi-paseo-workflow: a moved target base is reconciled by a fresh impl
   assert.equal((await f.read()).publication?.targetBase, movedBase);
 });
 
-test("RED pi-paseo-workflow: a round waits for in-flight writers and records uncommitted files as evidence", async () => {
+test("RED pi-workflow: a round waits for in-flight writers and records uncommitted files as evidence", async () => {
   const f = await fixture();
   await f.review("planning");
   await handoff(
@@ -3320,7 +3320,7 @@ test("RED pi-paseo-workflow: a round waits for in-flight writers and records unc
   assert.deepEqual(round?.uncommitted, ["?? scratch.txt"]);
 });
 
-test("RED pi-paseo-workflow: single-round planner-v1 state stays readable but cannot advance", async () => {
+test("RED pi-workflow: single-round planner-v1 state stays readable but cannot advance", async () => {
   const f = await fixture();
   const legacy = await f.read();
   legacy.orchestration = "planner-v1";
@@ -3340,7 +3340,7 @@ test("RED pi-paseo-workflow: single-round planner-v1 state stays readable but ca
   );
 });
 
-test("GREEN pi-paseo-workflow: assignments and tick prompts carry only the effective standing orders", async () => {
+test("GREEN pi-workflow: assignments and tick prompts carry only the effective standing orders", async () => {
   const f = await fixture();
   const order = (input: Record<string, string>) =>
     transition(f.path, "order", {
@@ -3402,7 +3402,7 @@ test("GREEN pi-paseo-workflow: assignments and tick prompts carry only the effec
   );
 });
 
-test("GREEN pi-paseo-workflow: contract questions and hosted user gates return awaiting-user and stop the watcher", async () => {
+test("GREEN pi-workflow: contract questions and hosted user gates return awaiting-user and stop the watcher", async () => {
   const f = await fixture();
   await dispatchFixtureReview(
     f.path,
@@ -3446,7 +3446,7 @@ test("GREEN pi-paseo-workflow: contract questions and hosted user gates return a
   assert.equal((await g.read()).watcher, undefined);
 });
 
-test("GREEN pi-paseo-workflow: a repair batch launches one new verified implementer session", async () => {
+test("GREEN pi-workflow: a repair batch launches one new verified implementer session", async () => {
   const f = await fixture();
   await f.review("planning");
   await f.accept();
@@ -3523,7 +3523,7 @@ test("GREEN pi-paseo-workflow: a repair batch launches one new verified implemen
   assert.equal(reported.result === "changed" && reported.next.action, "repair");
 });
 
-test("RED pi-paseo-workflow: ticks never start another review round or repair batch and time out busy reviewers as degraded evidence", async () => {
+test("RED pi-workflow: ticks never start another review round or repair batch and time out busy reviewers as degraded evidence", async () => {
   const f = await fixture();
   await dispatchFixtureReview(
     f.path,
@@ -3568,7 +3568,7 @@ test("RED pi-paseo-workflow: ticks never start another review round or repair ba
   );
 });
 
-test("RED pi-paseo-workflow: an idle worker that has not begun its assignment stays in flight", async () => {
+test("RED pi-workflow: an idle worker that has not begun its assignment stays in flight", async () => {
   const f = await fixture();
   await dispatchFixtureReview(
     f.path,
@@ -3589,7 +3589,7 @@ test("RED pi-paseo-workflow: an idle worker that has not begun its assignment st
   assert.equal((await f.step()).recorded.length, 4);
 });
 
-test("RED pi-paseo-workflow: review binds the worktree head and repair completion binds the repair report head", async () => {
+test("RED pi-workflow: review binds the worktree head and repair completion binds the repair report head", async () => {
   const f = await fixture();
   await f.review("planning");
   await f.accept();
@@ -3653,7 +3653,7 @@ test("RED pi-paseo-workflow: review binds the worktree head and repair completio
   assert.equal((await f.read()).repairs.implementation?.head, heads.repaired);
 });
 
-test("GREEN pi-paseo-workflow: inspection errors degrade reviewers and keep implementers in flight", async () => {
+test("GREEN pi-workflow: inspection errors degrade reviewers and keep implementers in flight", async () => {
   const f = await fixture();
   await dispatchFixtureReview(
     f.path,
@@ -3699,7 +3699,7 @@ test("GREEN pi-paseo-workflow: inspection errors degrade reviewers and keep impl
   );
 });
 
-test("GREEN pi-paseo-workflow: runner actions print one compact line and status stays the full read", async () => {
+test("GREEN pi-workflow: runner actions print one compact line and status stays the full read", async () => {
   const f = await fixture();
   const env = {
     AX_PI_CONTRACT: JSON.stringify({ role: "orchestrator" }),
@@ -3762,7 +3762,7 @@ test("GREEN pi-paseo-workflow: runner actions print one compact line and status 
   assert.ok(status.rounds.planning.reviews["review-architecture"].outcomes);
 });
 
-test("RED pi-paseo-workflow: only the worktree head binds review, never a prose or short SHA", async () => {
+test("RED pi-workflow: only the worktree head binds review, never a prose or short SHA", async () => {
   const f = await fixture();
   await f.review("planning");
   f.replyWith(
@@ -3794,7 +3794,7 @@ test("RED pi-paseo-workflow: only the worktree head binds review, never a prose 
   assert.equal((await f.read()).rounds.implementation?.head, heads.first);
 });
 
-test("RED pi-paseo-workflow: missing, duplicate, malformed, or mismatched reports fail the session for the user", async () => {
+test("RED pi-workflow: missing, duplicate, malformed, or mismatched reports fail the session for the user", async () => {
   type Fixture = Awaited<ReturnType<typeof fixture>>;
   const valid = reportEnvelope(implementerReport(heads.first));
   const cases: [string, (f: Fixture) => void, RegExp][] = [
@@ -3865,7 +3865,7 @@ test("RED pi-paseo-workflow: missing, duplicate, malformed, or mismatched report
   }
 });
 
-test("GREEN pi-paseo-workflow: a matching report records uncommitted files as evidence", async () => {
+test("GREEN pi-workflow: a matching report records uncommitted files as evidence", async () => {
   const f = await fixture();
   await f.review("planning");
   f.tree.uncommitted = [" M notes.md", "?? scratch.txt"];
@@ -3879,9 +3879,9 @@ test("GREEN pi-paseo-workflow: a matching report records uncommitted files as ev
 });
 
 const sessionBriefDeliveryScript =
-  "Objective: typed deletion outcomes. Dispatch with paseo run --background. Reviewers, and only these: Astra, Sol, Opus. Publish a draft PR.";
+  "Objective: typed deletion outcomes. Dispatch with hc run --bg. Reviewers, and only these: Astra, Sol, Opus. Publish a draft PR.";
 
-test("RED pi-paseo-workflow: a session brief's reviewer roster cannot start implementation review before a verified implementer report", async () => {
+test("RED pi-workflow: a session brief's reviewer roster cannot start implementation review before a verified implementer report", async () => {
   const f = await fixture();
   await writeFile(f.artifactPath, sessionBriefDeliveryScript);
   await assert.rejects(
@@ -3898,7 +3898,7 @@ test("RED pi-paseo-workflow: a session brief's reviewer roster cannot start impl
   );
 });
 
-test("GREEN pi-paseo-workflow: brief delivery text reaches the implementer only as its snapshot, never as standing orders", async () => {
+test("GREEN pi-workflow: brief delivery text reaches the implementer only as its snapshot, never as standing orders", async () => {
   const f = await fixture();
   await writeFile(f.artifactPath, sessionBriefDeliveryScript);
   await f.step();
@@ -3933,7 +3933,7 @@ async function cleanupFixture(
     scratch?: "temp" | "repository" | "symlink";
   } = {},
 ) {
-  const base = await realpath(await mkdtemp(join(tmpdir(), "paseo-cleanup-")));
+  const base = await realpath(await mkdtemp(join(tmpdir(), "herdr-cleanup-")));
   const gitEnv = {
     ...process.env,
     GIT_DIR: undefined,
@@ -3981,7 +3981,7 @@ async function cleanupFixture(
     { address: "t5", cwd: base, labels: {}, parent: null },
   ];
   const calls: string[][] = [];
-  const fail: { kill?: boolean } = {};
+  const fail: { kill?: boolean; removedOnKill?: string } = {};
   const live = () =>
     terminals.filter((terminal) => !terminal.killed && !terminal.removed);
   const transport: Transport = async (args) => {
@@ -4014,6 +4014,13 @@ async function cleanupFixture(
       });
     if (args[0] === "kill") {
       if (fail.kill) throw new Error("hc core unavailable");
+      // A --rm terminal is removed as it dies, so hc kill itself reports not_found.
+      if (terminal.address === fail.removedOnKill) {
+        terminal.removed = true;
+        throw Object.assign(new Error("Command failed"), {
+          stdout: `{"error":{"kind":"not_found","message":"${terminal.address} was removed"}}`,
+        });
+      }
       terminal.killed = true;
       return "{}";
     }
@@ -4074,7 +4081,7 @@ async function cleanupFixture(
 }
 type CleanupFixture = Awaited<ReturnType<typeof cleanupFixture>>;
 
-test("GREEN pi-paseo-workflow: authorized cleanup removes labelled terminals children first, never the caller, then the clean linked worktree and the scratch folder", async () => {
+test("GREEN pi-workflow: authorized cleanup removes labelled terminals children first, never the caller, then the clean linked worktree and the scratch folder", async () => {
   const c = await cleanupFixture();
   // A stale watcher is stopped by its stop generation and label before any other removal.
   c.terminals.push({
@@ -4124,7 +4131,26 @@ test("GREEN pi-paseo-workflow: authorized cleanup removes labelled terminals chi
   assert.ok(c.calls.every((args) => !args.includes("--force")));
 });
 
-test("RED pi-paseo-workflow: a runner call deletes wake requests bound to another session's nonce, and cleanup deletes only this workflow's request", async () => {
+test("RED pi-workflow: cleanup counts a not_found kill of a terminal removed as it dies as success", async () => {
+  const c = await cleanupFixture();
+  c.terminals.push({
+    address: "t3",
+    cwd: c.scratch,
+    labels: { "ax.workflow": c.workflowId, "ax.role": "watcher" },
+    parent: "t0",
+  });
+  c.fail.removedOnKill = "t3";
+  const { targets } = await c.run();
+  assert.deepEqual(targets.terminals, {
+    status: "removed",
+    target: `ax.workflow=${c.workflowId}`,
+    reason: "t2, t1, t3",
+  });
+  assert.deepEqual(c.killed(), ["t2", "t1", "t3"]);
+  assert.equal(targets.scratch.status, "removed");
+});
+
+test("RED pi-workflow: a runner call deletes wake requests bound to another session's nonce, and cleanup deletes only this workflow's request", async () => {
   const c = await cleanupFixture();
   const directory = join(wakeRoot(), "t0");
   await mkdir(directory, { recursive: true });
@@ -4170,7 +4196,7 @@ test("RED pi-paseo-workflow: a runner call deletes wake requests bound to anothe
   assert.ok(await c.present(join(directory, "session.json")));
 });
 
-test("RED pi-paseo-workflow: cleanup refuses unsafe targets and removes nothing", async () => {
+test("RED pi-workflow: cleanup refuses unsafe targets and removes nothing", async () => {
   const refusals: [
     string,
     Parameters<typeof cleanupFixture>[0],
@@ -4264,7 +4290,7 @@ test("RED pi-paseo-workflow: cleanup refuses unsafe targets and removes nothing"
   }
 });
 
-test("GREEN pi-paseo-workflow: cleanup skips a worktree it cannot safely remove and reports why", async () => {
+test("GREEN pi-workflow: cleanup skips a worktree it cannot safely remove and reports why", async () => {
   const skips: [
     string,
     Parameters<typeof cleanupFixture>[0],
@@ -4338,7 +4364,7 @@ test("GREEN pi-paseo-workflow: cleanup skips a worktree it cannot safely remove 
   assert.ok(await unbound.present(unbound.path));
 });
 
-test("RED pi-paseo-workflow: once cleanup starts, every orchestrator action except status refuses", async () => {
+test("RED pi-workflow: once cleanup starts, every orchestrator action except status refuses", async () => {
   const c = await cleanupFixture();
   // A locked worktree stops cleanup after it is recorded and before the scratch folder goes.
   c.git(c.repository, ["worktree", "lock", c.tree]);
@@ -4369,7 +4395,7 @@ test("RED pi-paseo-workflow: once cleanup starts, every orchestrator action exce
   assert.ok(state.cleanup);
 });
 
-test("RED pi-paseo-workflow: a failed cleanup step stops without retry and reports removed and remaining targets", async () => {
+test("RED pi-workflow: a failed cleanup step stops without retry and reports removed and remaining targets", async () => {
   const receiptOf = (error: unknown) =>
     JSON.parse(
       String((error as Error).message)
@@ -4416,7 +4442,7 @@ async function consultBrief(f: { dir: string }) {
   const path = join(f.dir, "consult-brief.md");
   await writeFile(
     path,
-    "Question: which delivery shape fits? Read skills/paseo-orchestration.",
+    "Question: which delivery shape fits? Read skills/herdr-orchestration.",
   );
   return path;
 }
@@ -4427,7 +4453,7 @@ const plannerAgent = (
 const consultStatuses = (state: Workflow) =>
   Object.values(state.consult?.sessions ?? {}).map((session) => session.status);
 
-test("GREEN pi-paseo-workflow: consult launches both planners concurrently on a sorted fingerprint and tick records their advice", async () => {
+test("GREEN pi-workflow: consult launches both planners concurrently on a sorted fingerprint and tick records their advice", async () => {
   const f = await fixture();
   const briefPath = await consultBrief(f);
   await transition(f.path, "order", {
@@ -4517,7 +4543,7 @@ test("GREEN pi-paseo-workflow: consult launches both planners concurrently on a 
   );
 });
 
-test("RED pi-paseo-workflow: consult refusals record nothing", async () => {
+test("RED pi-workflow: consult refusals record nothing", async () => {
   const f = await fixture();
   const briefPath = await consultBrief(f);
   const before = await readFile(f.path, "utf8");
@@ -4559,7 +4585,7 @@ test("RED pi-paseo-workflow: consult refusals record nothing", async () => {
   assert.equal(runs(g), 0);
 });
 
-test("GREEN pi-paseo-workflow: a state initialized before planner routes keeps working and only consult refuses, naming init", async () => {
+test("GREEN pi-workflow: a state initialized before planner routes keeps working and only consult refuses, naming init", async () => {
   const f = await fixture();
   const legacy = await f.read();
   const routes = legacy.routes as Partial<Workflow["routes"]>;
@@ -4584,7 +4610,7 @@ test("GREEN pi-paseo-workflow: a state initialized before planner routes keeps w
   assert.ok(!JSON.stringify(await f.read()).includes('"kind"'));
 });
 
-test("RED pi-paseo-workflow: init fails naming a missing planner route", async () => {
+test("RED pi-workflow: init fails naming a missing planner route", async () => {
   const f = await fixture();
   const { "planner-fable": _, ...missing } = f.table;
   await writeFile(f.routesPath, JSON.stringify(missing));
@@ -4597,7 +4623,7 @@ test("RED pi-paseo-workflow: init fails naming a missing planner route", async (
   );
 });
 
-test("RED pi-paseo-workflow: malformed, mismatched, timed-out, and erroring consults degrade without gating", async () => {
+test("RED pi-workflow: malformed, mismatched, timed-out, and erroring consults degrade without gating", async () => {
   const f = await fixture();
   const briefPath = await consultBrief(f);
   await dispatchConsult(f.path, { briefPath }, f.transport);
@@ -4659,7 +4685,7 @@ test("RED pi-paseo-workflow: malformed, mismatched, timed-out, and erroring cons
   assert.equal(actionOf(timedOut), "review");
 });
 
-test("RED pi-paseo-workflow: an undelivered planner gets one retry-launch, and a second non-delivery degrades it", async () => {
+test("RED pi-workflow: an undelivered planner gets one retry-launch, and a second non-delivery degrades it", async () => {
   const f = await fixture();
   await dispatchConsult(
     f.path,
@@ -4729,7 +4755,7 @@ test("RED pi-paseo-workflow: an undelivered planner gets one retry-launch, and a
   assert.equal(runs(f), 2);
 });
 
-test("GREEN pi-paseo-workflow: running consults never block review, handoff, or repair, but keep the watcher running", async () => {
+test("GREEN pi-workflow: running consults never block review, handoff, or repair, but keep the watcher running", async () => {
   const f = await fixture();
   await dispatchConsult(
     f.path,
@@ -4790,7 +4816,7 @@ test("GREEN pi-paseo-workflow: running consults never block review, handoff, or 
   assert.deepEqual(consultStatuses(await f.read()), ["running", "running"]);
 });
 
-test("RED pi-paseo-workflow: a running consult holds finish and cleanup until an ambiguous one is stopped and degraded past the timeout", async () => {
+test("RED pi-workflow: a running consult holds finish and cleanup until an ambiguous one is stopped and degraded past the timeout", async () => {
   const f = await fixture();
   await f.review("planning");
   await f.accept();

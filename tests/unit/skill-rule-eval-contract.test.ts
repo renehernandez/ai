@@ -35,10 +35,17 @@ import {
 } from "../../evals/skills-rules/scenarios.ts";
 import { read } from "../../scripts/charter-validator-reader.ts";
 import {
+  bindWake,
+  coalesceMs,
+  createWatcher,
+  labelledTerminals,
+  type WakeRequest,
+} from "../../skills/herdr-orchestration/scripts/watch.ts";
+import {
   bindOrchestrator,
   parseReport,
   parseReview,
-} from "../../skills/paseo-orchestration/scripts/paseo-workflow.ts";
+} from "../../skills/herdr-orchestration/scripts/workflow.ts";
 import {
   assignReviewLenses,
   effectiveOrders,
@@ -47,14 +54,7 @@ import {
   requireCurrentReviewMode,
   requireOrchestration,
   type Workflow,
-} from "../../skills/paseo-orchestration/scripts/paseo-workflow-state.ts";
-import {
-  bindWake,
-  coalesceMs,
-  createWatcher,
-  labelledTerminals,
-  type WakeRequest,
-} from "../../skills/paseo-orchestration/scripts/watch.ts";
+} from "../../skills/herdr-orchestration/scripts/workflow-state.ts";
 import { routeWorkDisposition } from "../../skills/plan/scripts/plan-contract.ts";
 
 const managedSkills = (
@@ -66,7 +66,7 @@ const managedSkills = (
 const verifiedReport = {
   branch: "feature",
   head: "68593b1531b5ad5a30e9e5c686571e11b13c63f0",
-  commits: ["68593b1 feat(paseo): make the managed planner the orchestrator"],
+  commits: ["68593b1 feat(pi): make the managed planner the orchestrator"],
   verification: ["pnpm run test:unit passed"],
   deviations: [],
   risks: [],
@@ -106,7 +106,7 @@ const cloudflareSkills = (
   }
 ).skills.flatMap(({ names }) => names);
 
-// The normative Pi/Paseo contract names the four-reviewer roster and no longer claims three Sol reviewers.
+// The normative Pi workflow contract names the four-reviewer roster and no longer claims three Sol reviewers.
 function assertFourReviewerContract(workflow: string) {
   assert.doesNotMatch(workflow, /three fresh Sol|focused Sol roster/);
   assert.match(
@@ -153,18 +153,16 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
     ["edge-cases-and-risk"],
   );
   assertFourReviewerContract(
-    read("skills/paseo-orchestration/references/paseo-workflow.md"),
+    read("skills/herdr-orchestration/references/workflow.md"),
   );
   assert.equal(groups["review-correctness"].at(-1)?.id, "security-review");
   assert.equal(groups["review-architecture"].at(-1)?.id, "migration-data");
   assert.equal(groups["review-contract"].at(-1)?.id, "docs-alignment-review");
-  const deepseek = axConfig.runtime.configs.paseo.managedPaths.find(
-    (entry) => entry.path.join(".") === "agents.providers.ax-review-deepseek",
-  );
-  assert.equal(deepseek?.value.command[5], "medium");
-  assert.equal(
-    deepseek?.value.command[4],
-    "workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731",
+  assert.deepEqual(
+    JSON.parse(read("hooks/pi/routes.json"))["review-deepseek"].routes,
+    [
+      "cloudflare-ai-gateway/workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731:medium",
+    ],
   );
   assert.equal(
     axConfig.runtime.configs.herdrTemplates.target,
@@ -172,7 +170,7 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
     "both profiles install the person-started herdr-core templates",
   );
   assert.deepEqual(currentManagedSkillCoverageGaps(managedSkills), []);
-  assert.ok(managedSkills.includes("paseo-orchestration"));
+  assert.ok(managedSkills.includes("herdr-orchestration"));
   assert.ok(managedSkills.includes("worker-handoff"));
   assert.ok(managedSkills.includes("review"));
   assert.ok(managedSkills.includes("finish"));
@@ -184,12 +182,8 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
     read("rules/git-and-review.md"),
     /work.*GitLab `origin` with Nitro/,
   );
-  const relay = axConfig.runtime.configs.paseo.managedPaths.find(
-    (entry) => entry.path.join(".") === "daemon.relay.enabled",
-  );
-  assert.equal(relay?.value, true);
   assert.match(
-    read("skills/paseo-orchestration/references/paseo-workflow.md"),
+    read("skills/herdr-orchestration/references/workflow.md"),
     /source fingerprint/,
   );
   assert.ok(
@@ -214,7 +208,7 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
     "the global mise Pi pin must be the version the managed launcher targets",
   );
   assert.match(
-    read("skills/paseo-orchestration/scripts/paseo-workflow-state.ts"),
+    read("skills/herdr-orchestration/scripts/workflow-state.ts"),
     /Publication requires the exact target-base SHA/,
   );
   assert.deepEqual(
@@ -253,46 +247,44 @@ test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", 
   for (const head of [verifiedReport.head, "a".repeat(64)])
     assert.equal(parseReport(reportWithHead(head)).head, head);
   assert.match(
-    read("skills/paseo-orchestration/references/paseo-workflow.md"),
+    read("skills/herdr-orchestration/references/workflow.md"),
     /orchestrator is the session the user talks to/,
   );
   assert.equal(maxReviewRounds, 3);
   assert.match(
-    read("skills/paseo-orchestration/references/paseo-workflow.md"),
+    read("skills/herdr-orchestration/references/workflow.md"),
     /## Review every head/,
   );
   assert.match(
-    read("skills/paseo-orchestration/references/paseo-workflow.md"),
+    read("skills/herdr-orchestration/references/workflow.md"),
     /repair that\s+reports no new head stops at `awaiting-user`/,
   );
   assert.match(
-    read("skills/paseo-orchestration/SKILL.md"),
+    read("skills/herdr-orchestration/SKILL.md"),
     /accepted-proposal contract selects Execute[\s\S]*runner `handoff`/,
   );
   assert.match(
-    read("skills/paseo-orchestration/references/paseo-workflow.md"),
+    read("skills/herdr-orchestration/references/workflow.md"),
     /A zero `send` exit releases the worker[\s\S]*\| `adopt` \|[\s\S]*\| `retry-launch` \|/,
   );
   assert.match(
-    read("skills/paseo-orchestration/SKILL.md"),
+    read("skills/herdr-orchestration/SKILL.md"),
     /`awaiting-user` gate names\s+\(`tick`, `adopt`, or `retry-launch`\)/,
   );
   assert.match(
-    read("skills/paseo-orchestration/references/paseo-workflow.md"),
+    read("skills/herdr-orchestration/references/workflow.md"),
     /stays in flight until the reviewer timeout, when\s+the delivery evaluator decides/,
   );
 });
 
 test("GREEN skill-rule-evals: consult planners advise without shell or edits, without gating and never change the plan themselves", () => {
-  const contract = read(
-    "skills/paseo-orchestration/references/paseo-workflow.md",
-  );
+  const contract = read("skills/herdr-orchestration/references/workflow.md");
   assert.match(contract, /## Consult planners/);
   assert.match(
     contract,
-    /no shell, no\s+edits, no Paseo tools, and launch no workers/,
+    /no shell, no\s+edits, and launch no workers; the generic agent-creation tool denial applies to\s+them/,
   );
-  assert.match(contract, /the planner policy denies Paseo MCP calls/);
+  assert.doesNotMatch(contract, /Paseo MCP/);
   assert.match(
     contract,
     /research-only use is an instruction, not an\s+enforced read-only boundary/,
@@ -311,7 +303,7 @@ test("GREEN skill-rule-evals: consult planners advise without shell or edits, wi
   assert.match(contract, /AX_CONSULT_BEGIN[\s\S]*AX_CONSULT_END/);
   assert.match(contract, /\| `consult` \| `briefPath` and optional `planners`/);
   assert.match(
-    read("skills/paseo-orchestration/SKILL.md"),
+    read("skills/herdr-orchestration/SKILL.md"),
     /\("ask Fable",\s+"consult Astra"\), write a consult brief and run `consult`/,
   );
   assert.match(
@@ -386,9 +378,9 @@ test("RED skill-rule-evals: orchestrator binding rejects a terminal that is not 
     ),
     false,
   );
-  // A queued send is accepted delivery; the contract never asks Paseo for a literal "sent".
+  // A zero send exit is accepted delivery; the contract never asks herdr-core for a literal "sent".
   assert.doesNotMatch(
-    read("skills/paseo-orchestration/references/paseo-workflow.md"),
+    read("skills/herdr-orchestration/references/workflow.md"),
     /uncertain assignment response blocks release|"sent"|has\s+not begun the assignment and stays in flight\./,
   );
   const directory = mkdtempSync(join(tmpdir(), "herdr-binding-red-"));
@@ -620,9 +612,7 @@ test("GREEN skill-rule-evals: one embedded reviewer envelope remains usable", ()
 });
 
 test("RED skill-rule-evals: degraded reviews and waivers never become passes or terminal authority", () => {
-  const workflow = read(
-    "skills/paseo-orchestration/references/paseo-workflow.md",
-  );
+  const workflow = read("skills/herdr-orchestration/references/workflow.md");
   const implementation = read("rules/investigation-and-implementation.md");
   const finish = read("skills/finish/SKILL.md");
 
@@ -642,9 +632,7 @@ test("RED skill-rule-evals: degraded reviews and waivers never become passes or 
 });
 
 test("GREEN skill-rule-evals: managed review fallback and waivers remain exact and fail-honest", () => {
-  const workflow = read(
-    "skills/paseo-orchestration/references/paseo-workflow.md",
-  );
+  const workflow = read("skills/herdr-orchestration/references/workflow.md");
   const implementation = read("rules/investigation-and-implementation.md");
   const finish = read("skills/finish/SKILL.md");
 
@@ -664,11 +652,11 @@ test("RED skill-rule-evals: missing CI does not introduce an ungoverned waiver s
     "automatic-ci-waiver",
   ]);
   assert.match(
-    read("skills/paseo-orchestration/references/paseo-workflow.md"),
+    read("skills/herdr-orchestration/references/workflow.md"),
     /empty required-check response remains\s+failed evidence/,
   );
   assert.match(
-    read("skills/finish/scripts/paseo-github-feedback.ts"),
+    read("skills/finish/scripts/github-feedback.ts"),
     /Skipped required CI needs policy disposition/,
   );
 });
@@ -1155,7 +1143,7 @@ test("operational evaluation separates runtime, readiness, and brief owners", ()
   assert.deepEqual(scenario.skills, [
     "ai-readiness-upkeep",
     "ax-cli",
-    "paseo-orchestration",
+    "herdr-orchestration",
     "project-health-brief",
     "session-handoff",
     "worker-handoff",
@@ -1407,17 +1395,15 @@ test("RED skill-rule-evals: a session handoff cannot prescribe the receiver's de
       /Continue from the (?:next concrete|recorded next) action/,
     );
   }
-  assert.doesNotMatch(session, /paseo-workflow|scripts\//);
+  assert.doesNotMatch(session, /workflow\.ts|scripts\//);
 });
 
 test("GREEN skill-rule-evals: session handoff, worker handoff, and orchestration each have one owner", () => {
   const handoffRules = read("rules/handoff-and-resume.md");
   const session = read("skills/session-handoff/SKILL.md");
   const worker = read("skills/worker-handoff/SKILL.md");
-  const orchestration = read("skills/paseo-orchestration/SKILL.md");
-  const workflow = read(
-    "skills/paseo-orchestration/references/paseo-workflow.md",
-  );
+  const orchestration = read("skills/herdr-orchestration/SKILL.md");
+  const workflow = read("skills/herdr-orchestration/references/workflow.md");
 
   assert.deepEqual(currentManagedSkillCoverageGaps(managedSkills), []);
   assert.match(handoffRules, /`session-handoff`/);
@@ -1445,12 +1431,14 @@ test("GREEN skill-rule-evals: session handoff, worker handoff, and orchestration
   );
   assert.match(
     workflow,
-    /caller's own session \(`PASEO_AGENT_ID`\) is the only running agent there,\s+the runner skips the workspace archive[\s\S]*still deletes the scratch\s+folder/,
+    /The\s+caller's own `HC_TERMINAL_ID` is always excluded, even when it carries the\s+workflow label\. Once cleanup starts, every action except `status` refuses/,
   );
   assert.match(
     workflow,
-    /caller\s+without `PASEO_AGENT_ID` gets no exemption\. Once cleanup starts, every action\s+except `status` refuses/,
+    /plain `git worktree remove` only when it\s+is clean at `head`, no live terminal other than the caller works inside it,\s+and the caller's own cwd is outside it/,
   );
+  assert.match(workflow, /reports\s+`not_found` counts as success/);
+  assert.doesNotMatch(workflow, /PASEO_AGENT_ID|workspace archive/);
   assert.doesNotMatch(workflow, /must therefore live outside the workflow/);
   assert.match(workflow, /with `worker-handoff`/);
   assert.match(workflow, /Only the user's statements in this session create/);

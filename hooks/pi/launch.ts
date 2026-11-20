@@ -199,7 +199,7 @@ function prepare(argv: string[]) {
   const launch = launchArguments(argv);
   const workflow = resolve(
     directory,
-    "../../skills/paseo-orchestration/references/paseo-workflow.md",
+    "../../skills/herdr-orchestration/references/workflow.md",
   );
   accessSync(join(directory, "enforcement.ts"), constants.R_OK);
   if (!readFileSync(workflow, "utf8").trim())

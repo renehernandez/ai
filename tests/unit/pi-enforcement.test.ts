@@ -36,7 +36,7 @@ const contract = parseContract({
   nonce: "test",
 });
 
-test("managed arguments preserve Paseo extensions and enforce the fixed route", () => {
+test("managed arguments preserve caller extensions and enforce the fixed route", () => {
   const result = launchArguments([
     ...baseArgs,
     "--model",
@@ -44,11 +44,11 @@ test("managed arguments preserve Paseo extensions and enforce the fixed route", 
     "--thinking",
     "medium",
     "-e",
-    "/tmp/paseo.ts",
+    "/tmp/caller.ts",
     "--session",
     "/tmp/session.jsonl",
   ]);
-  assert.ok(result.args.includes("/tmp/paseo.ts"));
+  assert.ok(result.args.includes("/tmp/caller.ts"));
   assert.ok(result.args.includes("/tmp/session.jsonl"));
   assert.ok(result.args.includes("--no-extensions"));
   assert.ok(result.args.some((v) => v.endsWith("/pi/enforcement.ts")));
@@ -115,7 +115,7 @@ const route = ({ contract }: ReturnType<typeof launchArguments>) => [
   contract.thinking,
 ];
 
-test("the orchestrator launches on the listed route Paseo selects, Opus by default, and refuses others", () => {
+test("the orchestrator launches on the listed route the caller selects, Opus by default, and refuses others", () => {
   const opus = ["orchestrator", "claude-bridge", "claude-opus-5-5", "medium"];
   const astra = ["orchestrator", "openai-codex", "gpt-6-astra", "medium"];
   for (const [tail, expected] of [
@@ -258,7 +258,7 @@ test("each focused reviewer is read-only without MCP and only Sonnet loads the C
   });
   assert.equal(env.ANTHROPIC_AUTH_TOKEN, undefined);
   assert.equal(env.CLAUDE_CODE_USE_VERTEX, undefined);
-  for (const name of ["bash", "edit", "write", "mcp", "mcp__paseo__run"])
+  for (const name of ["bash", "edit", "write", "mcp", "mcp__agents__run"])
     assert.match(
       toolDenial("review-quality", name, { command: "ls" }, process.cwd()) ??
         "",
@@ -313,26 +313,15 @@ test("consult planners have read tools plus MCP and no shell, fixed to one route
       toolDenial(role, "mcp", { action: "install" }, process.cwd()) ?? "",
       /explicit operator handling/,
     );
-    const paseo = /Paseo MCP tools are unavailable/;
-    for (const tool of [
-      "paseo_send_agent_prompt",
-      "paseo_kill_agent",
-      "mcp__paseo__create_agent",
-    ])
-      assert.match(
-        toolDenial(role, "mcp", { tool }, process.cwd()) ?? "",
-        paseo,
-        tool,
-      );
-    for (const [name, input] of [
-      ["mcp__paseo__paseo_create_terminal", {}],
-      ["mcp", { server: "paseo" }],
-    ] as const)
-      assert.match(
-        toolDenial(role, name, input, process.cwd()) ?? "",
-        paseo,
-        name,
-      );
+    assert.match(
+      toolDenial(
+        role,
+        "mcp",
+        { tool: "mcp__agents__create_agent" },
+        process.cwd(),
+      ) ?? "",
+      /bounded workflow runner/u,
+    );
     assert.equal(
       toolDenial(role, "mcp__context7__query-docs", {}, process.cwd()),
       undefined,
@@ -341,7 +330,7 @@ test("consult planners have read tools plus MCP and no shell, fixed to one route
   // Orchestrator and implementer MCP behavior is unchanged.
   for (const role of ["planner", "implementer"])
     assert.equal(
-      toolDenial(role, "mcp", { tool: "paseo_list_agents" }, process.cwd()),
+      toolDenial(role, "mcp", { tool: "agents_list_agents" }, process.cwd()),
       undefined,
     );
   assert.equal(
@@ -389,9 +378,9 @@ test("runtime model and thinking drift and unsupported reviewer tools are denied
     "write",
     "edit",
     "mcp",
-    "mcp__paseo__list_agents",
+    "mcp__agents__list_agents",
     "mcpScript",
-    "paseo_create_agent",
+    "agents_create_agent",
     "tool_search",
     "codemode",
     "unknown",
@@ -420,26 +409,26 @@ test("runtime model and thinking drift and unsupported reviewer tools are denied
   );
   for (const tool of [
     "create_agent",
-    "paseo_create_agent",
-    "paseo.update_agent",
-    "mcp__paseo__respond_to_permission",
+    "agents_create_agent",
+    "agents.update_agent",
+    "mcp__agents__respond_to_permission",
   ])
     assert.ok(toolDenial("orchestrator", "mcp", { tool }, process.cwd()));
   for (const role of writeRoles) {
     for (const name of [
-      "mcp__paseo__create_agent",
-      "mcp__paseo__update_agent",
-      "mcp__paseo__respond_to_permission",
+      "mcp__agents__create_agent",
+      "mcp__agents__update_agent",
+      "mcp__agents__respond_to_permission",
     ])
       assert.match(
         toolDenial(role, name, {}, process.cwd()) ?? "",
         /bounded workflow runner/u,
       );
     assert.equal(
-      toolDenial(role, "mcp__paseo__list_agents", { action: "x" }, "/"),
+      toolDenial(role, "mcp__agents__list_agents", { action: "x" }, "/"),
       undefined,
     );
-    for (const name of ["mcp__paseo", "tool_search", "codemode"])
+    for (const name of ["mcp__agents", "tool_search", "codemode"])
       assert.ok(toolDenial(role, name, {}, process.cwd()));
   }
   assert.ok(
@@ -449,90 +438,24 @@ test("runtime model and thinking drift and unsupported reviewer tools are denied
     toolDenial(
       "orchestrator",
       "mcp",
-      { tool: "paseo_list_agents" },
+      { tool: "agents_list_agents" },
       process.cwd(),
     ),
     undefined,
   );
 });
 
-test("managed roles cannot dispatch Paseo sessions outside the runner but keep read-only Paseo commands", () => {
+test("managed roles keep runner and quoted commands available", () => {
   for (const command of [
-    "paseo run --background --json --provider ax-implementer task",
-    "paseo send agent-1 --prompt-file brief.md --no-wait",
-    "paseo --json stop agent-1",
-    "paseo --host localhost:1 delete agent-1",
-    "paseo agent archive agent-1",
-    "git status && paseo heartbeat create --cron '*/5 * * * *' tick",
-    "env PASEO_AGENT_ID=other paseo schedule ls",
-    'bash -c "paseo run task"',
-    "/Applications/Paseo.app/Contents/Resources/bin/paseo send a b",
-    "paseo $ACTION agent-1",
-    "P=paseo; $P run task",
-    '"$PASEO_BIN" send agent-1 follow-up',
-  ]) {
-    for (const role of writeRoles)
-      assert.match(
-        toolDenial(role, "bash", { command }, process.cwd()) ?? "",
-        /Paseo policy/u,
-        command,
-      );
-  }
-  for (const command of [
-    "paseo --help",
-    "paseo ls --json",
-    "paseo inspect --json agent-1",
-    "paseo logs --filter assistant_message --tail 1 agent-1",
-    "paseo wait --json --timeout 60 agent-1",
-    'grep -n "paseo run" skills/paseo-orchestration/references/paseo-workflow.md',
-    "echo 'paseo send agent-1; paseo run task'",
-    "node ~/.agents/skills/paseo-orchestration/scripts/paseo-workflow.ts state.json review input.json",
+    'grep -n "hc run" skills/herdr-orchestration/references/workflow.md',
+    "echo 'hc send t1; hc run task'",
+    "node ~/.agents/skills/herdr-orchestration/scripts/workflow.ts state.json review input.json",
     '"$EDITOR" notes.md',
   ])
     for (const role of writeRoles)
       assert.equal(
         toolDenial(role, "bash", { command }, process.cwd()),
         undefined,
-        command,
-      );
-});
-
-test("pure Paseo help and global version requests stay available, but never hide a dispatch", () => {
-  for (const command of [
-    "paseo --help",
-    "paseo -h",
-    "paseo run --help",
-    "paseo send -h",
-    "paseo agent run --help",
-    "paseo --host localhost:1 stop --help",
-    "paseo heartbeat --help",
-    "paseo --version",
-    "paseo -v",
-  ])
-    for (const role of writeRoles)
-      assert.equal(
-        toolDenial(role, "bash", { command }, process.cwd()),
-        undefined,
-        command,
-      );
-  for (const command of [
-    "paseo run --version",
-    "paseo run -v",
-    "paseo -v run task",
-    "paseo --help run task",
-    "paseo run --help task",
-    "paseo run task --help",
-    "paseo run --prompt --help task",
-    "paseo send agent-1 -h follow-up",
-    "paseo run $HELP",
-    "paseo run --help && paseo run task",
-    "paseo run task; echo --help",
-    "sh -c 'paseo run task --help'",
-  ])
-    for (const role of writeRoles)
-      assert.match(
-        toolDenial(role, "bash", { command }, process.cwd()) ?? "",
-        /^Paseo policy/u,
         command,
       );
 });
@@ -870,7 +793,7 @@ test("the orchestrator and its planner alias cannot change dependencies, but kee
         undefined,
         command,
       );
-  // The Paseo and herdr-core policies separately deny a dynamic executable followed by `run` or `exec`.
+  // The herdr-core policy separately denies a dynamic executable followed by `run` or `exec`.
   assert.equal(findDependencyChange('"$PM" run test'), undefined);
   assert.equal(findDependencyChange('"$PM" exec vitest'), undefined);
   assert.match(
@@ -909,7 +832,7 @@ test("compound denial applies to agent shell calls, not a person's own commands"
     process.env.AX_PI_CONTRACT = JSON.stringify(implementer);
     process.env.AX_PI_WORKFLOW_FILE = join(
       f.root,
-      "skills/paseo-orchestration/references/paseo-workflow.md",
+      "skills/herdr-orchestration/references/workflow.md",
     );
     const handlers = new Map<string, (...args: unknown[]) => unknown>();
     enforcement({
@@ -935,11 +858,11 @@ test("compound denial applies to agent shell calls, not a person's own commands"
     assert.equal(agent.block, true);
     assert.match(agent.reason, /^Shell discipline/u);
     const dispatch = handlers.get("user_bash")?.(
-      { command: "paseo run task" },
+      { command: "hc run task" },
       ctx,
     ) as { result: { output: string; exitCode: number } };
     assert.equal(dispatch.result.exitCode, 1);
-    assert.match(dispatch.result.output, /^Paseo policy/u);
+    assert.match(dispatch.result.output, /^herdr-core policy/u);
   } finally {
     if (savedContract === undefined) delete process.env.AX_PI_CONTRACT;
     else process.env.AX_PI_CONTRACT = savedContract;
@@ -952,10 +875,10 @@ test("compound denial applies to agent shell calls, not a person's own commands"
 function fixture(): { root: string; launcher: string; env: NodeJS.ProcessEnv } {
   const root = mkdtempSync(join(tmpdir(), "pi-enforcement-"));
   cpSync(resolve("hooks"), join(root, "hooks"), { recursive: true });
-  const references = join(root, "skills/paseo-orchestration/references");
+  const references = join(root, "skills/herdr-orchestration/references");
   mkdirSync(references, { recursive: true });
   writeFileSync(
-    join(references, "paseo-workflow.md"),
+    join(references, "workflow.md"),
     "One local review pass. Publish Ready. Never merge.",
   );
   mkdirSync(join(root, "bin"));
@@ -1013,20 +936,20 @@ test("interactive launch waits for the adapter handshake and fails closed withou
   }
 });
 
-test("Paseo MCP config reaches the pinned adapter only for nonreview roles", () => {
+test("MCP config reaches the pinned adapter only for nonreview roles", () => {
   for (const fixed of [
     ["planner", "openai-codex", "gpt-6-astra", "medium"],
     ["implementer", "claude-bridge", "claude-opus-5-5", "medium"],
     ["planner-astra", "openai-codex", "gpt-6-astra", "medium"],
   ]) {
     for (const tail of [
-      ["--mcp-config", "/tmp/paseo mcp.json"],
-      ["--mcp-config=/tmp/paseo mcp.json"],
+      ["--mcp-config", "/tmp/caller mcp.json"],
+      ["--mcp-config=/tmp/caller mcp.json"],
     ]) {
       const result = launchArguments([...fixed, ...tail]);
       const index = result.args.indexOf("--mcp-config");
       assert.notEqual(index, -1);
-      assert.equal(result.args[index + 1], "/tmp/paseo mcp.json");
+      assert.equal(result.args[index + 1], "/tmp/caller mcp.json");
       assert.ok(result.args.includes("npm:pi-mcp-adapter@7.0.0"));
     }
     assert.throws(
@@ -1056,7 +979,7 @@ test("adapter injects the canonical workflow section once and retains other prom
     process.env.AX_PI_CONTRACT = JSON.stringify(contract);
     process.env.AX_PI_WORKFLOW_FILE = join(
       f.root,
-      "skills/paseo-orchestration/references/paseo-workflow.md",
+      "skills/herdr-orchestration/references/workflow.md",
     );
     const handlers = new Map<string, (...args: unknown[]) => unknown>();
     enforcement({
@@ -1070,7 +993,7 @@ test("adapter injects the canonical workflow section once and retains other prom
       cwd: f.root,
       model: { provider: contract.provider, id: contract.model },
     };
-    const sections: Record<string, string> = { paseo: "Paseo original" };
+    const sections: Record<string, string> = { host: "Host original" };
     handlers.get("before_agent_start")?.(
       { systemPromptOptions: { sections } },
       ctx,
@@ -1079,14 +1002,15 @@ test("adapter injects the canonical workflow section once and retains other prom
       { systemPromptOptions: { sections } },
       ctx,
     );
-    assert.equal(sections.paseo, "Paseo original");
+    assert.equal(sections.host, "Host original");
     assert.match(
-      sections["ax-paseo-workflow"],
-      /^Active fixed Pi\/Paseo role: review-astra\./u,
+      sections["ax-herdr-workflow"],
+      /^Active fixed Pi\/herdr-core role: review-astra\./u,
     );
-    assert.match(sections["ax-paseo-workflow"], /Publish Ready/u);
+    assert.match(sections["ax-herdr-workflow"], /Publish Ready/u);
     assert.equal(
-      sections["ax-paseo-workflow"].split("Active fixed Pi/Paseo role").length,
+      sections["ax-herdr-workflow"].split("Active fixed Pi/herdr-core role")
+        .length,
       2,
     );
     const blocked = handlers.get("tool_call")?.(

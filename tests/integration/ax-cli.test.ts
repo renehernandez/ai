@@ -334,11 +334,11 @@ test("top-level sync installs JSON configs with the selected profile", () => {
         target: "~/.pi/agent/settings.json",
         managedPaths: [{ path: ["defaultModel"], value: "gpt-6.1-sol" }],
       },
-      paseo: {
-        target: "~/.paseo/config.json",
+      piModels: {
+        target: "~/.pi/agent/models.json",
         managedPaths: [
           {
-            path: ["agents", "providers", "pi-ax"],
+            path: ["providers", "pi-ax"],
             value: {
               extends: "pi",
               command: ["pi", "--extension", "~/.agents/hooks/pi/index.ts"],
@@ -384,8 +384,8 @@ test("top-level sync installs JSON configs with the selected profile", () => {
         "gpt-6.1-sol",
       );
       assert.equal(
-        JSON.parse(readFileSync(join(home, ".paseo/config.json"), "utf-8"))
-          .agents.providers["pi-ax"].command[2],
+        JSON.parse(readFileSync(join(home, ".pi/agent/models.json"), "utf-8"))
+          .providers["pi-ax"].command[2],
         join(home, ".agents/hooks/pi/index.ts"),
       );
     }

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
-import { loadReviewCatalog } from "../../skills/paseo-orchestration/scripts/paseo-workflow-state.ts";
+import { loadReviewCatalog } from "../../skills/herdr-orchestration/scripts/workflow-state.ts";
 import {
   finalImplementationReviewerCatalog,
   planningReviewerCatalog,
@@ -29,10 +29,10 @@ test("handoff obtains canonical lens definitions through the Review CLI subproce
 test("missing Review skill reports the required CLI dependency clearly", async (context) => {
   const temporary = await mkdtemp(join(tmpdir(), "missing-review-skill-"));
   context.after(() => rm(temporary, { recursive: true }));
-  const stateModule = join(temporary, "paseo-workflow-state.ts");
+  const stateModule = join(temporary, "workflow-state.ts");
   await copyFile(
     new URL(
-      "../../skills/paseo-orchestration/scripts/paseo-workflow-state.ts",
+      "../../skills/herdr-orchestration/scripts/workflow-state.ts",
       import.meta.url,
     ),
     stateModule,

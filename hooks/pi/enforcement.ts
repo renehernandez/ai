@@ -79,8 +79,8 @@ export default function enforcement(pi: Pi): void {
     verify(ctx);
     const sections = event.systemPromptOptions?.sections;
     if (!sections) fail("Pi did not expose system prompt sections");
-    sections["ax-paseo-workflow"] =
-      `Active fixed Pi/Paseo role: ${contract.role}. The user accepted the following bounded workflow; its bounded head-keyed review loop and Ready publication policy supersede legacy draft/review-loop defaults for this session.${ticked(contract.role) ? heartbeatNote : ""}\n\n${workflow}`;
+    sections["ax-herdr-workflow"] =
+      `Active fixed Pi/herdr-core role: ${contract.role}. The user accepted the following bounded workflow; its bounded head-keyed review loop and Ready publication policy supersede legacy draft/review-loop defaults for this session.${ticked(contract.role) ? heartbeatNote : ""}\n\n${workflow}`;
   });
   pi.on("session_shutdown", () => {
     wake?.close();

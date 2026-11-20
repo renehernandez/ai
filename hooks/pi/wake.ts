@@ -56,7 +56,7 @@ const newer = (
   request.generation > last.generation ||
   (request.generation === last.generation && request.n > last.n);
 
-// Watches this terminal's wake directory and delivers each newer tick request once, as a queued follow-up.
+// Watches this terminal's wake directory and hands each newer tick request bound to this session to `deliver` once.
 export function startWake(options: {
   directory: string;
   deliver: (prompt: string) => Promise<void> | void;

@@ -10,7 +10,7 @@ import {
   type Transport,
   type Workflow,
   type WorktreeState,
-} from "./paseo-workflow-state.ts";
+} from "./workflow-state.ts";
 
 // herdr-core and Git access shared by the runner entrypoint and its cleanup action.
 const execute = promisify(execFile);
@@ -194,7 +194,7 @@ export async function receivedAssignment(
     (text) => text.includes(assignmentDigest),
   );
 }
-const runner = fileURLToPath(new URL("./paseo-workflow.ts", import.meta.url));
+const runner = fileURLToPath(new URL("./workflow.ts", import.meta.url));
 
 export type Worktree = WorktreeState;
 export type WorktreeReader = (cwd: string) => Promise<Worktree>;

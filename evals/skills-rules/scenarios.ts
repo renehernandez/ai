@@ -288,7 +288,7 @@ export const behaviorScenarios: BehaviorScenario[] = [
     skills: [
       "ai-readiness-upkeep",
       "ax-cli",
-      "paseo-orchestration",
+      "herdr-orchestration",
       "project-health-brief",
       "session-handoff",
       "worker-handoff",

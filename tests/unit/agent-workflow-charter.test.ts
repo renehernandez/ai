@@ -86,7 +86,7 @@ test("Pi config changes require their transaction behavior scenarios", () => {
     const changes = [{ path, content: "", additions: "" }];
     validateBehaviorContractCoverage(changes, changes, errors);
     assert.ok(
-      errors.some((error) => error.includes("pi-paseo-config")),
+      errors.some((error) => error.includes("pi-config")),
       `${path} must require the managed-config scenarios`,
     );
   }

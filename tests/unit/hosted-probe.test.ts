@@ -1,4 +1,4 @@
-// charter-contracts: pi-paseo-hosted
+// charter-contracts: pi-hosted
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import test from "node:test";
@@ -6,7 +6,7 @@ import {
   type Command,
   type ProbeOptions,
   probeHosted,
-} from "../../skills/finish/scripts/paseo-hosted-probe.ts";
+} from "../../skills/finish/scripts/hosted-probe.ts";
 
 const head = "a".repeat(40);
 const options: ProbeOptions = {
@@ -107,7 +107,7 @@ function github(
   };
 }
 
-test("GREEN pi-paseo-hosted: collects complete exact-head feedback for semantic triage", () => {
+test("GREEN pi-hosted: collects complete exact-head feedback for semantic triage", () => {
   const result = probeHosted(options, github());
   assert.equal(result.status, "completed");
   assert.equal(result.ready, true);
@@ -116,7 +116,7 @@ test("GREEN pi-paseo-hosted: collects complete exact-head feedback for semantic 
   assert.ok(result.findings.every((finding) => finding.id && finding.evidence));
 });
 
-test("RED pi-paseo-hosted: stale bot review and pending required CI cannot complete", () => {
+test("RED pi-hosted: stale bot review and pending required CI cannot complete", () => {
   assert.equal(
     probeHosted(options, github({ completion: false })).status,
     "waiting",
@@ -127,7 +127,7 @@ test("RED pi-paseo-hosted: stale bot review and pending required CI cannot compl
   );
 });
 
-test("GREEN pi-paseo-hosted: all CI and reviewer policy combinations stay independent", () => {
+test("GREEN pi-hosted: all CI and reviewer policy combinations stay independent", () => {
   for (const ciPolicy of ["required", "not-required"] as const)
     for (const reviewer of ["genie", undefined] as const) {
       const result = probeHosted(
@@ -144,7 +144,7 @@ test("GREEN pi-paseo-hosted: all CI and reviewer policy combinations stay indepe
     }
 });
 
-test("RED pi-paseo-hosted: required CI rejects empty or malformed command evidence", () => {
+test("RED pi-hosted: required CI rejects empty or malformed command evidence", () => {
   for (const checks of [[], "", [{ name: "unit", bucket: "skipping" }]])
     assert.equal(
       probeHosted(options, github({ checks })).status,

@@ -115,7 +115,6 @@ type ResolvedToolConfig = {
     | "pi"
     | "piModels"
     | "piClaudeBridge"
-    | "paseo"
     | "herdrTemplates";
   // Report and asset key; a generated file target adds its file name.
   key: string;
@@ -148,7 +147,6 @@ const CONFIG_TARGETS = {
   pi: "~/.pi/agent/settings.json",
   piModels: "~/.pi/agent/models.json",
   piClaudeBridge: "~/.pi/agent/claude-bridge.json",
-  paseo: "~/.paseo/config.json",
   herdrTemplates: HERDR_TEMPLATES_TARGET,
 } as const;
 const TEMPLATE_FILE = /^ax-[a-z0-9.-]+\.md$/;

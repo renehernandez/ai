@@ -16,7 +16,13 @@ import {
   resolve,
   sep,
 } from "node:path";
-import { git, herdr, readWorktree } from "./paseo-workflow-io.ts";
+import {
+  labelledTerminals,
+  stopWatcher,
+  syncWatcher,
+  wakeRequestFile,
+} from "./watch.ts";
+import { git, herdr, readWorktree } from "./workflow-io.ts";
 import {
   inFlight,
   locked,
@@ -26,13 +32,7 @@ import {
   type Transport,
   unsettledConsult,
   type Workflow,
-} from "./paseo-workflow-state.ts";
-import {
-  labelledTerminals,
-  stopWatcher,
-  syncWatcher,
-  wakeRequestFile,
-} from "./watch.ts";
+} from "./workflow-state.ts";
 
 export type CleanupInput = {
   authorizationSource: string;
@@ -222,15 +222,14 @@ async function removeTerminals(
   const ordered = [...listed].sort(
     (a, b) => depth(b.address) - depth(a.address),
   );
+  // A terminal started with --rm is removed as it dies, so its kill or rm reports not_found.
+  const gone = (error: { stdout?: unknown }) => {
+    if (!/not_found/.test(`${error?.stdout ?? ""} ${error}`)) throw error;
+  };
   for (const terminal of ordered)
-    await transport(["kill", "--json", terminal.address], 30_000);
-  // A watcher started with --rm is already gone once killed.
+    await transport(["kill", "--json", terminal.address], 30_000).catch(gone);
   for (const terminal of ordered)
-    await transport(["rm", "--json", terminal.address], 30_000).catch(
-      (error) => {
-        if (!/not_found/.test(`${error?.stdout ?? ""} ${error}`)) throw error;
-      },
-    );
+    await transport(["rm", "--json", terminal.address], 30_000).catch(gone);
   const left = (await labelledTerminals(state.workflowId, transport)).filter(
     (terminal) => terminal.address !== callerId,
   );

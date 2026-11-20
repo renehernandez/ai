@@ -116,7 +116,7 @@ ownership, and the mandatory OpenSpec rehearsal boundary.
   cross-component, verification, delivery, or rollout decision.
   Contract-preserving wording, formatting, validation, test, CI, review, and
   schema repairs return automatically to the current owner. In the managed
-  Pi/Paseo workflow, failed or degraded non-absolute quality evidence remains
+  Pi/herdr-core workflow, failed or degraded non-absolute quality evidence remains
   visible but does not erase explicit user authority. A user may waive named
   gates only for one exact action and current artifact or head; the owner must
   record the failed evidence and waiver without broadening that action. Such a

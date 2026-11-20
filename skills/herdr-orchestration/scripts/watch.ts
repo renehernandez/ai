@@ -5,7 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { tickPrompt } from "./paseo-workflow-io.ts";
+import { tickPrompt } from "./workflow-io.ts";
 import {
   inFlight,
   locked,
@@ -14,7 +14,7 @@ import {
   type Transport,
   type Workflow,
   workers,
-} from "./paseo-workflow-state.ts";
+} from "./workflow-state.ts";
 
 // herdr-core has no scheduler and types no parent note when a live agent finishes a turn, so one watcher
 // process per workflow follows `hc events` and decides when to tick. It never types into the orchestrator:

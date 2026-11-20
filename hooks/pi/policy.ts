@@ -65,68 +65,6 @@ export function allowedTools(role: string): string[] {
   return role.startsWith("planner-") ? consultTools : writeTools;
 }
 
-const paseoValueOptions = new Set(["-o", "--format", "--host", "--home"]);
-const paseoRunnerCommands = new Set([
-  "run",
-  "send",
-  "stop",
-  "delete",
-  "archive",
-  "heartbeat",
-  "schedule",
-]);
-
-function paseoSubcommand(words: ShellWord[], start: number) {
-  let index = start;
-  while (index < words.length) {
-    const word = words[index];
-    if (word.dynamic || !word.value.startsWith("-")) return { word, index };
-    index += paseoValueOptions.has(word.value) ? 2 : 1;
-  }
-}
-
-function paseoDispatch(words: ShellWord[]): string | undefined {
-  const { words: unwrapped, splitCommand } = unwrap(words);
-  if (splitCommand)
-    return splitCommand.dynamic
-      ? "<dynamic split command>"
-      : findPaseoDispatch(splitCommand.value);
-  if (unwrapped.length === 0) return undefined;
-  // A variable executable such as `$P run` could conceal the Paseo CLI.
-  const next = unwrapped[1]?.value ?? "";
-  if (unwrapped[0].dynamic && paseoRunnerCommands.has(next)) return next;
-  const executable = basename(unwrapped[0].value);
-  if (SHELLS.has(executable)) {
-    const flag = unwrapped.findIndex((word) => isShellCommandFlag(word.value));
-    const nested = flag >= 0 ? unwrapped[flag + 1] : undefined;
-    return nested ? findPaseoDispatch(nested.value) : undefined;
-  }
-  if (executable !== "paseo") return undefined;
-  let found = paseoSubcommand(unwrapped, 1);
-  if (found?.word.value === "agent" && !found.word.dynamic)
-    found = paseoSubcommand(unwrapped, found.index + 1);
-  if (found?.word.dynamic) return found.word.value || "<dynamic subcommand>";
-  // `paseo <subcommand> --help` only prints usage; any other word after the subcommand could make it dispatch.
-  const rest = found ? unwrapped.slice(found.index + 1) : [];
-  if (
-    rest.length === 1 &&
-    !rest[0].dynamic &&
-    ["--help", "-h"].includes(rest[0].value)
-  )
-    return undefined;
-  return found && paseoRunnerCommands.has(found.word.value)
-    ? found.word.value
-    : undefined;
-}
-
-export function findPaseoDispatch(command: string): string | undefined {
-  for (const words of tokenize(command)) {
-    const match = paseoDispatch(words);
-    if (match) return match;
-  }
-  return undefined;
-}
-
 // herdr-core and the Herdr app are default-deny: only these read-only forms run for managed roles.
 const herdrAllowed: Record<string, string[][]> = {
   hc: [
@@ -522,9 +460,6 @@ export function shellDenial(
   if (typeof command !== "string") return "Shell command must be a string";
   const force = findForcePush(command);
   if (force) return `Force-push policy: ${force.detail}`;
-  const paseo = findPaseoDispatch(command);
-  if (paseo)
-    return `Paseo policy: \`paseo ${paseo}\` dispatches or changes session lifecycle; managed roles use the Paseo workflow runner, and read-only ls, inspect, logs, and wait remain available`;
   const deletion = evaluateCommand(command, cwd);
   if (deletion) return `Deletion policy: ${deletion.detail}`;
   if (denyCompound && findCompoundCommand(command))
@@ -565,12 +500,6 @@ export function toolDenial(
   if (name === "mcp" && input.action !== undefined)
     return "MCP configuration and authentication actions require explicit operator handling";
   const mcpTool = nestedMcp ? name : name === "mcp" ? input.tool : undefined;
-  if (
-    role.startsWith("planner-") &&
-    ((typeof mcpTool === "string" && /^(?:mcp__)?paseo_/u.test(mcpTool)) ||
-      (name === "mcp" && input.server === "paseo"))
-  )
-    return `Consult planner policy: Paseo MCP tools are unavailable for fixed role ${role}; planners only advise the orchestrator`;
   if (
     typeof mcpTool === "string" &&
     /(?:^|[^a-z])(?:create_agent|update_agent|respond_to_permission)$/u.test(
