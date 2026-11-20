@@ -67,16 +67,23 @@ is never merged or synced partway.
    identity; `ax.workflow` and `ax.role` labels on every launch; deletion of
    Paseo workspace binding and registration; and removal of the launcher's
    RPC-only path. First proof 2, driven by a manually run tick.
-4. **Wake-up and cleanup.** Ticker chain, parent notes, label-based terminal
-   cleanup, and worktree cleanup. First proof 3's observations are appended
+4. **Wake-up and cleanup.** The workflow watcher, label-based terminal
+   cleanup, and worktree cleanup. First proof 4's observations are appended
    to the `Observed herdr-core behavior` section below and committed before
-   the tick-prompt handling is written; the end-to-end proof closes this step.
-   That section records facts only. It changes no accepted contract and does
-   not reopen planning review; implementation review checks it with the
-   diff. An observation that contradicts this plan's contract stops the
-   implementer and returns to Plan.
+   the watcher's change detection is written; the end-to-end proof closes
+   this step. That section records facts only. It changes no accepted
+   contract and does not reopen planning review; implementation review checks
+   it with the diff. An observation that contradicts this plan's contract
+   stops the implementer and returns to Plan.
 5. **Remove and rename.** Paseo config target, Paseo-specific code and docs,
    and the skill rename to `herdr-orchestration`. The drift proof closes it.
+
+Steps 1 to 3 are done on the branch (`1179734`, `5dea338`, `87c2b4a`), with
+the label-reading fix and first proof 3's observations in `d904dc0`. The
+first ticker-chain design for step 4 was contradicted by those observations
+and is replaced by the watcher below. The next implementer starts from
+`d904dc0` with step 4; it also adds `--outlive-parent` to worker launches
+(see Sessions).
 
 ### Per-laptop precondition
 
@@ -131,7 +138,19 @@ unmerged and the plan returns to Plan.
   `ax.workflow=<id>` and `ax.role=<role>`:
   `hc run --bg --json --name ax-<role>-<n> --cwd <cwd> --label ... -- node ~/.agents/hooks/pi/launch.ts <role> <route...> --session <path>`.
 - The parent defaults to the orchestrator's own terminal, so workers appear as
-  sub-agents under it in the desktop app and in the mobile Inbox. The runner
+  sub-agents under it in the desktop app and in the mobile Inbox. Workers,
+  consult planners, and reviewers launch with `--outlive-parent`, so a
+  closed or crashed orchestrator does not kill them, matching Paseo, where
+  workers outlived the orchestrator session. Their session JSONL and
+  worktree stay intact, and a new orchestrator in the same cwd resumes the
+  workflow with an ordinary tick, which re-arms the watcher under its own
+  `HC_TERMINAL_ID`. Workers left running are bounded by the reviewer
+  timeout on the next tick and by label-based cleanup. A worker that still
+  ends unexpectedly is recorded by the existing `failed` or `undelivered`
+  paths, and `adopt` and `retry-launch` read its session JSONL and the
+  recorded worktree baseline, never a live terminal; a unit test covers
+  adoption of a report from a `finished` worker terminal. Only the watcher
+  keeps the default die-with-parent behavior. The runner
   copies the orchestrator's `herdr.space` and `herdr.tab` labels onto workers
   so they land in the same space.
 - Templates exist for humans only. The runner never starts a template.
@@ -168,42 +187,93 @@ unmerged and the plan returns to Plan.
 
 ### Wake-up
 
-- A ticker chain replaces the Paseo heartbeat. Whenever a worker, consult
-  planner, ambiguous delivery, or hosted gate is in flight, the runner keeps
-  one `--rm` ticker chain labelled `ax.workflow=<id>` and `ax.role=ticker`.
-  Each ticker sleeps for the 5-minute heartbeat interval, starts its
-  successor with the same labels and the orchestrator as parent, and exits,
-  which produces a parent note in the orchestrator terminal. The chain
-  re-arms itself, so a dropped note never ends it. A tick that finds work in
-  flight and no live ticker starts one; the runner kills the chain by label
-  when nothing is in flight, at `awaiting-user`, and at finish. A hung
-  worker, an inert worker past the queue window, or a reviewer past its
-  timeout is therefore evaluated without user input while the chain lives.
-- Chain recovery: a ticker whose successor fails to start still exits and
-  notes the orchestrator, and that tick finds no live ticker and starts one.
-  First proof 3 records whether an externally killed child notes its parent.
-  If it does, that note's tick re-arms the chain. If it does not, external
-  chain death is the one case that needs a person: `status` and every tick
-  line report the missing ticker, and the next tick from a worker note,
-  the user, or Herdr Mobile re-arms it. `hc server restart` keeps terminals
-  running and does not end the chain.
-- Stop marker: the runner stops a chain in two phases. It first records a
-  new chain generation in a stop file in the scratch folder, then kills by
-  label, then sweeps the label once more. Each ticker carries the generation
-  it was started with and starts no successor when the stop file names a
-  newer one, so a kill that lands during a successor start leaves no live
-  ticker.
-- Orphan bound: before starting its successor, each ticker runs `hc get` on
-  its parent orchestrator terminal and exits without a successor unless the
-  parent is live. A closed, crashed, or abandoned orchestrator therefore ends
-  the chain within one interval. Each chain also stops after 24 hours, the
-  old heartbeat lifetime; `status` reports the expiry and the next dispatch
-  or tick re-arms it.
-- Parent notes from workers that stop working are early wake-ups only. Ticks
-  stay idempotent under the state lock, so a missed, dropped, or duplicate
-  note changes nothing; the next ticker note picks up any missed change.
-- The runner's tick-prompt handling is written against observed note text,
-  not assumed text.
+herdr-core types a parent note only when a child is blocked, errors, or
+exits, and a `--rm` child types none, so parent notes cannot wake the
+orchestrator (see `Observed herdr-core behavior`). One watcher process per
+workflow replaces the Paseo heartbeat and types the tick prompt itself.
+
+- Lifetime: whenever a worker, consult planner, ambiguous delivery, or
+  hosted gate is in flight, the runner keeps one watcher terminal, a child of
+  the orchestrator, started with
+  `hc run --bg --rm --no-notify --json --label ax.workflow=<id> --label ax.role=watcher -- node <runner dir>/watch.ts <state> <orchestrator address> <generation>`.
+  A dispatch or tick with work in flight and no live watcher starts one. The
+  runner stops it when nothing is in flight, at `awaiting-user`, and at
+  finish.
+- Change detection: the watcher follows `hc events` and reacts to any
+  terminal whose address the state records as an in-flight worker, so
+  workers started under an earlier orchestrator terminal are still seen,
+  when its turn ends, or it becomes blocked, errors, or finishes. If first proof 4 shows the
+  event stream does not report an ordinary turn end, it instead polls
+  `hc get` on the workflow's live children every 15 seconds and compares
+  `turn`, `status.state`, and `state`, which `hc get` was observed to update.
+  Bursts within 5 seconds are coalesced into one tick.
+- One unconsumed prompt: the watcher records when it last sent a tick
+  prompt and sends no further prompt, change-triggered or periodic, while
+  that send is newer than the state's `lastTickAt`, so a long orchestrator
+  turn queues at most one tick prompt. If a sent prompt is still unconsumed
+  after 15 minutes, it is treated as dropped and one prompt is sent again. A
+  scripted-`hc` unit test sends several changes and an interval during one
+  long turn and checks that exactly one prompt is queued.
+- Periodic tick: the watcher also types the tick prompt every 5 minutes,
+  the heartbeat interval, so a hung worker, an inert worker past the queue
+  window, a reviewer past its timeout, and a pending hosted gate are
+  evaluated without user input. It skips a periodic tick when the state's
+  `lastTickAt`, which every tick records, falls within the interval.
+- Delivery: the watcher sends the runner's fixed tick prompt, with the
+  effective standing orders, through `hc send <orchestrator address>`. A
+  prompt typed while the orchestrator is mid-turn is queued as Pi's next turn
+  (observed), so mid-turn sends stay allowed.
+- Blocked guard: the watcher reads the orchestrator's `hc get` status before
+  each send and skips the send while it is `blocked`, for example at a
+  permission prompt. `hc send` itself also refuses a blocked terminal unless
+  `--force` (`hc` manual, exit 9); the watcher never passes `--force`. A
+  skipped or refused send is retried at the next change or interval. A
+  scripted-`hc` unit test shows a blocked orchestrator gets no send and the
+  tick is sent after it unblocks. First proof 4 also records what `hc send`
+  does to a blocked Pi under `Observed herdr-core behavior`.
+- Draft guard, fail-closed: herdr-core holds sends while a person has an
+  unfinished draft, up to 60 seconds after their last key (`hc` manual,
+  `draft_wait`). The end-to-end proof leaves unsent composer text in the
+  idle orchestrator for longer than that window while the watcher sends, and
+  records whether the text is preserved, unmodified and unsubmitted. If it
+  is not preserved, automatic delivery is not enabled: the implementer stops
+  and returns to Plan. There is no weaker fallback.
+- Ticks stay idempotent under the
+  state lock, so a duplicate or late tick changes nothing.
+- Stop: the runner first records a newer generation in a stop file in the
+  scratch folder, then kills the watcher by label and sweeps once more. A
+  watcher whose generation is older than the stop file sends nothing and
+  exits.
+- Recovery: a watcher that receives a hang-up or termination signal while
+  its generation is current first writes a retiring marker naming its
+  generation and terminal address to the scratch folder, then types one tick
+  prompt and exits. A tick treats a watcher whose generation has a retiring
+  marker as absent even while its terminal is still live: it kills that
+  terminal, records a newer generation, and starts exactly one replacement.
+  A unit test runs the recovery tick before the old watcher exits and checks
+  that exactly one watcher survives. If the orchestrator is `blocked` when
+  the watcher is terminated, or the final send is refused or fails, the
+  blocked guard still holds: the watcher sends nothing, records
+  `recoveryPending` in its retiring marker, and exits. Automatic recovery
+  does not survive that case; `status` and every tick line report the
+  missing watcher, and the next tick from the user or Herdr Mobile, which a
+  blocked orchestrator already needs a person for, starts a replacement. A
+  scripted-`hc` unit test terminates the watcher while the orchestrator is
+  blocked, checks that no send happens and `recoveryPending` is recorded,
+  unblocks, and checks that the next tick starts exactly one replacement.
+  An event stream that ends, for example across
+  `hc server restart`, is reopened with backoff, and the watcher polls
+  meanwhile. Only an uncatchable kill ends a watcher silently; then `status`
+  and every tick line report the missing watcher, and the next tick from the
+  user or Herdr Mobile starts one.
+- Orphan bound: the watcher is a child of the orchestrator, and children end
+  with their parent (observed), so a closed or crashed orchestrator ends its
+  watcher. A watcher also exits after 24 hours, the old heartbeat lifetime;
+  a tick that finds its watcher older than 12 hours replaces it.
+- The watcher is a runner-owned process, not an agent tool call, so the
+  managed-role `hc` allow-list does not apply to it. The orchestrator's
+  injected system section names the watcher's tick prompt as the workflow
+  heartbeat, not a child report.
 
 ### Policy
 
@@ -228,8 +298,8 @@ unmerged and the plan returns to Plan.
 
 ### Cleanup
 
-- Cleanup kills and removes terminals carrying the workflow label, including
-  the ticker chain, children before parents, and deletes the scratch folder
+- Cleanup stops the watcher as described above, then kills and removes
+  terminals carrying the workflow label, children before parents, and deletes the scratch folder
   under today's guards. The caller's own `HC_TERMINAL_ID` is always excluded,
   even when it carries the workflow label. A unit test covers that case.
 - A Paseo-marked state refuses every action except `status`, including
@@ -275,7 +345,8 @@ New mechanisms, each justified:
   `routes.json` instead of tracked as separate sources.
 - The herdr-core vendor installer in bootstrap, because herdr-core has no
   Homebrew formula or mise plugin and the app cask does not install it.
-- The ticker chain, because herdr-core has no scheduler or heartbeat.
+- The workflow watcher, because herdr-core has no scheduler or heartbeat and
+  types no parent note when a live agent finishes a turn.
 - Session-JSONL reply reading, because reviewers have no write tool and no
   shell, so they cannot report through a file or `hc send`.
 
@@ -296,33 +367,37 @@ All live proofs run under an isolated HOME, `XDG_CONFIG_HOME`, and
   review envelope from the session JSONL. A second reviewer kept busy past a
   shortened timeout is stopped with `hc kill` and recorded degraded from its
   possibly truncated session JSONL.
-- First proof 3: a fake child under a real `hc` orchestrator terminal stops
-  working, and the observed parent-note text, plus how Pi handles a note typed
-  while it is mid-turn, whether an externally killed child notes its
-  parent, and what happens to a ticker when its parent terminal is killed,
-  are recorded under `Observed herdr-core behavior` before the
-  tick-prompt handling is written.
+- First proof 3 (done in `d904dc0`): parent-note text, mid-turn handling,
+  killed-child and killed-parent behavior, recorded under `Observed
+  herdr-core behavior`.
+- First proof 4: under a real `hc` orchestrator terminal, a real managed Pi
+  child finishes a turn while `hc events --children-of <orchestrator> --json`
+  runs. The recorded result says whether an event reports the turn end, and
+  its exact shape, before the watcher's change detection is written.
 - End-to-end proof: real managed Pi runs a planning workflow where a real
   implementer returns a valid `AX_REPORT` and a real reviewer returns a valid
-  review envelope. Each completion writes a parent note into the orchestrator
-  terminal, and a tick driven by that note records it. With no worker in
-  flight, a pending hosted gate's ticker produces a note that drives one probe
-  tick. A third worker that never stops working sends no note; ticker notes
-  alone drive the tick that times it out and records it degraded. One ticker
-  note is deliberately dropped, or typed while the orchestrator is mid-turn,
-  and the next ticker in the chain still drives a tick. The chain is then
-  killed externally with work in flight, and the documented recovery path
-  re-arms it. Expected record:
-  implementer and reviewer `complete` with the verified head, the hung worker
-  `degraded`, one hosted probe recorded, the ticker chain killed afterwards,
-  and label-based cleanup leaving no `ax.workflow` terminals on a second
-  label sweep.
+  review envelope. Each completion makes the watcher type the tick prompt
+  within one detection cycle, and that tick records it. With no worker in
+  flight, a pending hosted gate's periodic tick drives one probe. A third
+  worker that never stops working triggers no change; periodic ticks alone
+  time it out and record it degraded. One tick prompt is typed while the
+  orchestrator is mid-turn and runs as its next turn, and one is sent while
+  unsent composer text has sat in the idle orchestrator for more than 60
+  seconds; the text must survive unmodified and unsubmitted. The watcher is then
+  killed with `hc kill` with work in flight, and the recovery tick starts a
+  replacement. Expected record: implementer and reviewer `complete` with the
+  verified head, the hung worker `degraded`, one hosted probe recorded, the
+  watcher stopped afterwards, and label-based cleanup leaving no
+  `ax.workflow` terminals on a second label sweep.
 - Unit tests use a scripted `hc` fake for every delivery, conflict, adoption,
-  ticker, and cleanup path that exists today, plus a tick with work in flight
-  and no live ticker, a failed successor start, a ticker whose parent is
-  gone starting no successor, a stop landing during a successor start, a
-  session JSONL with a truncated trailing line,
-  chain expiry, and cleanup with a labelled caller.
+  watcher, and cleanup path that exists today, plus: a turn-end change
+  producing one send; a burst coalesced into one send; a periodic send
+  skipped after a recent tick; a stop file making an older watcher send
+  nothing; a hang-up without a stop sending one recovery tick; an event
+  stream that ends and is reopened; a refused send retried later; a tick with
+  work in flight and no live watcher starting one; watcher replacement after
+  12 hours; a session JSONL with a truncated trailing line; and cleanup with
+  a labelled caller.
 - Policy tests cover each allowed `hc` and `herdr-app` form, representative
   denied forms, an unknown subcommand, an unknown leading option, dynamic
   executables, and nested shell payloads.
@@ -349,10 +424,15 @@ from then on, quit Paseo, run `brew uninstall --cask paseo`, and delete
 
 - Pi reports status only after the terminal confirms OSC 7501 support.
   Covered by first proof 1.
-- The parent-note text and Pi's handling of a note typed mid-turn are not yet
-  observed. First proof 3 records both before the tick-prompt handling is
-  written; idempotent ticks and the self-re-arming ticker cover a dropped
-  note.
+- Whether `hc events --children-of` reports an ordinary turn end is not yet
+  observed. First proof 4 decides between the event stream and `hc get`
+  polling; both are within this contract.
+- `hc send` from a child arrives tagged as a child report. The
+  orchestrator's system section names the watcher's prompt as the heartbeat,
+  and a tick is idempotent, so a mistaken or duplicate tick is harmless.
+- An uncatchable kill of the watcher, or its termination while the
+  orchestrator is blocked, stops automatic ticks until the next
+  manual or mobile tick, which `status` and every tick line make visible.
 - The workflow carrying this PR runs under Paseo and reaches `finish` before
   the merge, and its cleanup runs before the post-merge sync, so the new
   runner never has to handle it.
@@ -363,10 +443,9 @@ from then on, quit Paseo, run `brew uninstall --cask paseo`, and delete
 
 ## Observed herdr-core behavior
 
-The implementer appends first proof 3's observations here during step 4:
-the exact parent-note text, how Pi handles a note typed mid-turn, whether an
-externally killed child notes its parent, and what happens to a ticker when
-its parent terminal is killed.
+First proof 3's observations, committed in `d904dc0`, follow. The
+implementer appends first proof 4's and the end-to-end proof's
+observations here during step 4.
 
 Observed with `hc` 0.1.21 and Pi 1.5.0, under an isolated HOME and
 `HC_SESSION`, with a real managed Pi orchestrator launched through the
@@ -420,4 +499,6 @@ ticker's exit notes the orchestrator, but every ticker runs with `--rm`, so
 no ticker note is typed. The end-to-end proof expects every worker
 completion to write a parent note, but a live worker that finishes its turn
 writes none, and reviewers have no shell to report with `hc send`. Under
-this plan's rule the implementer stopped here and returned to Plan.
+this plan's rule the implementer stopped here and returned to Plan. The
+revised Wake-up section replaces the ticker chain with the workflow
+watcher, which types the tick prompt itself.
