@@ -243,7 +243,7 @@ export type Workflow = {
   // The live watcher that requests ticks of the orchestrator while work is in flight.
   watcher?: Watcher;
   // Where the watcher writes wake requests for the last dispatching or ticking orchestrator terminal.
-  wake?: { root: string; address: string };
+  wake?: { root: string; address: string; nonce?: string };
   // The newest watcher generation started; stopping records a newer one in the scratch stop file.
   watcherGenerations?: number;
   // When the latest tick began; the watcher skips a periodic prompt within the interval and holds one unconsumed prompt.

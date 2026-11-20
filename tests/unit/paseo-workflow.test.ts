@@ -56,9 +56,13 @@ import {
 import {
   type RetiringMarker,
   type WakeRequest,
+  wakeRoot,
   watchedAddresses,
   watchIntervalMs,
 } from "../../skills/paseo-orchestration/scripts/watch.ts";
+
+// Runner calls bind the caller's wake directory, so they never read or prune the person's own state.
+process.env.XDG_STATE_HOME = await mkdtemp(join(tmpdir(), "paseo-wake-state-"));
 
 // Each fixture's fake worktree stands in for `git rev-parse` when a round binds its head.
 const worktrees = new Map<string, WorktreeReader>();
@@ -2678,6 +2682,31 @@ test("RED pi-paseo-workflow: worker changes and an interval during one long orch
   assert.equal(w.sends.length, 3);
 });
 
+test("GREEN pi-paseo-workflow: a person who restarts Pi in the orchestrator terminal keeps automatic ticks bound to the new session nonce", async () => {
+  let nonce: string | undefined = "nonce-1";
+  const w = await watcherRun({ nonce: () => nonce });
+  await w.event(w.worker, "turn");
+  await w.advance(6000);
+  assert.deepEqual(
+    w.sends.map((request) => request.nonce),
+    ["nonce-1"],
+  );
+  w.consume();
+  // Between sessions no nonce is readable, so no request is written and the tick stays owed.
+  nonce = undefined;
+  await w.event(w.worker, "turn");
+  await w.advance(6000);
+  assert.equal(w.sends.length, 1);
+  // The restarted Pi wrote a fresh nonce; the watcher re-reads it before its next request.
+  nonce = "nonce-2";
+  await w.event("t0", "status", "idle");
+  await w.advance(6000);
+  assert.deepEqual(
+    w.sends.map((request) => request.nonce),
+    ["nonce-1", "nonce-2"],
+  );
+});
+
 test("GREEN pi-paseo-workflow: the watcher skips a periodic prompt within the interval of the last tick and sends one after it", async () => {
   const w = await watcherRun();
   await w.advance(watchIntervalMs / 2);
@@ -4093,6 +4122,52 @@ test("GREEN pi-paseo-workflow: authorized cleanup removes labelled terminals chi
   assert.doesNotMatch(c.git(c.repository, ["worktree", "list"]), /tree/);
   assert.match(c.git(c.repository, ["branch", "--list", "feature"]), /feature/);
   assert.ok(c.calls.every((args) => !args.includes("--force")));
+});
+
+test("RED pi-paseo-workflow: a runner call deletes wake requests bound to another session's nonce, and cleanup deletes only this workflow's request", async () => {
+  const c = await cleanupFixture();
+  const directory = join(wakeRoot(), "t0");
+  await mkdir(directory, { recursive: true });
+  const request = (workflow: string, nonce: string): WakeRequest => ({
+    workflow,
+    nonce,
+    generation: 1,
+    n: 1,
+    prompt: "AX orchestration tick. Run `node runner`",
+  });
+  const files = {
+    own: join(directory, `${c.workflowId}.json`),
+    concurrent: join(directory, "other-workflow.json"),
+    stale: join(directory, "abandoned-workflow.json"),
+    malformed: join(directory, "broken.json"),
+  };
+  await writeFile(join(directory, "session.json"), '{"nonce":"current"}');
+  await writeFile(files.own, JSON.stringify(request(c.workflowId, "current")));
+  await writeFile(
+    files.concurrent,
+    JSON.stringify(request("other-workflow", "current")),
+  );
+  // Left by a crashed Pi session at this address, it would never be delivered, so the runner removes it.
+  await writeFile(
+    files.stale,
+    JSON.stringify(request("abandoned-workflow", "previous")),
+  );
+  await writeFile(files.malformed, "{");
+  await syncWatcher(c.path, "t0", c.transport);
+  assert.deepEqual(JSON.parse(await readFile(c.path, "utf8")).wake, {
+    root: wakeRoot(),
+    address: "t0",
+    nonce: "current",
+  });
+  assert.equal(await c.present(files.stale), false);
+  assert.ok(await c.present(files.own));
+  await c.run();
+  assert.equal(await c.present(files.stale), false);
+  assert.equal(await c.present(files.malformed), false);
+  assert.equal(await c.present(files.own), false);
+  // Another workflow ticking the same orchestrator keeps its pending request.
+  assert.ok(await c.present(files.concurrent));
+  assert.ok(await c.present(join(directory, "session.json")));
 });
 
 test("RED pi-paseo-workflow: cleanup refuses unsafe targets and removes nothing", async () => {

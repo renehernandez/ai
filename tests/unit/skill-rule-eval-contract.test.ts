@@ -3,7 +3,9 @@
 import assert from "node:assert/strict";
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -47,6 +49,7 @@ import {
   type Workflow,
 } from "../../skills/paseo-orchestration/scripts/paseo-workflow-state.ts";
 import {
+  bindWake,
   coalesceMs,
   createWatcher,
   labelledTerminals,
@@ -546,6 +549,44 @@ test("GREEN skill-rule-evals: a worker that ended its turn before the watcher st
     { workflow: "wf1", nonce: "n1", generation: 1, n: 1, prompt: undefined },
   );
   assert.match(sends[0]?.prompt ?? "", /^AX orchestration tick\. Run `node /);
+});
+
+// One orchestrator wake directory holding the current Pi session's nonce and one request per workflow.
+function wakeFixture(nonce: string | undefined) {
+  const root = mkdtempSync(join(tmpdir(), "ax-wake-bind-"));
+  const directory = join(root, "t0");
+  mkdirSync(directory);
+  if (nonce)
+    writeFileSync(join(directory, "session.json"), JSON.stringify({ nonce }));
+  const request = (workflow: string, value: string) =>
+    writeFileSync(
+      join(directory, `${workflow}.json`),
+      JSON.stringify({ workflow, nonce: value, generation: 1, n: 1 }),
+    );
+  request("wf1", "current");
+  request("abandoned", "previous");
+  return { root, files: () => readdirSync(directory).sort() };
+}
+
+test("RED skill-rule-evals: before its Pi session writes a nonce, binding the orchestrator records no nonce and deletes no request", async () => {
+  const wake = wakeFixture(undefined);
+  const state = {} as Workflow;
+  await bindWake(state, "t0", wake.root);
+  assert.deepEqual(state.wake, { root: wake.root, address: "t0" });
+  assert.deepEqual(wake.files(), ["abandoned.json", "wf1.json"]);
+  await assert.rejects(bindWake(state, "../t0", wake.root), /Invalid/);
+});
+
+test("GREEN skill-rule-evals: binding the orchestrator records its session nonce and deletes only requests bound to another session", async () => {
+  const wake = wakeFixture("current");
+  const state = {} as Workflow;
+  await bindWake(state, "t0", wake.root);
+  assert.deepEqual(state.wake, {
+    root: wake.root,
+    address: "t0",
+    nonce: "current",
+  });
+  assert.deepEqual(wake.files(), ["session.json", "wf1.json"]);
 });
 
 test("RED skill-rule-evals: ambiguous reviewer envelopes remain rejected", () => {

@@ -64,10 +64,20 @@ test("a wake listener delivers each newer request bound to its own session nonce
     wake.scan();
     writeFileSync(join(directory, "wf1.json"), request(wake.nonce, 1, 3));
     wake.scan();
+    // A replacement watcher's first request (newer generation, n reset) orders after its predecessor's last.
     writeFileSync(join(directory, "wf1.json"), request(wake.nonce, 2, 1));
     wake.scan();
     await settle();
     assert.equal(delivered.length, 3);
+    // Two workflows ticking this orchestrator each have their own file, and both pending requests are delivered.
+    writeFileSync(join(directory, "wf1.json"), request(wake.nonce, 2, 2));
+    writeFileSync(
+      join(directory, "wf2.json"),
+      request(wake.nonce, 1, 1, "wf2"),
+    );
+    wake.scan();
+    await settle();
+    assert.equal(delivered.length, 5);
   } finally {
     wake.close();
     rmSync(join(directory, ".."), { recursive: true, force: true });

@@ -1,5 +1,5 @@
 import { execFile, spawn } from "node:child_process";
-import { readFile, rename, writeFile } from "node:fs/promises";
+import { readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
@@ -53,6 +53,48 @@ export type WakeRequest = {
   n: number;
   prompt: string;
 };
+export const wakeRequestFile = (
+  wake: { root: string; address: string },
+  workflowId: string,
+) => join(wakeDirectory(wake.root, wake.address), `${workflowId}.json`);
+async function readJson(path: string) {
+  try {
+    const text = await readOptional(path);
+    return text === undefined ? undefined : JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+// The orchestrator Pi session's nonce, which its managed extension writes at session start.
+export async function readSessionNonce(directory: string) {
+  const nonce = (await readJson(join(directory, wakeSessionFile)))?.nonce;
+  return nonempty(nonce) ? (nonce as string) : undefined;
+}
+
+// Records the caller's wake directory and current session nonce, and deletes every request there bound to another session.
+export async function bindWake(
+  state: Workflow,
+  callerId: string,
+  root = wakeRoot(),
+) {
+  const directory = wakeDirectory(root, callerId);
+  const nonce = await readSessionNonce(directory);
+  state.wake = { root, address: callerId, ...(nonce ? { nonce } : {}) };
+  if (!nonce) return;
+  let entries: string[];
+  try {
+    entries = await readdir(directory);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw error;
+  }
+  for (const entry of entries) {
+    if (entry === wakeSessionFile || !entry.endsWith(".json")) continue;
+    const file = join(directory, entry);
+    if ((await readJson(file))?.nonce !== nonce)
+      await rm(file, { force: true });
+  }
+}
 
 export type RetiringMarker = {
   generation: number;
@@ -243,11 +285,7 @@ export async function syncWatcher(
 ): Promise<WatcherStatus> {
   return locked(path, async (state) => {
     // The runner runs inside the orchestrator's Pi, so its environment names the extension's wake root.
-    if (nonempty(callerId))
-      state.wake = {
-        root: wakeRoot(),
-        address: requireAddress(callerId),
-      };
+    if (nonempty(callerId)) await bindWake(state, callerId);
     if (state.finished || !inFlight(state, now()).length) {
       await stopWatcher(path, state, transport);
       return { status: "stopped" as const };
@@ -590,11 +628,7 @@ if (process.argv[1] && resolve(process.argv[1]) === watchScript) {
     hc: async (args, timeout) =>
       (await execute("hc", args, { timeout, maxBuffer: 8 * 1024 * 1024 }))
         .stdout,
-    readNonce: async (state) => {
-      const text = await readOptional(join(directory(state), wakeSessionFile));
-      const nonce = text === undefined ? undefined : JSON.parse(text)?.nonce;
-      return typeof nonce === "string" ? nonce : undefined;
-    },
+    readNonce: (state) => readSessionNonce(directory(state)),
     writeRequest: (state, request) =>
       writeAtomic(
         join(directory(state), `${request.workflow}.json`),

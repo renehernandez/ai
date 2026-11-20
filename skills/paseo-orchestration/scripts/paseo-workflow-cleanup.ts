@@ -27,7 +27,12 @@ import {
   unsettledConsult,
   type Workflow,
 } from "./paseo-workflow-state.ts";
-import { labelledTerminals, stopWatcher, syncWatcher } from "./watch.ts";
+import {
+  labelledTerminals,
+  stopWatcher,
+  syncWatcher,
+  wakeRequestFile,
+} from "./watch.ts";
 
 export type CleanupInput = {
   authorizationSource: string;
@@ -280,6 +285,8 @@ export async function cleanup(
     const scratch = await scratchTarget(path, state, tempRoots);
     // The watcher goes first: its stop generation lands before any kill, so it types nothing during cleanup.
     await stopWatcher(path, state, transport);
+    if (state.wake && nonempty(state.workflowId))
+      await rm(wakeRequestFile(state.wake, state.workflowId), { force: true });
     const terminals = await removeTerminals(
       state,
       caller.terminalId,
