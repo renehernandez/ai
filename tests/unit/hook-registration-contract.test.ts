@@ -14,6 +14,7 @@ test("RED hook-registration: MCP and Pi runtime configuration, including the in-
       ".agents/hooks/pi/launch.ts",
       ".agents/hooks/pi/wake.ts",
       ".local/state/ax/wake/t8/session.json",
+      ".local/state/ax/wake/t8/wf1.json",
       ".agents/skills/paseo-orchestration/scripts/watch.ts",
       ".pi/agent/extensions/herdr-core-policy.json",
       ".config/herdr-core/templates/ax-orchestrator.md",

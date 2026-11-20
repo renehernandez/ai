@@ -7,7 +7,11 @@ import {
 } from "./policy.ts";
 import { startWake, wakeDirectory, wakeRoot } from "./wake.ts";
 
-type Context = { cwd: string; model?: { provider: string; id: string } };
+type Context = {
+  cwd: string;
+  model?: { provider: string; id: string };
+  isIdle?(): boolean;
+};
 type Event = {
   toolName: string;
   input: Record<string, unknown>;
@@ -51,14 +55,14 @@ export default function enforcement(pi: Pi): void {
     const terminal = process.env.HC_TERMINAL_ID?.trim();
     if (ticked(contract.role) && terminal) {
       wake?.close();
-      // `followUp` queues the tick behind a running turn; Pi ignores it while idle and starts a turn.
+      // While streaming, `followUp` queues the tick as the next turn; while idle it starts one.
       // Delivery never touches the composer, so a person's unsent draft stays as it is.
       wake = startWake({
         directory: wakeDirectory(wakeRoot(), terminal),
         deliver: (prompt) =>
-          pi.sendUserMessage(prompt, { deliverAs: "followUp" }) as
-            | Promise<void>
-            | undefined,
+          (ctx.isIdle?.() === false
+            ? pi.sendUserMessage(prompt, { deliverAs: "followUp" })
+            : pi.sendUserMessage(prompt)) as Promise<void> | undefined,
       });
     }
     if (

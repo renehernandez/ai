@@ -136,7 +136,7 @@ test("a refused delivery is retried at the next scan", async () => {
   }
 });
 
-test("only a ticked role in a herdr-core terminal listens, delivering ticks as Pi follow-ups", async () => {
+test("only a ticked role in a herdr-core terminal listens, delivering a tick directly while idle and as a follow-up while streaming", async () => {
   const root = mkdtempSync(join(tmpdir(), "ax-wake-ext-"));
   const workflowFile = join(root, "workflow.md");
   writeFileSync(workflowFile, "Publish Ready.");
@@ -146,6 +146,7 @@ test("only a ticked role in a herdr-core terminal listens, delivering ticks as P
     terminal: process.env.HC_TERMINAL_ID,
     state: process.env.XDG_STATE_HOME,
   };
+  let idle = true;
   const start = (role: string) => {
     process.env.AX_PI_CONTRACT = JSON.stringify({
       role,
@@ -169,7 +170,10 @@ test("only a ticked role in a herdr-core terminal listens, delivering ticks as P
     try {
       handlers.get("session_start")?.(
         {},
-        { model: { provider: "openai-codex", id: "gpt-6-astra" } },
+        {
+          model: { provider: "openai-codex", id: "gpt-6-astra" },
+          isIdle: () => idle,
+        },
       );
     } catch (error) {
       // The launcher's readiness pipe on fd 3 is absent under the test runner; the listener starts first.
@@ -190,10 +194,20 @@ test("only a ticked role in a herdr-core terminal listens, delivering ticks as P
       readFileSync(join(directory, sessionFile), "utf8"),
     );
     writeFileSync(join(directory, "wf1.json"), request(nonce, 1, 1));
-    for (let i = 0; i < 50 && orchestrator.sent.length === 0; i += 1)
-      await new Promise((resolve) => setTimeout(resolve, 20));
+    const delivered = async (count: number) => {
+      // fs.watch can lag under load; the 5-second poll backstop bounds the wait.
+      for (let i = 0; i < 400 && orchestrator.sent.length < count; i += 1)
+        await new Promise((resolve) => setTimeout(resolve, 25));
+    };
+    await delivered(1);
+    idle = false;
+    writeFileSync(join(directory, "wf1.json"), request(nonce, 1, 2));
+    await delivered(2);
     orchestrator.handlers.get("session_shutdown")?.({});
-    assert.deepEqual(orchestrator.sent, [[prompt, { deliverAs: "followUp" }]]);
+    assert.deepEqual(orchestrator.sent, [
+      [prompt, undefined],
+      [prompt, { deliverAs: "followUp" }],
+    ]);
   } finally {
     for (const [key, value] of [
       ["AX_PI_CONTRACT", saved.contract],
