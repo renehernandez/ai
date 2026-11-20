@@ -16,12 +16,7 @@ import {
   resolve,
   sep,
 } from "node:path";
-import {
-  labelledTerminals,
-  stopWatcher,
-  syncWatcher,
-  wakeRequestFile,
-} from "./watch.ts";
+import { labelledTerminals, stopWatcher, wakeRequestFile } from "./watch.ts";
 import { git, herdr, readWorktree } from "./workflow-io.ts";
 import {
   type CleanupReceipt,
@@ -272,8 +267,8 @@ export async function cleanup(
     !unsettled.length,
     `Cleanup waits for the current consult to settle: ${unsettled.join(", ")}`,
   );
-  await syncWatcher(path, caller.terminalId, transport);
-  // Every check that can refuse runs first; the reservation is saved before the first removal, so later actions refuse.
+  // Every check that can refuse runs first and mutates nothing; the reservation is saved before the first removal, so later actions refuse.
+  // The watcher stops and this workflow's wake request goes only after the reservation, in the receipt's terminal step.
   const { state, targets } = await locked(path, async (state) => {
     requireThat(
       !inFlight(state).length && !unsettledConsult(state).length,

@@ -1444,6 +1444,24 @@ test("GREEN skill-rule-evals: session handoff, worker handoff, and orchestration
     /validates the scratch folder, and saves the cleanup reservation in state\. It\s+then stops the watcher/,
   );
   assert.match(workflow, /the surviving state keeps that receipt/);
+  // A refused cleanup mutates nothing: the watcher and wake request go only after the reservation.
+  const cleanupSource = read(
+    "skills/herdr-orchestration/scripts/workflow-cleanup.ts",
+  );
+  assert.doesNotMatch(cleanupSource, /syncWatcher/);
+  assert.match(
+    cleanupSource,
+    /The watcher stops and this workflow's wake request goes only after the reservation/,
+  );
+  // An ended terminal that received its assignment but never replied settles instead of ticking forever.
+  assert.match(
+    workflow,
+    /An ended terminal that received its assignment\s+but wrote no reply never answers, so it records `failed` for an implementer\s+or repair and `degraded` for a reviewer or planner/,
+  );
+  assert.match(
+    read("skills/herdr-orchestration/scripts/workflow.ts"),
+    /ended without a readable reply after it received its assignment/,
+  );
   // The runner mirrors the wake protocol and route parsing it cannot import; one contract test holds them equal.
   assert.match(
     read("skills/herdr-orchestration/scripts/watch.ts"),

@@ -1325,6 +1325,67 @@ test("RED pi-workflow: a released reviewer that never began is retried once, the
   assert.equal(runs(f), 8);
 });
 
+test("RED pi-workflow: an ended reviewer that received its assignment but wrote no reply degrades, while an undelivered one keeps its retry", async () => {
+  const f = await fixture();
+  await dispatchFixtureReview(
+    f.path,
+    { phase: "planning", artifactPath: f.artifactPath },
+    f.transport,
+  );
+  const [received, ...others] = [...f.sessions.entries()];
+  // Every terminal ends at its startup turn; only the first received its assignment.
+  for (const [id, session] of f.sessions) {
+    f.replies.set(id, startupReply);
+    session.status = "closed";
+  }
+  for (const [, session] of others) session.prompt = "Start inertly.";
+  const first = await f.step();
+  const reviewOf = (state: Workflow, agentId: string) =>
+    Object.values(state.rounds.planning?.reviews ?? {}).find(
+      (review) => review.agentId === agentId,
+    );
+  assert.equal(reviewOf(await f.read(), received[0])?.status, "degraded");
+  assert.equal(first.recorded.length, 1);
+  assert.match(first.recorded[0], /degraded \(reduced independence\)/);
+  const second = await f.step(f.transport, undefined, later(601_000));
+  const settled = await f.read();
+  assert.equal(reviewOf(settled, received[0])?.status, "degraded");
+  for (const [id] of others)
+    assert.equal(reviewOf(settled, id)?.status, "undelivered");
+  assert.equal(actionOf(second), "retry-launch");
+  // A settled worker is not re-recorded on later ticks.
+  const third = await f.step(f.transport, undefined, later(601_000));
+  assert.deepEqual(third.recorded, []);
+});
+
+test("RED pi-workflow: an ended implementer that received its assignment but wrote no reply fails at the adopt gate", async () => {
+  const f = await fixture();
+  await f.review("planning");
+  await handoff(
+    f.path,
+    { briefPath: f.artifactPath, planResolution: "Settled." },
+    f.transport,
+  );
+  const agentId = (await f.read()).handoff?.agentId ?? "";
+  const session = f.sessions.get(agentId);
+  assert.ok(session);
+  f.replies.set(agentId, startupReply);
+  session.status = "closed";
+  const ended = await f.step();
+  assert.deepEqual(ended.recorded, ["handoff: failed"]);
+  const state = await f.read();
+  assert.equal(state.handoff?.status, "failed");
+  assert.match(state.handoff?.error ?? "", /received its assignment/);
+  assert.equal(ended.result, "awaiting-user");
+  assert.match(
+    ended.result === "awaiting-user" ? ended.gate : "",
+    /handoff failed; `adopt`/,
+  );
+  const again = await f.step(f.transport, undefined, later(601_000));
+  assert.deepEqual(again.recorded, []);
+  assert.equal((await f.read()).handoff?.status, "failed");
+});
+
 test("RED pi-workflow: retry-launch needs established non-delivery and an unchanged worktree, and a spent retry needs user authorization", async () => {
   const f = await fixture();
   await f.review("planning");
@@ -4216,6 +4277,69 @@ test("RED pi-workflow: a runner call deletes wake requests bound to another sess
   // Another workflow ticking the same orchestrator keeps its pending request.
   assert.ok(await c.present(files.concurrent));
   assert.ok(await c.present(join(directory, "session.json")));
+});
+
+test("RED pi-workflow: a refused cleanup leaves a live watcher, its stop file, and wake requests untouched", async () => {
+  const refusals: [string, (c: CleanupFixture) => Promise<unknown>, RegExp][] =
+    [
+      [
+        "unfinished without a reason",
+        async (c) => {
+          await locked(c.path, (state) => {
+            delete state.finished;
+          });
+          return c.run();
+        },
+        /requires a reason/,
+      ],
+      [
+        "an invalid scratch folder",
+        async (c) => {
+          await mkdir(join(c.base, "elsewhere"));
+          return c.run({}, [join(c.base, "elsewhere")]);
+        },
+        /outside the temporary roots/,
+      ],
+    ];
+  for (const [name, act, message] of refusals) {
+    const c = await cleanupFixture();
+    c.terminals.push({
+      address: "t3",
+      cwd: c.scratch,
+      labels: { "ax.workflow": c.workflowId, "ax.role": "watcher" },
+      parent: "t0",
+    });
+    await locked(c.path, (state) => {
+      state.watcherGenerations = 1;
+      state.watcher = {
+        generation: 1,
+        terminal: "t3",
+        parent: "t0",
+        startedAt: new Date().toISOString(),
+      };
+      state.wake = { root: wakeRoot(), address: "t0", nonce: "current" };
+    });
+    const directory = join(wakeRoot(), "t0");
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, "session.json"), '{"nonce":"current"}');
+    const own = join(directory, `${c.workflowId}.json`);
+    const stale = join(directory, `stale-${c.workflowId}.json`);
+    await writeFile(
+      own,
+      JSON.stringify({ workflow: c.workflowId, nonce: "current" }),
+    );
+    await writeFile(
+      stale,
+      JSON.stringify({ workflow: "stale", nonce: "previous" }),
+    );
+    await assert.rejects(act(c), message, name);
+    await c.untouched();
+    assert.equal(await c.present(join(c.scratch, "watcher-stop")), false, name);
+    assert.ok(await c.present(own), name);
+    assert.ok(await c.present(stale), name);
+    const saved = JSON.parse(await readFile(c.path, "utf8"));
+    assert.equal(saved.watcher?.terminal, "t3", name);
+  }
 });
 
 test("RED pi-workflow: cleanup refuses unsafe targets and removes nothing", async () => {

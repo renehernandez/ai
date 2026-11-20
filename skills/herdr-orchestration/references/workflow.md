@@ -149,7 +149,9 @@ evidence:
 
 - delivered: a user message in the session JSONL holds the assignment digest,
   the terminal is active, or its `turn` advanced past the startup turn. The
-  worker returns to monitoring.
+  worker returns to monitoring. An ended terminal that received its assignment
+  but wrote no reply never answers, so it records `failed` for an implementer
+  or repair and `degraded` for a reviewer or planner.
 - undelivered: the 60-second queue window has passed since the send, and the
   terminal is live and quiet, without the digest, with `turn` unchanged. The
   runner kills the terminal and records `undelivered`.

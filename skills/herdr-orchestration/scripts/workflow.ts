@@ -722,13 +722,25 @@ async function recordCompletion(
     requireTerminal(state, role, worker, actual);
     const report = await lastReply(worker.session, transport);
     // Without a readable reply, a quiet worker still at its startup turn has not begun; a later turn has not yet answered.
+    // An ended terminal never replies, so one that began or received its assignment is a terminal outcome; one without the digest stays undelivered.
     if (!report) {
-      requireThat(
-        lifecycle(actual) !== "ended" ||
-          actual.turn <= (worker.startupTurn ?? 0),
-        `Terminal ${worker.agentId} ended without a readable reply`,
-      );
-      return actual.turn > (worker.startupTurn ?? 0) ? "no-reply" : "not-begun";
+      const begun = actual.turn > (worker.startupTurn ?? 0);
+      if (lifecycle(actual) === "ended") {
+        requireThat(
+          !begun,
+          `Terminal ${worker.agentId} ended without a readable reply`,
+        );
+        requireThat(
+          !nonempty(worker.assignmentDigest) ||
+            !(await receivedAssignment(
+              worker.session,
+              worker.assignmentDigest,
+              transport,
+            )),
+          `Terminal ${worker.agentId} ended without a readable reply after it received its assignment`,
+        );
+      }
+      return begun ? "no-reply" : "not-begun";
     }
     result = { status: "complete", ...(await interpret(report)) };
   } catch (error) {
