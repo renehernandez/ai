@@ -671,3 +671,32 @@ hosted probe. It stopped at the draft guard:
 - Not reached: the recovery tick starting a replacement after a kill with
   work in flight, a prompt typed mid-turn by the watcher, and the final
   label-based cleanup sweep.
+
+First proof 5, observed on `0bc3332` with `hc` 0.1.21 and Pi 1.5.0 under
+an isolated HOME, `XDG_CONFIG_HOME`, `XDG_STATE_HOME`, and `HC_SESSION`,
+with a real managed Pi orchestrator `t1g` launched through the launcher, the
+managed extension, and a scripted local model. Wake requests were written
+in the watcher's exact form (current `session.json` nonce, temporary file,
+then rename):
+
+- Session start: the extension created `<wake root>/t1g/` with mode 0700
+  and `session.json` with mode 0600 holding a fresh nonce.
+- Draft guard: preserved. `draft keep` was typed into the idle composer
+  with `hc keys` and sat for 74 seconds. A request written at
+  18:26:06.471 while Pi was idle became a user message at 18:26:06.550 and
+  started a turn (the scripted model held it for 45 seconds). A second
+  request written at 18:26:32.222 mid-turn appeared as Pi's queued
+  `Follow-up:` line, became the next user message at 18:26:51.617 right
+  after the first reply, and got its own reply. The session JSONL holds
+  exactly the two tick prompts and two replies; `draft keep` stayed in the
+  composer, unmodified and unsubmitted, through both deliveries and to the
+  end of the proof. herdr-core counted the two deliveries as one `turn`
+  (0 to 1), because Pi runs a queued follow-up inside the same agent run.
+- No terminal notes: three children of the orchestrator started with
+  `--no-notify` (`hc get` shows `notify: false`). A Pi child blocked on a
+  proof-only extension dialog (`state: blocked`, `kind: permission`), then
+  hit a model error (`state: error`, `msg: Connection error.`), and was
+  then killed; a `sleep 600` child was killed with `hc kill`; a `sleep 5`
+  child exited 0. None of them typed anything into the orchestrator: its
+  session JSONL gained no message, its `status_ms` and `turn` did not
+  change, and the composer still held only `draft keep`.
