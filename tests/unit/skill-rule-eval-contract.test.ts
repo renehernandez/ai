@@ -44,8 +44,13 @@ import {
   reportsHead,
   requireCurrentReviewMode,
   requireOrchestration,
+  type Workflow,
 } from "../../skills/paseo-orchestration/scripts/paseo-workflow-state.ts";
-import { labelledTerminals } from "../../skills/paseo-orchestration/scripts/watch.ts";
+import {
+  coalesceMs,
+  createWatcher,
+  labelledTerminals,
+} from "../../skills/paseo-orchestration/scripts/watch.ts";
 import { routeWorkDisposition } from "../../skills/plan/scripts/plan-contract.ts";
 
 const managedSkills = (
@@ -484,6 +489,49 @@ test("GREEN skill-rule-evals: workflow terminals are found by labels read throug
       parent: "t0",
     },
   ]);
+});
+
+// A watcher whose event stream opens after its worker already ended the turn; only the open sweep can see that change.
+async function openSweep(workerStatus: string) {
+  const state = {
+    rounds: {},
+    repairs: {},
+    handoff: { status: "running", agentId: "t5" },
+  } as unknown as Workflow;
+  let clock = 0;
+  const sends: string[][] = [];
+  const watcher = createWatcher(
+    { state: "/tmp/state.json", orchestrator: "t0", generation: 1 },
+    {
+      hc: async (args) => {
+        if (args[0] === "send") {
+          sends.push(args);
+          return "{}";
+        }
+        const status = args.at(-1) === "t0" ? "idle" : workerStatus;
+        return JSON.stringify({ state: "live", status: { state: status } });
+      },
+      now: () => clock,
+      readState: async () => state,
+      readStop: async () => 0,
+      writeRetiring: async () => {},
+      terminal: "t9",
+    },
+  );
+  await watcher.onOpen();
+  clock += coalesceMs;
+  await watcher.step();
+  return sends;
+}
+
+test("RED skill-rule-evals: a worker still working when the watcher stream opens queues no tick prompt", async () => {
+  assert.deepEqual(await openSweep("working"), []);
+});
+
+test("GREEN skill-rule-evals: a worker that ended its turn before the watcher stream opened queues one tick prompt", async () => {
+  const sends = await openSweep("done");
+  assert.equal(sends.length, 1);
+  assert.equal(sends[0]?.[2], "t0");
 });
 
 test("RED skill-rule-evals: ambiguous reviewer envelopes remain rejected", () => {

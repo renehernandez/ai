@@ -542,3 +542,52 @@ with `--outlive-parent`, and a scripted local model:
 - Right after `hc kill` returned `state: finished`, one `hc ls --all` still
   showed the killed terminal `live`; the next call showed it finished.
   Readers treat a just-killed terminal's `ls` row as eventually consistent.
+
+The end-to-end proof, observed with `hc` 0.1.21 and Pi 1.5.0 under the same
+isolated core, with a real managed Pi orchestrator `t8`, real managed
+reviewers, planner, and implementer launched by the runner with
+`--outlive-parent`, the step-4 watcher, a scripted local model, and a fake
+hosted probe. It stopped at the draft guard:
+
+- Draft guard: not preserved. Unsent composer text typed into the idle
+  orchestrator with `hc keys` (`draft keep`) sat for more than 60 seconds.
+  herdr-core's own parent note was then pasted after it and both were
+  submitted as one user message:
+  `draft keep<hc>t17 ax-planner-astra-49645 hit an error: terminated. See: hc read t17</hc>`.
+  A second draft (`second draft`) sat about eleven minutes; the watcher's
+  exact send form, `hc send --json t8 <text>`, returned
+  `{"started":true,"status":"done","turn":9}` and Pi submitted
+  `second draftAX orchestration tick (draft-guard probe)`. `hc send` holds
+  only within `draft_wait`, then pastes into the composer and presses
+  enter, so the person's draft is modified and submitted. Under this plan's
+  rule automatic delivery is not enabled; the implementer stopped and
+  returned to Plan before step 5.
+- Detection: the implementer's completion at 05:08:19.1 made the watcher
+  type the tick prompt at 05:08:24.7, and four reviewer completions within
+  0.3 seconds produced one prompt 5.6 seconds after the last, each within
+  one coalescing cycle. The next ticks recorded `handoff: complete at`
+  the verified head and all four reviewers `complete`.
+- Catch-up at stream open: the first planning round's reviewers finished
+  within a second of dispatch, before the new watcher's event stream opened,
+  and no event reported them. The watcher now runs one `hc get` sweep of
+  watched workers when each stream opens and counts a `done`, `blocked`,
+  `error`, finished, or missing worker as a change; a later watcher typed
+  its prompt about 6 seconds after start this way.
+- A never-ending model stream is not a hung worker under Pi: Pi ended a
+  stalled stream as `error: terminated` after about five minutes, even with
+  keepalive chunks every 15 seconds, and hc noted the parent
+  `<hc>t9 ax-review-quality-49642 hit an error: terminated. See: hc read t9</hc>`.
+  The tick recorded the reviewer `degraded (reduced independence)` and the
+  planner `degraded (advice unavailable)`. The periodic-timeout case was not
+  observed separately.
+- An unconsumed prompt holds resends: while the orchestrator had not run
+  the last typed tick, the watcher sent nothing for over ten minutes, as
+  designed (`resendMs`). The first periodic tick with only the hosted gate
+  in flight ran one probe.
+- `hc kill` on a `--rm` watcher delivers the hang-up, the watcher types its
+  recovery tick and exits, and `hc kill` itself then exits 3 with
+  `{"error":{"kind":"not_found","message":"t13 was removed"}}`. Killers
+  treat that error as success.
+- Not reached: the recovery tick starting a replacement after a kill with
+  work in flight, a prompt typed mid-turn by the watcher, and the final
+  label-based cleanup sweep.

@@ -368,6 +368,34 @@ export function createWatcher(config: WatchConfig, deps: WatchDeps) {
     if (relevant && (await watched()).has(event.terminal)) markChange();
   }
 
+  // Once the stream is open, a worker that already ended its turn, blocked, errored, or exited before it, for example during the dispatch that started this watcher or while the stream was down, counts as a change.
+  async function onOpen() {
+    for (const address of await watched()) {
+      let terminal: { state?: string; status?: { state?: string } | null };
+      try {
+        terminal = JSON.parse(
+          await deps.hc(["get", "--json", address], 30_000),
+        );
+      } catch (error) {
+        if (
+          /not_found/.test(
+            `${(error as { stdout?: unknown }).stdout ?? ""} ${error}`,
+          )
+        )
+          markChange();
+        continue;
+      }
+      const status = terminal?.status?.state;
+      if (
+        terminal?.state !== "live" ||
+        status === "done" ||
+        status === "blocked" ||
+        status === "error"
+      )
+        markChange();
+    }
+  }
+
   // While the event stream is down, `hc get` on each watched worker detects a changed state, status, or turn.
   async function poll() {
     for (const address of await watched()) {
@@ -458,6 +486,7 @@ export function createWatcher(config: WatchConfig, deps: WatchDeps) {
   }
 
   return {
+    onOpen,
     onLine,
     step,
     retire,
@@ -473,6 +502,7 @@ export function createWatcher(config: WatchConfig, deps: WatchDeps) {
 export async function followEvents(
   open: () => AsyncIterable<string>,
   handlers: {
+    onOpen: () => Promise<void>;
     onLine: (line: string) => Promise<void>;
     setPolling: (polling: boolean) => void;
   },
@@ -488,6 +518,7 @@ export async function followEvents(
           opened = true;
           handlers.setPolling(false);
           backoff = 1000;
+          await handlers.onOpen();
         }
         await handlers.onLine(line);
         if (!running()) return;

@@ -43,7 +43,10 @@ import {
   type WorktreeReader,
   watcherStatus,
 } from "../../skills/paseo-orchestration/scripts/paseo-workflow.ts";
-import { sessionCommand } from "../../skills/paseo-orchestration/scripts/paseo-workflow-io.ts";
+import {
+  lastReply,
+  sessionCommand,
+} from "../../skills/paseo-orchestration/scripts/paseo-workflow-io.ts";
 import {
   assignReviewLenses,
   gates,
@@ -2770,6 +2773,7 @@ test("RED pi-paseo-workflow: while the event stream is down the watcher polls wa
   const slept: number[] = [];
   const polling: boolean[] = [];
   const lines: string[] = [];
+  let opened = 0;
   let opens = 0;
   await followEvents(
     () => {
@@ -2780,6 +2784,9 @@ test("RED pi-paseo-workflow: while the event stream is down the watcher polls wa
       })();
     },
     {
+      onOpen: async () => {
+        opened++;
+      },
       onLine: async (line) => {
         lines.push(line);
       },
@@ -2795,6 +2802,59 @@ test("RED pi-paseo-workflow: while the event stream is down the watcher polls wa
   assert.deepEqual(lines, ["3", "4"]);
   assert.deepEqual(slept, [1000, 2000, 1000]);
   assert.deepEqual(polling, [true, true, false, true, false]);
+  // Each stream that opens runs one catch-up sweep.
+  assert.equal(opened, 2);
+});
+
+test("RED pi-paseo-workflow: a worker that finished before the watcher's stream opened still queues one tick prompt", async () => {
+  const w = await watcherRun();
+  // The scripted worker already reports done, as reviewers finishing during their own dispatch do.
+  await w.watcher.onOpen();
+  await w.advance(6000);
+  assert.equal(w.sends.length, 1);
+  assert.ok(w.hc.some((args) => args[0] === "get" && args.at(-1) === w.worker));
+  // A busy worker at stream open is not a change.
+  const busy = await watcherRun();
+  const quiet = createWatcher(
+    { state: busy.f.path, orchestrator: "t0", generation: 1 },
+    {
+      hc: async (args) => {
+        if (args[0] === "send") {
+          busy.sends.push(args);
+          return "{}";
+        }
+        return JSON.stringify({ state: "live", status: { state: "working" } });
+      },
+      now: () => Date.parse(busy.state.lastTickAt ?? "") + 6000,
+      readState: async () => structuredClone(busy.state),
+      readStop: async () => 0,
+      writeRetiring: async () => {},
+      terminal: "t8",
+    },
+  );
+  await quiet.onOpen();
+  await quiet.step();
+  assert.equal(busy.sends.length, 0);
+});
+
+test("RED pi-paseo-workflow: a session JSONL with a truncated trailing line yields the last complete reply, and earlier damage fails closed", async () => {
+  const header = JSON.stringify({ type: "session", version: 3, id: "t1" });
+  const reply = sessionLine("assistant", "Complete reply.");
+  const cut = sessionLine("assistant", "Cut short").slice(0, 30);
+  const jsonl =
+    (text: string): Transport =>
+    async (args) => {
+      assert.deepEqual(args, [sessionCommand, "/s.jsonl"]);
+      return text;
+    };
+  assert.equal(
+    await lastReply("/s.jsonl", jsonl(`${header}\n${reply}\n${cut}`)),
+    "Complete reply.",
+  );
+  await assert.rejects(
+    lastReply("/s.jsonl", jsonl(`${header}\n${cut}\n${reply}\n`)),
+    /line 2 is unreadable/,
+  );
 });
 
 test("RED pi-paseo-workflow: managed workers cannot run orchestrator actions", async () => {
