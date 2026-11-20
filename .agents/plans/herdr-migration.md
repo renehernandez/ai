@@ -700,3 +700,58 @@ then rename):
   child exited 0. None of them typed anything into the orchestrator: its
   session JSONL gained no message, its `status_ms` and `turn` did not
   change, and the composer still held only `draft keep`.
+
+The second end-to-end proof, observed on `42a1c99` with `hc` 0.1.21 and
+Pi 1.5.0 under an isolated HOME, `XDG_CONFIG_HOME`, and `HC_SESSION`, with
+a real managed Pi orchestrator `t1q`, real managed reviewers and
+implementer launched by the runner with `--no-notify`, the watcher writing
+wake requests, the managed extension delivering them, a scripted local
+model that holds each orchestrator reply for 40 seconds and keeps one
+reviewer calling tools without end, and a fake hosted probe:
+
+- herdr-core keys its core by `XDG_STATE_HOME`
+  (`$XDG_STATE_HOME/herdr-core/<session>/`). Setting it for the runner
+  alone pointed `hc` at an empty core, and `hc get --json` on the live
+  orchestrator returned `not_found`. Every process of one workflow must
+  share one `XDG_STATE_HOME`; the proof leaves it unset, so the wake root
+  is `$HOME/.local/state/ax/wake`.
+- Pruning: a planted `leftover.json` carrying another nonce was deleted by
+  the first runner call (`init`). At cleanup, the workflow's own request
+  was deleted, while a planted request from another workflow with the
+  current nonce and `session.json` stayed.
+- Detection and delivery: reviewers that replied at 18:48:12 produced a
+  tick user message at 18:48:19; the implementer's reply at 18:55:35, one
+  at 18:55:43; three reviewers replying at 18:56:27 to 18:56:28, one at
+  18:56:36. Each tick recorded the completions it was woken for.
+- Mid-turn request: the last reviewer replied at 18:56:47 while the
+  orchestrator was in its 40-second turn. The request file was written at
+  18:56:53, and its tick became the next user message at 18:57:18.742,
+  8 ms after that turn's reply, and recorded the reviewer `complete`.
+- Watcher kill: after `hc kill` on watcher `t1w` (`t1w was removed`), its
+  recovery request was delivered at 18:49:22. That tick started
+  generation 2 (`reason: watcher retiring`), and exactly one watcher
+  stayed live.
+- Periodic ticks: with only the endlessly looping reviewer in flight,
+  generation 2's first periodic tick arrived at 18:54:26, five minutes
+  after it started; it recorded the reviewer `degraded (reduced
+  independence)` past the 120-second timeout. With only the hosted gate in
+  flight, the periodic tick at 19:03:45, five minutes after publication,
+  ran the probe exactly once.
+- The probe's output lacked `evidence`, a harness defect, so the runner
+  recorded `hosted: failed`. The proof dismissed that gate in triage with
+  the reason, then ran `finish`.
+- Watcher stop: every tick or action that left nothing in flight reported
+  `watcher: stopped`, and no watcher terminal stayed live after finish.
+- Draft guard: preserved. `draft keep`, typed into the composer with
+  `hc keys` before the first dispatch, stayed unmodified and unsubmitted
+  through all seven tick deliveries and cleanup. The session JSONL holds
+  exactly seven tick prompts, each with one tool call and one reply.
+  herdr-core counted six turns, because a queued follow-up runs inside the
+  same agent run.
+- No terminal notes: no `<hc>` note reached the orchestrator from any
+  `--no-notify` worker, including the reviewer the runner killed at its
+  timeout.
+- Cleanup: the label sweep killed and removed the eight remaining
+  workflow terminals (`t1s`, `t1t`, `t1v`, `t1y`, `t20`, `t21`, `t22`,
+  `t23`), and the runner removed the clean linked worktree and the scratch
+  folder. The orchestrator, which carried no workflow label, stayed live.
