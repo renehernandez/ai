@@ -8,9 +8,7 @@ import { read } from "../../scripts/charter-validator-reader.ts";
 const root = process.cwd();
 
 test("GREEN authority: managed Pi workflow keeps Ready publication separate from merge", () => {
-  const workflow = read(
-    "skills/paseo-orchestration/references/paseo-workflow.md",
-  );
+  const workflow = read("skills/herdr-orchestration/references/workflow.md");
   assert.match(workflow, /Merge requires separate\s+user authority/);
   assert.match(workflow, /three hosted repair\s+batches/);
   assert.match(
@@ -32,7 +30,7 @@ test("GREEN authority: managed Pi workflow keeps Ready publication separate from
     /work.*GitLab `origin` with Nitro/,
   );
   assert.match(
-    read("skills/paseo-orchestration/scripts/paseo-workflow-state.ts"),
+    read("skills/herdr-orchestration/scripts/workflow-state.ts"),
     /Publication requires the exact target-base SHA/,
   );
 });
@@ -51,9 +49,7 @@ test("GREEN authority: the general size rule keeps its own cap outside this repo
 });
 
 test("GREEN authority: the managed orchestrator works through runner ticks and workers stop at their report", () => {
-  const workflow = read(
-    "skills/paseo-orchestration/references/paseo-workflow.md",
-  );
+  const workflow = read("skills/herdr-orchestration/references/workflow.md");
   assert.match(
     workflow,
     /orchestrator\s+is\s+the\s+session\s+the\s+user\s+talks\s+to/i,
@@ -70,22 +66,24 @@ test("GREEN authority: the managed orchestrator works through runner ticks and w
   assert.match(workflow, /`tick`\s+is\s+the\s+only\s+way\s+to\s+record/i);
   assert.match(workflow, /`unchanged`[\s\S]*no\s+user-visible\s+message/);
   assert.match(workflow, /effective\s+standing\s+orders/i);
-  assert.match(workflow, /denies\s+direct\s+`paseo run`/);
+  assert.match(workflow, /`hc` and `herdr-app` are default-deny allow-lists/);
+  assert.match(
+    workflow,
+    /including `hc run`, `send`,\s+`kill`, `rm`, and `label`/,
+  );
   assert.match(workflow, /refuse[\s\S]*not\s+`orchestrator`\s+or\s+`planner`/);
   assert.match(workflow, /no\s+new\s+autonomy\s+and\s+no\s+new\s+gates/i);
 });
 
 test("RED authority: the managed implementer no longer owns review, publication, or hosted repair", () => {
-  const workflow = read(
-    "skills/paseo-orchestration/references/paseo-workflow.md",
-  );
+  const workflow = read("skills/herdr-orchestration/references/workflow.md");
   assert.doesNotMatch(
     workflow,
     /implementation owner (?:evaluates|must assess|follows Execute)/i,
   );
   assert.doesNotMatch(workflow, /planning session remains available/i);
   assert.doesNotMatch(
-    read("skills/paseo-orchestration/scripts/paseo-workflow.ts"),
+    read("skills/herdr-orchestration/scripts/workflow.ts"),
     /Ready publication through Finish, one hosted feedback repair batch/,
   );
   assert.doesNotMatch(
@@ -95,9 +93,7 @@ test("RED authority: the managed implementer no longer owns review, publication,
 });
 
 test("GREEN authority: managed Pi workflow degrades reviewer outages and scopes waivers without granting terminal actions", () => {
-  const workflow = read(
-    "skills/paseo-orchestration/references/paseo-workflow.md",
-  );
+  const workflow = read("skills/herdr-orchestration/references/workflow.md");
   const implementation = read("rules/investigation-and-implementation.md");
   const finish = read("skills/finish/SKILL.md");
 
@@ -135,9 +131,7 @@ test("GREEN authority: managed Pi workflow degrades reviewer outages and scopes 
 });
 
 test("RED authority: scoped gate waivers cannot convert failed evidence into a pass", () => {
-  const workflow = read(
-    "skills/paseo-orchestration/references/paseo-workflow.md",
-  );
+  const workflow = read("skills/herdr-orchestration/references/workflow.md");
   const finish = read("skills/finish/SKILL.md");
 
   assert.doesNotMatch(workflow, /waiver (?:marks|records).*as passed/i);
@@ -154,16 +148,14 @@ test("RED authority: this repository does not force personal publication through
 });
 
 test("RED authority: absent CI does not create a publication policy", () => {
-  const workflow = read(
-    "skills/paseo-orchestration/references/paseo-workflow.md",
-  );
+  const workflow = read("skills/herdr-orchestration/references/workflow.md");
   assert.doesNotMatch(workflow, /an empty check list establishes/i);
   assert.match(
     workflow,
     /empty required-check response remains\s+failed evidence/,
   );
   assert.match(
-    read("skills/finish/scripts/paseo-github-feedback.ts"),
+    read("skills/finish/scripts/github-feedback.ts"),
     /Skipped required CI needs policy disposition/,
   );
 });

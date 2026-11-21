@@ -1,10 +1,12 @@
-// charter-contracts: pi-paseo-config
+// charter-contracts: pi-config
 import assert from "node:assert/strict";
 import {
   chmodSync,
+  copyFileSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   symlinkSync,
@@ -79,13 +81,8 @@ function options(root: string) {
                 ],
                 value: 16384,
               },
-            ],
-          },
-          paseo: {
-            target: "~/.paseo/config.json",
-            managedPaths: [
               {
-                path: ["agents", "providers", "pi-ax"],
+                path: ["providers", "pi-ax"],
                 value: {
                   extends: "pi",
                   command: ["pi", "--extension", "~/.agents/hooks/pi/index.ts"],
@@ -94,7 +91,7 @@ function options(root: string) {
                 expandHome: true,
               },
               {
-                path: ["daemon", "agentProfiles"],
+                path: ["profiles"],
                 value: [
                   { id: "implementer", model: "openai-codex/gpt-6.1-sol" },
                 ],
@@ -114,23 +111,21 @@ function write(path: string, value: unknown): void {
   writeFileSync(path, JSON.stringify(value));
 }
 
-test("GREEN pi-paseo-config: JSON sync preserves unowned configuration and credentials", (t) => {
+test("GREEN pi-config: JSON sync preserves unowned configuration and credentials", (t) => {
   const root = mkdtempSync(join(tmpdir(), "ax-json-config-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const input = options(root);
-  const paseo = join(input.home, ".paseo/config.json");
+  const models = join(input.home, ".pi/agent/models.json");
   const auth = join(input.home, ".pi/agent/auth.json");
   const piSettings = join(input.home, ".pi/agent/settings.json");
   write(piSettings, {
     packages: ["npm:unowned-extension@1.0.0", "npm:pi-claude-bridge@0.7.0"],
   });
   chmodSync(piSettings, 0o600);
-  write(paseo, {
-    agents: {
-      providers: {
-        "pi-ax": { obsolete: true },
-        custom: { command: ["custom"] },
-      },
+  write(models, {
+    providers: {
+      "pi-ax": { obsolete: true },
+      custom: { command: ["custom"] },
     },
     daemon: { port: 1234 },
     theme: "dark",
@@ -138,23 +133,19 @@ test("GREEN pi-paseo-config: JSON sync preserves unowned configuration and crede
   write(auth, { sentinel: "untouched" });
   const result = syncManagedConfigs(input);
   assert.equal(result.status, "synchronized");
-  const observed = JSON.parse(readFileSync(paseo, "utf-8"));
-  assert.equal(observed.agents.providers["pi-ax"].obsolete, undefined);
-  assert.deepEqual(observed.agents.providers.custom, { command: ["custom"] });
+  const observed = JSON.parse(readFileSync(models, "utf-8"));
+  assert.equal(observed.providers["pi-ax"].obsolete, undefined);
+  assert.deepEqual(observed.providers.custom, { command: ["custom"] });
   assert.equal(observed.daemon.port, 1234);
   assert.equal(observed.theme, "dark");
   assert.equal(
-    observed.agents.providers["pi-ax"].command[2],
+    observed.providers["pi-ax"].command[2],
     join(input.home, ".agents/hooks/pi/index.ts"),
   );
-  assert.equal(
-    observed.agents.providers["pi-ax"].env.DESCRIPTION,
-    "literal ~/ text",
-  );
+  assert.equal(observed.providers["pi-ax"].env.DESCRIPTION, "literal ~/ text");
   assert.equal(readFileSync(auth, "utf-8"), '{"sentinel":"untouched"}');
   assert.equal(
-    JSON.parse(readFileSync(join(input.home, ".pi/agent/models.json"), "utf-8"))
-      .providers["cloudflare-ai-gateway"].modelOverrides[
+    observed.providers["cloudflare-ai-gateway"].modelOverrides[
       "workers-ai/@cf/zai-org/glm-5.3"
     ].maxTokens,
     16384,
@@ -184,21 +175,84 @@ test("GREEN pi-paseo-config: JSON sync preserves unowned configuration and crede
   assert.deepEqual(syncManagedConfigs(input).changedPaths, []);
 });
 
-test("RED pi-paseo-config: invalid JSON leaves every target unchanged", (t) => {
+test("RED pi-config: invalid JSON leaves every target unchanged", (t) => {
   const root = mkdtempSync(join(tmpdir(), "ax-json-config-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const input = options(root);
   const pi = join(input.home, ".pi/agent/settings.json");
-  const paseo = join(input.home, ".paseo/config.json");
+  const models = join(input.home, ".pi/agent/models.json");
   const mise = join(input.home, ".config/mise/config.toml");
   write(pi, { defaultProvider: "old" });
-  write(paseo, {});
-  writeFileSync(paseo, "invalid json");
+  write(models, {});
+  writeFileSync(models, "invalid json");
   mkdirSync(join(mise, ".."), { recursive: true });
   writeFileSync(mise, '[tools]\nruby = "3.4.1"\n');
   assert.throws(() => syncManagedConfigs(input), /json_invalid/);
   assert.equal(readFileSync(pi, "utf-8"), '{"defaultProvider":"old"}');
   assert.equal(readFileSync(mise, "utf-8"), '[tools]\nruby = "3.4.1"\n');
+});
+
+function templateOptions(t: TestContext) {
+  const input = fixture(t);
+  mkdirSync(join(input.sourceRoot, "hooks/pi"), { recursive: true });
+  copyFileSync(
+    join(import.meta.dirname, "../../hooks/pi/routes.json"),
+    join(input.sourceRoot, "hooks/pi/routes.json"),
+  );
+  return {
+    ...input,
+    config: {
+      ...input.config,
+      runtime: {
+        ...input.config.runtime,
+        configs: {
+          herdrTemplates: { target: "~/.config/herdr-core/templates" },
+        },
+      },
+    },
+  };
+}
+
+test("GREEN pi-config: config sync owns only the generated herdr-core ax templates and repairs their drift", (t) => {
+  const input = templateOptions(t);
+  const directory = join(input.home, ".config/herdr-core/templates");
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(join(directory, "reviewer.md"), "person-owned\n");
+  assert.equal(syncManagedConfigs(input).changedPaths.length, 4);
+  assert.equal(inspectManagedConfigs(input).ok, true);
+  assert.deepEqual(syncManagedConfigs(input).changedPaths, []);
+  assert.deepEqual(readdirSync(directory).sort(), [
+    "ax-orchestrator-gpt-6-astra.md",
+    "ax-orchestrator.md",
+    "ax-planner-astra.md",
+    "ax-planner-fable.md",
+    "reviewer.md",
+  ]);
+  const orchestrator = join(directory, "ax-orchestrator.md");
+  const generated = readFileSync(orchestrator, "utf8");
+  writeFileSync(orchestrator, "edited\n");
+  assert.deepEqual(inspectManagedConfigs(input).findings, [
+    "managed_config_drift: herdrTemplates/ax-orchestrator.md.content is different",
+  ]);
+  assert.deepEqual(syncManagedConfigs(input).changedPaths, [orchestrator]);
+  assert.equal(readFileSync(orchestrator, "utf8"), generated);
+  assert.equal(
+    readFileSync(join(directory, "reviewer.md"), "utf8"),
+    "person-owned\n",
+  );
+});
+
+test("RED pi-config: a symlinked herdr-core templates directory is refused", (t) => {
+  const input = templateOptions(t);
+  const elsewhere = join(input.home, "elsewhere");
+  mkdirSync(elsewhere, { recursive: true });
+  mkdirSync(join(input.home, ".config/herdr-core"), { recursive: true });
+  symlinkSync(elsewhere, join(input.home, ".config/herdr-core/templates"));
+  assert.throws(
+    () => syncManagedConfigs(input),
+    /managed_config_parent_invalid/,
+  );
+  assert.deepEqual(readdirSync(elsewhere), []);
 });
 
 test("Pi parent symlink escapes are rejected", (t) => {

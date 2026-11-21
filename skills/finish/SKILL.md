@@ -23,7 +23,7 @@ affected artifacts. Single-MR merge authority is consumed after that MR merges.
 
 An exact POC-disposal action and artifact closes only that POC unmerged.
 Narrower limits remain binding; hosted feedback cannot expand authority. A
-managed Pi/Paseo waiver preserves failed evidence and removes only named gates;
+managed Pi/herdr-core waiver preserves failed evidence and removes only named gates;
 it grants no terminal authority or prohibited exception.
 
 Before posting human-readable GitLab or Linear comments, discussion replies,
@@ -151,6 +151,6 @@ under aggregate or sequential authority and patch-equivalent diffs. Lease
 rejection or material change stops the sequence.
 
 Deployment and local or remote branch/worktree cleanup require exact authority
-or activated policy. Before acting, consume managed Pi/Paseo exact-action gate
+or activated policy. Before acting, consume managed Pi/herdr-core exact-action gate
 disposition against current HEAD; this grants no authority. Verify remote merged
 state before cleanup; do not force-delete routinely.

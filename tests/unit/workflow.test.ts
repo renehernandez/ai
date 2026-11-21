@@ -1,4 +1,4 @@
-// charter-contracts: pi-paseo-workflow
+// charter-contracts: pi-workflow
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -16,39 +16,53 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import {
+  type RetiringMarker,
+  type WakeRequest,
+  wakeRoot,
+  watchedAddresses,
+  watchIntervalMs,
+} from "../../skills/herdr-orchestration/scripts/watch.ts";
+import {
   adopt,
   assertActionGateDisposition,
-  bindWorkspace,
+  bindOrchestrator,
   cleanup,
-  collectReviews,
+  createWatcher,
   dispatchConsult,
   dispatchReview,
+  followEvents,
   initialize,
-  loopStatus,
   main,
-  monitor,
   parseConsult,
   parseReview,
   requireOrchestratorCaller,
   retryLaunch,
   retryMisroutedHandoff,
-  routesFromConfig,
+  routesFromTable,
   dispatchRepair as runnerDispatchRepair,
   handoff as runnerHandoff,
-  syncHeartbeat,
+  syncWatcher,
   type Transport,
   tick,
   tickPrompt,
   transition,
   type Workflow,
   type WorktreeReader,
-} from "../../skills/paseo-orchestration/scripts/paseo-workflow.ts";
+  watcherStatus,
+} from "../../skills/herdr-orchestration/scripts/workflow.ts";
+import {
+  lastReply,
+  sessionCommand,
+} from "../../skills/herdr-orchestration/scripts/workflow-io.ts";
 import {
   assignReviewLenses,
   gates,
   locked,
   nextStep,
-} from "../../skills/paseo-orchestration/scripts/paseo-workflow-state.ts";
+} from "../../skills/herdr-orchestration/scripts/workflow-state.ts";
+
+// Runner calls bind the caller's wake directory, so they never read or prune the person's own state.
+process.env.XDG_STATE_HOME = await mkdtemp(join(tmpdir(), "herdr-wake-state-"));
 
 // Each fixture's fake worktree stands in for `git rev-parse` when a round binds its head.
 const worktrees = new Map<string, WorktreeReader>();
@@ -74,7 +88,7 @@ const dispatchRepair = (
 
 const policySourceFingerprint = "a".repeat(64);
 const targetBase = "b".repeat(40);
-const orchestrator = { agentId: "orchestrator-0001" };
+const orchestrator = { terminalId: "t0" };
 const startupReply = "Ready. Awaiting a verified follow-up assignment.";
 const hex = (digit: number) => String(digit).repeat(40);
 const heads = {
@@ -109,6 +123,61 @@ const implementerReport = (head: string) => ({
   risks: [],
 });
 
+// A scripted herdr-core: terminals keyed by address, each with the Pi session JSONL its replies are read from.
+type FakeTerminal = {
+  name: string;
+  cwd: string;
+  argv: string[];
+  parent: string | null;
+  labels: Record<string, string>;
+  // Fake vocabulary mapped onto herdr-core status: running, idle, closed, error, or any unknown status.
+  status: string;
+  prompt: string;
+  session?: string;
+  removed?: boolean;
+};
+const inertPrompt = "Start inertly.";
+const sessionLine = (role: string, text: string) =>
+  JSON.stringify({
+    type: "message",
+    message: { role, content: [{ type: "text", text }] },
+  });
+// Rewrites the text of the last assistant message in a session JSONL read.
+const editReply = (jsonl: string, edit: (text: string) => string) => {
+  const lines = jsonl.split("\n");
+  for (let index = lines.length - 1; index >= 0; index--) {
+    if (!lines[index].trim()) continue;
+    const entry = JSON.parse(lines[index]);
+    if (entry.message?.role !== "assistant") continue;
+    entry.message.content = [
+      { type: "text", text: edit(entry.message.content[0].text) },
+    ];
+    lines[index] = JSON.stringify(entry);
+    break;
+  }
+  return lines.join("\n");
+};
+const notFound = (id: string) =>
+  Object.assign(new Error(`Command failed: hc get --json ${id}`), {
+    stdout: '{"error":{"kind":"not_found"}}',
+  });
+const fakeRoles = [
+  "implementer",
+  "review-correctness",
+  "review-quality",
+  "review-architecture",
+  "review-contract",
+  "planner-astra",
+  "planner-fable",
+];
+const fakeRouteTable = () =>
+  Object.fromEntries(
+    fakeRoles.map((role) => [
+      role,
+      { label: role, routes: [`openai-codex/model-${role}:low`] },
+    ]),
+  );
+
 async function fixture(
   gates: {
     ci: "required" | "not-required" | "unknown";
@@ -118,41 +187,13 @@ async function fixture(
     reviewer: "required",
   },
 ) {
-  const dir = await mkdtemp(join(tmpdir(), "paseo-workflow-"));
+  const dir = await mkdtemp(join(tmpdir(), "herdr-workflow-"));
   const path = join(dir, "state.json");
-  const configPath = join(dir, "config.json");
-  const roles = [
-    "implementer",
-    "review-correctness",
-    "review-quality",
-    "review-architecture",
-    "review-contract",
-    "planner-astra",
-    "planner-fable",
-  ];
-  const config = {
-    agents: {
-      providers: Object.fromEntries(
-        roles.map((role) => [
-          `ax-${role}`,
-          {
-            extends: "pi",
-            command: [
-              "node",
-              "/managed/hooks/pi/launch.ts",
-              role,
-              "openai-codex",
-              `model-${role}`,
-              "low",
-            ],
-            models: [{ id: `openai-codex/model-${role}` }],
-          },
-        ]),
-      ),
-    },
-  };
-  await writeFile(configPath, JSON.stringify(config));
-  await initialize(path, { cwd: dir, configPath });
+  const routesPath = join(dir, "routes.json");
+  const table: Record<string, { label: string; routes: string[] }> =
+    fakeRouteTable();
+  await writeFile(routesPath, JSON.stringify(table));
+  await initialize(path, { cwd: dir, routesPath });
   await transition(path, "policy", {
     deliveryPolicy: {
       provider: "github",
@@ -172,22 +213,12 @@ async function fixture(
     "Objective: test the accepted behavior. Exact target evidence: test fixture.",
   );
   const calls: string[][] = [];
-  const workspaceId = "workspace-fixture";
-  const sessions = new Map<
-    string,
-    {
-      provider: string;
-      model: string;
-      thinking: string;
-      cwd: string;
-      prompt: string;
-      status: string;
-    }
-  >();
-  const heartbeats = new Map<string, { agentId: string; prompt: string }>();
+  const watcherCalls: string[][] = [];
+  const sessions = new Map<string, FakeTerminal>();
+  const watchers = new Map<string, FakeTerminal>();
   let reportedHead = heads.first;
   let implementerReply: string | undefined;
-  // Per-session last replies, as a session that stopped without reporting would show.
+  // Per-terminal last replies, as a session that stopped without reporting would show.
   const replies = new Map<string, string>();
   const tree: { branch: string; head?: string; uncommitted: string[] } = {
     branch: "feature",
@@ -199,84 +230,177 @@ async function fixture(
     uncommitted: tree.uncommitted,
   });
   worktrees.set(path, worktree);
-  let heartbeatIds = 0;
-  let maxHeartbeats = 0;
-  const transport: Transport = async (args, _timeout, env) => {
-    calls.push(args);
-    if (args[0] === "heartbeat" && args[1] === "create") {
-      const agentId = env?.PASEO_AGENT_ID ?? "";
-      const id = `heartbeat-${++heartbeatIds}`;
-      heartbeats.set(id, { agentId, prompt: args[args.length - 1] });
-      maxHeartbeats = Math.max(maxHeartbeats, heartbeats.size);
-      return JSON.stringify({ id, target: `agent:${agentId.slice(0, 7)}` });
-    }
-    if (args[0] === "heartbeat" && args[1] === "delete") {
-      if (!heartbeats.delete(args[2]))
-        throw new Error(`Schedule not found: ${args[2]}`);
-      return JSON.stringify({ id: args[2], status: "deleted" });
-    }
-    if (args[0] === "workspace" && args[1] === "ls")
-      return JSON.stringify([{ workspaceId, cwd: dir }]);
-    if (args[0] === "--version") return "0.14.0\n";
-    if (args[0] === "run") {
-      const agentId = `agent-${sessions.size}`;
-      const flag = (name: string) => args[args.indexOf(name) + 1];
-      assert.equal(flag("--workspace"), workspaceId);
-      sessions.set(agentId, {
-        provider: flag("--provider"),
-        model: flag("--model"),
-        thinking: flag("--thinking"),
-        cwd: flag("--cwd"),
-        prompt: args[args.length - 1],
-        status: "idle",
-      });
-      return JSON.stringify({ agentId });
-    }
-    if (args[0] === "send") {
-      const agentId = args[1];
-      const session = sessions.get(agentId);
-      assert.ok(session);
-      session.prompt = await readFile(
-        args[args.indexOf("--prompt-file") + 1],
-        "utf8",
-      );
-      return JSON.stringify({ agentId, status: "queued" });
-    }
-    const agentId = args[args.length - 1];
-    const session = sessions.get(agentId);
-    assert.ok(session);
-    if (args[0] === "logs" && args.length === 2)
-      return `[Message received] ${orchestrator.agentId}\n${session.prompt}`;
-    if (args[0] === "wait") return JSON.stringify({ agentId, status: "idle" });
-    if (args[0] === "inspect")
-      return JSON.stringify({
-        Id: agentId,
-        Provider: session.provider,
-        Model: session.model,
-        Thinking: session.thinking,
-        Status: session.status,
-        Cwd: session.cwd,
-        Archived: false,
-        PendingPermissions: [],
-      });
-    const override = replies.get(agentId);
+  let addresses = 0;
+  let maxWatchers = 0;
+  const liveWatchers = () =>
+    [...watchers.values()].filter((terminal) => terminal.status !== "closed");
+  const replyOf = async (id: string, terminal: FakeTerminal) => {
+    const override = replies.get(id);
     if (override !== undefined) return override;
-    if (session.prompt.startsWith("Start inertly")) return startupReply;
-    if (session.provider === "ax-implementer")
+    const role = terminal.labels["ax.role"];
+    if (role === "implementer")
       return (
         implementerReply ??
         `Implemented and committed through native hooks. Head: ${reportedHead}.\n${reportEnvelope(implementerReport(reportedHead))}`
       );
     const state = JSON.parse(await readFile(path, "utf8")) as Workflow;
-    if (session.provider.startsWith("ax-planner-"))
+    if (role.startsWith("planner-"))
       return consultEnvelope(state.consult?.fingerprint ?? "");
-    const phase = session.prompt.includes("this planning")
+    const phase = Object.values(state.rounds.planning?.reviews ?? {}).some(
+      (review) => review.agentId === id,
+    )
       ? "planning"
       : "implementation";
-    const role = session.provider.replace(/^ax-/, "");
     const assigned = state.rounds[phase]?.lensAssignments[role]?.lensIds ?? [];
     return `AX_REVIEW_BEGIN${JSON.stringify({ fingerprint: state.rounds[phase]?.fingerprint, outcomes: Object.fromEntries(assigned.map((id) => [id, { status: "passed", evidence: "Inspected exact fixture behavior; no scoped issue.", findings: [] }])) })}AX_REVIEW_END`;
   };
+  // A terminal that never received its assignment, or replies with the startup reply, has not finished a turn.
+  const begun = (id: string, terminal: FakeTerminal) =>
+    !terminal.prompt.startsWith(inertPrompt) &&
+    replies.get(id) !== startupReply;
+  const lookup = (id: string) => {
+    const terminal = sessions.get(id) ?? watchers.get(id);
+    if (!terminal || terminal.removed) throw notFound(id);
+    return terminal;
+  };
+  const transport: Transport = async (args, _timeout, _env) => {
+    const watcher =
+      args.includes("ax.role=watcher") ||
+      (["kill", "rm"].includes(args[0]) && watchers.has(args.at(-1) ?? ""));
+    (watcher ? watcherCalls : calls).push(args);
+    if (args[0] === "-V") return "hc 0.1.21\n";
+    if (args[0] === sessionCommand) {
+      const entry = [...sessions.entries()].find(
+        ([, terminal]) => terminal.session === args[1],
+      );
+      if (!entry || entry[1].prompt.startsWith(inertPrompt)) return "";
+      const [id, terminal] = entry;
+      const header = JSON.stringify({ type: "session", version: 3, id });
+      const user = sessionLine("user", terminal.prompt);
+      if (!begun(id, terminal)) return `${header}\n${user}\n`;
+      return `${header}\n${user}\n${sessionLine("assistant", await replyOf(id, terminal))}\n`;
+    }
+    if (args[0] === "run") {
+      const id = `t${++addresses}`;
+      const flag = (name: string) => args[args.indexOf(name) + 1];
+      const labels = Object.fromEntries(
+        args.flatMap((value, index) =>
+          args[index - 1] === "--label"
+            ? [
+                [
+                  value.slice(0, value.indexOf("=")),
+                  value.slice(value.indexOf("=") + 1),
+                ],
+              ]
+            : [],
+        ),
+      );
+      const argv = args.slice(args.indexOf("--") + 1);
+      const terminal: FakeTerminal = {
+        name: flag("--name"),
+        cwd: flag("--cwd"),
+        argv,
+        parent: flag("--parent"),
+        labels,
+        status: "idle",
+        prompt: inertPrompt,
+        ...(argv.includes("--session")
+          ? { session: argv[argv.indexOf("--session") + 1] }
+          : {}),
+      };
+      if (watcher) {
+        watchers.set(id, terminal);
+        maxWatchers = Math.max(maxWatchers, liveWatchers().length);
+      } else sessions.set(id, terminal);
+      return JSON.stringify({
+        address: id,
+        agent: "pi",
+        cwd: terminal.cwd,
+        name: terminal.name,
+        state: "live",
+        turn: 0,
+      });
+    }
+    if (args[0] === "ls") {
+      // Like herdr-core 0.1.21: rows carry no labels, and the `--label` filter matches nothing.
+      assert.ok(!args.includes("--label"), "hc ls --label matches nothing");
+      return JSON.stringify({
+        hidden_finished: 0,
+        terminals: [
+          {
+            address: orchestrator.terminalId,
+            cwd: dir,
+            name: "orchestrator",
+            state: "live",
+          },
+          ...[...sessions.entries(), ...watchers.entries()]
+            .filter(
+              ([, terminal]) =>
+                !terminal.removed && terminal.status !== "closed",
+            )
+            .map(([address, terminal]) => ({
+              address,
+              cwd: terminal.cwd,
+              name: terminal.name,
+              parent: terminal.parent,
+              state: "live",
+            })),
+        ],
+      });
+    }
+    const id = args.at(-1) ?? "";
+    if (args[0] === "send") {
+      const terminal = lookup(args[4]);
+      terminal.prompt = args[5];
+      return JSON.stringify({ started: true, status: "working", turn: 1 });
+    }
+    if (args[0] === "get" && id === orchestrator.terminalId)
+      return JSON.stringify({
+        address: id,
+        argv: ["node", "launch.ts", "orchestrator"],
+        cwd: dir,
+        labels: { "herdr.space": "space-1", "herdr.tab": "tab-1" },
+        name: "orchestrator",
+        parent: null,
+        state: "live",
+        status: { app: "pi", state: "idle" },
+        reported: true,
+        turn: 3,
+      });
+    const terminal = lookup(id);
+    if (args[0] === "kill") {
+      terminal.status = "closed";
+      // A --rm watcher is removed once killed.
+      if (watchers.has(id)) watchers.delete(id);
+      return "{}";
+    }
+    if (args[0] === "rm") {
+      terminal.removed = true;
+      return "";
+    }
+    if (args[0] === "wait")
+      return JSON.stringify({ status: "idle", terminal: id, turn: 0 });
+    assert.equal(args[0], "get", args.join(" "));
+    const state =
+      terminal.status === "running"
+        ? "working"
+        : terminal.status === "closed"
+          ? "idle"
+          : terminal.status;
+    return JSON.stringify({
+      address: id,
+      argv: terminal.argv,
+      cwd: terminal.cwd,
+      labels: terminal.labels,
+      name: terminal.name,
+      parent: terminal.parent,
+      state: terminal.status === "closed" ? "exited" : "live",
+      status: { app: "pi", state },
+      reported: true,
+      turn: begun(id, terminal) ? 1 : 0,
+    });
+  };
+  await bindOrchestrator(path, orchestrator.terminalId, transport);
   const read = async () => JSON.parse(await readFile(path, "utf8")) as Workflow;
   const step = (
     via: Transport = transport,
@@ -313,12 +437,15 @@ async function fixture(
   return {
     path,
     dir,
-    config,
-    configPath,
+    table,
+    routesPath,
     artifactPath,
     repairBrief,
     calls,
+    watcherCalls,
     sessions,
+    watchers: liveWatchers,
+    maxWatchers: () => maxWatchers,
     reportHead: (head: string) => {
       reportedHead = head;
     },
@@ -327,8 +454,6 @@ async function fixture(
     },
     replies,
     tree,
-    heartbeats,
-    maxHeartbeats: () => maxHeartbeats,
     transport,
     read,
     step,
@@ -364,12 +489,14 @@ function withReviewOutcome(
 ): Transport {
   return async (args, timeout, env) => {
     const output = await transport(args, timeout, env);
-    if (args[0] !== "logs") return output;
-    const report = JSON.parse(
-      output.replace("AX_REVIEW_BEGIN", "").replace("AX_REVIEW_END", ""),
-    );
-    if (report.outcomes[lens]) report.outcomes[lens] = outcome;
-    return `AX_REVIEW_BEGIN${JSON.stringify(report)}AX_REVIEW_END`;
+    if (args[0] !== sessionCommand) return output;
+    return editReply(output, (text) => {
+      const report = JSON.parse(
+        text.replace("AX_REVIEW_BEGIN", "").replace("AX_REVIEW_END", ""),
+      );
+      if (report.outcomes[lens]) report.outcomes[lens] = outcome;
+      return `AX_REVIEW_BEGIN${JSON.stringify(report)}AX_REVIEW_END`;
+    });
   };
 }
 
@@ -401,7 +528,7 @@ function fallbackAssessment(
   };
 }
 
-test("GREEN pi-paseo-workflow: deliberate focused handoff reaches Ready once without review loops", async () => {
+test("GREEN pi-workflow: deliberate focused handoff reaches Ready once without review loops", async () => {
   const f = await fixture();
   await f.review("planning");
   await handoff(
@@ -463,7 +590,7 @@ test("GREEN pi-paseo-workflow: deliberate focused handoff reaches Ready once wit
       .every((args) => !args.includes("--output-schema")),
   );
   assert.equal((await f.step()).result, "finished");
-  assert.equal(f.heartbeats.size, 0);
+  assert.equal(f.watchers().length, 0);
   await assert.rejects(
     dispatchFixtureReview(
       f.path,
@@ -482,7 +609,7 @@ test("GREEN pi-paseo-workflow: deliberate focused handoff reaches Ready once wit
   );
 });
 
-test("GREEN pi-paseo-workflow: no hosted gates publishes without a fabricated reviewer", async () => {
+test("GREEN pi-workflow: no hosted gates publishes without a fabricated reviewer", async () => {
   const f = await fixture({ ci: "not-required", reviewer: "not-required" });
   await f.review("planning");
   await handoff(
@@ -510,7 +637,7 @@ test("GREEN pi-paseo-workflow: no hosted gates publishes without a fabricated re
   assert.equal(published.hosted?.status, "completed");
 });
 
-test("RED pi-paseo-workflow: unknown policy blocks handoff", async () => {
+test("RED pi-workflow: unknown policy blocks handoff", async () => {
   const f = await fixture({ ci: "unknown", reviewer: "not-required" });
   await f.review("planning");
   await assert.rejects(
@@ -531,7 +658,7 @@ test("RED pi-paseo-workflow: unknown policy blocks handoff", async () => {
   );
 });
 
-test("GREEN pi-paseo-workflow: authorized continuation preserves prior evidence", async () => {
+test("GREEN pi-workflow: authorized continuation preserves prior evidence", async () => {
   const f = await fixture();
   await f.review("planning");
   await handoff(
@@ -573,83 +700,114 @@ test("GREEN pi-paseo-workflow: authorized continuation preserves prior evidence"
   );
 });
 
-test("workspace binding rejects mismatches and ambiguity, and registers once", async () => {
-  const wrong = await fixture();
-  await assert.rejects(
-    bindWorkspace(wrong.path, { workspaceId: "other" }, async () =>
-      JSON.stringify([{ workspaceId: "other", cwd: "/other" }]),
-    ),
-    /does not match canonical cwd/,
-  );
-  const ambiguous = await fixture();
-  await assert.rejects(
-    bindWorkspace(ambiguous.path, {}, async () =>
-      JSON.stringify([
-        { workspaceId: "one", cwd: ambiguous.dir },
-        { workspaceId: "two", cwd: ambiguous.dir },
-      ]),
-    ),
-    /ambiguous Paseo workspaces/,
-  );
-  const registration = await fixture();
-  let created = false;
-  let createCalls = 0;
-  let releaseCreation: () => void = () => {};
-  let signalCreation: () => void = () => {};
-  const creationStarted = new Promise<void>((resolve) => {
-    signalCreation = resolve;
+test("GREEN pi-workflow: dispatch binds the caller's live terminal, and workers start as its children in its space and tab", async () => {
+  const f = await fixture();
+  const bound = await f.read();
+  assert.deepEqual(bound.orchestrator, {
+    id: orchestrator.terminalId,
+    labels: { "herdr.space": "space-1", "herdr.tab": "tab-1" },
   });
-  const creationReleased = new Promise<void>((resolve) => {
-    releaseCreation = resolve;
-  });
-  const transport: Transport = async (args) => {
-    if (args[0] === "workspace" && args[1] === "ls")
-      return JSON.stringify(
-        created ? [{ workspaceId: "registered", cwd: registration.dir }] : [],
-      );
-    assert.equal(args[1], "create");
-    createCalls++;
-    signalCreation();
-    await creationReleased;
-    created = true;
-    return JSON.stringify({ workspaceId: "registered" });
-  };
-  const first = bindWorkspace(
-    registration.path,
-    { registerWorkspace: true, projectId: "project" },
-    transport,
+  await assert.rejects(
+    bindOrchestrator(f.path, undefined, f.transport),
+    /HC_TERMINAL_ID/,
   );
-  await creationStarted;
-  const second = bindWorkspace(
-    registration.path,
-    { registerWorkspace: true, projectId: "project" },
-    transport,
+  await assert.rejects(
+    bindOrchestrator(f.path, "t404", f.transport),
+    /not_found|Command failed/,
   );
-  await assert.rejects(second, /registration is already reserved/);
-  releaseCreation();
-  const results = await Promise.allSettled([first]);
-  assert.equal(createCalls, 1);
-  assert.equal(
-    results.filter((result) => result.status === "fulfilled").length,
-    1,
+  await dispatchFixtureReview(
+    f.path,
+    { phase: "planning", artifactPath: f.artifactPath },
+    f.transport,
   );
-  assert.equal((await registration.read()).workspace?.id, "registered");
+  const state = await f.read();
+  const launches = f.calls.filter((args) => args[0] === "run");
+  assert.equal(launches.length, 4);
+  for (const args of launches) {
+    assert.equal(args[args.indexOf("--parent") + 1], orchestrator.terminalId);
+    assert.equal(args[args.indexOf("--cwd") + 1], state.cwd);
+    for (const label of [
+      "herdr.space=space-1",
+      "herdr.tab=tab-1",
+      `ax.workflow=${state.workflowId}`,
+    ])
+      assert.ok(args.includes(label), label);
+    const argv = args.slice(args.indexOf("--") + 1);
+    assert.deepEqual(argv.slice(0, 2), ["node", join(f.dir, "launch.ts")]);
+    assert.match(
+      argv.at(-1) ?? "",
+      /\/sessions\/ax-review-[a-z-]+-[0-9a-f]{4}\d+\.jsonl$/,
+    );
+  }
+  // Each reviewer is sent its assignment only once it is an idle child of the orchestrator.
+  for (const review of Object.values(state.rounds.planning?.reviews ?? {})) {
+    assert.equal(review.status, "running");
+    assert.equal(review.startupTurn, 0);
+    assert.equal(review.hcVersion, "hc 0.1.21");
+  }
+});
 
-  const uncertain = await fixture();
-  let listCalls = 0;
+test("RED pi-workflow: a worker that is not the orchestrator's idle child is never sent its assignment", async () => {
+  const f = await fixture();
+  await dispatchFixtureReview(
+    f.path,
+    { phase: "planning", artifactPath: f.artifactPath },
+    async (args, timeout, env) => {
+      const output = await f.transport(args, timeout, env);
+      if (args[0] !== "get" || args.at(-1) === orchestrator.terminalId)
+        return output;
+      return JSON.stringify({ ...JSON.parse(output), parent: "t99" });
+    },
+  );
+  assert.equal(f.calls.filter((args) => args[0] === "send").length, 0);
+  assert.deepEqual(
+    Object.values((await f.read()).rounds.planning?.reviews ?? {}).map(
+      (review) => review.status,
+    ),
+    ["degraded", "degraded", "degraded", "degraded"],
+  );
+});
+
+test("RED pi-workflow: a Paseo-era state stays readable through status but every other action refuses it", async () => {
+  const f = await fixture();
+  const legacy = await f.read();
+  delete legacy.transport;
+  await writeFile(f.path, JSON.stringify(legacy));
+  const status = await captureStdout(() => main([f.path, "status"], {}));
+  assert.equal(JSON.parse(status).workflowId, legacy.workflowId);
+  const refusal = /written by the Paseo runner/;
+  await assert.rejects(f.step(), refusal);
   await assert.rejects(
-    bindWorkspace(uncertain.path, { registerWorkspace: true }, async (args) => {
-      if (args[1] === "create") throw new Error("lost create response");
-      listCalls++;
-      if (listCalls === 1) return "[]";
-      throw new Error("workspace inspection unavailable");
-    }),
-    /workspace inspection unavailable/,
+    dispatchFixtureReview(
+      f.path,
+      { phase: "planning", artifactPath: f.artifactPath },
+      f.transport,
+    ),
+    refusal,
   );
-  assert.equal(
-    (await uncertain.read()).workspaceRegistration?.status,
-    "uncertain",
+  await assert.rejects(
+    cleanup(
+      f.path,
+      { authorizationSource: "User: clean up.", head: heads.first },
+      { terminalId: orchestrator.terminalId },
+      f.transport,
+    ),
+    refusal,
   );
+  const tickInput = join(f.dir, "empty.json");
+  await writeFile(tickInput, "{}");
+  await assert.rejects(
+    main(
+      [f.path, "order", tickInput],
+      {
+        AX_PI_CONTRACT: JSON.stringify({ role: "orchestrator" }),
+        HC_TERMINAL_ID: "t0",
+      },
+      f.transport,
+    ),
+    refusal,
+  );
+  assert.equal(f.calls.filter((args) => args[0] === "run").length, 0);
 });
 
 test("legacy mixed-model workflow state remains inspectable but cannot continue", async () => {
@@ -669,15 +827,18 @@ test("legacy mixed-model workflow state remains inspectable but cannot continue"
   );
 });
 
-test("GREEN pi-paseo-workflow: init records the four-reviewer roster and assigns both canonical catalogs to it", async () => {
+test("GREEN pi-workflow: init records the four-reviewer roster and assigns both canonical catalogs to it", async () => {
   const f = await fixture();
   const state = await f.read();
   assert.equal(state.reviewMode, "focused-v2");
   assert.deepEqual(state.routes["review-quality"], {
-    provider: "ax-review-quality",
-    model: "openai-codex/model-review-quality",
+    provider: "openai-codex",
+    model: "model-review-quality",
     thinking: "low",
   });
+  assert.equal(state.transport, "herdr-core");
+  assert.match(state.workflowId ?? "", /^[0-9a-f]{8}$/);
+  assert.equal(state.launcher, join(f.dir, "launch.ts"));
   const ids = (phase: "planning" | "implementation") =>
     Object.fromEntries(
       Object.entries(assignReviewLenses(phase, state.lenses[phase])).map(
@@ -696,14 +857,22 @@ test("GREEN pi-paseo-workflow: init records the four-reviewer roster and assigns
     "review-architecture": ["code-simplifier", "deslop"],
     "review-contract": ["scrutinize"],
   });
-  delete f.config.agents.providers["ax-review-quality"];
+  const { "review-quality": _, ...missing } = f.table;
   assert.throws(
-    () => routesFromConfig(f.config),
-    /Missing managed provider ax-review-quality/,
+    () => routesFromTable(missing),
+    /Route table lacks the single review-quality route/,
+  );
+  assert.throws(
+    () =>
+      routesFromTable({
+        ...f.table,
+        "review-quality": { label: "x", routes: ["openai-codex/model"] },
+      }),
+    /Invalid review-quality route/,
   );
 });
 
-test("RED pi-paseo-workflow: a three-Sol roster state stays readable through status but tick and dispatch refuse it", async () => {
+test("RED pi-workflow: a three-Sol roster state stays readable through status but tick and dispatch refuse it", async () => {
   const f = await fixture();
   const legacy = await f.read();
   legacy.reviewMode = "sol-focused-v1";
@@ -739,16 +908,12 @@ async function captureStdout(run: () => Promise<void>) {
   return output;
 }
 
-test("GREEN pi-paseo-workflow: pre-orchestration state stays readable while tick is the only orchestrated advancement path", async () => {
+test("GREEN pi-workflow: pre-orchestration state stays readable while tick is the only orchestrated advancement path", async () => {
   const f = await fixture();
   await dispatchFixtureReview(
     f.path,
     { phase: "planning", artifactPath: f.artifactPath },
     f.transport,
-  );
-  await assert.rejects(
-    collectReviews(f.path, { phase: "planning" }, f.transport),
-    /only through tick/,
   );
   const legacy = await f.read();
   delete legacy.orchestration;
@@ -769,28 +934,9 @@ test("GREEN pi-paseo-workflow: pre-orchestration state stays readable while tick
     ),
     /predates planner orchestration/,
   );
-  await collectReviews(f.path, { phase: "planning" }, f.transport);
-  assert.ok(
-    Object.values((await f.read()).rounds.planning?.reviews ?? {}).every(
-      (review) => review.status === "complete",
-    ),
-  );
-
-  const g = await fixture({ ci: "required", reviewer: "not-required" });
-  await g.review("planning");
-  await g.accept();
-  await g.review("implementation");
-  await transition(g.path, "publication", {
-    ...hostedReceipt,
-    reviewer: undefined,
-  });
-  await assert.rejects(
-    monitor(g.path, { probeCommand: ["finish-probe"] }),
-    /only through tick/,
-  );
 });
 
-test("RED pi-paseo-workflow: an untriaged round cannot be replaced by another review of the phase", async () => {
+test("RED pi-workflow: an untriaged round cannot be replaced by another review of the phase", async () => {
   const f = await fixture();
   const originalArtifact = await readFile(f.artifactPath, "utf8");
   await dispatchFixtureReview(
@@ -876,9 +1022,16 @@ test("reviewer launch and response failures become degraded evidence without ret
     { phase: "planning", artifactPath: g.artifactPath },
     g.transport,
   );
-  await g.step(async (args, timeout, env) =>
-    args[0] === "logs" ? "" : g.transport(args, timeout, env),
+  // A finished turn without a readable reply waits; past the timeout the reviewer degrades.
+  const unreadable: Transport = async (args, timeout, env) =>
+    args[0] === sessionCommand ? "" : g.transport(args, timeout, env);
+  await g.step(unreadable);
+  assert.ok(
+    Object.values((await g.read()).rounds.planning?.reviews ?? {}).every(
+      (review) => review.status === "running",
+    ),
   );
+  await g.step(unreadable, undefined, later(601_000));
   assert.ok(
     Object.values((await g.read()).rounds.planning?.reviews ?? {}).every(
       (review) => review.status === "degraded",
@@ -998,16 +1151,16 @@ test("uncertain implementer launch remains a hard blocker without retry", async 
   assert.equal((await f.read()).handoff?.status, "failed");
 });
 
-// Fails every send; `deliver` first lets the fake session receive the assignment, as a late Paseo queue flush would.
+// Fails every send; `deliver` first lets the fake session receive the assignment, as a late herdr-core write would.
 const failingSend =
   (f: { transport: Transport }, deliver: boolean): Transport =>
   async (args, timeout, env) => {
     if (args[0] !== "send") return f.transport(args, timeout, env);
     if (deliver) await f.transport(args, timeout, env);
-    throw new Error("Command failed: paseo send timed out");
+    throw new Error("Command failed: hc send timed out");
   };
 const sends = (f: { calls: string[][] }, agentId?: string) =>
-  f.calls.filter((args) => args[0] === "send" && args[1] === agentId).length;
+  f.calls.filter((args) => args[0] === "send" && args[4] === agentId).length;
 const later = (ms: number) => () => Date.now() + ms;
 const gateOf = (step: { result: string; gate?: string }) =>
   step.result === "awaiting-user" ? (step.gate ?? "") : "";
@@ -1018,7 +1171,7 @@ const statuses = (state: Workflow) =>
     (review) => review.status,
   );
 
-test("GREEN pi-paseo-workflow: a zero send exit releases the worker whatever Paseo returns", async () => {
+test("GREEN pi-workflow: a zero send exit releases the worker whatever herdr-core returns", async () => {
   for (const body of [undefined, '{"status":"sent"}', "unrecognized body"]) {
     const f = await fixture();
     await dispatchFixtureReview(
@@ -1036,16 +1189,16 @@ test("GREEN pi-paseo-workflow: a zero send exit releases the worker whatever Pas
       reviews.map((review) => review.status),
       ["running", "running", "running", "running"],
     );
-    // `status` shows what Paseo returned and which Paseo version took the dispatch.
+    // `status` shows what herdr-core returned and which hc version took the dispatch.
     for (const review of reviews) {
-      assert.match(review.sendOutput ?? "", /queued|sent|unrecognized/);
-      assert.equal(review.paseoVersion, "0.14.0");
+      assert.match(review.sendOutput ?? "", /started|sent|unrecognized/);
+      assert.equal(review.hcVersion, "hc 0.1.21");
     }
     assert.equal(actionOf(await f.step()), "triage");
   }
 });
 
-test("RED pi-paseo-workflow: an ambiguous send is decided only by delivery evidence and never re-sent", async () => {
+test("RED pi-workflow: an ambiguous send is decided only by delivery evidence and never re-sent", async () => {
   const f = await fixture();
   await f.review("planning");
   await handoff(
@@ -1097,7 +1250,7 @@ test("RED pi-paseo-workflow: an ambiguous send is decided only by delivery evide
   const undelivered = await g.step(g.transport, undefined, later(61_000));
   assert.equal((await g.read()).handoff?.status, "undelivered");
   assert.equal(actionOf(undelivered), "retry-launch");
-  assert.ok(g.calls.some((args) => args[0] === "stop" && args[1] === lost));
+  assert.ok(g.calls.some((args) => args[0] === "kill" && args.at(-1) === lost));
   await retryLaunch(
     g.path,
     { worker: "handoff", agentId: lost },
@@ -1108,11 +1261,11 @@ test("RED pi-paseo-workflow: an ambiguous send is decided only by delivery evide
   assert.equal(relaunched.handoff?.status, "running");
   assert.notEqual(relaunched.handoff?.agentId, lost);
   assert.equal(relaunched.handoff?.attempts?.[0].agentId, lost);
-  // The only send to the lost session failed before reaching Paseo; nothing was re-sent.
+  // The only send to the lost session failed before reaching herdr-core; nothing was re-sent.
   assert.equal(sends(g, lost), 0);
 });
 
-test("RED pi-paseo-workflow: a released reviewer that never began is retried once, then degraded with reduced independence", async () => {
+test("RED pi-workflow: a released reviewer that never began is retried once, then degraded with reduced independence", async () => {
   const f = await fixture();
   await dispatchFixtureReview(
     f.path,
@@ -1172,7 +1325,68 @@ test("RED pi-paseo-workflow: a released reviewer that never began is retried onc
   assert.equal(runs(f), 8);
 });
 
-test("RED pi-paseo-workflow: retry-launch needs established non-delivery and an unchanged worktree, and a spent retry needs user authorization", async () => {
+test("RED pi-workflow: an ended reviewer that received its assignment but wrote no reply degrades, while an undelivered one keeps its retry", async () => {
+  const f = await fixture();
+  await dispatchFixtureReview(
+    f.path,
+    { phase: "planning", artifactPath: f.artifactPath },
+    f.transport,
+  );
+  const [received, ...others] = [...f.sessions.entries()];
+  // Every terminal ends at its startup turn; only the first received its assignment.
+  for (const [id, session] of f.sessions) {
+    f.replies.set(id, startupReply);
+    session.status = "closed";
+  }
+  for (const [, session] of others) session.prompt = "Start inertly.";
+  const first = await f.step();
+  const reviewOf = (state: Workflow, agentId: string) =>
+    Object.values(state.rounds.planning?.reviews ?? {}).find(
+      (review) => review.agentId === agentId,
+    );
+  assert.equal(reviewOf(await f.read(), received[0])?.status, "degraded");
+  assert.equal(first.recorded.length, 1);
+  assert.match(first.recorded[0], /degraded \(reduced independence\)/);
+  const second = await f.step(f.transport, undefined, later(601_000));
+  const settled = await f.read();
+  assert.equal(reviewOf(settled, received[0])?.status, "degraded");
+  for (const [id] of others)
+    assert.equal(reviewOf(settled, id)?.status, "undelivered");
+  assert.equal(actionOf(second), "retry-launch");
+  // A settled worker is not re-recorded on later ticks.
+  const third = await f.step(f.transport, undefined, later(601_000));
+  assert.deepEqual(third.recorded, []);
+});
+
+test("RED pi-workflow: an ended implementer that received its assignment but wrote no reply fails at the adopt gate", async () => {
+  const f = await fixture();
+  await f.review("planning");
+  await handoff(
+    f.path,
+    { briefPath: f.artifactPath, planResolution: "Settled." },
+    f.transport,
+  );
+  const agentId = (await f.read()).handoff?.agentId ?? "";
+  const session = f.sessions.get(agentId);
+  assert.ok(session);
+  f.replies.set(agentId, startupReply);
+  session.status = "closed";
+  const ended = await f.step();
+  assert.deepEqual(ended.recorded, ["handoff: failed"]);
+  const state = await f.read();
+  assert.equal(state.handoff?.status, "failed");
+  assert.match(state.handoff?.error ?? "", /received its assignment/);
+  assert.equal(ended.result, "awaiting-user");
+  assert.match(
+    ended.result === "awaiting-user" ? ended.gate : "",
+    /handoff failed; `adopt`/,
+  );
+  const again = await f.step(f.transport, undefined, later(601_000));
+  assert.deepEqual(again.recorded, []);
+  assert.equal((await f.read()).handoff?.status, "failed");
+});
+
+test("RED pi-workflow: retry-launch needs established non-delivery and an unchanged worktree, and a spent retry needs user authorization", async () => {
   const f = await fixture();
   await f.review("planning");
   await handoff(
@@ -1254,7 +1468,9 @@ async function conflictFixture() {
   assert.deepEqual(conflicted.result === "unchanged" && conflicted.inFlight, [
     "handoff",
   ]);
-  assert.ok((await f.read()).heartbeat);
+  assert.ok((await f.read()).watcher);
+  // The watcher follows both conflicted attempts, whichever finishes first.
+  assert.ok(watchedAddresses(await f.read()).has(old));
   await assert.rejects(
     dispatchFixtureReview(
       f.path,
@@ -1269,7 +1485,7 @@ const withoutReport = (f: { replies: Map<string, string> }, ids: string[]) => {
   for (const id of ids) f.replies.set(id, "Stopped without a report.");
 };
 
-test("RED pi-paseo-workflow: a superseded attempt that receives its assignment conflicts until adopt or an authorized retry-launch resolves it", async () => {
+test("RED pi-workflow: a superseded attempt that receives its assignment conflicts until adopt or an authorized retry-launch resolves it", async () => {
   const both = await conflictFixture();
   const bothGate = gateOf(await both.f.step());
   assert.match(bothGate, /`adopt`.*authorizationSource/);
@@ -1342,13 +1558,31 @@ test("RED pi-paseo-workflow: a superseded attempt that receives its assignment c
   const restarted = await none.f.read();
   assert.equal(restarted.handoff?.status, "running");
   // The fresh attempt receives the original brief plus the observed worktree.
-  const prompt =
+  const sent =
     none.f.sessions.get(restarted.handoff?.agentId ?? "")?.prompt ?? "";
+  const prompt = await readFile(
+    /assignment is (\S+?); /.exec(sent)?.[1] ?? "",
+    "utf8",
+  );
   assert.match(prompt, /Implementation brief snapshot/);
   assert.match(prompt, /partial\.ts/);
 });
 
-test("GREEN pi-paseo-workflow: adopt records a falsely failed handoff once and refuses mismatched evidence", async () => {
+test("RED pi-workflow: conflict recovery records reports when the killed original has ended", async () => {
+  const ended = await conflictFixture();
+  // The undelivered original was killed before its replacement launched, so herdr-core reports it finished.
+  const session = ended.f.sessions.get(ended.old);
+  assert.ok(session);
+  session.status = "closed";
+  const gate = gateOf(await ended.f.step());
+  assert.match(gate, /`adopt`.*authorizationSource/);
+  assert.deepEqual(
+    [...((await ended.f.read()).handoff?.conflictReports ?? [])].sort(),
+    [ended.old, ended.replacement].sort(),
+  );
+});
+
+test("GREEN pi-workflow: adopt records a falsely failed handoff once and refuses mismatched evidence", async () => {
   const f = await fixture();
   await f.review("planning");
   await handoff(
@@ -1356,11 +1590,11 @@ test("GREEN pi-paseo-workflow: adopt records a falsely failed handoff once and r
     { briefPath: f.artifactPath, planResolution: "Settled." },
     f.transport,
   );
-  // The earlier runner recorded a delivered handoff as failed when Paseo answered `queued`.
+  // A runner can record a delivered handoff as failed when its send result is lost.
   await locked(f.path, (state) => {
     Object.assign(state.handoff ?? {}, {
       status: "failed",
-      error: "Error: Paseo did not confirm assignment delivery",
+      error: "Error: herdr-core did not confirm assignment delivery",
     });
   });
   const agentId = (await f.read()).handoff?.agentId ?? "";
@@ -1374,7 +1608,7 @@ test("GREEN pi-paseo-workflow: adopt records a falsely failed handoff once and r
     (change: Record<string, unknown>): Transport =>
     async (args, timeout, env) => {
       const output = await f.transport(args, timeout, env);
-      return args[0] === "inspect"
+      return args[0] === "get"
         ? JSON.stringify({ ...JSON.parse(output), ...change })
         : output;
     };
@@ -1384,9 +1618,9 @@ test("GREEN pi-paseo-workflow: adopt records a falsely failed handoff once and r
     [{ branch: "other" }, f.transport],
     [{ agentId: "agent-unknown" }, f.transport],
     [{ worker: "planning:review-correctness" }, f.transport],
-    [{}, inspected({ Cwd: "/elsewhere" })],
-    [{}, inspected({ Model: "other" })],
-    [{}, inspected({ Status: "running" })],
+    [{}, inspected({ cwd: "/elsewhere" })],
+    [{}, inspected({ argv: ["other"] })],
+    [{}, inspected({ status: { app: "pi", state: "working" } })],
   ];
   for (const [change, transport] of refusals)
     await assert.rejects(
@@ -1428,7 +1662,7 @@ test("GREEN pi-paseo-workflow: adopt records a falsely failed handoff once and r
   assert.deepEqual(await f.read(), adopted);
 });
 
-test("RED pi-paseo-workflow: a missing inspect field stops the launch before any send, naming the field and version", async () => {
+test("RED pi-workflow: a missing inspect field stops the launch before any send, naming the field and version", async () => {
   const f = await fixture();
   await f.review("planning");
   const before = f.calls.length;
@@ -1438,13 +1672,14 @@ test("RED pi-paseo-workflow: a missing inspect field stops the launch before any
       { briefPath: f.artifactPath, planResolution: "Settled." },
       async (args, timeout, env) => {
         const output = await f.transport(args, timeout, env);
-        if (args[0] !== "inspect") return output;
-        const { Archived: _archived, ...rest } = JSON.parse(output);
+        if (args[0] !== "get") return output;
+        const { reported: _reported, ...rest } = JSON.parse(output);
         return JSON.stringify(rest);
       },
     ),
     (error: Error) =>
-      /Archived/.test(error.message) && /0\.14\.0/.test(error.message),
+      /required field reported/.test(error.message) &&
+      /hc 0\.1\.21/.test(error.message),
   );
   assert.equal(
     f.calls.slice(before).filter((args) => args[0] === "send").length,
@@ -1453,7 +1688,7 @@ test("RED pi-paseo-workflow: a missing inspect field stops the launch before any
   assert.equal((await f.read()).handoff?.status, "failed");
 });
 
-test("GREEN pi-paseo-workflow: a planning-bound continuation binds the planning fingerprint before any implementation head", async () => {
+test("GREEN pi-workflow: a planning-bound continuation binds the planning fingerprint before any implementation head", async () => {
   const f = await fixture();
   await f.review("planning");
   const fingerprint = (await f.read()).rounds.planning?.fingerprint;
@@ -1474,7 +1709,7 @@ test("GREEN pi-paseo-workflow: a planning-bound continuation binds the planning 
   assert.equal(actionOf(await f.step()), "review");
 });
 
-test("GREEN pi-paseo-workflow: a transient wait error during inert startup still releases the round", async () => {
+test("GREEN pi-workflow: a transient wait error during inert startup still releases the round", async () => {
   const f = await fixture();
   const failedOnce = new Set<string>();
   await dispatchReview(
@@ -1501,7 +1736,7 @@ test("GREEN pi-paseo-workflow: a transient wait error during inert startup still
   assert.equal(runs(f), 4);
 });
 
-test("RED pi-paseo-workflow: a reviewer still at its startup reply keeps its round in flight until the timeout", async () => {
+test("RED pi-workflow: a reviewer still at its startup reply keeps its round in flight until the timeout", async () => {
   const f = await fixture();
   const dispatch = () =>
     dispatchReview(
@@ -1526,7 +1761,7 @@ test("RED pi-paseo-workflow: a reviewer still at its startup reply keeps its rou
   ]);
 });
 
-test("GREEN pi-paseo-workflow: every awaiting-user gate names the supported action that clears it", () => {
+test("GREEN pi-workflow: every awaiting-user gate names the supported action that clears it", () => {
   const actions =
     /`(tick|adopt|retry-launch|retry-handoff|continuation|triage|waiver|handoff)`|Finish/;
   const texts = Object.values(gates).flatMap((gate) =>
@@ -1551,18 +1786,18 @@ test("wrong-cwd inert launch never receives the task assignment", async () => {
       { briefPath: f.artifactPath, planResolution: "Planning is settled." },
       async (args, timeout, env) => {
         const output = await f.transport(args, timeout, env);
-        return args[0] === "inspect"
-          ? JSON.stringify({ ...JSON.parse(output), Cwd: "/wrong/worktree" })
+        return args[0] === "get"
+          ? JSON.stringify({ ...JSON.parse(output), cwd: "/wrong/worktree" })
           : output;
       },
     ),
-    /Session cwd.*differs/,
+    /Terminal cwd, identity, route/,
   );
   const failed = await f.read();
   assert.equal(failed.handoff?.launchStatus, "blocked");
   assert.equal(
     f.calls.filter(
-      (args) => args[0] === "send" && args[1] === failed.handoff?.agentId,
+      (args) => args[0] === "send" && args[4] === failed.handoff?.agentId,
     ).length,
     0,
   );
@@ -1594,12 +1829,12 @@ test("authorized known-misroute recovery archives history and launches once", as
       { briefPath: f.artifactPath, planResolution: "Planning is settled." },
       async (args, timeout, env) => {
         const output = await f.transport(args, timeout, env);
-        return args[0] === "inspect"
-          ? JSON.stringify({ ...JSON.parse(output), Cwd: "/wrong/worktree" })
+        return args[0] === "get"
+          ? JSON.stringify({ ...JSON.parse(output), cwd: "/wrong/worktree" })
           : output;
       },
     ),
-    /Session cwd.*differs/,
+    /Terminal cwd, identity, route/,
   );
   const failed = await f.read();
   const previousAgentId = failed.handoff?.agentId;
@@ -1621,15 +1856,15 @@ test("authorized known-misroute recovery archives history and launches once", as
   };
   const recoveryTransport: Transport = async (args, timeout, env) => {
     const output = await f.transport(args, timeout, env);
-    return args[0] === "inspect" && args[args.length - 1] === previousAgentId
-      ? JSON.stringify({ ...JSON.parse(output), Cwd: "/wrong/worktree" })
+    return args[0] === "get" && args[args.length - 1] === previousAgentId
+      ? JSON.stringify({ ...JSON.parse(output), cwd: "/wrong/worktree" })
       : output;
   };
   const launchesBeforeRace = f.calls.filter((args) => args[0] === "run").length;
   await assert.rejects(
     retryMisroutedHandoff(f.path, input, async (args, timeout) => {
       const output = await recoveryTransport(args, timeout);
-      if (args[0] === "inspect" && args[args.length - 1] === previousAgentId)
+      if (args[0] === "get" && args[args.length - 1] === previousAgentId)
         await locked(f.path, (state) => {
           state.repairs.implementation = { status: "started" };
         });
@@ -1674,8 +1909,8 @@ test("actual session model mismatch records degraded evidence", async () => {
   );
   await f.step(async (args, timeout, env) => {
     const output = await f.transport(args, timeout, env);
-    return args[0] === "inspect"
-      ? JSON.stringify({ ...JSON.parse(output), Model: "other" })
+    return args[0] === "get"
+      ? JSON.stringify({ ...JSON.parse(output), argv: ["other"] })
       : output;
   });
   assert.ok(
@@ -1748,8 +1983,6 @@ test("canonical lenses cannot be omitted and incomplete report is rejected", asy
       ),
     /Incomplete/,
   );
-  f.config.agents.providers["ax-implementer"].models[0].id = "override";
-  assert.throws(() => routesFromConfig(f.config), /metadata differs/);
 });
 
 test("review reports reject duplicate findings and contradictory pass outcomes", () => {
@@ -1776,7 +2009,7 @@ test("review reports reject duplicate findings and contradictory pass outcomes",
   );
 });
 
-test("GREEN pi-paseo-workflow: a hosted repair head gets a fresh local round and republication before finish", async () => {
+test("GREEN pi-workflow: a hosted repair head gets a fresh local round and republication before finish", async () => {
   const f = await fixture();
   await f.review("planning");
   await f.accept("No findings.");
@@ -1869,7 +2102,7 @@ test("hosted ticks probe once each and expire without inferring success", async 
   for (let index = 0; index < 2; index++)
     assert.equal((await f.step(f.transport, waiting)).result, "unchanged");
   assert.equal(probes, 2);
-  assert.equal(f.heartbeats.size, 1);
+  assert.equal(f.watchers().length, 1);
   const expired = await f.step(
     f.transport,
     waiting,
@@ -1878,7 +2111,7 @@ test("hosted ticks probe once each and expire without inferring success", async 
   assert.equal(probes, 2);
   assert.deepEqual(expired.recorded, ["hosted: timed-out"]);
   assert.equal(expired.result === "changed" && expired.next.action, "triage");
-  assert.equal(f.heartbeats.size, 0);
+  assert.equal(f.watchers().length, 0);
   assert.equal((await f.read()).hosted?.status, "timed-out");
   await transition(f.path, "triage", {
     phase: "hosted",
@@ -2192,7 +2425,7 @@ test("large plan, implementation and handoff use private snapshots with bounded 
 const runs = (f: { calls: string[][] }) =>
   f.calls.filter((args) => args[0] === "run").length;
 
-test("GREEN pi-paseo-workflow: ticks carry an unattended run from implementation report to triage", async () => {
+test("GREEN pi-workflow: ticks carry an unattended run from implementation report to triage", async () => {
   const f = await fixture();
   await f.review("planning");
   await handoff(
@@ -2200,13 +2433,11 @@ test("GREEN pi-paseo-workflow: ticks carry an unattended run from implementation
     { briefPath: f.artifactPath, planResolution: "Settled." },
     f.transport,
   );
-  const armed = await syncHeartbeat(f.path, orchestrator, f.transport);
-  assert.ok(armed);
   const reported = await f.step();
   assert.deepEqual(reported.recorded, [`handoff: complete at ${heads.first}`]);
   assert.equal(reported.result, "changed");
   assert.equal(reported.result === "changed" && reported.next.action, "review");
-  assert.equal(reported.heartbeat, undefined);
+  assert.deepEqual(reported.watcher, { status: "stopped" });
   assert.ok((await f.read()).handoff?.report);
   await dispatchFixtureReview(
     f.path,
@@ -2217,16 +2448,15 @@ test("GREEN pi-paseo-workflow: ticks carry an unattended run from implementation
     },
     f.transport,
   );
-  await syncHeartbeat(f.path, orchestrator, f.transport);
   const launches = runs(f);
   const reviewed = await f.step();
   assert.equal(reviewed.recorded.length, 4);
   assert.equal(reviewed.result === "changed" && reviewed.next.action, "triage");
   assert.equal(runs(f), launches);
-  assert.equal(f.heartbeats.size, 0);
+  assert.equal(f.watchers().length, 0);
 });
 
-test("GREEN pi-paseo-workflow: a tick with busy workers is quiet and never dispatches", async () => {
+test("GREEN pi-workflow: a tick with busy workers is quiet and never dispatches", async () => {
   const f = await fixture();
   await dispatchFixtureReview(
     f.path,
@@ -2245,7 +2475,7 @@ test("GREEN pi-paseo-workflow: a tick with busy workers is quiet and never dispa
       "planning:review-contract",
     ],
     recorded: [],
-    heartbeat: (await f.read()).heartbeat,
+    watcher: { status: "started", generation: 1 },
   });
   assert.equal(runs(f), launches);
   assert.match(
@@ -2254,7 +2484,7 @@ test("GREEN pi-paseo-workflow: a tick with busy workers is quiet and never dispa
   );
 });
 
-test("GREEN pi-paseo-workflow: one caller heartbeat is armed, renewed, re-armed after expiry, and deleted when nothing is in flight", async () => {
+test("GREEN pi-workflow: one watcher on the caller is started, kept, replaced after loss, a caller change, retirement, or 12 hours, and stopped when nothing is in flight", async () => {
   const f = await fixture();
   await f.review("planning");
   await handoff(
@@ -2263,72 +2493,492 @@ test("GREEN pi-paseo-workflow: one caller heartbeat is armed, renewed, re-armed 
     f.transport,
   );
   for (const session of f.sessions.values()) session.status = "running";
-  const first = await syncHeartbeat(f.path, orchestrator, f.transport);
-  assert.equal(first?.agentId, orchestrator.agentId);
-  assert.equal([...f.heartbeats.values()][0].agentId, orchestrator.agentId);
   await Promise.all([f.step(), f.step(), f.step()]);
-  assert.equal(f.heartbeats.size, 1);
-  assert.equal(f.maxHeartbeats(), 1);
-  assert.equal((await f.read()).heartbeat?.id, first?.id);
+  assert.equal(f.watchers().length, 1);
+  assert.equal(f.maxWatchers(), 1);
+  const first = (await f.read()).watcher;
+  assert.equal(first?.generation, 1);
+  assert.equal(first?.parent, orchestrator.terminalId);
+  assert.ok((await f.read()).lastTickAt);
+  // The watcher runs in the scratch folder as the orchestrator's child, in its space and tab, and dies with it.
+  const [started] = f.watcherCalls.filter((args) => args[0] === "run");
+  assert.equal(started[started.indexOf("--cwd") + 1], f.dir);
+  assert.equal(started[started.indexOf("--parent") + 1], "t0");
+  for (const label of [
+    "herdr.space=space-1",
+    "herdr.tab=tab-1",
+    "ax.role=watcher",
+    "ax.generation=1",
+  ])
+    assert.ok(started.includes(label), label);
+  for (const flag of ["--rm", "--no-notify"])
+    assert.ok(started.includes(flag), flag);
+  assert.ok(!started.includes("--outlive-parent"));
+  assert.match(started.at(-4) ?? "", /watch\.ts$/);
+  assert.deepEqual(started.slice(-3), [f.path, "t0", "1"]);
+  // Workers outlive the orchestrator, and herdr-core types no note about them into it.
+  for (const role of ["implementer", "review-correctness"]) {
+    const worker = f.calls.find(
+      (args) => args[0] === "run" && args.includes(`ax.role=${role}`),
+    );
+    assert.ok(worker?.includes("--outlive-parent"), role);
+    assert.ok(worker?.includes("--no-notify"), role);
+  }
 
-  const halfway = () => Date.now() + 13 * 60 * 60_000;
-  const renewed = await syncHeartbeat(
+  const old = () => Date.now() + 13 * 60 * 60_000;
+  const replaced = await syncWatcher(
     f.path,
-    orchestrator,
+    orchestrator.terminalId,
     f.transport,
-    halfway,
+    old,
   );
-  assert.ok(renewed && renewed.id !== first?.id);
-  assert.ok(Date.parse(renewed.expiresAt) > Date.parse(first?.expiresAt ?? ""));
-  assert.deepEqual([...f.heartbeats.keys()], [renewed.id]);
+  assert.deepEqual(replaced, {
+    status: "started",
+    generation: 2,
+    reason: "watcher older than 12 hours",
+  });
+  assert.equal(f.watchers().length, 1);
+  assert.equal(f.maxWatchers(), 1);
+  // The stop generation silences every older watcher before the replacement starts.
+  assert.equal(
+    (await readFile(join(f.dir, "watcher-stop"), "utf8")).trim(),
+    "2",
+  );
 
-  const later = () => Date.now() + 38 * 60 * 60_000;
+  // A failed start leaves no live watcher, and the next tick starts one.
   await assert.rejects(
-    syncHeartbeat(
+    syncWatcher(
       f.path,
-      orchestrator,
+      orchestrator.terminalId,
       async (args, timeout, env) => {
-        if (args[1] === "create") throw new Error("daemon unavailable");
+        if (args[0] === "run") throw new Error("hc core unavailable");
         return f.transport(args, timeout, env);
       },
-      later,
+      () => Date.now() + 26 * 60 * 60_000,
     ),
-    /daemon unavailable/,
+    /hc core unavailable/,
   );
-  assert.equal((await f.read()).heartbeat?.id, renewed.id);
-  assert.deepEqual([...f.heartbeats.keys()], [renewed.id]);
+  assert.equal(f.watchers().length, 0);
+  const restarted = await f.step();
+  assert.equal(restarted.result, "unchanged");
+  assert.equal(
+    restarted.watcher.status === "started" && restarted.watcher.reason,
+    "no live watcher",
+  );
+  assert.equal(f.watchers().length, 1);
 
-  assert.equal(loopStatus(await f.read(), later), "expired");
-  f.heartbeats.clear();
-  const rearmed = await f.step(f.transport, undefined, later);
-  assert.equal(rearmed.result, "unchanged");
-  assert.equal(f.heartbeats.size, 1);
-  assert.equal(loopStatus(await f.read(), later), "armed");
+  assert.equal(
+    await watcherStatus(
+      f.path,
+      await f.read(),
+      () => Date.now() + 25 * 60 * 60_000,
+    ),
+    "expired",
+  );
+  assert.equal(await watcherStatus(f.path, await f.read()), "watching");
   await assert.rejects(
-    syncHeartbeat(f.path, {}, f.transport),
-    /PASEO_AGENT_ID/,
+    syncWatcher(f.path, undefined, f.transport),
+    /HC_TERMINAL_ID/,
   );
-  await transition(f.path, "order", {
-    op: "add",
-    id: "visibility",
-    constraint: "Keep the repository private.",
-    authorizationSource: "User message in this task",
-  });
-  const refreshed = await syncHeartbeat(f.path, orchestrator, f.transport);
-  assert.notEqual(refreshed?.id, rearmed.heartbeat?.id);
-  assert.match(
-    f.heartbeats.get(refreshed?.id ?? "")?.prompt ?? "",
-    /Keep the repository private/,
+  const changed = await syncWatcher(f.path, "t9", f.transport);
+  assert.equal(
+    changed.status === "started" && changed.reason,
+    "orchestrator terminal changed",
   );
-  assert.equal(f.heartbeats.size, 1);
-  for (const session of f.sessions.values()) session.status = "idle";
   await f.step();
-  assert.equal(f.heartbeats.size, 0);
-  assert.equal((await f.read()).heartbeat, undefined);
-  assert.equal(loopStatus(await f.read()), "idle");
+  assert.equal((await f.read()).watcher?.parent, orchestrator.terminalId);
+
+  // A watcher that hung up while current leaves a marker; status reports it and the next tick replaces it.
+  const current = (await f.read()).watcher;
+  assert.ok(current);
+  const marker: RetiringMarker = {
+    generation: current.generation,
+    terminal: current.terminal,
+    recoveryPending: true,
+  };
+  await writeFile(
+    join(f.dir, `watcher-retiring-${current.generation}.json`),
+    JSON.stringify(marker),
+  );
+  assert.equal(
+    await watcherStatus(f.path, await f.read()),
+    "missing (recovery pending)",
+  );
+  const recovered = await f.step();
+  assert.equal(
+    recovered.watcher.status === "started" && recovered.watcher.reason,
+    "watcher retired with recovery pending",
+  );
+  assert.equal(f.watchers().length, 1);
+  assert.equal(f.maxWatchers(), 1);
+
+  const generation = (await f.read()).watcher?.generation ?? 0;
+  for (const session of f.sessions.values()) session.status = "idle";
+  const stopped = await f.step();
+  assert.deepEqual(stopped.watcher, { status: "stopped" });
+  assert.equal(f.watchers().length, 0);
+  assert.equal((await f.read()).watcher, undefined);
+  assert.equal(await watcherStatus(f.path, await f.read()), "idle");
+  assert.equal(
+    (await readFile(join(f.dir, "watcher-stop"), "utf8")).trim(),
+    String(generation + 1),
+  );
 });
 
-test("RED pi-paseo-workflow: managed workers cannot run orchestrator actions", async () => {
+// Scripts one watcher against a fixture workflow with its handoff in flight, on a manual clock.
+async function watcherRun(
+  options: {
+    orchestrator?: () => string;
+    refuseSend?: () => boolean;
+    nonce?: () => string | undefined;
+  } = {},
+) {
+  const f = await fixture();
+  await f.review("planning");
+  await handoff(
+    f.path,
+    { briefPath: f.artifactPath, planResolution: "Settled." },
+    f.transport,
+  );
+  for (const session of f.sessions.values()) session.status = "running";
+  await f.step();
+  const state = await f.read();
+  const worker = state.handoff?.agentId ?? "";
+  assert.ok(worker);
+  let clock = Date.parse(state.lastTickAt ?? "");
+  const sends: WakeRequest[] = [];
+  const hc: string[][] = [];
+  const markers: RetiringMarker[] = [];
+  let stop = 0;
+  const watcher = createWatcher(
+    { state: f.path, orchestrator: "t0", generation: 1 },
+    {
+      readNonce: async () => (options.nonce ? options.nonce() : "nonce-1"),
+      writeRequest: async (_state, request) => {
+        if (options.refuseSend?.()) throw new Error("EACCES");
+        sends.push(request);
+      },
+      hc: async (args) => {
+        hc.push(args);
+        if (args.at(-1) === "t0")
+          return JSON.stringify({
+            state: "live",
+            status: { state: options.orchestrator?.() ?? "working" },
+          });
+        return JSON.stringify({ state: "live", status: { state: "done" } });
+      },
+      now: () => clock,
+      readState: async () => structuredClone(state),
+      readStop: async () => stop,
+      writeRetiring: async (marker) => {
+        markers.push(marker);
+      },
+      terminal: "t8",
+    },
+  );
+  const event = (terminal: string, type: string, status?: string) =>
+    watcher.onLine(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        method: "event",
+        params: {
+          terminal,
+          type,
+          data: status ? { status: { state: status } } : {},
+        },
+      }),
+    );
+  // Advances the clock in one-second steps, as the watcher process does.
+  const advance = async (ms: number) => {
+    for (const end = clock + ms; clock < end; ) {
+      clock += 1000;
+      const ended = await watcher.step();
+      if (ended) return ended;
+    }
+    return undefined;
+  };
+  return {
+    f,
+    state,
+    worker,
+    sends,
+    hc,
+    markers,
+    watcher,
+    event,
+    advance,
+    consume: () => {
+      state.lastTickAt = new Date(clock).toISOString();
+    },
+    stopAt: (generation: number) => {
+      stop = generation;
+    },
+  };
+}
+
+test("RED pi-workflow: worker changes and an interval during one long orchestrator turn queue exactly one tick prompt", async () => {
+  const w = await watcherRun();
+  await w.event(w.worker, "status", "done");
+  await w.event(w.worker, "turn");
+  await w.advance(4000);
+  assert.equal(w.sends.length, 0, "a burst coalesces for five seconds");
+  await w.advance(2000);
+  assert.equal(w.sends.length, 1);
+  const [send] = w.sends;
+  assert.deepEqual(
+    { ...send, prompt: undefined },
+    {
+      workflow: w.state.workflowId,
+      nonce: "nonce-1",
+      generation: 1,
+      n: 1,
+      prompt: undefined,
+    },
+  );
+  assert.match(send.prompt, /^AX orchestration tick\. Run `node /);
+  // Nothing is typed into any terminal.
+  assert.ok(w.hc.every((args) => args[0] === "get"));
+  // The orchestrator is still in its turn: further changes and the interval send nothing more.
+  await w.event(w.worker, "status", "blocked");
+  await w.advance(10_000);
+  await w.event(w.worker, "finished");
+  await w.advance(watchIntervalMs + 10_000);
+  assert.equal(w.sends.length, 1);
+  // Unrelated terminals and the orchestrator's own turns are not worker changes.
+  await w.event("t42", "turn");
+  await w.event("t0", "turn");
+  // An unconsumed prompt counts as dropped after 15 minutes.
+  await w.advance(10 * 60_000);
+  assert.equal(w.sends.length, 2);
+  // Once a tick consumes the prompt, the next change sends again.
+  w.consume();
+  await w.event(w.worker, "status", "error");
+  await w.advance(6000);
+  assert.equal(w.sends.length, 3);
+});
+
+test("GREEN pi-workflow: a person who restarts Pi in the orchestrator terminal keeps automatic ticks bound to the new session nonce", async () => {
+  let nonce: string | undefined = "nonce-1";
+  const w = await watcherRun({ nonce: () => nonce });
+  await w.event(w.worker, "turn");
+  await w.advance(6000);
+  assert.deepEqual(
+    w.sends.map((request) => request.nonce),
+    ["nonce-1"],
+  );
+  w.consume();
+  // Between sessions no nonce is readable, so no request is written and the tick stays owed.
+  nonce = undefined;
+  await w.event(w.worker, "turn");
+  await w.advance(6000);
+  assert.equal(w.sends.length, 1);
+  // The restarted Pi wrote a fresh nonce; the watcher re-reads it before its next request.
+  nonce = "nonce-2";
+  await w.event("t0", "status", "idle");
+  await w.advance(6000);
+  assert.deepEqual(
+    w.sends.map((request) => request.nonce),
+    ["nonce-1", "nonce-2"],
+  );
+});
+
+test("GREEN pi-workflow: the watcher skips a periodic prompt within the interval of the last tick and sends one after it", async () => {
+  const w = await watcherRun();
+  await w.advance(watchIntervalMs / 2);
+  w.consume();
+  await w.advance(watchIntervalMs / 2 + 1000);
+  assert.equal(w.sends.length, 0);
+  await w.advance(watchIntervalMs);
+  assert.equal(w.sends.length, 1);
+  // The prompt carries the effective standing orders read from the state at send time.
+  assert.match(w.sends[0].prompt, /Standing orders/);
+});
+
+test("RED pi-workflow: the watcher never types into a blocked orchestrator and sends once it unblocks", async () => {
+  let orchestratorState = "blocked";
+  let refuse = false;
+  const w = await watcherRun({
+    orchestrator: () => orchestratorState,
+    refuseSend: () => refuse,
+  });
+  await w.event(w.worker, "turn");
+  await w.advance(watchIntervalMs + 60_000);
+  assert.equal(w.sends.length, 0);
+  // A status change on the orchestrator other than blocked releases the owed prompt.
+  orchestratorState = "idle";
+  await w.event("t0", "status", "idle");
+  await w.advance(6000);
+  assert.equal(w.sends.length, 1);
+  // A request that cannot be written stays owed.
+  w.consume();
+  refuse = true;
+  await w.event(w.worker, "turn");
+  await w.advance(6000);
+  assert.equal(w.sends.length, 1);
+  refuse = false;
+  await w.event("t0", "status", "working");
+  await w.advance(6000);
+  assert.equal(w.sends.length, 2);
+  assert.deepEqual(
+    w.sends.map((request) => request.n),
+    [1, 3],
+  );
+  assert.ok(w.hc.every((args) => args[0] === "get"));
+});
+
+test("RED pi-workflow: a watcher stops at a newer stop generation and its lifetime, and a hang-up leaves a retiring marker", async () => {
+  const stopped = await watcherRun();
+  stopped.stopAt(1);
+  assert.equal(await stopped.advance(2000), undefined);
+  stopped.stopAt(2);
+  assert.equal(await stopped.advance(2000), "stopped");
+  assert.equal(await stopped.watcher.retire(), "stopped");
+  assert.deepEqual(stopped.markers, []);
+
+  const expired = await watcherRun();
+  expired.consume();
+  assert.equal(await expired.advance(25 * 60 * 60_000), "expired");
+
+  const retired = await watcherRun();
+  assert.equal(await retired.watcher.retire(), "retired");
+  assert.deepEqual(retired.markers, [{ generation: 1, terminal: "t8" }]);
+  assert.equal(retired.sends.length, 1);
+
+  const pending = await watcherRun({ orchestrator: () => "blocked" });
+  assert.equal(await pending.watcher.retire(), "recovery-pending");
+  assert.deepEqual(pending.markers.at(-1), {
+    generation: 1,
+    terminal: "t8",
+    recoveryPending: true,
+  });
+  assert.equal(pending.sends.length, 0);
+});
+
+test("RED pi-workflow: while the event stream is down the watcher polls watched workers and reopens the stream with backoff", async () => {
+  const w = await watcherRun();
+  let status = "working";
+  let clock = Date.parse(w.state.lastTickAt ?? "");
+  const polled = createWatcher(
+    { state: w.f.path, orchestrator: "t0", generation: 1 },
+    {
+      readNonce: async () => "nonce-1",
+      writeRequest: async (_state, request) => {
+        w.sends.push(request);
+      },
+      hc: async (args) => {
+        return JSON.stringify({
+          state: "live",
+          status: { state: args.at(-1) === "t0" ? "idle" : status },
+          turn: status === "done" ? 2 : 1,
+        });
+      },
+      now: () => clock,
+      readState: async () => structuredClone(w.state),
+      readStop: async () => 0,
+      writeRetiring: async () => {},
+      terminal: "t8",
+    },
+  );
+  const advance = async (ms: number) => {
+    for (const end = clock + ms; clock < end; ) {
+      clock += 1000;
+      await polled.step();
+    }
+  };
+  polled.setPolling(true);
+  await advance(20_000);
+  assert.equal(w.sends.length, 0);
+  status = "done";
+  await advance(25_000);
+  assert.equal(w.sends.length, 1);
+
+  const slept: number[] = [];
+  const polling: boolean[] = [];
+  const lines: string[] = [];
+  let opened = 0;
+  let opens = 0;
+  await followEvents(
+    () => {
+      opens++;
+      if (opens <= 2) throw new Error("hc events unavailable");
+      return (async function* () {
+        yield `${opens}`;
+      })();
+    },
+    {
+      onOpen: async () => {
+        opened++;
+      },
+      onLine: async (line) => {
+        lines.push(line);
+      },
+      setPolling: (value) => {
+        polling.push(value);
+      },
+    },
+    async (ms) => {
+      slept.push(ms);
+    },
+    () => opens < 4,
+  );
+  assert.deepEqual(lines, ["3", "4"]);
+  assert.deepEqual(slept, [1000, 2000, 1000]);
+  assert.deepEqual(polling, [true, true, false, true, false]);
+  // Each stream that opens runs one catch-up sweep.
+  assert.equal(opened, 2);
+});
+
+test("RED pi-workflow: a worker that finished before the watcher's stream opened still queues one tick prompt", async () => {
+  const w = await watcherRun();
+  // The scripted worker already reports done, as reviewers finishing during their own dispatch do.
+  await w.watcher.onOpen();
+  await w.advance(6000);
+  assert.equal(w.sends.length, 1);
+  assert.ok(w.hc.some((args) => args[0] === "get" && args.at(-1) === w.worker));
+  // A busy worker at stream open is not a change.
+  const busy = await watcherRun();
+  const quiet = createWatcher(
+    { state: busy.f.path, orchestrator: "t0", generation: 1 },
+    {
+      readNonce: async () => "nonce-1",
+      writeRequest: async (_state, request) => {
+        busy.sends.push(request);
+      },
+      hc: async () =>
+        JSON.stringify({ state: "live", status: { state: "working" } }),
+      now: () => Date.parse(busy.state.lastTickAt ?? "") + 6000,
+      readState: async () => structuredClone(busy.state),
+      readStop: async () => 0,
+      writeRetiring: async () => {},
+      terminal: "t8",
+    },
+  );
+  await quiet.onOpen();
+  await quiet.step();
+  assert.equal(busy.sends.length, 0);
+});
+
+test("RED pi-workflow: a session JSONL with a truncated trailing line yields the last complete reply, and earlier damage fails closed", async () => {
+  const header = JSON.stringify({ type: "session", version: 3, id: "t1" });
+  const reply = sessionLine("assistant", "Complete reply.");
+  const cut = sessionLine("assistant", "Cut short").slice(0, 30);
+  const jsonl =
+    (text: string): Transport =>
+    async (args) => {
+      assert.deepEqual(args, [sessionCommand, "/s.jsonl"]);
+      return text;
+    };
+  assert.equal(
+    await lastReply("/s.jsonl", jsonl(`${header}\n${reply}\n${cut}`)),
+    "Complete reply.",
+  );
+  await assert.rejects(
+    lastReply("/s.jsonl", jsonl(`${header}\n${cut}\n${reply}\n`)),
+    /line 2 is unreadable/,
+  );
+});
+
+test("RED pi-workflow: managed workers cannot run orchestrator actions", async () => {
   const f = await fixture();
   const input = join(f.dir, "review-input.json");
   await writeFile(
@@ -2345,14 +2995,14 @@ test("RED pi-paseo-workflow: managed workers cannot run orchestrator actions", a
     await assert.rejects(
       main([f.path, "review", input], {
         AX_PI_CONTRACT: JSON.stringify({ role }),
-        PASEO_AGENT_ID: "worker",
+        HC_TERMINAL_ID: "worker",
       }),
       /cannot run orchestrator actions/,
     );
   await assert.rejects(
     main([f.path, "tick"], {
       AX_PI_CONTRACT: "not json",
-      PASEO_AGENT_ID: "worker",
+      HC_TERMINAL_ID: "worker",
     }),
     /cannot run orchestrator actions/,
   );
@@ -2364,12 +3014,13 @@ test("RED pi-paseo-workflow: managed workers cannot run orchestrator actions", a
   await assert.rejects(
     main([f.path, "cleanup", cleanupInput], {
       AX_PI_CONTRACT: JSON.stringify({ role: "implementer" }),
-      PASEO_AGENT_ID: "worker",
+      HC_TERMINAL_ID: "worker",
     }),
     /cannot run orchestrator actions/,
   );
   assert.equal((await f.read()).rounds.planning, undefined);
-  assert.equal(f.calls.length, 0);
+  // Only the fixture's own orchestrator binding reached herdr-core.
+  assert.deepEqual(f.calls, [["get", "--json", orchestrator.terminalId]]);
   const status = await captureStdout(() =>
     main([f.path, "status"], {
       AX_PI_CONTRACT: JSON.stringify({ role: "implementer" }),
@@ -2378,7 +3029,7 @@ test("RED pi-paseo-workflow: managed workers cannot run orchestrator actions", a
   assert.equal(JSON.parse(status).orchestration, "planner-v2");
 });
 
-test("GREEN pi-paseo-workflow: init needs no orchestrator route, and orchestrator and planner callers keep existing planner-v2 states working", async () => {
+test("GREEN pi-workflow: init needs no orchestrator route, and orchestrator and planner callers keep existing planner-v2 states working", async () => {
   const f = await fixture();
   const state = await f.read();
   assert.equal(state.orchestration, "planner-v2");
@@ -2420,10 +3071,11 @@ test("GREEN pi-paseo-workflow: init needs no orchestrator route, and orchestrato
       }),
     );
     await captureStdout(() =>
-      main([f.path, "order", input], {
-        ...env,
-        PASEO_AGENT_ID: orchestrator.agentId,
-      }),
+      main(
+        [f.path, "order", input],
+        { ...env, HC_TERMINAL_ID: orchestrator.terminalId },
+        f.transport,
+      ),
     );
   }
   const updated = await f.read();
@@ -2479,7 +3131,7 @@ const hostedProbe =
   async () =>
     JSON.stringify({ ...hostedReceipt, head, status: "completed", findings });
 
-test("GREEN pi-paseo-workflow: every repaired head gets a fresh implementation round until one is clean", async () => {
+test("GREEN pi-workflow: every repaired head gets a fresh implementation round until one is clean", async () => {
   const f = await fixture();
   await f.review("planning");
   await f.accept();
@@ -2508,7 +3160,7 @@ test("GREEN pi-paseo-workflow: every repaired head gets a fresh implementation r
   });
 });
 
-test("RED pi-paseo-workflow: a repair that reports no new head stops for the user instead of looping", async () => {
+test("RED pi-workflow: a repair that reports no new head stops for the user instead of looping", async () => {
   const f = await fixture();
   await f.review("planning");
   await f.accept();
@@ -2530,7 +3182,7 @@ test("RED pi-paseo-workflow: a repair that reports no new head stops for the use
   );
 });
 
-test("RED pi-paseo-workflow: a third implementation round with fixes stops for the user until a continuation", async () => {
+test("RED pi-workflow: a third implementation round with fixes stops for the user until a continuation", async () => {
   const f = await fixture();
   await f.review("planning");
   await f.accept();
@@ -2579,7 +3231,7 @@ test("RED pi-paseo-workflow: a third implementation round with fixes stops for t
   assert.equal(await nextAction(f), "repair");
 });
 
-test("GREEN pi-paseo-workflow: planning fixes need a revised plan and a fresh planning round before handoff", async () => {
+test("GREEN pi-workflow: planning fixes need a revised plan and a fresh planning round before handoff", async () => {
   const f = await fixture();
   await f.step();
   await dispatchFixtureReview(
@@ -2632,7 +3284,7 @@ test("GREEN pi-paseo-workflow: planning fixes need a revised plan and a fresh pl
   assert.equal((await f.read()).handoff?.status, "complete");
 });
 
-test("GREEN pi-paseo-workflow: hosted repair rounds use the hosted budget after implementation used all three rounds", async () => {
+test("GREEN pi-workflow: hosted repair rounds use the hosted budget after implementation used all three rounds", async () => {
   const f = await fixture();
   await f.review("planning");
   await f.accept();
@@ -2664,7 +3316,7 @@ test("GREEN pi-paseo-workflow: hosted repair rounds use the hosted budget after 
   assert.equal(await nextAction(f), "publication");
 });
 
-test("GREEN pi-paseo-workflow: a moved target base is reconciled by a fresh implementer and re-reviewed", async () => {
+test("GREEN pi-workflow: a moved target base is reconciled by a fresh implementer and re-reviewed", async () => {
   const f = await fixture();
   await f.review("planning");
   await f.accept();
@@ -2715,7 +3367,7 @@ test("GREEN pi-paseo-workflow: a moved target base is reconciled by a fresh impl
   assert.equal((await f.read()).publication?.targetBase, movedBase);
 });
 
-test("RED pi-paseo-workflow: a round waits for in-flight writers and records uncommitted files as evidence", async () => {
+test("RED pi-workflow: a round waits for in-flight writers and records uncommitted files as evidence", async () => {
   const f = await fixture();
   await f.review("planning");
   await handoff(
@@ -2743,7 +3395,7 @@ test("RED pi-paseo-workflow: a round waits for in-flight writers and records unc
   assert.deepEqual(round?.uncommitted, ["?? scratch.txt"]);
 });
 
-test("RED pi-paseo-workflow: single-round planner-v1 state stays readable but cannot advance", async () => {
+test("RED pi-workflow: single-round planner-v1 state stays readable but cannot advance", async () => {
   const f = await fixture();
   const legacy = await f.read();
   legacy.orchestration = "planner-v1";
@@ -2763,7 +3415,7 @@ test("RED pi-paseo-workflow: single-round planner-v1 state stays readable but ca
   );
 });
 
-test("GREEN pi-paseo-workflow: assignments and tick prompts carry only the effective standing orders", async () => {
+test("GREEN pi-workflow: assignments and tick prompts carry only the effective standing orders", async () => {
   const f = await fixture();
   const order = (input: Record<string, string>) =>
     transition(f.path, "order", {
@@ -2825,7 +3477,7 @@ test("GREEN pi-paseo-workflow: assignments and tick prompts carry only the effec
   );
 });
 
-test("GREEN pi-paseo-workflow: contract questions and hosted user gates return awaiting-user and delete the heartbeat", async () => {
+test("GREEN pi-workflow: contract questions and hosted user gates return awaiting-user and stop the watcher", async () => {
   const f = await fixture();
   await dispatchFixtureReview(
     f.path,
@@ -2862,14 +3514,14 @@ test("GREEN pi-paseo-workflow: contract questions and hosted user gates return a
   await g.review("implementation");
   await transition(g.path, "publication", hostedReceipt);
   await g.step(g.transport, probeReturning("waiting"));
-  assert.equal(g.heartbeats.size, 1);
+  assert.equal(g.watchers().length, 1);
   const hosted = await g.step(g.transport, probeReturning("awaiting-user"));
   assert.equal(hosted.result, "awaiting-user");
-  assert.equal(g.heartbeats.size, 0);
-  assert.equal((await g.read()).heartbeat, undefined);
+  assert.equal(g.watchers().length, 0);
+  assert.equal((await g.read()).watcher, undefined);
 });
 
-test("GREEN pi-paseo-workflow: a repair batch launches one new verified implementer session", async () => {
+test("GREEN pi-workflow: a repair batch launches one new verified implementer session", async () => {
   const f = await fixture();
   await f.review("planning");
   await f.accept();
@@ -2916,7 +3568,7 @@ test("GREEN pi-paseo-workflow: a repair batch launches one new verified implemen
   assert.notEqual(session.agentId, before.handoff?.agentId);
   assert.equal(
     f.calls.filter(
-      (args) => args[0] === "send" && args[1] === before.handoff?.agentId,
+      (args) => args[0] === "send" && args[4] === before.handoff?.agentId,
     ).length,
     1,
   );
@@ -2946,7 +3598,7 @@ test("GREEN pi-paseo-workflow: a repair batch launches one new verified implemen
   assert.equal(reported.result === "changed" && reported.next.action, "repair");
 });
 
-test("RED pi-paseo-workflow: ticks never start another review round or repair batch and time out busy reviewers as degraded evidence", async () => {
+test("RED pi-workflow: ticks never start another review round or repair batch and time out busy reviewers as degraded evidence", async () => {
   const f = await fixture();
   await dispatchFixtureReview(
     f.path,
@@ -2963,7 +3615,7 @@ test("RED pi-paseo-workflow: ticks never start another review round or repair ba
   assert.equal(timedOut.recorded.length, 4);
   assert.equal(timedOut.result === "changed" && timedOut.next.action, "triage");
   assert.equal(runs(f), launches);
-  assert.equal(f.calls.filter((args) => args[0] === "stop").length, 4);
+  assert.equal(f.calls.filter((args) => args[0] === "kill").length, 4);
   const degraded = await f.read();
   assert.ok(
     Object.values(degraded.rounds.planning?.reviews ?? {}).every(
@@ -2991,16 +3643,17 @@ test("RED pi-paseo-workflow: ticks never start another review round or repair ba
   );
 });
 
-test("RED pi-paseo-workflow: an idle worker that has not begun its assignment stays in flight", async () => {
+test("RED pi-workflow: an idle worker that has not begun its assignment stays in flight", async () => {
   const f = await fixture();
   await dispatchFixtureReview(
     f.path,
     { phase: "planning", artifactPath: f.artifactPath },
     f.transport,
   );
-  const queued: Transport = async (args, timeout, env) =>
-    args[0] === "logs" ? startupReply : f.transport(args, timeout, env);
-  const waiting = await f.step(queued);
+  // Still at the startup turn with no reply: the assignment has not begun.
+  for (const id of f.sessions.keys()) f.replies.set(id, startupReply);
+  const waiting = await f.step();
+  f.replies.clear();
   assert.equal(waiting.result, "unchanged");
   assert.deepEqual(waiting.recorded, []);
   assert.ok(
@@ -3011,7 +3664,7 @@ test("RED pi-paseo-workflow: an idle worker that has not begun its assignment st
   assert.equal((await f.step()).recorded.length, 4);
 });
 
-test("RED pi-paseo-workflow: review binds the worktree head and repair completion binds the repair report head", async () => {
+test("RED pi-workflow: review binds the worktree head and repair completion binds the repair report head", async () => {
   const f = await fixture();
   await f.review("planning");
   await f.accept();
@@ -3075,7 +3728,7 @@ test("RED pi-paseo-workflow: review binds the worktree head and repair completio
   assert.equal((await f.read()).repairs.implementation?.head, heads.repaired);
 });
 
-test("GREEN pi-paseo-workflow: inspection errors degrade reviewers and keep implementers in flight", async () => {
+test("GREEN pi-workflow: inspection errors degrade reviewers and keep implementers in flight", async () => {
   const f = await fixture();
   await dispatchFixtureReview(
     f.path,
@@ -3083,7 +3736,7 @@ test("GREEN pi-paseo-workflow: inspection errors degrade reviewers and keep impl
     f.transport,
   );
   const unavailable: Transport = async (args, timeout, env) => {
-    if (args[0] === "inspect") throw new Error("daemon unavailable");
+    if (args[0] === "get") throw new Error("daemon unavailable");
     return f.transport(args, timeout, env);
   };
   const degraded = await f.step(unavailable);
@@ -3104,10 +3757,12 @@ test("GREEN pi-paseo-workflow: inspection errors degrade reviewers and keep impl
     g.transport,
   );
   const flaky = await g.step(async (args, timeout, env) => {
-    if (args[0] === "inspect") throw new Error("daemon unavailable");
+    if (args[0] === "get") throw new Error("daemon unavailable");
     return g.transport(args, timeout, env);
   });
   assert.equal(flaky.result, "unchanged");
+  // An unreadable terminal list never starts a possibly duplicate watcher.
+  assert.equal(flaky.watcher?.status, "missing");
   assert.match(
     flaky.recorded[0],
     /handoff: inspect failed: .*daemon unavailable/,
@@ -3119,11 +3774,11 @@ test("GREEN pi-paseo-workflow: inspection errors degrade reviewers and keep impl
   );
 });
 
-test("GREEN pi-paseo-workflow: runner actions print one compact line and status stays the full read", async () => {
+test("GREEN pi-workflow: runner actions print one compact line and status stays the full read", async () => {
   const f = await fixture();
   const env = {
     AX_PI_CONTRACT: JSON.stringify({ role: "orchestrator" }),
-    PASEO_AGENT_ID: orchestrator.agentId,
+    HC_TERMINAL_ID: orchestrator.terminalId,
   };
   const orderInput = join(f.dir, "order.json");
   await writeFile(
@@ -3136,7 +3791,7 @@ test("GREEN pi-paseo-workflow: runner actions print one compact line and status 
     }),
   );
   const ordered = await captureStdout(() =>
-    main([f.path, "order", orderInput], env),
+    main([f.path, "order", orderInput], env, f.transport),
   );
   assert.equal(ordered.trimEnd().split("\n").length, 1);
   assert.deepEqual(JSON.parse(ordered), {
@@ -3145,6 +3800,7 @@ test("GREEN pi-paseo-workflow: runner actions print one compact line and status 
     ids: { order: "visibility" },
     result: "changed",
     next: { action: "review", detail: "Dispatch the planning review round" },
+    watcher: { status: "stopped" },
   });
   await dispatchFixtureReview(
     f.path,
@@ -3158,7 +3814,7 @@ test("GREEN pi-paseo-workflow: runner actions print one compact line and status 
     JSON.stringify({ phase: "planning", decisions: [] }),
   );
   const triaged = await captureStdout(() =>
-    main([f.path, "triage", triageInput], env),
+    main([f.path, "triage", triageInput], env, f.transport),
   );
   assert.equal(triaged.trimEnd().split("\n").length, 1);
   assert.deepEqual(JSON.parse(triaged), {
@@ -3167,18 +3823,21 @@ test("GREEN pi-paseo-workflow: runner actions print one compact line and status 
     ids: {},
     result: "awaiting-user",
     gate: gates.acceptance,
+    watcher: { status: "stopped" },
   });
   assert.doesNotMatch(triaged, /code-simplifier|outcomes|lenses/);
-  const ticked = await captureStdout(() => main([f.path, "tick"], env));
+  const ticked = await captureStdout(() =>
+    main([f.path, "tick"], env, f.transport),
+  );
   assert.equal(JSON.parse(ticked).action, "tick");
   const status = JSON.parse(
-    await captureStdout(() => main([f.path, "status"], env)),
+    await captureStdout(() => main([f.path, "status"], env, f.transport)),
   );
   assert.ok(status.lenses.planning.length > 0);
   assert.ok(status.rounds.planning.reviews["review-architecture"].outcomes);
 });
 
-test("RED pi-paseo-workflow: only the worktree head binds review, never a prose or short SHA", async () => {
+test("RED pi-workflow: only the worktree head binds review, never a prose or short SHA", async () => {
   const f = await fixture();
   await f.review("planning");
   f.replyWith(
@@ -3210,7 +3869,7 @@ test("RED pi-paseo-workflow: only the worktree head binds review, never a prose 
   assert.equal((await f.read()).rounds.implementation?.head, heads.first);
 });
 
-test("RED pi-paseo-workflow: missing, duplicate, malformed, or mismatched reports fail the session for the user", async () => {
+test("RED pi-workflow: missing, duplicate, malformed, or mismatched reports fail the session for the user", async () => {
   type Fixture = Awaited<ReturnType<typeof fixture>>;
   const valid = reportEnvelope(implementerReport(heads.first));
   const cases: [string, (f: Fixture) => void, RegExp][] = [
@@ -3281,7 +3940,7 @@ test("RED pi-paseo-workflow: missing, duplicate, malformed, or mismatched report
   }
 });
 
-test("GREEN pi-paseo-workflow: a matching report records uncommitted files as evidence", async () => {
+test("GREEN pi-workflow: a matching report records uncommitted files as evidence", async () => {
   const f = await fixture();
   await f.review("planning");
   f.tree.uncommitted = [" M notes.md", "?? scratch.txt"];
@@ -3295,9 +3954,9 @@ test("GREEN pi-paseo-workflow: a matching report records uncommitted files as ev
 });
 
 const sessionBriefDeliveryScript =
-  "Objective: typed deletion outcomes. Dispatch with paseo run --background. Reviewers, and only these: Astra, Sol, Opus. Publish a draft PR.";
+  "Objective: typed deletion outcomes. Dispatch with hc run --bg. Reviewers, and only these: Astra, Sol, Opus. Publish a draft PR.";
 
-test("RED pi-paseo-workflow: a session brief's reviewer roster cannot start implementation review before a verified implementer report", async () => {
+test("RED pi-workflow: a session brief's reviewer roster cannot start implementation review before a verified implementer report", async () => {
   const f = await fixture();
   await writeFile(f.artifactPath, sessionBriefDeliveryScript);
   await assert.rejects(
@@ -3314,7 +3973,7 @@ test("RED pi-paseo-workflow: a session brief's reviewer roster cannot start impl
   );
 });
 
-test("GREEN pi-paseo-workflow: brief delivery text reaches the implementer only as its snapshot, never as standing orders", async () => {
+test("GREEN pi-workflow: brief delivery text reaches the implementer only as its snapshot, never as standing orders", async () => {
   const f = await fixture();
   await writeFile(f.artifactPath, sessionBriefDeliveryScript);
   await f.step();
@@ -3335,14 +3994,21 @@ test("GREEN pi-paseo-workflow: brief delivery text reaches the implementer only 
   );
 });
 
+type CleanupTerminal = {
+  address: string;
+  cwd: string;
+  labels: Record<string, string>;
+  parent: string | null;
+  killed?: boolean;
+  removed?: boolean;
+};
 async function cleanupFixture(
   options: {
     linked?: boolean;
-    isolation?: "worktree" | "local";
     scratch?: "temp" | "repository" | "symlink";
   } = {},
 ) {
-  const base = await realpath(await mkdtemp(join(tmpdir(), "paseo-cleanup-")));
+  const base = await realpath(await mkdtemp(join(tmpdir(), "herdr-cleanup-")));
   const gitEnv = {
     ...process.env,
     GIT_DIR: undefined,
@@ -3373,72 +4039,98 @@ async function cleanupFixture(
     await mkdir(join(base, "outside"));
     await symlink(join(base, "outside"), scratch);
   } else await mkdir(scratch);
-  const configPath = join(base, "config.json");
-  const roles = [
-    "implementer",
-    "review-correctness",
-    "review-quality",
-    "review-architecture",
-    "review-contract",
-    "planner-astra",
-    "planner-fable",
-  ];
-  await writeFile(
-    configPath,
-    JSON.stringify({
-      agents: {
-        providers: Object.fromEntries(
-          roles.map((role) => [
-            `ax-${role}`,
-            {
-              extends: "pi",
-              command: [
-                "node",
-                "/managed/hooks/pi/launch.ts",
-                role,
-                "openai-codex",
-                `model-${role}`,
-                "low",
-              ],
-              models: [{ id: `openai-codex/model-${role}` }],
-            },
-          ]),
-        ),
-      },
-    }),
-  );
+  const routesPath = join(base, "routes.json");
+  await writeFile(routesPath, JSON.stringify(fakeRouteTable()));
   const path = join(scratch, "state.json");
-  await initialize(path, { cwd, configPath });
-  const workspaceId = "workspace-cleanup";
+  await initialize(path, { cwd, routesPath });
+  const workflowId = JSON.parse(await readFile(path, "utf8")).workflowId;
   await locked(path, (state) => {
-    state.workspace = { id: workspaceId, cwd };
     state.finished = "Observed final Ready state.";
   });
+  const label = { "ax.workflow": workflowId };
+  // The caller carries the workflow label too, as an orchestrator started from a workflow template would.
+  const terminals: CleanupTerminal[] = [
+    { address: "t0", cwd: base, labels: label, parent: null },
+    { address: "t1", cwd, labels: label, parent: "t0" },
+    { address: "t2", cwd, labels: label, parent: "t1" },
+    { address: "t5", cwd: base, labels: {}, parent: null },
+  ];
   const calls: string[][] = [];
-  const workspaces = [
-    { workspaceId, cwd, isolation: options.isolation ?? "worktree" },
-  ];
-  const agents = [
-    { id: "orchestrator", cwd: base, status: "running" },
-    { id: "worker", cwd, status: "idle" },
-  ];
-  const fail: { archive?: boolean; keepTree?: boolean } = {};
+  const fail: {
+    kill?: boolean;
+    killAddress?: string;
+    rmAddress?: string;
+    removedOnKill?: string;
+    // This 1-based `ls --all` read still shows removed terminals live, as herdr-core did right after a kill.
+    staleAllRead?: number;
+  } = {};
+  // Until the next `ls`, `get` agrees with a stale `ls --all` read.
+  let stale = false;
+  let allReads = 0;
   const transport: Transport = async (args) => {
     calls.push(args);
-    if (args[0] === "workspace" && args[1] === "ls")
-      return JSON.stringify(workspaces);
-    if (args[0] === "ls") return JSON.stringify(agents);
-    if (args[0] === "heartbeat")
-      return JSON.stringify({ id: args[2], status: "deleted" });
-    assert.deepEqual(args, ["workspace", "archive", workspaceId]);
-    if (fail.archive) throw new Error("daemon unavailable");
-    // Paseo archive removes its worktree directory and Git registration.
-    if (!fail.keepTree) git(repository, ["worktree", "remove", tree]);
-    return "archived";
+    if (args[0] === "ls") {
+      // Like herdr-core 0.1.21: rows carry no labels, the `--label` filter matches nothing, and plain `ls` hides finished terminals.
+      assert.ok(!args.includes("--label"), "hc ls --label matches nothing");
+      const all = args.includes("--all");
+      if (all) allReads++;
+      stale = all && allReads === fail.staleAllRead;
+      const rows = terminals.filter((terminal) =>
+        stale ? true : !terminal.removed && (all || !terminal.killed),
+      );
+      return JSON.stringify({
+        hidden_finished: all
+          ? 0
+          : terminals.filter((item) => item.killed && !item.removed).length,
+        terminals: rows.map(({ address, cwd, parent, killed, removed }) => ({
+          address,
+          cwd,
+          parent,
+          state: killed && !removed && !stale ? "finished" : "live",
+        })),
+      });
+    }
+    const terminal = terminals.find((item) => item.address === args.at(-1));
+    if (args[0] === "get" && terminal?.removed && stale)
+      return JSON.stringify({
+        address: terminal.address,
+        cwd: terminal.cwd,
+        labels: terminal.labels,
+        parent: terminal.parent,
+        state: "live",
+      });
+    if (!terminal || terminal.removed)
+      throw Object.assign(new Error("Command failed"), {
+        stdout: '{"error":{"kind":"not_found"}}',
+      });
+    if (args[0] === "get")
+      return JSON.stringify({
+        address: terminal.address,
+        cwd: terminal.cwd,
+        labels: terminal.labels,
+        parent: terminal.parent,
+        state: terminal.killed ? "finished" : "live",
+      });
+    if (args[0] === "kill") {
+      if (fail.kill || terminal.address === fail.killAddress)
+        throw new Error("hc core unavailable");
+      // A --rm terminal is removed as it dies, so hc kill itself reports not_found.
+      if (terminal.address === fail.removedOnKill) {
+        terminal.removed = true;
+        throw Object.assign(new Error("Command failed"), {
+          stdout: `{"error":{"kind":"not_found","message":"${terminal.address} was removed"}}`,
+        });
+      }
+      terminal.killed = true;
+      return "{}";
+    }
+    assert.equal(args[0], "rm", args.join(" "));
+    if (terminal.address === fail.rmAddress)
+      throw new Error("hc core unavailable");
+    terminal.removed = true;
+    return "";
   };
   const head = git(cwd, ["rev-parse", "HEAD"]);
-  const archives = () =>
-    calls.filter((args) => args[0] === "workspace" && args[1] === "archive");
   const present = (target: string) =>
     stat(target).then(
       () => true,
@@ -3447,7 +4139,10 @@ async function cleanupFixture(
   const run = (
     overrides: Record<string, unknown> = {},
     roots = [temp],
-    caller: { agentId?: string } = { agentId: "orchestrator" },
+    caller: { terminalId?: string; cwd?: string } = {
+      terminalId: "t0",
+      cwd: base,
+    },
   ) =>
     cleanup(
       path,
@@ -3460,8 +4155,10 @@ async function cleanupFixture(
       transport,
       roots,
     );
+  const killed = () =>
+    calls.filter((args) => args[0] === "kill").map((args) => args.at(-1));
   const untouched = async () => {
-    assert.equal(archives().length, 0);
+    assert.deepEqual(killed(), []);
     assert.ok(await present(tree));
     assert.ok(await present(path));
     assert.equal(JSON.parse(await readFile(path, "utf8")).cleanup, undefined);
@@ -3472,13 +4169,13 @@ async function cleanupFixture(
     tree,
     scratch,
     path,
+    workflowId,
     git,
     transport,
     calls,
-    workspaces,
-    agents,
+    terminals,
     fail,
-    archives,
+    killed,
     present,
     run,
     untouched,
@@ -3486,42 +4183,244 @@ async function cleanupFixture(
 }
 type CleanupFixture = Awaited<ReturnType<typeof cleanupFixture>>;
 
-test("GREEN pi-paseo-workflow: authorized cleanup archives the linked worktree workspace, then deletes its scratch folder", async () => {
+test("GREEN pi-workflow: authorized cleanup removes labelled terminals children first, never the caller, then the clean linked worktree and the scratch folder", async () => {
   const c = await cleanupFixture();
+  // A stale watcher is stopped by its stop generation and label before any other removal.
+  c.terminals.push({
+    address: "t3",
+    cwd: c.scratch,
+    labels: { "ax.workflow": c.workflowId, "ax.role": "watcher" },
+    parent: "t0",
+  });
   await locked(c.path, (state) => {
-    state.heartbeat = {
-      id: "heartbeat-stale",
-      agentId: orchestrator.agentId,
-      expiresAt: new Date(Date.now() + 60_000).toISOString(),
-      promptSha256: "c".repeat(64),
+    state.watcherGenerations = 1;
+    state.watcher = {
+      generation: 1,
+      terminal: "t3",
+      parent: "t0",
+      startedAt: new Date().toISOString(),
     };
   });
   // Runner-owned snapshots may quote workflow state without counting as another workflow.
-  await mkdir(join(c.scratch, ".paseo-snapshot-fixture"));
+  await mkdir(join(c.scratch, ".ax-snapshot-fixture"));
   await writeFile(
-    join(c.scratch, ".paseo-snapshot-fixture", "artifact.md"),
+    join(c.scratch, ".ax-snapshot-fixture", "artifact.md"),
     await readFile(c.path, "utf8"),
   );
   const { targets } = await c.run();
+  // The watcher stop leaves t3 finished; terminal removal then removes it without a second kill.
   assert.deepEqual(targets, {
+    terminals: {
+      status: "removed",
+      target: `ax.workflow=${c.workflowId}`,
+      reason: "t2, t1, t3",
+    },
     worktree: { status: "removed", target: c.tree },
-    workspace: { status: "removed", target: "workspace-cleanup" },
     scratch: { status: "removed", target: c.scratch },
   });
+  assert.deepEqual(c.killed(), ["t3", "t2", "t1"]);
+  // The caller and the unlabelled t5 are read for their labels but never killed or removed.
+  for (const untouchedTerminal of ["t0", "t5"])
+    assert.ok(
+      !c.calls.some(
+        (args) =>
+          args.at(-1) === untouchedTerminal && ["kill", "rm"].includes(args[0]),
+      ),
+    );
   assert.equal(await c.present(c.tree), false);
   assert.equal(await c.present(c.scratch), false);
   assert.doesNotMatch(c.git(c.repository, ["worktree", "list"]), /tree/);
   assert.match(c.git(c.repository, ["branch", "--list", "feature"]), /feature/);
-  assert.equal(c.archives().length, 1);
-  assert.ok(
-    c.calls.some(
-      (args) => args[0] === "heartbeat" && args[2] === "heartbeat-stale",
-    ),
-  );
   assert.ok(c.calls.every((args) => !args.includes("--force")));
 });
 
-test("RED pi-paseo-workflow: cleanup refuses unsafe targets and removes nothing", async () => {
+test("RED pi-workflow: cleanup counts a not_found kill of a terminal removed as it dies as success", async () => {
+  const c = await cleanupFixture();
+  c.terminals.push({
+    address: "t3",
+    cwd: c.scratch,
+    labels: { "ax.workflow": c.workflowId, "ax.role": "watcher" },
+    parent: "t0",
+  });
+  c.fail.removedOnKill = "t3";
+  const { targets } = await c.run();
+  assert.deepEqual(targets.terminals, {
+    status: "removed",
+    target: `ax.workflow=${c.workflowId}`,
+    reason: "t2, t1, t3",
+  });
+  assert.deepEqual(c.killed(), ["t2", "t1", "t3"]);
+  assert.equal(targets.scratch.status, "removed");
+});
+
+test("RED pi-workflow: cleanup removes a finished labelled worker that plain hc ls hides, kills only live workers, and never touches the caller", async () => {
+  const c = await cleanupFixture();
+  // An exited worker or a reviewer killed at timeout: finished, hidden from plain `ls`, labels still visible through `get`.
+  c.terminals.push({
+    address: "t4",
+    cwd: c.scratch,
+    labels: { "ax.workflow": c.workflowId },
+    parent: "t0",
+    killed: true,
+  });
+  const { targets } = await c.run();
+  assert.equal(targets.terminals.status, "removed");
+  assert.match(targets.terminals.reason ?? "", /\bt4\b/);
+  assert.ok(c.terminals.find((item) => item.address === "t4")?.removed);
+  // Finished t4 gets rm without kill; live t1 and t2 keep kill then rm.
+  assert.deepEqual(c.killed(), ["t2", "t1"]);
+  for (const address of ["t1", "t2"]) {
+    const order = c.calls
+      .filter((args) => args.at(-1) === address)
+      .map((args) => args[0])
+      .filter((verb) => verb === "kill" || verb === "rm");
+    assert.deepEqual(order, ["kill", "rm"], address);
+  }
+  assert.ok(
+    c.calls.some((args) => args[0] === "rm" && args.at(-1) === "t4"),
+    "finished t4 is removed",
+  );
+  assert.ok(
+    !c.calls.some(
+      (args) => args.at(-1) === "t0" && ["kill", "rm"].includes(args[0]),
+    ),
+    "the caller is excluded",
+  );
+  // Enumeration and the final residual check include finished terminals.
+  const allReads = c.calls.filter(
+    (args) => args[0] === "ls" && args.includes("--all"),
+  );
+  assert.ok(allReads.length >= 2, "cleanup enumerates with hc ls --all");
+  assert.equal(targets.scratch.status, "removed");
+});
+
+test("RED pi-workflow: a just-removed terminal still read live once is re-read before cleanup reports it remaining", async () => {
+  const c = await cleanupFixture();
+  // The first `ls --all` read enumerates; the second, the residual check, is stale once.
+  c.fail.staleAllRead = 2;
+  const { targets } = await c.run();
+  assert.deepEqual(targets.terminals, {
+    status: "removed",
+    target: `ax.workflow=${c.workflowId}`,
+    reason: "t2, t1",
+  });
+  const allReads = c.calls.filter(
+    (args) => args[0] === "ls" && args.includes("--all"),
+  );
+  assert.equal(allReads.length, 3, "the stale residual read is retried once");
+  assert.equal(targets.scratch.status, "removed");
+});
+
+test("RED pi-workflow: a runner call deletes wake requests bound to another session's nonce, and cleanup deletes only this workflow's request", async () => {
+  const c = await cleanupFixture();
+  const directory = join(wakeRoot(), "t0");
+  await mkdir(directory, { recursive: true });
+  const request = (workflow: string, nonce: string): WakeRequest => ({
+    workflow,
+    nonce,
+    generation: 1,
+    n: 1,
+    prompt: "AX orchestration tick. Run `node runner`",
+  });
+  const files = {
+    own: join(directory, `${c.workflowId}.json`),
+    concurrent: join(directory, "other-workflow.json"),
+    stale: join(directory, "abandoned-workflow.json"),
+    malformed: join(directory, "broken.json"),
+  };
+  await writeFile(join(directory, "session.json"), '{"nonce":"current"}');
+  await writeFile(files.own, JSON.stringify(request(c.workflowId, "current")));
+  await writeFile(
+    files.concurrent,
+    JSON.stringify(request("other-workflow", "current")),
+  );
+  // Left by a crashed Pi session at this address, it would never be delivered, so the runner removes it.
+  await writeFile(
+    files.stale,
+    JSON.stringify(request("abandoned-workflow", "previous")),
+  );
+  await writeFile(files.malformed, "{");
+  await syncWatcher(c.path, "t0", c.transport);
+  assert.deepEqual(JSON.parse(await readFile(c.path, "utf8")).wake, {
+    root: wakeRoot(),
+    address: "t0",
+    nonce: "current",
+  });
+  assert.equal(await c.present(files.stale), false);
+  assert.ok(await c.present(files.own));
+  await c.run();
+  assert.equal(await c.present(files.stale), false);
+  assert.equal(await c.present(files.malformed), false);
+  assert.equal(await c.present(files.own), false);
+  // Another workflow ticking the same orchestrator keeps its pending request.
+  assert.ok(await c.present(files.concurrent));
+  assert.ok(await c.present(join(directory, "session.json")));
+});
+
+test("RED pi-workflow: a refused cleanup leaves a live watcher, its stop file, and wake requests untouched", async () => {
+  const refusals: [string, (c: CleanupFixture) => Promise<unknown>, RegExp][] =
+    [
+      [
+        "unfinished without a reason",
+        async (c) => {
+          await locked(c.path, (state) => {
+            delete state.finished;
+          });
+          return c.run();
+        },
+        /requires a reason/,
+      ],
+      [
+        "an invalid scratch folder",
+        async (c) => {
+          await mkdir(join(c.base, "elsewhere"));
+          return c.run({}, [join(c.base, "elsewhere")]);
+        },
+        /outside the temporary roots/,
+      ],
+    ];
+  for (const [name, act, message] of refusals) {
+    const c = await cleanupFixture();
+    c.terminals.push({
+      address: "t3",
+      cwd: c.scratch,
+      labels: { "ax.workflow": c.workflowId, "ax.role": "watcher" },
+      parent: "t0",
+    });
+    await locked(c.path, (state) => {
+      state.watcherGenerations = 1;
+      state.watcher = {
+        generation: 1,
+        terminal: "t3",
+        parent: "t0",
+        startedAt: new Date().toISOString(),
+      };
+      state.wake = { root: wakeRoot(), address: "t0", nonce: "current" };
+    });
+    const directory = join(wakeRoot(), "t0");
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, "session.json"), '{"nonce":"current"}');
+    const own = join(directory, `${c.workflowId}.json`);
+    const stale = join(directory, `stale-${c.workflowId}.json`);
+    await writeFile(
+      own,
+      JSON.stringify({ workflow: c.workflowId, nonce: "current" }),
+    );
+    await writeFile(
+      stale,
+      JSON.stringify({ workflow: "stale", nonce: "previous" }),
+    );
+    await assert.rejects(act(c), message, name);
+    await c.untouched();
+    assert.equal(await c.present(join(c.scratch, "watcher-stop")), false, name);
+    assert.ok(await c.present(own), name);
+    assert.ok(await c.present(stale), name);
+    const saved = JSON.parse(await readFile(c.path, "utf8"));
+    assert.equal(saved.watcher?.terminal, "t3", name);
+  }
+});
+
+test("RED pi-workflow: cleanup refuses unsafe targets and removes nothing", async () => {
   const refusals: [
     string,
     Parameters<typeof cleanupFixture>[0],
@@ -3556,60 +4455,10 @@ test("RED pi-paseo-workflow: cleanup refuses unsafe targets and removes nothing"
       /requires a reason/,
     ],
     [
-      "a running workspace agent",
+      "a short head",
       {},
-      async (c) => {
-        c.agents.push({ id: "busy-worker", cwd: c.tree, status: "running" });
-        return c.run();
-      },
-      /still running .*busy-worker/,
-    ],
-    [
-      "the calling orchestrator plus another running agent in the workspace",
-      {},
-      async (c) => {
-        c.agents[0].cwd = c.tree;
-        c.agents.push({ id: "busy-worker", cwd: c.tree, status: "running" });
-        return c.run();
-      },
-      /still running .*busy-worker/,
-    ],
-    [
-      "a running agent in the workspace without the caller's PASEO_AGENT_ID",
-      {},
-      async (c) => {
-        c.agents[0].cwd = c.tree;
-        return c.run({}, undefined, {});
-      },
-      /still running .*orchestrator \(running\)/,
-    ],
-    [
-      "an ambiguous workspace",
-      {},
-      async (c) => {
-        c.workspaces.push({
-          workspaceId: "workspace-duplicate",
-          cwd: c.tree,
-          isolation: "worktree",
-        });
-        return c.run();
-      },
-      /ambiguous Paseo workspaces/,
-    ],
-    [
-      "a dirty worktree",
-      {},
-      async (c) => {
-        await writeFile(join(c.tree, "unsaved.txt"), "work");
-        return c.run();
-      },
-      /uncommitted changes: \?\? unsaved\.txt/,
-    ],
-    [
-      "a head mismatch",
-      {},
-      (c) => c.run({ head: "f".repeat(40) }),
-      /not the expected head/,
+      (c) => c.run({ head: "abc1234" }),
+      /expected full worktree head/,
     ],
     [
       "a scratch folder outside the temporary roots",
@@ -3665,33 +4514,65 @@ test("RED pi-paseo-workflow: cleanup refuses unsafe targets and removes nothing"
   }
 });
 
-test("GREEN pi-paseo-workflow: cleanup skips main checkouts, local-checkout workspaces, and unbound scratch folders", async () => {
-  const checkout = await cleanupFixture({ linked: false });
-  await locked(checkout.path, (state) => {
-    delete state.finished;
-  });
-  const skippedMain = await checkout.run({
-    reason: "User abandoned the work.",
-  });
-  assert.deepEqual(skippedMain.targets.worktree, {
-    status: "skipped",
-    target: checkout.repository,
-    reason: "main checkout",
-  });
-  assert.equal(skippedMain.targets.workspace.status, "skipped");
-  assert.equal(skippedMain.targets.scratch.status, "removed");
-  assert.equal(checkout.archives().length, 0);
-  assert.ok(await checkout.present(checkout.repository));
-
-  const local = await cleanupFixture({ isolation: "local" });
-  const skippedLocal = await local.run();
-  assert.deepEqual(skippedLocal.targets.workspace, {
-    status: "skipped",
-    target: "workspace-cleanup",
-    reason: "local-checkout workspace",
-  });
-  assert.equal(local.archives().length, 0);
-  assert.ok(await local.present(local.tree));
+test("GREEN pi-workflow: cleanup skips a worktree it cannot safely remove and reports why", async () => {
+  const skips: [
+    string,
+    Parameters<typeof cleanupFixture>[0],
+    (c: CleanupFixture) => Promise<{ targets: Record<string, unknown> }>,
+    RegExp,
+  ][] = [
+    ["a main checkout", { linked: false }, (c) => c.run(), /^main checkout$/],
+    [
+      "a dirty worktree",
+      {},
+      async (c) => {
+        await writeFile(join(c.tree, "unsaved.txt"), "work");
+        return c.run();
+      },
+      /uncommitted changes: \?\? unsaved\.txt/,
+    ],
+    [
+      "a head mismatch",
+      {},
+      (c) => c.run({ head: "f".repeat(40) }),
+      /not the expected f{40}/,
+    ],
+    [
+      "an unlabelled live terminal working inside it",
+      {},
+      async (c) => {
+        c.terminals.push({
+          address: "t6",
+          cwd: join(c.tree, "sub"),
+          labels: {},
+          parent: null,
+        });
+        return c.run();
+      },
+      /live terminals work inside it: t6/,
+    ],
+    [
+      "a caller whose cwd is inside it",
+      {},
+      (c) => c.run({}, undefined, { terminalId: "t0", cwd: c.tree }),
+      /caller's working directory is inside the worktree/,
+    ],
+  ];
+  for (const [name, options, act, reason] of skips) {
+    const c = await cleanupFixture(options);
+    const { targets } = await act(c);
+    const worktree = targets.worktree as { status: string; reason: string };
+    assert.equal(worktree.status, "skipped", name);
+    assert.match(worktree.reason, reason, name);
+    assert.ok(
+      await c.present(options?.linked === false ? c.repository : c.tree),
+    );
+    assert.equal(
+      (targets.scratch as { status: string }).status,
+      "removed",
+      name,
+    );
+  }
 
   const unbound = await cleanupFixture();
   await locked(unbound.path, (state) => {
@@ -3707,26 +4588,11 @@ test("GREEN pi-paseo-workflow: cleanup skips main checkouts, local-checkout work
   assert.ok(await unbound.present(unbound.path));
 });
 
-test("GREEN pi-paseo-workflow: cleanup from an orchestrator inside the workflow workspace deletes scratch and leaves the workspace for the user", async () => {
+test("RED pi-workflow: once cleanup starts, every orchestrator action except status refuses", async () => {
   const c = await cleanupFixture();
-  c.agents[0].cwd = c.tree;
-  const { targets } = await c.run();
-  const reason =
-    "the calling orchestrator session runs in this workspace; archive workspace workspace-cleanup from Paseo when done";
-  assert.deepEqual(targets, {
-    worktree: { status: "skipped", target: c.tree, reason },
-    workspace: { status: "skipped", target: "workspace-cleanup", reason },
-    scratch: { status: "removed", target: c.scratch },
-  });
-  assert.equal(c.archives().length, 0);
-  assert.ok(await c.present(c.tree));
-  assert.equal(await c.present(c.scratch), false);
-});
-
-test("RED pi-paseo-workflow: once cleanup starts, every orchestrator action except status refuses", async () => {
-  const c = await cleanupFixture();
-  c.fail.archive = true;
-  await assert.rejects(c.run(), /stopped at workspace archive/);
+  // A locked worktree stops cleanup after it is recorded and before the scratch folder goes.
+  c.git(c.repository, ["worktree", "lock", c.tree]);
+  await assert.rejects(c.run(), /stopped at worktree removal/);
   const artifactPath = join(c.base, "artifact.md");
   await writeFile(artifactPath, "Plan artifact");
   await assert.rejects(
@@ -3743,38 +4609,63 @@ test("RED pi-paseo-workflow: once cleanup starts, every orchestrator action exce
     /Cleanup already started/,
   );
   await assert.rejects(
-    tick(c.path, { agentId: "orchestrator" }, c.transport),
+    tick(c.path, { terminalId: "t0" }, c.transport),
     /Cleanup already started/,
   );
+  await assert.rejects(c.run(), /already started/);
   const state = JSON.parse(await readFile(c.path, "utf8")) as Workflow;
   assert.equal(state.rounds.planning, undefined);
   assert.equal(state.standingOrders.length, 0);
   assert.ok(state.cleanup);
-  assert.equal(c.archives().length, 1);
 });
 
-test("RED pi-paseo-workflow: a failed cleanup step stops without retry and reports removed and remaining targets", async () => {
+test("RED pi-workflow: a failed cleanup step stops without retry and reports removed and remaining targets", async () => {
   const receiptOf = (error: unknown) =>
-    JSON.parse(String((error as Error).message).split("\n")[1]).targets;
+    JSON.parse(
+      String((error as Error).message)
+        .split("\n")
+        .at(-1) ?? "",
+    ).targets;
 
-  const archive = await cleanupFixture();
-  archive.fail.archive = true;
-  const archiveError = await archive.run().catch((error) => error);
-  assert.match(String(archiveError), /stopped at workspace archive/);
-  assert.equal(receiptOf(archiveError).workspace.status, "remaining");
-  assert.equal(receiptOf(archiveError).scratch.status, "remaining");
-  assert.equal(archive.archives().length, 1);
-  assert.ok(await archive.present(archive.path));
-  await assert.rejects(archive.run(), /already started/);
-  assert.equal(archive.archives().length, 1);
+  // The reservation is saved before the first kill, so a later kill or rm failure leaves a receipt and a refusing state.
+  for (const failure of ["killAddress", "rmAddress"] as const) {
+    const partial = await cleanupFixture();
+    partial.fail[failure] = "t1";
+    const error = await partial.run().catch((caught) => caught);
+    assert.match(String(error), /stopped at terminal removal/, failure);
+    assert.match(String(error), /hc core unavailable/, failure);
+    const receipt = receiptOf(error);
+    assert.equal(receipt.terminals.status, "remaining", failure);
+    assert.match(receipt.terminals.reason, /removed: t2; remaining: t1/);
+    assert.equal(receipt.worktree.status, "remaining", failure);
+    assert.equal(receipt.scratch.status, "remaining", failure);
+    assert.ok(await partial.present(partial.tree));
+    const saved = JSON.parse(await readFile(partial.path, "utf8")) as Workflow;
+    assert.ok(saved.cleanup?.startedAt, failure);
+    assert.deepEqual(saved.cleanup?.receipt, receipt, failure);
+    await assert.rejects(
+      tick(partial.path, { terminalId: "t0" }, partial.transport),
+      /Cleanup already started/,
+    );
+    await assert.rejects(partial.run(), /already started/);
+  }
 
-  const kept = await cleanupFixture();
-  kept.fail.keepTree = true;
-  const keptError = await kept.run().catch((error) => error);
-  assert.match(String(keptError), /stopped at worktree removal/);
-  assert.equal(receiptOf(keptError).workspace.status, "removed");
-  assert.equal(receiptOf(keptError).worktree.status, "remaining");
-  assert.ok(await kept.present(kept.path));
+  const unkillable = await cleanupFixture();
+  unkillable.fail.kill = true;
+  const killError = await unkillable.run().catch((caught) => caught);
+  assert.match(String(killError), /stopped at terminal removal/);
+  assert.equal(receiptOf(killError).terminals.status, "remaining");
+  assert.ok(await unkillable.present(unkillable.tree));
+  assert.ok(await unkillable.present(unkillable.path));
+
+  const locked_ = await cleanupFixture();
+  locked_.git(locked_.repository, ["worktree", "lock", locked_.tree]);
+  const lockError = await locked_.run().catch((error) => error);
+  assert.match(String(lockError), /stopped at worktree removal/);
+  assert.equal(receiptOf(lockError).terminals.status, "removed");
+  assert.equal(receiptOf(lockError).worktree.status, "remaining");
+  assert.equal(receiptOf(lockError).scratch.status, "remaining");
+  assert.ok(await locked_.present(locked_.path));
 
   const scratch = await cleanupFixture();
   const sealed = join(scratch.scratch, "sealed");
@@ -3790,7 +4681,6 @@ test("RED pi-paseo-workflow: a failed cleanup step stops without retry and repor
       ),
       ["removed", "removed", "remaining"],
     );
-    assert.equal(scratch.archives().length, 1);
   } finally {
     await chmod(sealed, 0o700);
   }
@@ -3801,7 +4691,7 @@ async function consultBrief(f: { dir: string }) {
   const path = join(f.dir, "consult-brief.md");
   await writeFile(
     path,
-    "Question: which delivery shape fits? Read skills/paseo-orchestration.",
+    "Question: which delivery shape fits? Read skills/herdr-orchestration.",
   );
   return path;
 }
@@ -3812,7 +4702,7 @@ const plannerAgent = (
 const consultStatuses = (state: Workflow) =>
   Object.values(state.consult?.sessions ?? {}).map((session) => session.status);
 
-test("GREEN pi-paseo-workflow: consult launches both planners concurrently on a sorted fingerprint and tick records their advice", async () => {
+test("GREEN pi-workflow: consult launches both planners concurrently on a sorted fingerprint and tick records their advice", async () => {
   const f = await fixture();
   const briefPath = await consultBrief(f);
   await transition(f.path, "order", {
@@ -3842,11 +4732,21 @@ test("GREEN pi-paseo-workflow: consult launches both planners concurrently on a 
   assert.equal(runs(f), 2);
   for (const role of ["planner-astra", "planner-fable"] as const) {
     const session = f.sessions.get(plannerAgent(state, role));
-    assert.equal(session?.provider, `ax-${role}`);
+    assert.equal(session?.labels["ax.role"], role);
+    assert.deepEqual(session?.argv.slice(2, 6), [
+      role,
+      "openai-codex",
+      `model-${role}`,
+      "low",
+    ]);
     assert.match(session?.prompt ?? "", /^Assignment digest: [a-f0-9]{64}/);
-    assert.ok(session?.prompt.includes(state.consult?.brief.path ?? "-"));
-    assert.match(session?.prompt ?? "", /AX_CONSULT_BEGIN/);
-    assert.match(session?.prompt ?? "", /- scope: Stay inside the runner\./);
+    const assignment = await readFile(
+      /assignment is (\S+?); /.exec(session?.prompt ?? "")?.[1] ?? "",
+      "utf8",
+    );
+    assert.ok(assignment.includes(state.consult?.brief.path ?? "-"));
+    assert.match(assignment, /AX_CONSULT_BEGIN/);
+    assert.match(assignment, /- scope: Stay inside the runner\./);
   }
   const ticked = await f.step();
   assert.deepEqual(ticked.recorded.sort(), [
@@ -3859,7 +4759,7 @@ test("GREEN pi-paseo-workflow: consult launches both planners concurrently on a 
   // Complete advice never yields triage or a user gate.
   assert.equal(actionOf(ticked), "review");
   assert.equal("consulting" in ticked, false);
-  assert.equal(f.heartbeats.size, 0);
+  assert.equal(f.watchers().length, 0);
 
   // A second consult archives the first.
   await dispatchConsult(
@@ -3892,7 +4792,7 @@ test("GREEN pi-paseo-workflow: consult launches both planners concurrently on a 
   );
 });
 
-test("RED pi-paseo-workflow: consult refusals record nothing", async () => {
+test("RED pi-workflow: consult refusals record nothing", async () => {
   const f = await fixture();
   const briefPath = await consultBrief(f);
   const before = await readFile(f.path, "utf8");
@@ -3934,7 +4834,7 @@ test("RED pi-paseo-workflow: consult refusals record nothing", async () => {
   assert.equal(runs(g), 0);
 });
 
-test("GREEN pi-paseo-workflow: a state initialized before planner routes keeps working and only consult refuses, naming init", async () => {
+test("GREEN pi-workflow: a state initialized before planner routes keeps working and only consult refuses, naming init", async () => {
   const f = await fixture();
   const legacy = await f.read();
   const routes = legacy.routes as Partial<Workflow["routes"]>;
@@ -3959,24 +4859,20 @@ test("GREEN pi-paseo-workflow: a state initialized before planner routes keeps w
   assert.ok(!JSON.stringify(await f.read()).includes('"kind"'));
 });
 
-test("RED pi-paseo-workflow: init fails naming a missing planner provider", async () => {
+test("RED pi-workflow: init fails naming a missing planner route", async () => {
   const f = await fixture();
-  delete f.config.agents.providers["ax-planner-fable"];
-  assert.throws(
-    () => routesFromConfig(f.config),
-    /Missing managed provider ax-planner-fable/,
-  );
-  await writeFile(f.configPath, JSON.stringify(f.config));
+  const { "planner-fable": _, ...missing } = f.table;
+  await writeFile(f.routesPath, JSON.stringify(missing));
   await assert.rejects(
     initialize(join(f.dir, "next", "state.json"), {
       cwd: f.dir,
-      configPath: f.configPath,
+      routesPath: f.routesPath,
     }),
-    /Missing managed provider ax-planner-fable/,
+    /Route table lacks the single planner-fable route/,
   );
 });
 
-test("RED pi-paseo-workflow: malformed, mismatched, timed-out, and erroring consults degrade without gating", async () => {
+test("RED pi-workflow: malformed, mismatched, timed-out, and erroring consults degrade without gating", async () => {
   const f = await fixture();
   const briefPath = await consultBrief(f);
   await dispatchConsult(f.path, { briefPath }, f.transport);
@@ -4014,7 +4910,7 @@ test("RED pi-paseo-workflow: malformed, mismatched, timed-out, and erroring cons
   assert.ok(session);
   session.status = "running";
   const erroring: Transport = async (args, timeout, env) => {
-    if (args[0] === "inspect" && args.at(-1) === fable)
+    if (args[0] === "get" && args.at(-1) === fable)
       throw new Error("provider unavailable");
     return g.transport(args, timeout, env);
   };
@@ -4032,11 +4928,13 @@ test("RED pi-paseo-workflow: malformed, mismatched, timed-out, and erroring cons
     after.consult?.sessions["planner-fable"]?.error ?? "",
     /provider unavailable/,
   );
-  assert.ok(g.calls.some((args) => args[0] === "stop" && args[1] === astra));
+  assert.ok(
+    g.calls.some((args) => args[0] === "kill" && args.at(-1) === astra),
+  );
   assert.equal(actionOf(timedOut), "review");
 });
 
-test("RED pi-paseo-workflow: an undelivered planner gets one retry-launch, and a second non-delivery degrades it", async () => {
+test("RED pi-workflow: an undelivered planner gets one retry-launch, and a second non-delivery degrades it", async () => {
   const f = await fixture();
   await dispatchConsult(
     f.path,
@@ -4106,7 +5004,7 @@ test("RED pi-paseo-workflow: an undelivered planner gets one retry-launch, and a
   assert.equal(runs(f), 2);
 });
 
-test("GREEN pi-paseo-workflow: running consults never block review, handoff, or repair, but keep the heartbeat armed", async () => {
+test("GREEN pi-workflow: running consults never block review, handoff, or repair, but keep the watcher running", async () => {
   const f = await fixture();
   await dispatchConsult(
     f.path,
@@ -4130,8 +5028,8 @@ test("GREEN pi-paseo-workflow: running consults never block review, handoff, or 
     reviewed.result === "changed" && reviewed.consulting,
     planners,
   );
-  assert.equal(f.heartbeats.size, 1);
-  assert.ok(reviewed.heartbeat);
+  assert.equal(f.watchers().length, 1);
+  assert.ok(reviewed.watcher);
   await transition(f.path, "triage", { phase: "planning", decisions: [] });
   const acceptance = nextStep(await f.read());
   assert.equal(acceptance.result, "awaiting-user");
@@ -4167,7 +5065,7 @@ test("GREEN pi-paseo-workflow: running consults never block review, handoff, or 
   assert.deepEqual(consultStatuses(await f.read()), ["running", "running"]);
 });
 
-test("RED pi-paseo-workflow: a running consult holds finish and cleanup until an ambiguous one is stopped and degraded past the timeout", async () => {
+test("RED pi-workflow: a running consult holds finish and cleanup until an ambiguous one is stopped and degraded past the timeout", async () => {
   const f = await fixture();
   await f.review("planning");
   await f.accept();
@@ -4241,7 +5139,9 @@ test("RED pi-paseo-workflow: a running consult holds finish and cleanup until an
   assert.deepEqual(stopped.recorded, [
     "consult:planner-astra: degraded (advice unavailable)",
   ]);
-  assert.ok(f.calls.some((args) => args[0] === "stop" && args[1] === agent));
+  assert.ok(
+    f.calls.some((args) => args[0] === "kill" && args.at(-1) === agent),
+  );
   assert.equal(actionOf(stopped), "finish");
   assert.equal(
     (await transition(f.path, "finish", hostedReceipt)).finished,

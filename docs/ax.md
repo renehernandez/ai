@@ -23,22 +23,27 @@ bin/bootstrap personal
 Use `work` for the work profile. The script is safe to re-run and stops at the
 first failing step, naming it. In order, it:
 
-1. installs the `Brewfile`: mise, plus the Paseo, Claude Code, and Codex apps.
+1. installs the `Brewfile`: mise, plus the Herdr, Claude Code, and Codex apps.
    Homebrew does not pin these; they update to the latest release.
-2. installs this repository's mise tools and runs `mise run setup`.
-3. installs the `ax` shim and runs `ax sync --profile <profile>`. This also
+2. installs herdr-core (`hc`) into `~/.local/bin` with its vendor installer
+   when `hc` is missing or older than the recorded minimum. The installer
+   verifies the release checksum and Apple code-signing identity; bootstrap
+   downloads it to a temporary file instead of piping it into a shell. It then
+   requires `~/.local/bin` on PATH and a working `hc server status`.
+3. installs this repository's mise tools and runs `mise run setup`.
+4. installs the `ax` shim and runs `ax sync --profile <profile>`. This also
    writes the pinned Node, pnpm, Pi, and OpenSpec versions into
    `~/.config/mise/config.toml`.
-4. installs those global mise tools.
-5. installs Pi's configured packages and pre-downloads the managed launcher's
+5. installs those global mise tools.
+6. installs Pi's configured packages and pre-downloads the managed launcher's
    pinned extensions (`pnpm run pi:packages-install`).
-6. runs `ax validate` and checks that Node, pnpm, Pi, and OpenSpec run at
+7. runs `ax validate` and checks that Node, pnpm, Pi, and OpenSpec run at
    their pinned versions. It fails when another copy shadows a pin, such as a
    global npm package inside a mise Node install, and lists any other copy on
    PATH, each with a suggested removal command. It never uninstalls anything.
 
-Afterwards, restart Paseo so it picks up the new PATH, and sign in where
-needed: Claude Code, `codex login`, and Pi's `/login`. To change a version,
+Afterwards, run `hc server restart` after any PATH change (running terminals
+keep going), and sign in where needed: Claude Code, `codex login`, and Pi's `/login`. To change a version,
 edit its pin (`runtime.configs.mise` in `ax.config.json`, the repo
 `mise.toml`, or `packageManager`) and re-run bootstrap from `main`. pnpm is
 pinned in all three places; a unit test keeps them in agreement.
@@ -165,22 +170,30 @@ AX rejects alternate targets, symlinked config paths, unsafe parent paths,
 ambiguous TOML representations, validator failures, and concurrent target
 changes without replacing the original file.
 
-Pi settings, Pi model overrides and Paseo config use JSON `managedPaths` at
-`~/.pi/agent/settings.json`, `~/.pi/agent/models.json` and `~/.paseo/config.json`.
+Pi settings and Pi model overrides use JSON `managedPaths` at
+`~/.pi/agent/settings.json` and `~/.pi/agent/models.json`.
 Each entry names a path and value. An object or array at that path is replaced
 as a whole; other JSON values survive, although formatting may change.
 `expandHome: true` expands strings beginning with `~/` within that entry.
 
-The tracked Paseo profile array and its `ax-` provider objects are AX-owned.
-Add or modify those profiles in source. Unrelated provider objects remain
-unowned. Credentials, sessions and Pi's `auth.json` are never AX targets.
-Top-level sync applies configs, instructions, skills, hooks and selected profile
-through the same runtime transaction. Use it for migrations that change both
-provider commands and their adapters.
+`runtime.configs.herdrTemplates` owns the `ax-*.md` files in
+`~/.config/herdr-core/templates`: one orchestrator template per orchestrator
+route (`ax-orchestrator` on the default route) and one per consult planner.
+AX generates each from `hooks/pi/routes.json`, so a person can start
+`hc run ax-orchestrator "task"` on exactly a tracked route. Each template has
+an empty body, because herdr-core sends a nonempty body as a first prompt.
+Other templates in that folder are unowned.
 
-## Use Pi with Paseo
+Role routes live in `hooks/pi/routes.json`, which the launcher reads and the
+templates derive from. Change a route there, in source. Credentials, sessions
+and Pi's `auth.json` are never AX targets. Top-level sync applies configs,
+instructions, skills, hooks and selected profile through the same runtime
+transaction. Use it for migrations that change both routes and their adapters.
 
-[Set up a machine](#set-up-a-machine) installs Pi and Paseo. Authenticate Pi's
+## Use Pi with herdr-core
+
+[Set up a machine](#set-up-a-machine) installs Pi, herdr-core, and the Herdr
+app. Authenticate Pi's
 `openai-codex` provider with your ChatGPT account, and configure the
 `cloudflare-ai-gateway` provider locally for your account and Gateway. This
 repository does not supply or synchronize credentials. The managed launcher
@@ -203,7 +216,6 @@ After the migration is merged, use the clean default-branch source:
 ```bash
 pnpm ax sync --profile personal
 pnpm ax validate
-paseo reload
 ```
 
 Use `work` instead of `personal` for work instructions. Both profiles default
@@ -212,43 +224,45 @@ subscription bridge. Astra remains a selectable orchestrator model. Four
 focused reviewer sessions provide automatic reviews at medium thinking: GPT-6.1
 Sol for correctness, Sonnet 5.5 for risk and quality, GPT-6.1 Terra for
 architecture, and Sonnet 5.5 for contract alignment. Sonnet reviewers use the
-same pinned Claude bridge as Opus, stay read-only, and receive no MCP. Paseo applies provider/profile
-changes to new sessions; existing sessions keep their launch configuration.
-Read its reload result before assuming changes were applied.
+same pinned Claude bridge as Opus, stay read-only, and receive no MCP. Route
+changes apply to new sessions; existing sessions keep their launch
+configuration.
 
-Both profiles enable Paseo's hosted relay at `relay.paseo.sh:443`, with TLS for
-the daemon and public client connection. AX owns the five `daemon.relay` leaves:
-`enabled`, `endpoint`, `publicEndpoint`, `useTls`, and `publicUseTls`. It leaves
-daemon identity, encryption keys, pairing offers and authentication machine-local.
-Relay traffic is end-to-end encrypted; see [Paseo connectivity](https://paseo.sh/docs/connectivity).
-
-Relay enablement can reload, but endpoint or TLS changes require a restart.
-After activation, inspect `restartRequiredPaths` and `overrideControlledPaths`
-from `paseo reload`. Restart the selected daemon if required; remove conflicting
-deployment overrides before expecting the file to control relay behavior.
-Then use Paseo Desktop's **Pair a device** or `paseo daemon pair` to pair your
-device. Keep the pairing link private; it is not repository configuration.
-
-Select the **Orchestrator** profile. New tabs open on Opus 5.5; choose Astra
-from the model menu for the alternative, both at medium thinking. Sync never
-removes unmanaged provider entries, so the retired `ax-planner` providers stay
-in your Paseo config, and sessions launched from them keep working. In the
-[Pi workflow](../skills/paseo-orchestration/references/paseo-workflow.md),
+Start the orchestrator in the repository from a template:
+`hc run ax-orchestrator "task"` opens Opus 5.5, and
+`hc run ax-orchestrator-gpt-6-astra "task"` opens Astra, both at medium
+thinking. In the
+[Pi workflow](../skills/herdr-orchestration/references/workflow.md),
 the orchestrator you talk to runs the work: it hands the accepted brief to a
-fresh Opus implementer, runs correctness, architecture, and contract-alignment
-Sol reviews, publishes, and follows hosted feedback. A Paseo heartbeat wakes it
-while work is in flight, so you do not need to ask for status. You do not
+fresh Opus implementer, runs the four reviews, publishes, and follows hosted
+feedback. Workers appear as child terminals in the orchestrator's Herdr space
+and tab. A workflow watcher wakes the orchestrator through its managed Pi
+extension while work is in flight, without typing into its terminal, so you do
+not need to ask for status and an unsent draft is never submitted. You do not
 choose a model each time a reviewer or implementation worker starts.
+
+### Use Herdr Mobile
+
+AX owns no relay, pairing, or SSH configuration. To reach a Mac from Herdr
+Mobile:
+
+1. Enable **Remote Login** in macOS System Settings > General > Sharing.
+2. Authorize an SSH key for your account; do not use password login.
+3. Reach the Mac over Tailscale or the local network.
+4. Add the machine in Herdr Mobile with that address and key.
+
+If a work-machine policy forbids Remote Login, desktop and orchestration still
+work; only mobile access is lost on that machine.
 
 Two consult planners, **Astra · Consult Planner** (GPT-6 Astra) and
 **Fable · Consult Planner** (Fable 5.1 through the Claude bridge), give advice
 at medium thinking. Ask the orchestrator to "ask Fable", "consult Astra", or
 "get both planners' take"; it runs the runner's `consult` action and folds the
 advice into its own plan revision. Consults never block progress. You can also
-open either planner profile in Paseo as a standalone consultant.
-Planners read files and have no shell, edit, write, or Paseo tools: Paseo does
-not inject its tools for planner providers, and the planner policy denies Paseo
-MCP calls. Other MCP servers from your own MCP configuration stay available;
+start either planner as a standalone consultant with
+`hc run ax-planner-astra "question"` or `hc run ax-planner-fable "question"`.
+Planners read files and have no shell, edit, or write tools, and launch no
+workers. MCP servers from your own MCP configuration stay available;
 research-only use is an instruction, not an enforced read-only boundary.
 
 Managed launches require Node 26, Pi on PATH, and the synchronized mandatory

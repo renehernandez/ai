@@ -7,7 +7,28 @@ import {
   renderHookRegistrationDocument,
 } from "../../scripts/ax/hook-registration.ts";
 
-test("RED hook-registration: MCP and Pi runtime configuration, including the in-process Paseo dispatch, orchestrator write, git, dependency, nested MCP, read-only reviewer, and no-shell, no-Paseo-MCP consult planner tool policies, agent shell discipline, and pinned package configs, are not hook targets", () => {
+test("RED hook-registration: MCP and Pi runtime configuration, including the herdr-core and Herdr app allow-lists with fail-closed dynamic executables, interactive-only launcher, herdr-core workflow watcher, in-process wake-request delivery, tracked route table, orchestrator write, git, dependency, nested MCP, read-only reviewer, and no-shell consult planner tool policies, agent shell discipline, and pinned package configs, are not hook targets", () => {
+  for (const target of ["claude", "codex"] as const)
+    for (const path of [
+      ".agents/hooks/pi/routes.json",
+      ".agents/hooks/pi/launch.ts",
+      ".agents/hooks/pi/policy.ts",
+      ".agents/hooks/pi/wake.ts",
+      ".local/state/ax/wake/t8/session.json",
+      ".local/state/ax/wake/t8/wf1.json",
+      ".agents/skills/herdr-orchestration/scripts/watch.ts",
+      ".pi/agent/extensions/herdr-core-policy.json",
+      ".config/herdr-core/templates/ax-orchestrator.md",
+    ])
+      assert.throws(
+        () =>
+          assertRegistrationTargetSafe({
+            path: `/tmp/isolated-home/${path}`,
+            target,
+            home: "/tmp/isolated-home",
+          }),
+        /hook_registration_target_invalid/u,
+      );
   for (const target of ["claude", "codex"] as const)
     for (const policy of [
       "review-quality-policy.json",
@@ -94,7 +115,7 @@ test("RED hook-registration: MCP and Pi runtime configuration, including the in-
   assert.throws(
     () =>
       assertRegistrationTargetSafe({
-        path: "/tmp/isolated-home/.pi/agent/extensions/paseo-policy.json",
+        path: "/tmp/isolated-home/.pi/agent/extensions/herdr-policy.json",
         target: "claude",
         home: "/tmp/isolated-home",
       }),
@@ -121,7 +142,7 @@ test("RED hook-registration: MCP and Pi runtime configuration, including the in-
   assert.throws(
     () =>
       assertRegistrationTargetSafe({
-        path: "/tmp/isolated-home/.agents/skills/paseo-orchestration/references/paseo-workflow.md",
+        path: "/tmp/isolated-home/.agents/skills/herdr-orchestration/references/workflow.md",
         target: "claude",
         home: "/tmp/isolated-home",
       }),
@@ -200,5 +221,39 @@ test("GREEN hook-registration: registration renders the declared hook", () => {
       },
     }),
     /block-delete-outside-cwd/u,
+  );
+  // The interactive Pi launcher starts managed terminals; it is never rendered as a harness hook.
+  assert.doesNotMatch(
+    renderHookRegistrationDocument({
+      path: "/tmp/nonexistent-hook-registration-settings.json",
+      declaration: {
+        id: "block-delete-outside-cwd",
+        event: "PreToolUse",
+        matcher: "^Bash$",
+        command: "pnpm exec tsx ~/.agents/hooks/block-delete-outside-cwd.ts",
+        targets: {
+          claude: "~/.claude/settings.json",
+          codex: "~/.codex/hooks.json",
+        },
+      },
+    }),
+    /hooks\/pi\/launch\.ts|--mode/u,
+  );
+  // Wake delivery runs inside the managed Pi extension; it is never rendered as a harness hook either.
+  assert.doesNotMatch(
+    renderHookRegistrationDocument({
+      path: "/tmp/nonexistent-hook-registration-settings.json",
+      declaration: {
+        id: "block-agent-force-push",
+        event: "PreToolUse",
+        matcher: "^Bash$",
+        command: "pnpm exec tsx ~/.agents/hooks/block-agent-force-push.ts",
+        targets: {
+          claude: "~/.claude/settings.json",
+          codex: "~/.codex/hooks.json",
+        },
+      },
+    }),
+    /hooks\/pi\/(?:wake|enforcement)\.ts/u,
   );
 });

@@ -37,7 +37,7 @@ const retainedSpecialists = [
   "maintain-verification-skill",
   "nitro-review-feedback",
   "openspec-tasks",
-  "paseo-orchestration",
+  "herdr-orchestration",
   "project-health-brief",
   "research",
   "research-content",

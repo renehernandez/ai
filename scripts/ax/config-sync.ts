@@ -12,6 +12,10 @@ import { userInfo } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import {
+  HERDR_TEMPLATES_TARGET,
+  readHerdrTemplates,
+} from "./herdr-templates.ts";
+import {
   isScalar,
   mergedArrayContains,
   parseJsonDocument,
@@ -105,10 +109,20 @@ export type ManagedLeaf = {
 };
 
 type ResolvedToolConfig = {
-  name: "codex" | "mise" | "pi" | "piModels" | "piClaudeBridge" | "paseo";
+  name:
+    | "codex"
+    | "mise"
+    | "pi"
+    | "piModels"
+    | "piClaudeBridge"
+    | "herdrTemplates";
+  // Report and asset key; a generated file target adds its file name.
+  key: string;
   target: string;
   home: string;
   leaves: ManagedLeaf[];
+  // A generated file AX owns whole, instead of managed leaves.
+  content?: string;
 };
 
 type PreparedCandidate = {
@@ -133,8 +147,9 @@ const CONFIG_TARGETS = {
   pi: "~/.pi/agent/settings.json",
   piModels: "~/.pi/agent/models.json",
   piClaudeBridge: "~/.pi/agent/claude-bridge.json",
-  paseo: "~/.paseo/config.json",
+  herdrTemplates: HERDR_TEMPLATES_TARGET,
 } as const;
+const TEMPLATE_FILE = /^ax-[a-z0-9.-]+\.md$/;
 
 export function inspectManagedConfigs(
   input: ManagedConfigOptions,
@@ -144,17 +159,16 @@ export function inspectManagedConfigs(
   try {
     for (const tool of resolveToolConfigs(input)) {
       const observed = readObserved(tool);
-      const parsed = parseDocument(observed.content ?? "", tool);
-      const drift = compareLeaves(parsed, tool.leaves);
-      tools[tool.name] = {
+      const drift = compareTool(observed.content, tool);
+      tools[tool.key] = {
         target: tool.target,
-        managedPaths: tool.leaves.map((leaf) => leaf.path.join(".")),
+        managedPaths: managedPaths(tool),
         drift,
         validator: "not_run",
       };
       for (const entry of drift) {
         findings.push(
-          `managed_config_drift: ${tool.name}.${entry.path} is ${entry.reason}`,
+          `managed_config_drift: ${tool.key}.${entry.path} is ${entry.reason}`,
         );
       }
     }
@@ -227,7 +241,7 @@ export function stageManagedConfigs(
     chmodSync(candidatePath, entry.originalMode ?? 0o600);
     operations.push({
       path: entry.tool.target,
-      asset: `config/${entry.tool.name}`,
+      asset: `config/${entry.tool.key}`,
       candidatePath,
       expectedPreviousHash: entry.originalHash,
     });
@@ -253,16 +267,16 @@ function prepareCore(
   }
   for (const tool of configs) {
     const observed = readObserved(tool);
-    const parsed = parseDocument(observed.content ?? "", tool);
-    const drift = compareLeaves(parsed, tool.leaves);
-    const candidate =
-      drift.length === 0
-        ? (observed.content ?? "")
-        : isToml(tool.name)
-          ? updateTomlDocument(observed.content ?? "", parsed, tool.leaves)
-          : updateJsonDocument(parsed, tool.leaves);
-    const parsedCandidate = parseDocument(candidate, tool);
-    const candidateDrift = compareLeaves(parsedCandidate, tool.leaves);
+    const drift = compareTool(observed.content, tool);
+    let candidate = observed.content ?? "";
+    if (tool.content !== undefined) candidate = tool.content;
+    else if (drift.length > 0) {
+      const parsed = parseDocument(candidate, tool);
+      candidate = isToml(tool.name)
+        ? updateTomlDocument(candidate, parsed, tool.leaves)
+        : updateJsonDocument(parsed, tool.leaves);
+    }
+    const candidateDrift = compareTool(candidate, tool);
     if (candidateDrift.length > 0) {
       throw new Error(
         `managed_config_candidate_drift: ${candidateDrift
@@ -282,11 +296,11 @@ function prepareCore(
       );
     const report: ManagedConfigToolReport = {
       target: tool.target,
-      managedPaths: tool.leaves.map((leaf) => leaf.path.join(".")),
+      managedPaths: managedPaths(tool),
       drift,
       validator: "passed",
     };
-    tools[tool.name] = report;
+    tools[tool.key] = report;
     candidates.push({
       tool,
       original: observed.content,
@@ -329,6 +343,21 @@ function resolveToolConfigs(input: ManagedConfigOptions): ResolvedToolConfig[] {
         `managed_config_target_invalid: ${name} must target ${expectedTarget}`,
       );
     }
+    if (supportedName === "herdrTemplates") {
+      for (const template of readHerdrTemplates(input.sourceRoot)) {
+        const target = join(home, expectedTarget.slice(2), template.file);
+        assertTargetSafe(target, home);
+        resolved.push({
+          name: supportedName,
+          key: `${name}/${template.file}`,
+          target,
+          home,
+          leaves: [],
+          content: template.content,
+        });
+      }
+      continue;
+    }
     const target = join(home, expectedTarget.slice(2));
     assertTargetSafe(target, home);
     const leaves = isToml(name)
@@ -337,7 +366,7 @@ function resolveToolConfigs(input: ManagedConfigOptions): ResolvedToolConfig[] {
     if (leaves.length === 0) {
       throw new Error(`managed_config_empty: ${name}`);
     }
-    resolved.push({ name: supportedName, target, home, leaves });
+    resolved.push({ name: supportedName, key: name, target, home, leaves });
   }
   return resolved;
 }
@@ -349,6 +378,29 @@ function parseDocument(
   return isToml(tool.name)
     ? parseToml(content, tool.target)
     : parseJsonDocument(content, tool.target);
+}
+
+function managedPaths(tool: ResolvedToolConfig): string[] {
+  return tool.content === undefined
+    ? tool.leaves.map((leaf) => leaf.path.join("."))
+    : ["content"];
+}
+
+// A generated file drifts whenever its whole content differs.
+function compareTool(
+  content: string | undefined,
+  tool: ResolvedToolConfig,
+): ManagedConfigDrift[] {
+  if (tool.content === undefined)
+    return compareLeaves(parseDocument(content ?? "", tool), tool.leaves);
+  if (content === tool.content) return [];
+  return [
+    {
+      path: "content",
+      expected: "generated from hooks/pi/routes.json",
+      reason: content === undefined ? "missing" : "different",
+    },
+  ];
 }
 
 function isToml(name: string): boolean {
@@ -420,9 +472,15 @@ function assertConfigMutationSource(
 function assertTargetSafe(target: string, home: string): void {
   const absoluteHome = resolve(home);
   const expected = resolve(target);
+  const templates = join(absoluteHome, HERDR_TEMPLATES_TARGET.slice(2));
+  const generatedTemplate =
+    dirname(expected) === templates && TEMPLATE_FILE.test(basename(expected));
   if (
+    !generatedTemplate &&
     !Object.values(CONFIG_TARGETS).some(
-      (path) => expected === join(absoluteHome, path.slice(2)),
+      (path) =>
+        path !== HERDR_TEMPLATES_TARGET &&
+        expected === join(absoluteHome, path.slice(2)),
     )
   ) {
     throw new Error(`managed_config_target_invalid: ${target}`);

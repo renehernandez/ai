@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
   mkdir,
   mkdtemp,
@@ -57,10 +57,9 @@ export type Consult = {
 };
 export type LaunchInspection = {
   cwd: string;
-  provider: string;
-  model: string;
-  thinking: string;
-  status: string;
+  argv: string[];
+  status: string | null;
+  turn: number;
 };
 export type WorktreeState = {
   branch: string;
@@ -74,21 +73,27 @@ export type Review = {
     | "complete"
     | "degraded"
     | "failed"
-    // The send command failed or timed out; Paseo may still have queued the assignment.
+    // The send command failed or timed out; herdr-core may still have typed the assignment.
     | "ambiguous"
     // Delivery evidence established that the assignment never reached the session.
     | "undelivered"
     // A superseded attempt received its assignment after its replacement was reserved.
     | "conflict"
     | "superseded";
+  // The herdr-core terminal address, such as `t7`.
   agentId?: string;
+  // Unique among live terminals; carries the workflow prefix so concurrent workflows never collide.
+  name?: string;
+  // The worker's Pi session JSONL in the scratch folder; replies and receipt are read from it.
+  session?: string;
   launchStatus?: "identity-recorded" | "verified" | "released" | "blocked";
   inspection?: LaunchInspection;
   assignment?: Snapshot;
-  // Leads the assignment prompt, so the session timeline proves receipt.
+  // Leads the assignment prompt, so the session JSONL proves receipt.
   assignmentDigest?: string;
-  startupReplySha256?: string;
-  paseoVersion?: string;
+  // The terminal turn after inert startup; a later turn proves the assignment started.
+  startupTurn?: number;
+  hcVersion?: string;
   sentAt?: string;
   sendOutput?: string;
   releasedAt?: string;
@@ -110,12 +115,6 @@ export type StandingOrderChange = {
   constraint?: string;
   authorizationSource: string;
 };
-export type Heartbeat = {
-  id: string;
-  agentId: string;
-  expiresAt: string;
-  promptSha256: string;
-};
 export type Step =
   | { result: "unchanged"; inFlight: string[] }
   | {
@@ -126,7 +125,12 @@ export type Step =
   | { result: "awaiting-user"; gate: string; consulting?: string[] }
   | { result: "finished" };
 export type Snapshot = { path: string; sha256: string };
-export type WorkspaceBinding = { id: string; cwd: string };
+export type Watcher = {
+  generation: number;
+  terminal: string;
+  parent: string;
+  startedAt: string;
+};
 export type Decision = {
   id: string;
   action: "fix" | "dismiss" | "question";
@@ -186,14 +190,8 @@ export type Input = Partial<Receipt> &
     id?: string;
     constraint?: string;
   };
-export type ManagedConfig = {
-  agents?: {
-    providers?: Record<
-      string,
-      { extends?: string; command?: string[]; models?: { id: string }[] }
-    >;
-  };
-};
+// The tracked `hooks/pi/routes.json` the launcher also reads; each worker role lists one route.
+export type RouteTable = Record<string, { label?: string; routes?: string[] }>;
 export type Round = {
   fingerprint: string;
   artifact: Snapshot;
@@ -227,13 +225,39 @@ export type ArchivedHostedBatch = {
   decisions?: Decision[];
   repair?: Repair;
 };
+export type CleanupTarget = {
+  status: "removed" | "skipped" | "remaining";
+  target: string;
+  reason?: string;
+};
+export type CleanupReceipt = Record<
+  "terminals" | "worktree" | "scratch",
+  CleanupTarget
+>;
 export type Workflow = {
   version: 1;
   // `sol-focused-v1` marks the earlier three-Sol roster; only `focused-v2` states may continue.
   reviewMode?: "sol-focused-v1" | "focused-v2";
   orchestration?: "planner-v1" | "planner-v2";
+  // States without this marker were written by the Paseo runner and refuse every action except `status`.
+  transport?: "herdr-core";
+  // Labels every launched terminal `ax.workflow=<id>`.
+  workflowId?: string;
+  // The installed managed launcher beside the route table.
+  launcher?: string;
+  // Counts terminal launches, numbering their names.
+  launches?: number;
+  // The dispatching orchestrator's terminal; workers start as its children in the same Herdr space and tab.
+  orchestrator?: { id: string; labels: Record<string, string> };
+  // The live watcher that requests ticks of the orchestrator while work is in flight.
+  watcher?: Watcher;
+  // Where the watcher writes wake requests for the last dispatching or ticking orchestrator terminal.
+  wake?: { root: string; address: string; nonce?: string };
+  // The newest watcher generation started; stopping records a newer one in the scratch stop file.
+  watcherGenerations?: number;
+  // When the latest tick began; the watcher skips a periodic prompt within the interval and holds one unconsumed prompt.
+  lastTickAt?: string;
   standingOrders?: StandingOrderChange[];
-  heartbeat?: Heartbeat;
   hostedMonitor?: { probeCommand: string[]; deadline: string };
   cwd: string;
   // The state file's directory, dedicated to this workflow; cleanup deletes only this recorded folder.
@@ -243,12 +267,8 @@ export type Workflow = {
     head: string;
     reason?: string;
     startedAt: string;
-  };
-  workspace?: WorkspaceBinding;
-  workspaceRegistration?: {
-    status: "reserved" | "uncertain";
-    cwd: string;
-    error?: string;
+    // Each target removed, skipped, or remaining once cleanup stopped or reached its last step.
+    receipt?: CleanupReceipt;
   };
   routes: Record<Role, Route>;
   lenses: Record<Phase, Lens[]>;
@@ -389,7 +409,13 @@ export function requireCurrentReviewMode(state: Workflow) {
     "Legacy workflow state is read-only and cannot continue under the current four-reviewer roster (Sol correctness, Sonnet quality, Terra architecture, Sonnet contract)",
   );
 }
+export const paseoStateRefusal =
+  "Workflow state was written by the Paseo runner; it stays readable through status, but every other action, including cleanup, refuses it. Clean it up manually: archive its Paseo workspace, remove its linked worktree with plain `git worktree remove`, and delete its scratch folder";
+export function requireHerdrTransport(state: Workflow) {
+  requireThat(state.transport === "herdr-core", paseoStateRefusal);
+}
 export function requireOrchestration(state: Workflow) {
+  requireHerdrTransport(state);
   requireCurrentReviewMode(state);
   requireThat(
     state.orchestration === "planner-v2",
@@ -573,13 +599,12 @@ export function workers(state: Workflow): Worker[] {
   }
   return entries;
 }
-// Paseo flushes queued sends within seconds; past this window an absent assignment is undelivered.
+// A typed assignment starts its turn within seconds; past this window an absent assignment is undelivered.
 export const queueWindowMs = 60_000;
 export type DeliveryEvidence = {
-  lifecycle: "active" | "quiet" | "errored" | "unknown";
-  archived: boolean;
+  lifecycle: "active" | "quiet" | "errored" | "ended" | "unknown";
   received: boolean;
-  startupReply: boolean;
+  turnAdvanced: boolean;
 };
 // Decides delivery only from evidence; anything else stays undecided.
 export function deliveryVerdict(
@@ -591,14 +616,14 @@ export function deliveryVerdict(
   if (
     evidence.received ||
     evidence.lifecycle === "active" ||
-    !evidence.startupReply
+    evidence.turnAdvanced
   )
     return "delivered";
   const elapsed = sentAt ? now - Date.parse(sentAt) : 0;
   if (
     elapsed >= Math.min(queueWindowMs, timeoutSeconds * 1000) &&
-    evidence.lifecycle === "quiet" &&
-    !evidence.archived
+    // An ended terminal can no longer receive the assignment.
+    (evidence.lifecycle === "quiet" || evidence.lifecycle === "ended")
   )
     return "undelivered";
   return undefined;
@@ -623,7 +648,7 @@ function inFlightWorkers(state: Workflow, now: number) {
 }
 const hostedInFlight = (state: Workflow) =>
   state.hostedMonitor && state.hosted?.status === "waiting" ? ["hosted"] : [];
-// Monitored work: the heartbeat, tick monitoring, loop status, finish, and cleanup wait for all of it.
+// Monitored work: the watcher, tick monitoring, watcher status, finish, and cleanup wait for all of it.
 export function inFlight(state: Workflow, now = Date.now()) {
   return [
     ...inFlightWorkers(state, now).map(({ name }) => name),
@@ -900,9 +925,7 @@ export async function createSnapshots(
   statePath: string,
   contents: Record<string, string>,
 ) {
-  const directory = await mkdtemp(
-    resolve(dirname(statePath), ".paseo-snapshot-"),
-  );
+  const directory = await mkdtemp(resolve(dirname(statePath), ".ax-snapshot-"));
   const snapshots: Record<string, Snapshot> = {};
   for (const [name, content] of Object.entries(contents)) {
     requireThat(/^[a-z-]+\.(md|json)$/.test(name), "Invalid snapshot filename");
@@ -923,10 +946,7 @@ async function save(path: string, state: Workflow) {
   });
   await rename(temporary, path);
 }
-export async function locked<T>(
-  path: string,
-  update: (state: Workflow) => Promise<T> | T,
-): Promise<T> {
+async function withLock<T>(path: string, body: () => Promise<T>): Promise<T> {
   const lock = `${path}.lock`;
   for (let attempt = 0; ; attempt++) {
     try {
@@ -939,8 +959,22 @@ export async function locked<T>(
     }
   } // An uncertain/stale lock requires inspection, never automatic takeover.
   try {
-    const state: Workflow = JSON.parse(await readFile(path, "utf8"));
-    requireThat(state.version === 1, "Unsupported workflow state");
+    return await body();
+  } finally {
+    await rm(lock, { recursive: true });
+  }
+}
+async function readLocked(path: string) {
+  const state: Workflow = JSON.parse(await readFile(path, "utf8"));
+  requireThat(state.version === 1, "Unsupported workflow state");
+  return state;
+}
+export function locked<T>(
+  path: string,
+  update: (state: Workflow) => Promise<T> | T,
+): Promise<T> {
+  return withLock(path, async () => {
+    const state = await readLocked(path);
     // Cleanup is terminal: once recorded, every mutation refuses and only `status` may read the state.
     requireThat(
       !state.cleanup,
@@ -949,34 +983,47 @@ export async function locked<T>(
     const result = await update(state);
     await save(path, state);
     return result;
-  } finally {
-    await rm(lock, { recursive: true });
-  }
+  });
+}
+// The one write after the cleanup reservation: cleanup records its own receipt.
+export function recordCleanupReceipt(
+  path: string,
+  receipt: CleanupReceipt,
+  watcherStopped: boolean,
+) {
+  return withLock(path, async () => {
+    const state = await readLocked(path);
+    requireThat(state.cleanup, "Cleanup has no recorded reservation");
+    state.cleanup.receipt = structuredClone(receipt);
+    if (watcherStopped) delete state.watcher;
+    await save(path, state);
+  });
 }
 
-export function routesFromConfig(config: ManagedConfig): Record<Role, Route> {
+// Each worker role's one `provider/model:thinking` route, parsed the way the launcher parses it.
+export function routesFromTable(table: RouteTable): Record<Role, Route> {
   return Object.fromEntries(
     roles.map((role) => {
-      const id = `ax-${role}`;
-      const provider = config.agents?.providers?.[id];
-      const command = provider?.command;
+      const specs = table?.[role]?.routes;
       requireThat(
-        provider?.extends === "pi" &&
-          Array.isArray(command) &&
-          command.length === 6 &&
-          command.every(nonempty),
-        `Missing managed provider ${id}`,
+        Array.isArray(specs) && specs.length === 1 && nonempty(specs[0]),
+        `Route table lacks the single ${role} route`,
       );
+      const spec = specs[0];
+      const slash = spec.indexOf("/");
+      const colon = spec.lastIndexOf(":");
       requireThat(
-        command[2] === role && command[1].endsWith("/pi/launch.ts"),
-        `Invalid role command for ${id}`,
+        slash > 0 && colon > slash + 1 && colon < spec.length - 1,
+        `Invalid ${role} route ${spec}`,
       );
-      const model = `${command[3]}/${command[4]}`;
-      requireThat(
-        provider.models?.[0]?.id === model,
-        `Model metadata differs from command for ${id}`,
-      );
-      return [role, { provider: id, model, thinking: command[5] }];
+      return [
+        role,
+        {
+          provider: spec.slice(0, slash),
+          model: spec.slice(slash + 1, colon),
+          thinking: spec.slice(colon + 1),
+        },
+      ];
     }),
   ) as Record<Role, Route>;
 }
@@ -1008,7 +1055,7 @@ export async function initialize(
   path: string,
   input: {
     cwd: string;
-    configPath?: string;
+    routesPath?: string;
     timeoutSeconds?: number;
     additionalLenses?: Partial<Record<Phase, Lens[]>>;
   },
@@ -1042,20 +1089,21 @@ export async function initialize(
       timeoutSeconds <= 3600,
     "Review timeout must be 1..3600 seconds",
   );
-  const config = JSON.parse(
-    await readFile(
-      input.configPath ?? resolve(homedir(), ".paseo/config.json"),
-      "utf8",
-    ),
+  const routesPath = resolve(
+    input.routesPath ?? resolve(homedir(), ".agents/hooks/pi/routes.json"),
   );
+  const table = JSON.parse(await readFile(routesPath, "utf8"));
   const state: Workflow = {
     version: 1,
     reviewMode: "focused-v2",
     orchestration: "planner-v2",
+    transport: "herdr-core",
+    workflowId: randomBytes(4).toString("hex"),
+    launcher: resolve(dirname(routesPath), "launch.ts"),
     standingOrders: [],
     cwd: resolve(input.cwd),
     scratch: dirname(resolve(path)),
-    routes: routesFromConfig(config),
+    routes: routesFromTable(table),
     lenses: lensesByPhase,
     timeoutSeconds,
     rounds: {},

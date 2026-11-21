@@ -2,12 +2,7 @@ import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import {
-  array,
-  assertArtifact,
-  github,
-  object,
-} from "./paseo-github-feedback.ts";
+import { array, assertArtifact, github, object } from "./github-feedback.ts";
 
 export type RecordValue = Record<string, unknown>;
 export type ProbeOptions = {

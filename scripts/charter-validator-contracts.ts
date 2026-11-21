@@ -86,18 +86,18 @@ export type Change = {
 };
 
 const behaviorScenarioContracts = {
-  "pi-paseo-workflow": {
+  "pi-workflow": {
     principles: ["authority", "canonical-ownership"],
-    path: "tests/unit/paseo-workflow.test.ts",
-    redName: "RED pi-paseo-workflow:",
-    greenName: "GREEN pi-paseo-workflow:",
+    path: "tests/unit/workflow.test.ts",
+    redName: "RED pi-workflow:",
+    greenName: "GREEN pi-workflow:",
     owns: (change: Change) =>
-      change.path.startsWith("skills/paseo-orchestration/"),
+      change.path.startsWith("skills/herdr-orchestration/"),
     redEvidence: {
       source: {
         binding: {
           kind: "import",
-          module: "../../skills/paseo-orchestration/scripts/paseo-workflow.ts",
+          module: "../../skills/herdr-orchestration/scripts/workflow.ts",
           name: "dispatchReview",
         },
         callee: /^dispatchReview$/,
@@ -108,7 +108,7 @@ const behaviorScenarioContracts = {
       source: {
         binding: {
           kind: "import",
-          module: "../../skills/paseo-orchestration/scripts/paseo-workflow.ts",
+          module: "../../skills/herdr-orchestration/scripts/workflow.ts",
           name: "transition",
         },
         callee: /^transition$/,
@@ -116,18 +116,21 @@ const behaviorScenarioContracts = {
       assertion: { callee: /^assert\.equal$/ },
     },
   },
-  "pi-paseo-hosted": {
+  "pi-hosted": {
     principles: ["authority", "canonical-ownership"],
-    path: "tests/unit/paseo-hosted-probe.test.ts",
-    redName: "RED pi-paseo-hosted:",
-    greenName: "GREEN pi-paseo-hosted:",
+    path: "tests/unit/hosted-probe.test.ts",
+    redName: "RED pi-hosted:",
+    greenName: "GREEN pi-hosted:",
     owns: (change: Change) =>
-      change.path.startsWith("skills/finish/scripts/paseo-"),
+      [
+        "skills/finish/scripts/hosted-probe.ts",
+        "skills/finish/scripts/github-feedback.ts",
+      ].includes(change.path),
     redEvidence: {
       source: {
         binding: {
           kind: "import",
-          module: "../../skills/finish/scripts/paseo-hosted-probe.ts",
+          module: "../../skills/finish/scripts/hosted-probe.ts",
           name: "probeHosted",
         },
         callee: /^probeHosted$/,
@@ -138,7 +141,7 @@ const behaviorScenarioContracts = {
       source: {
         binding: {
           kind: "import",
-          module: "../../skills/finish/scripts/paseo-hosted-probe.ts",
+          module: "../../skills/finish/scripts/hosted-probe.ts",
           name: "probeHosted",
         },
         callee: /^probeHosted$/,
@@ -146,15 +149,16 @@ const behaviorScenarioContracts = {
       assertion: { callee: /^assert\.equal$/ },
     },
   },
-  "pi-paseo-config": {
+  "pi-config": {
     principles: ["canonical-ownership", "authority"],
     path: "tests/unit/json-config-sync.test.ts",
-    redName: "RED pi-paseo-config:",
-    greenName: "GREEN pi-paseo-config:",
+    redName: "RED pi-config:",
+    greenName: "GREEN pi-config:",
     owns: (change: Change) =>
       [
         "scripts/ax.ts",
         "scripts/ax/config-sync.ts",
+        "scripts/ax/herdr-templates.ts",
         "scripts/ax/runtime-sync.ts",
         "scripts/ax/source-snapshot.ts",
         "scripts/ax/json-config.ts",
@@ -520,6 +524,7 @@ const behaviorScenarioContracts = {
     greenName: "GREEN hook-registration:",
     owns: (change: Change) =>
       change.path === "hooks/README.md" ||
+      change.path === "hooks/pi/routes.json" ||
       (change.path.startsWith("hooks/") && change.path.endsWith(".ts")) ||
       change.path === "scripts/ax/hook-registration.ts" ||
       (change.path === "ax.config.json" &&

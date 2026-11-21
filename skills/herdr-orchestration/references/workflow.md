@@ -1,6 +1,6 @@
-# Pi and Paseo workflow
+# Pi and herdr-core workflow
 
-This contract applies to AX-managed Paseo providers running Pi. It is the
+This contract applies to AX-managed Pi sessions in herdr-core terminals. It is the
 explicitly accepted Pi workflow: a fresh review round for every new head or
 revised plan, bounded at three rounds per phase and three hosted repair
 batches, and Ready publication. It takes precedence over older generic
@@ -54,13 +54,15 @@ retries a malformed report.
 ## Work without model selection
 
 Use the orchestrator for brainstorming, research and the initial plan.
-Role model and effort come from the managed Paseo provider command. Never ask
-the user to select a worker model, override it, or substitute another model.
-Only the Orchestrator profile offers a choice: Opus 5.5, the default, or
-Astra, both at medium thinking, picked when the tab opens. The launcher fixes
-the route matching the model and thinking Paseo passes, uses Opus when none is
-passed, and refuses any other; the chosen route then stays fixed for the
-session.
+Role model and effort come from the tracked route table, `hooks/pi/routes.json`,
+which the launcher reads. Never ask the user to select a worker model, override
+it, or substitute another model. Only the Orchestrator offers a choice: Opus
+5.5, the default, or Astra, both at medium thinking, picked when a person starts
+it from the `ax-orchestrator` or `ax-orchestrator-gpt-6-astra` herdr-core
+template. The launcher fixes the route matching the model and thinking it is
+passed, uses Opus when none is passed, and refuses any other; the chosen route
+then stays fixed for the session. Templates exist for people only; the runner
+never starts one.
 Unavailable reviewer models and incomplete reviewer responses are degraded evidence, never passing reviews. The orchestrator records a complete
 inline fallback assessment for that review group's assigned lenses before
 advancing. Uncertain implementer launch, missing session identity, corrupt state,
@@ -91,19 +93,26 @@ from the reviewed plan; it is a worker assignment, not a session handoff. Keep
 the brief and workflow state task-local.
 
 When implementation is accepted, the orchestrator uses the runner to start a
-new Paseo-managed Opus implementer session with that brief. The runner resolves one
-unique Paseo workspace whose directory exactly matches the canonical workflow
-cwd, or performs an explicitly requested local registration for that directory.
-It passes the verified workspace identity on every launch; ambient caller
-workspace, project-name similarity, and repository containment are never
-routing evidence.
+new Opus implementer session with that brief. The orchestrator runs in a
+herdr-core terminal, and its `HC_TERMINAL_ID` is its identity; the runner
+refuses a dispatching caller without it. Every worker starts with explicit argv,
+not a template, through `hc run --bg` in the canonical workflow cwd, as a child of
+the orchestrator's terminal in its Herdr space and tab. It carries the labels
+`ax.workflow=<id>` and `ax.role=<role>` and its own session file
+`<scratch>/sessions/<name>.jsonl`. Workers launch with `--outlive-parent`, so a
+closed or crashed orchestrator does not kill them; a new orchestrator in the same
+cwd resumes with an ordinary tick. They also launch with `--no-notify`, so
+herdr-core types no blocked, error, or exit note into the orchestrator. The
+terminal's cwd is the binding; ambient caller state, project-name similarity,
+and repository containment are never routing evidence.
 
-A launch begins with an inert assignment. The runner records the returned
-identity, waits for the startup turn to become idle, then verifies cwd,
-provider, model, effort, archive state, and pending permissions. Only after
-that verification does it send the immutable task assignment and transfer
-write ownership. A missing, ambiguous, moved, or archived workspace, wrong cwd
-or route, or unknown identity blocks release. Delivery of the sent assignment
+A launch begins with an inert start. The runner records the returned terminal
+address, waits for the startup turn to become idle, then verifies with
+`hc get --json` the exact cwd, argv equal to the fixed route, the workflow and
+role labels, live state, status reporting, and that the terminal is an idle
+child of the orchestrator. Only after that verification does it send the
+immutable task assignment and transfer write ownership. A wrong cwd, route,
+label, or parent, an unreported status, or an unknown identity blocks release. Delivery of the sent assignment
 follows [delivery evidence](#delivery-evidence-and-recovery). Dispatch returns
 after the send; it does not wait for the worker. The orchestrator never writes the
 implementation worktree. Do not fork accumulated conversation or reuse a
@@ -112,35 +121,44 @@ worktrees.
 
 ## Delivery evidence and recovery
 
-The runner depends only on stable Paseo facts: `run --json` returns an agent
-ID; `inspect --json` exposes ID, cwd, provider, model, thinking, lifecycle
-status, archive state, and pending permissions; `logs` returns the last
-assistant reply and a timeline that includes received prompts; and `send`
-exits zero when Paseo accepts the message. A missing `inspect` field stops the
-launch before any send, naming the field and the Paseo version. Lifecycle
-status is active (`initializing`, `running`), quiet (`idle`, `closed`),
-errored (`error`), or unknown; an unknown status never decides anything. Each
-dispatch records `paseo --version` for diagnostics only, and the worker stores
-the raw send output, truncated, so `status` shows what Paseo returned.
-Observation calls (`inspect`, `logs`, `wait`, `workspace ls`, `--version`)
-retry transient errors up to three attempts; `run` and `send` never repeat.
+The runner depends only on stable herdr-core facts: `hc run --json` returns a
+terminal address; `hc get --json` exposes the address, `cwd`, `argv`, `state`,
+`status.state`, `turn`, `reported`, `parent`, and `labels`; `hc send --if idle`
+exits zero when herdr-core types the line into the idle terminal; and the
+worker's own session JSONL holds its received prompts and replies. A missing
+`hc get` field stops the launch before any send, naming the field and the
+`hc -V` output. Lifecycle is ended (terminal not live), active (`working`, or
+`blocked` on a person's dialog), quiet (`idle`, `done`), errored (`error`), or
+unknown; an unknown status never decides anything. Each dispatch records
+`hc -V` for diagnostics only, and the worker stores the raw send output,
+truncated, so `status` shows what herdr-core returned. Observation calls
+(`get`, `wait`, `ls`, `-V`, and session reads) retry transient errors up to
+three attempts; `run` and `send` never repeat.
 
-Every assignment starts with its digest line, so the session timeline proves
+The last reply is the last assistant message in the worker's session JSONL. The
+reader ignores an unparseable trailing line, so a partial write, an unflushed
+reply, or a file cut short by `hc kill` means no reply yet, never a malformed
+report; earlier damage fails closed. A turn that ended in a provider error
+reads as an error, not a reply.
+
+Every assignment starts with its digest line, so the session JSONL proves
 receipt. A zero `send` exit releases the worker; the send body is never
 interpreted. A non-zero exit or timeout records the worker `ambiguous`,
-because Paseo may still have queued the message. One evaluator decides from
+because herdr-core may still have typed the line. One evaluator decides from
 evidence:
 
-- delivered: the timeline holds the assignment digest, the session is active,
-  or the last reply differs from the startup reply. The worker returns to
-  monitoring.
+- delivered: a user message in the session JSONL holds the assignment digest,
+  the terminal is active, or its `turn` advanced past the startup turn. The
+  worker returns to monitoring. An ended terminal that received its assignment
+  but wrote no reply never answers, so it records `failed` for an implementer
+  or repair and `degraded` for a reviewer or planner.
 - undelivered: the 60-second queue window has passed since the send, and the
-  session is quiet and unarchived, without the digest, still at its startup
-  reply. The runner stops the session and records `undelivered`.
+  terminal is live and quiet, without the digest, with `turn` unchanged. The
+  runner kills the terminal and records `undelivered`.
 - otherwise, nothing is decided.
 
-Each tick evaluates ambiguous workers, and released workers still at their
-startup reply past the reviewer timeout. An ambiguous worker stays in flight
+Each tick evaluates ambiguous workers, and released workers whose `turn` has
+not advanced past the startup turn by the reviewer timeout. An ambiguous worker stays in flight
 until the reviewer timeout; afterwards its gate names `tick`, `adopt`, or
 `retry-launch`. No worker is ever sent its assignment twice.
 
@@ -161,7 +179,7 @@ The replacement alone owns the worktree; every earlier attempt stays in the
 worker's attempt history. Until the workflow finishes, each tick checks
 superseded implementer sessions' timelines. If one received its assignment,
 both attempts become `conflict` and new dispatch stops. They stay in flight
-until both sessions are quiet. The gate then depends on which sessions
+until both terminals are quiet or ended. The gate then depends on which sessions
 reported the worktree head: one names `adopt` of that attempt; both name
 `adopt` of the attempt the user chooses, with an `authorizationSource`;
 neither names `retry-launch` with an `authorizationSource`. That relaunch
@@ -172,9 +190,11 @@ the original brief plus that observed state.
 repair whose exact session produced a valid report after the runner lost track
 of it. It accepts the current attempt when that attempt is `failed`,
 `ambiguous`, `undelivered`, or `conflict`, and a superseded attempt only under
-a conflict. It verifies everything a tick verifies: the recorded identity,
-route and cwd, a quiet unarchived session without pending permissions, a reply
-other than the startup reply holding exactly one valid `AX_REPORT`, a branch and
+a conflict. It reads the recorded session JSONL and worktree, never a live
+terminal alone, so a finished worker terminal can still be adopted. It verifies
+everything a tick verifies: the recorded terminal address, route and cwd, a
+terminal that is quiet or ended, a session reply holding exactly one valid
+`AX_REPORT`, a branch and
 head equal to the input and the worktree, and, for a repair, a head other than
 the reviewed head. A mismatch refuses with nothing recorded. On success the
 worker becomes `complete`, the prior attempt is archived in `Workflow.history`,
@@ -204,20 +224,38 @@ only the orchestrator writes. When the result is `unchanged`, end the turn with
 no user-visible message. Report to the user only on a completed phase, a new
 blocker, an open gate, or finish.
 
-While any worker or hosted gate is in flight, the runner keeps exactly one Paseo
-heartbeat on the orchestrator's own session, the caller's `PASEO_AGENT_ID`. It
-fires every 5 minutes with the fixed tick prompt. Each dispatch or tick with
-work in flight keeps at least half of its 24-hour lifetime, and a change to the
-prompt or caller replaces it; the replacement is created before the old
-heartbeat is deleted. Expiry only ends a loop whose orchestrator stopped
-ticking; `status` reports an expired loop and the next dispatch or tick re-arms
-it. The runner deletes the heartbeat when nothing is
-in flight, at `awaiting-user`, and at finish.
+While any worker, consult planner, ambiguous delivery, or hosted gate is in
+flight, the runner keeps exactly one workflow watcher: a `--rm --no-notify`
+terminal labelled `ax.role=watcher`, a child of the orchestrator's own terminal,
+the caller's `HC_TERMINAL_ID`. A dispatch or tick with work in flight and no
+live watcher starts one; the runner stops it when nothing is in flight, at
+`awaiting-user`, and at finish. The watcher follows `hc events` and polls the
+workflow's in-flight terminals every 15 seconds, coalescing changes within 5
+seconds into one tick. It also ticks every 5 minutes unless a tick ran within
+that interval, so a hung worker, a reviewer past its timeout, and a pending
+hosted gate are evaluated without user input. While one tick prompt is
+unconsumed it sends no other; after 15 minutes it treats that prompt as
+dropped and sends one again. It writes nothing while the orchestrator is
+`blocked`, for example at a permission prompt, and retries at the next change
+or interval.
 
-Ticks run under the state lock and are idempotent. A heartbeat that fires while
-the orchestrator is mid-turn waits for the turn to end, and Paseo may drop
-extra fires from that turn; the next fire or tick picks up any missed change. A
-tick cannot duplicate a dispatch or a recorded completion.
+Nothing is typed into the orchestrator terminal, because typing joins and
+submits a person's unsent draft. To tick, the watcher atomically writes a wake
+request for its workflow under `$XDG_STATE_HOME/ax/wake/<orchestrator
+address>/`, bound to the nonce the orchestrator's managed extension recorded at
+session start. The extension delivers the fixed tick prompt inside the
+orchestrator's Pi: as a new turn while idle, or as a queued follow-up while a
+turn streams. It ignores a request carrying another session's nonce, and each
+runner call that binds the orchestrator deletes such stale requests. A watcher
+exits after 24 hours, and a tick that finds it older than 12 hours replaces it.
+A terminated watcher writes a retiring marker and one last request; the next
+tick starts exactly one replacement. `status` and every tick line report a
+missing watcher, and the next tick from the user or Herdr Mobile starts one.
+
+Ticks run under the state lock and are idempotent. A tick prompt that arrives
+while the orchestrator is mid-turn runs after that turn, and a duplicate or late
+tick changes nothing. A tick cannot duplicate a dispatch or a recorded
+completion.
 
 ## Standing orders
 
@@ -243,8 +281,8 @@ produced it; a caller head that differs, a short SHA, or a SHA named only in
 prose never binds. Uncommitted files are recorded as evidence and are not
 reviewed. The runner refuses a round while an implementer or repair is in
 flight. A completed repair's head must still equal the verified head from its
-report envelope. A worker whose last reply is still its inert startup reply has
-not begun the assignment; it stays in flight until the reviewer timeout, when
+report envelope. A worker whose `turn` has not advanced past its inert startup
+turn has not begun the assignment; it stays in flight until the reviewer timeout, when
 the delivery evaluator decides. Planning lenses go to correctness
 (implementation readiness), quality (edge cases and risk), architecture
 (code-simplifier and refactoring opportunities), and contract (delivery shape).
@@ -289,16 +327,17 @@ reviewed, degraded, waived, and repaired heads accurately.
 Two planners give advice: Astra (`planner-astra`, GPT-6 Astra) and
 Fable (`planner-fable`, Fable 5.1 through the pinned Claude bridge). Both run at
 medium thinking. They read, search, and list files. They have no shell, no
-edits, no Paseo tools, and launch no workers. Paseo does not inject its tools
-for planner providers, and the planner policy denies Paseo MCP calls. Other
-MCP servers from the user's own MCP configuration stay available;
-research-only use is an instruction, not an enforced read-only boundary.
+edits, and launch no workers; the generic agent-creation tool denial applies to
+them as to every managed role. MCP servers from the user's own MCP
+configuration stay available; research-only use is an instruction, not an
+enforced read-only boundary.
 The orchestrator dispatches a consult when it chooses or when the user asks, for
 example "ask Fable", "consult Astra", or "get both planners' take". Planners do
 not review and do not write plans. Advice may inform the plan, but only the
 orchestrator's own revision changes it, and that revision still needs a fresh
-planning round. The planner profiles can also be opened manually in Paseo as
-standalone consultants.
+planning round. A person can also start either planner as a standalone
+consultant from its `ax-planner-astra` or `ax-planner-fable` herdr-core
+template.
 
 The orchestrator writes a consult brief that holds the question, the
 constraints, and the repository paths to read. `consult` snapshots the brief and
@@ -325,7 +364,7 @@ malformed envelope, fingerprint mismatch, timeout, or provider error records
 same turn. Running consults never block `review`, `handoff`, or `repair`, and
 never require triage, fallback assessment, or a waiver. When only consults are
 in flight, `nextStep` names the ready phase step and lists them as
-`consulting`. They still count as monitored work: the heartbeat stays armed
+`consulting`. They still count as monitored work: the watcher stays live
 until each is recorded, and `finish` and `cleanup` refuse while one runs.
 `consult`, `finish`, and `cleanup` also refuse until every current planner is
 `complete` or `degraded`, naming `tick` for an ambiguous planner and
@@ -346,7 +385,7 @@ The orchestrator uses Finish and Change Request Create to publish the
 hook-clean implementation as a Ready PR or MR. It requests and monitors only
 hosted gates that the resolved repository policy requires. A not-required gate
 is not passed or waived, and an absent reviewer is never fabricated or polled.
-This managed Pi/Paseo Ready-publication contract takes precedence over generic
+This managed Pi/herdr-core Ready-publication contract takes precedence over generic
 Standard draft publication rules. Respect the provider-specific review request
 mechanism. Publication never authorizes merge, deployment or cleanup.
 
@@ -381,9 +420,10 @@ conflict, as [delivery evidence](#delivery-evidence-and-recovery) describes.
 
 ## Enforced boundary
 
-Paseo owns session creation and visibility. Use the runner for every workflow
-launch; do not call generic create-agent tools, recursive delegation or another
-orchestration package. Its state records each dispatch before launch, archives
+herdr-core hosts every session, and the runner is its only dispatcher for
+managed roles; the herdr-core skill's sub-agent advice does not apply to them.
+Use the runner for every workflow launch; do not call generic create-agent
+tools, recursive delegation or another orchestration package. Its state records each dispatch before launch, archives
 superseded rounds with their triage and repairs, and refuses a duplicate round
 for the same head or plan and a second repair for the same round.
 
@@ -406,25 +446,29 @@ available. The implementer commits the plan with the implementation. A shell
 redirection or in-place edit stays outside what the policy can prove; the
 commit denial keeps it from becoming an orchestrator-authored head.
 
-The Pi shell policy denies direct `paseo run`, `send`, `stop`, `delete`,
-`archive`, `heartbeat`, and `schedule` commands for every managed role; `ls`,
-`inspect`, `logs`, and `wait` stay available, as do `paseo --help` or `-h`,
-`paseo <subcommand> --help` or `-h` with nothing else after the subcommand,
-and the global `paseo --version` or `-v`. A version flag after a subcommand,
-or a help flag beside other arguments, gets no allowance. Runner actions other
-than `status` refuse a caller whose managed role contract is not
-`orchestrator` or `planner`.
+For every managed role, `hc` and `herdr-app` are default-deny allow-lists. `hc`
+allows `ls`, `get`, `read`, `wait`, `events`, `templates`, `schema`,
+`machine ls`, `file read`, `server status`, `--help`, `--skill`, and `-V`;
+`herdr-app` allows `ls`, `status`, `commands`, `shot`, `--help`, `--skill`,
+and `--version`. Every other form is denied, including `hc run`, `send`,
+`kill`, `rm`, and `label`, an unknown subcommand, and an unrecognized option
+before the subcommand. Invocation through `herdr-core`, a path, a variable, or
+a nested shell payload gets the same check, and a dynamic executable that
+cannot be resolved is denied. The runner and its watcher are runner-owned
+processes, not agent tool calls, so the allow-list does not apply to them.
+Runner actions other than `status` refuse a caller whose managed role contract
+is not `orchestrator` or `planner`.
 
 For agent shell calls in the `orchestrator`, `planner`, and `implementer`
 roles, the Pi shell
 policy also enforces the one-command rule in `rules/command-and-tools.md`. A
-person's own `!` commands in those sessions skip this check but keep the Paseo,
-force-push, and deletion policies. It denies any agent command with
+person's own `!` commands in those sessions skip this check but keep the
+force-push, deletion, and herdr-core policies. It denies any agent command with
 more than one shell segment: `&&`, `||`, `;`, pipes, background `&`, subshells,
 command substitution, and newline-separated commands. Payloads of `sh -c`,
 `bash -lc`, and `env -S` get the same check, and a dynamic payload that cannot
 be inspected is denied. Quoted operators and redirections such as `2>&1` stay
-allowed. The Paseo, force-push, and deletion policies run first and keep their
+allowed. The force-push and deletion policies run first and keep their
 messages. Heredocs are split at each newline and denied, so commit with `-m` or
 `-F <file>`. The policy cannot see parallel tool calls; the assignment rule
 against parallel git mutations covers them.
@@ -449,7 +493,7 @@ transitions manually. Use Node 26 and private files outside the repository for
 state and input. The installed Review skill supplies the canonical lens catalog.
 
 ```bash
-node ~/.agents/skills/paseo-orchestration/scripts/paseo-workflow.ts STATE ACTION INPUT.json
+node ~/.agents/skills/herdr-orchestration/scripts/workflow.ts STATE ACTION INPUT.json
 ```
 
 Each input is one JSON object. The following table is the readable input
@@ -468,21 +512,21 @@ is the only full-state read.
 | `init` | `cwd`; optional `configPath`, `timeoutSeconds`, and `additionalLenses` keyed by planning/implementation. Put STATE in a new temporary folder dedicated to this workflow; `init` records that folder as its scratch folder. |
 | `policy` | `deliveryPolicy` with provider/repository identity, independent CI and reviewer status, source, and source fingerprint. Unknown policy blocks handoff. |
 | `order` | `op` (add/amend/retire), stable `id`, `constraint` except on retire, and `authorizationSource`. |
-| `review` | `phase` and `artifactPath`; optional implementation `head`, which must equal the worktree head the runner reads. The artifact includes the exact diff/base or complete plan and original evidence references. Dispatches one round and returns; a later round needs a revised plan or a repaired head. Optional `workspaceId`; when no exact workspace exists, explicit `registerWorkspace: true` and optional `projectId` register the canonical cwd locally. |
-| `consult` | `briefPath` and optional `planners` (`planner-astra`, `planner-fable`; default both, distinct, nonempty). Launches one fresh planner per name and returns; advice is recorded by `tick` and never gates. Refuses on a finished workflow, a state without planner routes, or a current consult with a planner not yet `complete` or `degraded`. Accepts the same optional workspace fields as `review`. |
-| `tick` | No input. Records completions and one hosted probe, renews or deletes the heartbeat, and returns the compact result. |
+| `review` | `phase` and `artifactPath`; optional implementation `head`, which must equal the worktree head the runner reads. The artifact includes the exact diff/base or complete plan and original evidence references. Dispatches one round and returns; a later round needs a revised plan or a repaired head. |
+| `consult` | `briefPath` and optional `planners` (`planner-astra`, `planner-fable`; default both, distinct, nonempty). Launches one fresh planner per name and returns; advice is recorded by `tick` and never gates. Refuses on a finished workflow, a state without planner routes, or a current consult with a planner not yet `complete` or `degraded`. |
+| `tick` | No input. Records completions and one hosted probe, starts, keeps, or stops the watcher, and returns the compact result. |
 | `triage` | `phase`, `decisions` containing each finding's `id`, `action` (fix/dismiss/question) and `reason`; for each degraded reviewer, `assessments` with its `role` and complete per-lens `outcomes` using the review outcome shape. |
 | `waiver` | `phase`, exact current `target`, exact `requestedAction`, nonempty `failedGates`, and `reason`. Records failed evidence without granting the action itself. |
-| `handoff` | `briefPath`, `planResolution`; launches the fresh implementer and returns. Accepts the same optional workspace fields as `review`. |
-| `adopt` | `worker` (`handoff`, `implementation-repair`, or `hosted-repair`), its recorded `agentId`, expected `branch` and full `head`, and an `authorizationSource` when both conflicted sessions reported the head. Records a verified report from a failed, ambiguous, undelivered, or conflicted attempt. |
+| `handoff` | `briefPath`, `planResolution`; launches the fresh implementer and returns. |
+| `adopt` | `worker` (`handoff`, `implementation-repair`, or `hosted-repair`), its recorded `agentId` (the terminal address), expected `branch` and full `head`, and an `authorizationSource` when both conflicted sessions reported the head. Records a verified report from a failed, ambiguous, undelivered, or conflicted attempt. |
 | `retry-launch` | `worker` (a name from `status`, such as `handoff` or `planning:review-contract`), its recorded `agentId`, and an `authorizationSource` once the automatic retry is spent or for a conflict with no matching report. Relaunches established non-delivery in one fresh session. |
-| `retry-handoff` | Exact `previousAgentId`, immutable authorization source, target `branch` and `head`, exact porcelain `dirtyStatus`, and `noWritesEvidence`; optional explicit workspace registration fields. Recovers only an inactive known wrong-cwd implementation handoff with unused implementation/review phases. |
+| `retry-handoff` | Exact `previousAgentId`, immutable authorization source, target `branch` and `head`, exact porcelain `dirtyStatus`, and `noWritesEvidence`. Recovers only an inactive known wrong-cwd implementation handoff with unused implementation/review phases. |
 | `repair` | `phase` (implementation/hosted) and `stage`. `start` needs `briefPath` and launches one fresh implementer for the current round or hosted batch; a hosted `start` with a new `targetBase` reconciles a moved base. `complete` needs the exact verified `head` from the tick-recorded repair report and named `verification`. |
 | `publication` | Observed `artifactUrl`, `head`, exact `targetBase` SHA, optional policy-required `reviewer`, `ready: true`, `evidence`, and the unchanged policy-source fingerprint. When a hosted gate is required, also the Finish `probeCommand` argv and optional `deadlineMs`. After a hosted repair's clean local round, the same action records the republication of that head. |
 | `finish` | Current observed publication fields and final evidence; does not merge. |
 | `continuation` | Explicit `batchId`, authorization source, purpose, allowed phases, and expected current head; before any implementation head, the expected head is the current planning round fingerprint. Archives prior evidence and opens one bounded batch. |
-| `cleanup` | `authorizationSource` (the user's cleanup statement, or the ID of the active standing order that carries it), the expected worktree `head`, and a `reason` when the workflow is not finished. Removes only this workflow's recorded targets; when the caller is the only running agent in the workspace, deletes only the scratch folder. |
-| `status` | No input required; any role may read it. Prints the full state, the only full-state read. Inspect persisted phase, reports, unresolved gaps, and an expired heartbeat loop. |
+| `cleanup` | `authorizationSource` (the user's cleanup statement, or the ID of the active standing order that carries it), the expected worktree `head`, and a `reason` when the workflow is not finished. Removes only this workflow's labelled terminals, wake request, linked worktree when safe, and scratch folder. |
+| `status` | No input required; any role may read it. Prints the full state, the only full-state read. Inspect persisted phase, reports, unresolved gaps, and a missing watcher. |
 
 For hosted probes, use the installed Finish probe with the resolved `--ci-policy`,
 `--reviewer` (`none`, `genie`, or `nitro`), and `--policy-evidence`; include
@@ -492,35 +536,39 @@ failed evidence. When both gates are not required, publication records them as
 not required after exact open Ready artifact readback.
 
 For a known wrong-cwd implementation handoff, `retry-handoff` verifies
-the original exact session is idle, unarchived, route-matched, and outside the
-accepted cwd. It verifies both immutable snapshots plus the target branch, head,
+the original exact terminal is quiet, route-matched, and outside the accepted
+cwd. It verifies both immutable snapshots plus the target branch, head,
 and dirty inventory, and requires explicit no-write evidence. The runner then
 archives the failed identity, inspection, authorization, and target in
 `Workflow.history`, reserves one replacement, and uses the normal verified
-workspace launch. Repeating the same completed request is idempotent. An active
-or unknown old session, used implementation phase, target drift, missing
-snapshot, uncertain registration, or reserved replacement stops recovery; do
-not hand-edit state, stop/archive the old session, or create another attempt.
+launch. Repeating the same completed request is idempotent. An active or
+unknown old terminal, used implementation phase, target drift, missing
+snapshot, or reserved replacement stops recovery; do not hand-edit state, kill
+the old terminal, or create another attempt.
 
 After the user authorizes cleanup, use `cleanup` instead of shell deletion.
 Before removing anything, the runner requires that nothing is in flight,
-deletes any remaining heartbeat, and verifies that the recorded workspace still
-resolves uniquely for the workflow cwd with no running agent in that cwd. When
-the caller's own session (`PASEO_AGENT_ID`) is the only running agent there,
-the runner skips the workspace archive and worktree removal and tells you to
-archive that workspace from Paseo when done; it still deletes the scratch
-folder. Any other running agent in that cwd refuses the action, and a caller
-without `PASEO_AGENT_ID` gets no exemption. Once cleanup starts, every action
-except `status` refuses. For a Paseo worktree workspace on a linked worktree whose HEAD equals `head`
-with no uncommitted changes, the runner archives the workspace; Paseo's archive
-removes the worktree directory and its Git registration. A main checkout or
-local-checkout workspace is skipped. Last, it deletes the scratch folder
+validates the scratch folder, and saves the cleanup reservation in state. It
+then stops the watcher, deletes this
+workflow's wake request, and removes every terminal carrying the workflow
+label, children before parents. It lists with `hc ls --all`, so finished
+workers and timed-out reviewers are removed too; only live terminals are
+killed first. A kill or removal that reports `not_found` counts as success,
+because a `--rm` terminal is removed as it dies. A just-killed terminal's row
+is eventually consistent, so the final check re-reads a residual before
+reporting it remaining.
+The caller's own `HC_TERMINAL_ID` is always excluded, even when it carries the
+workflow label. Once cleanup starts, every action except `status` refuses. The
+runner removes a linked worktree with plain `git worktree remove` only when it
+is clean at `head`, no live terminal other than the caller works inside it,
+and the caller's own cwd is outside it; otherwise it skips the worktree and
+reports why. A main checkout is always skipped. Last, it deletes the scratch folder
 recorded at `init`, only when its real path is strictly below the system
 temporary directory or `/tmp`, it still holds this state file, and it contains
 no Git metadata or other workflow state. States without that record skip the
 folder. Any failed check refuses the action with nothing removed. A failure
 after removal starts stops without retry and reports each target as removed,
-skipped, or remaining. Cleanup never forces removal and never deletes a
+skipped, or remaining; the surviving state keeps that receipt. Cleanup never forces removal and never deletes a
 branch.
 
 Every `awaiting-user` result names the action that clears it. Use `adopt`,
@@ -533,6 +581,12 @@ runner lock only when identities still match. Never hand-edit or replace state.
 A moved head, mismatched artifact, unsupported format, or uncertain ownership
 stops recovery; bookkeeping reconciliation neither launches reviewers nor
 grants terminal authority.
+
+States written by the earlier Paseo runner carry no herdr-core transport
+marker. They stay readable through `status`, and every other action, including
+`cleanup`, refuses them and names the manual steps: archive the old workspace,
+remove its linked worktree with plain `git worktree remove`, and delete its
+scratch folder.
 
 New runner states carry the head-keyed planner orchestration marker, identify
 the four-reviewer roster (`focused-v2`), and store one immutable lens snapshot
@@ -560,7 +614,7 @@ to passed. Terminal owners consume the gate disposition against the current
 exact target immediately before an already-authorized action such as deployment;
 the consumer supplies no terminal authority. Stop on any hard-failed orchestration phase
 and report the saved error. A reserved launch with no returned identity needs
-Paseo inspection before human-directed recovery; never delete state to bypass
+`hc ls` inspection before human-directed recovery; never delete state to bypass
 the round bound. Before acting on a waiver, the runner compares its interpreted
 target with the current artifact or head. A waiver preserves failed evidence,
 does not grant its requested terminal action, and never permits force-push,

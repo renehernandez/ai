@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import {
   chmodSync,
   cpSync,
@@ -12,11 +12,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import enforcement from "../../hooks/pi/enforcement.ts";
-import {
-  launchArguments,
-  launchEnvironment,
-  rpcDenial,
-} from "../../hooks/pi/launch.ts";
+import { launchArguments, launchEnvironment } from "../../hooks/pi/launch.ts";
 import {
   findDependencyChange,
   parseContract,
@@ -27,12 +23,10 @@ import {
 const orchestratorRoles = ["orchestrator", "planner"];
 const writeRoles = [...orchestratorRoles, "implementer"];
 const baseArgs = [
-  "review-astra",
+  "review-correctness",
   "openai-codex",
-  "gpt-6-astra",
-  "low",
-  "--mode",
-  "rpc",
+  "gpt-6.1-sol",
+  "medium",
 ];
 const contract = parseContract({
   role: "review-astra",
@@ -42,19 +36,19 @@ const contract = parseContract({
   nonce: "test",
 });
 
-test("managed arguments preserve Paseo extensions and enforce the fixed route", () => {
+test("managed arguments preserve caller extensions and enforce the fixed route", () => {
   const result = launchArguments([
     ...baseArgs,
     "--model",
-    "openai-codex/gpt-6-astra",
+    "openai-codex/gpt-6.1-sol",
     "--thinking",
-    "low",
+    "medium",
     "-e",
-    "/tmp/paseo.ts",
+    "/tmp/caller.ts",
     "--session",
     "/tmp/session.jsonl",
   ]);
-  assert.ok(result.args.includes("/tmp/paseo.ts"));
+  assert.ok(result.args.includes("/tmp/caller.ts"));
   assert.ok(result.args.includes("/tmp/session.jsonl"));
   assert.ok(result.args.includes("--no-extensions"));
   assert.ok(result.args.some((v) => v.endsWith("/pi/enforcement.ts")));
@@ -62,15 +56,13 @@ test("managed arguments preserve Paseo extensions and enforce the fixed route", 
   assert.ok(!result.args.some((v) => v.includes("pi-mcp-adapter")));
   const implementation = launchArguments([
     "implementer",
-    "openai-codex",
-    "gpt-6.1-sol",
+    "claude-bridge",
+    "claude-opus-5-5",
     "medium",
-    "--mode",
-    "rpc",
   ]);
   assert.ok(implementation.args.includes("npm:pi-mcp-adapter@7.0.0"));
   for (const tail of [
-    ["--model", "gpt-6.1-sol"],
+    ["--model", "gpt-6-astra"],
     ["--thinking=high"],
     ["--provider", "anthropic"],
     ["--tools", "bash"],
@@ -81,7 +73,34 @@ test("managed arguments preserve Paseo extensions and enforce the fixed route", 
     assert.throws(() => launchArguments([...baseArgs, ...tail]));
   }
   assert.throws(() => launchArguments(["unknown", ...baseArgs.slice(1)]));
-  assert.throws(() => launchArguments(baseArgs.slice(0, 4)));
+  // The launcher runs Pi only interactively in a herdr-core terminal; RPC mode is refused.
+  const interactive = launchArguments(baseArgs);
+  assert.ok(!interactive.args.includes("--mode"));
+  assert.ok(interactive.args.includes("--no-approve"));
+  assert.throws(
+    () => launchArguments([...baseArgs, "--mode", "rpc"]),
+    /Unsupported managed Pi argument: --mode/,
+  );
+  assert.throws(
+    () =>
+      launchArguments([
+        "review-correctness",
+        "openai-codex",
+        "gpt-6.1-sol",
+        "high",
+      ]),
+    /differ from routes.json/,
+  );
+  assert.throws(
+    () =>
+      launchArguments(baseArgs, {
+        "review-correctness": {
+          label: "x",
+          routes: ["openai-codex/gpt-6.1-terra:medium"],
+        },
+      }),
+    /differ from routes.json/,
+  );
 });
 
 const orchestratorRoutes = [
@@ -96,7 +115,7 @@ const route = ({ contract }: ReturnType<typeof launchArguments>) => [
   contract.thinking,
 ];
 
-test("the orchestrator launches on the listed route Paseo selects, Opus by default, and refuses others", () => {
+test("the orchestrator launches on the listed route the caller selects, Opus by default, and refuses others", () => {
   const opus = ["orchestrator", "claude-bridge", "claude-opus-5-5", "medium"];
   const astra = ["orchestrator", "openai-codex", "gpt-6-astra", "medium"];
   for (const [tail, expected] of [
@@ -107,12 +126,7 @@ test("the orchestrator launches on the listed route Paseo selects, Opus by defau
     [["--model=gpt-6-astra"], astra],
     [["--provider", "openai-codex"], astra],
   ] as const) {
-    const result = launchArguments([
-      ...orchestratorRoutes,
-      "--mode",
-      "rpc",
-      ...tail,
-    ]);
+    const result = launchArguments([...orchestratorRoutes, ...tail]);
     assert.deepEqual(route(result), expected, tail.join(" "));
     const at = result.args.indexOf("--model");
     assert.deepEqual(result.args.slice(at - 2, at + 4), [
@@ -139,53 +153,24 @@ test("the orchestrator launches on the listed route Paseo selects, Opus by defau
     [["--model", "claude-opus-5-5", "--model", "gpt-6-astra"], /Model/],
   ] as const)
     assert.throws(
-      () => launchArguments([...orchestratorRoutes, "--mode", "rpc", ...tail]),
+      () => launchArguments([...orchestratorRoutes, ...tail]),
       message,
       tail.join(" "),
     );
   for (const argv of [
-    ["orchestrator", "--mode", "rpc"],
-    [
-      "orchestrator",
-      "claude-bridge",
-      "claude-opus-5-5",
-      "medium",
-      "--mode",
-      "rpc",
-    ],
-    ["orchestrator", "claude-bridge/claude-opus-5-5", "--mode", "rpc"],
-    ["orchestrator", "claude-bridge/claude-opus-5-5:fast", "--mode", "rpc"],
-    [...orchestratorRoutes, "--mode", "rpc", "a prompt"],
+    ["orchestrator"],
+    ["orchestrator", "claude-bridge", "claude-opus-5-5", "medium"],
+    ["orchestrator", "claude-bridge/claude-opus-5-5"],
+    ["orchestrator", "claude-bridge/claude-opus-5-5:fast"],
+    [...orchestratorRoutes, "a prompt"],
   ])
     assert.throws(() => launchArguments(argv), argv.join(" "));
 
   const chosen = launchArguments([
     ...orchestratorRoutes,
-    "--mode",
-    "rpc",
     "--model",
     "openai-codex/gpt-6-astra",
   ]).contract;
-  for (const request of [
-    {
-      type: "set_model",
-      provider: "claude-bridge",
-      modelId: "claude-opus-5-5",
-    },
-    { type: "set_model", provider: "openai-codex", modelId: "gpt-6.1-sol" },
-    { type: "set_thinking_level", level: "high" },
-    { type: "cycle_model" },
-    { type: "cycle_thinking_level" },
-  ])
-    assert.ok(rpcDenial(chosen, request, process.cwd()), request.type);
-  assert.equal(
-    rpcDenial(
-      chosen,
-      { type: "set_model", provider: "openai-codex", modelId: "gpt-6-astra" },
-      process.cwd(),
-    ),
-    undefined,
-  );
   assert.ok(
     runtimeDenial(
       chosen,
@@ -212,17 +197,14 @@ test("implementer, reviewer, and planner alias routes stay single and fixed", ()
     ["review-architecture", "openai-codex", "gpt-6.1-terra", "medium"],
     ["review-contract", "claude-bridge", "claude-sonnet-5-5", "medium"],
   ]) {
-    assert.deepEqual(
-      route(launchArguments([...fixed, "--mode", "rpc"])),
-      fixed,
-    );
+    assert.deepEqual(route(launchArguments([...fixed])), fixed);
     for (const tail of [
       ["--model", "openai-codex/gpt-6-astra"],
       ["--thinking", "high"],
       ["--provider", "anthropic"],
     ])
       assert.throws(
-        () => launchArguments([...fixed, "--mode", "rpc", ...tail]),
+        () => launchArguments([...fixed, ...tail]),
         /override rejected/,
       );
     assert.throws(() =>
@@ -230,8 +212,6 @@ test("implementer, reviewer, and planner alias routes stay single and fixed", ()
         fixed[0],
         "claude-bridge/claude-opus-5-5:medium",
         "openai-codex/gpt-6-astra:medium",
-        "--mode",
-        "rpc",
       ]),
     );
   }
@@ -249,8 +229,6 @@ test("each focused reviewer is read-only without MCP and only Sonnet loads the C
       provider,
       model,
       "medium",
-      "--mode",
-      "rpc",
     ]);
     assert.equal(contract.role, role);
     assert.equal(args.at(-1), "read,grep,find,ls", role);
@@ -267,8 +245,6 @@ test("each focused reviewer is read-only without MCP and only Sonnet loads the C
           provider,
           model,
           "medium",
-          "--mode",
-          "rpc",
           "--mcp-config",
           "/tmp/mcp.json",
         ]),
@@ -282,7 +258,7 @@ test("each focused reviewer is read-only without MCP and only Sonnet loads the C
   });
   assert.equal(env.ANTHROPIC_AUTH_TOKEN, undefined);
   assert.equal(env.CLAUDE_CODE_USE_VERTEX, undefined);
-  for (const name of ["bash", "edit", "write", "mcp", "mcp__paseo__run"])
+  for (const name of ["bash", "edit", "write", "mcp", "mcp__agents__run"])
     assert.match(
       toolDenial("review-quality", name, { command: "ls" }, process.cwd()) ??
         "",
@@ -300,7 +276,7 @@ test("consult planners have read tools plus MCP and no shell, fixed to one route
     ["planner-fable", "claude-bridge", "claude-fable-5-1"],
   ]) {
     const fixed = [role, provider, model, "medium"];
-    const { contract, args } = launchArguments([...fixed, "--mode", "rpc"]);
+    const { contract, args } = launchArguments([...fixed]);
     assert.deepEqual(route({ contract, args }), fixed);
     assert.equal(args.at(-1), "read,grep,find,ls,mcp", role);
     assert.ok(args.includes("npm:pi-mcp-adapter@7.0.0"), role);
@@ -315,7 +291,7 @@ test("consult planners have read tools plus MCP and no shell, fixed to one route
       ["--provider", "anthropic"],
     ])
       assert.throws(
-        () => launchArguments([...fixed, "--mode", "rpc", ...tail]),
+        () => launchArguments([...fixed, ...tail]),
         /override rejected/,
         `${role} ${tail.join(" ")}`,
       );
@@ -337,26 +313,15 @@ test("consult planners have read tools plus MCP and no shell, fixed to one route
       toolDenial(role, "mcp", { action: "install" }, process.cwd()) ?? "",
       /explicit operator handling/,
     );
-    const paseo = /Paseo MCP tools are unavailable/;
-    for (const tool of [
-      "paseo_send_agent_prompt",
-      "paseo_kill_agent",
-      "mcp__paseo__create_agent",
-    ])
-      assert.match(
-        toolDenial(role, "mcp", { tool }, process.cwd()) ?? "",
-        paseo,
-        tool,
-      );
-    for (const [name, input] of [
-      ["mcp__paseo__paseo_create_terminal", {}],
-      ["mcp", { server: "paseo" }],
-    ] as const)
-      assert.match(
-        toolDenial(role, name, input, process.cwd()) ?? "",
-        paseo,
-        name,
-      );
+    assert.match(
+      toolDenial(
+        role,
+        "mcp",
+        { tool: "mcp__agents__create_agent" },
+        process.cwd(),
+      ) ?? "",
+      /bounded workflow runner/u,
+    );
     assert.equal(
       toolDenial(role, "mcp__context7__query-docs", {}, process.cwd()),
       undefined,
@@ -365,7 +330,7 @@ test("consult planners have read tools plus MCP and no shell, fixed to one route
   // Orchestrator and implementer MCP behavior is unchanged.
   for (const role of ["planner", "implementer"])
     assert.equal(
-      toolDenial(role, "mcp", { tool: "paseo_list_agents" }, process.cwd()),
+      toolDenial(role, "mcp", { tool: "agents_list_agents" }, process.cwd()),
       undefined,
     );
   assert.equal(
@@ -374,8 +339,6 @@ test("consult planners have read tools plus MCP and no shell, fixed to one route
       "claude-bridge",
       "claude-opus-5-5",
       "medium",
-      "--mode",
-      "rpc",
     ]).args.at(-1),
     "read,grep,find,ls,bash,edit,write,mcp",
   );
@@ -415,9 +378,9 @@ test("runtime model and thinking drift and unsupported reviewer tools are denied
     "write",
     "edit",
     "mcp",
-    "mcp__paseo__list_agents",
+    "mcp__agents__list_agents",
     "mcpScript",
-    "paseo_create_agent",
+    "agents_create_agent",
     "tool_search",
     "codemode",
     "unknown",
@@ -446,26 +409,26 @@ test("runtime model and thinking drift and unsupported reviewer tools are denied
   );
   for (const tool of [
     "create_agent",
-    "paseo_create_agent",
-    "paseo.update_agent",
-    "mcp__paseo__respond_to_permission",
+    "agents_create_agent",
+    "agents.update_agent",
+    "mcp__agents__respond_to_permission",
   ])
     assert.ok(toolDenial("orchestrator", "mcp", { tool }, process.cwd()));
   for (const role of writeRoles) {
     for (const name of [
-      "mcp__paseo__create_agent",
-      "mcp__paseo__update_agent",
-      "mcp__paseo__respond_to_permission",
+      "mcp__agents__create_agent",
+      "mcp__agents__update_agent",
+      "mcp__agents__respond_to_permission",
     ])
       assert.match(
         toolDenial(role, name, {}, process.cwd()) ?? "",
         /bounded workflow runner/u,
       );
     assert.equal(
-      toolDenial(role, "mcp__paseo__list_agents", { action: "x" }, "/"),
+      toolDenial(role, "mcp__agents__list_agents", { action: "x" }, "/"),
       undefined,
     );
-    for (const name of ["mcp__paseo", "tool_search", "codemode"])
+    for (const name of ["mcp__agents", "tool_search", "codemode"])
       assert.ok(toolDenial(role, name, {}, process.cwd()));
   }
   assert.ok(
@@ -475,51 +438,18 @@ test("runtime model and thinking drift and unsupported reviewer tools are denied
     toolDenial(
       "orchestrator",
       "mcp",
-      { tool: "paseo_list_agents" },
+      { tool: "agents_list_agents" },
       process.cwd(),
     ),
     undefined,
   );
-  assert.ok(
-    rpcDenial(
-      contract,
-      { type: "set_model", provider: contract.provider, modelId: "other" },
-      process.cwd(),
-    ),
-  );
 });
 
-test("managed roles cannot dispatch Paseo sessions outside the runner but keep read-only Paseo commands", () => {
+test("managed roles keep runner and quoted commands available", () => {
   for (const command of [
-    "paseo run --background --json --provider ax-implementer task",
-    "paseo send agent-1 --prompt-file brief.md --no-wait",
-    "paseo --json stop agent-1",
-    "paseo --host localhost:1 delete agent-1",
-    "paseo agent archive agent-1",
-    "git status && paseo heartbeat create --cron '*/5 * * * *' tick",
-    "env PASEO_AGENT_ID=other paseo schedule ls",
-    'bash -c "paseo run task"',
-    "/Applications/Paseo.app/Contents/Resources/bin/paseo send a b",
-    "paseo $ACTION agent-1",
-    "P=paseo; $P run task",
-    '"$PASEO_BIN" send agent-1 follow-up',
-  ]) {
-    for (const role of writeRoles)
-      assert.match(
-        toolDenial(role, "bash", { command }, process.cwd()) ?? "",
-        /Paseo policy/u,
-        command,
-      );
-  }
-  for (const command of [
-    "paseo --help",
-    "paseo ls --json",
-    "paseo inspect --json agent-1",
-    "paseo logs --filter assistant_message --tail 1 agent-1",
-    "paseo wait --json --timeout 60 agent-1",
-    'grep -n "paseo run" skills/paseo-orchestration/references/paseo-workflow.md',
-    "echo 'paseo send agent-1; paseo run task'",
-    "node ~/.agents/skills/paseo-orchestration/scripts/paseo-workflow.ts state.json review input.json",
+    'grep -n "hc run" skills/herdr-orchestration/references/workflow.md',
+    "echo 'hc send t1; hc run task'",
+    "node ~/.agents/skills/herdr-orchestration/scripts/workflow.ts state.json review input.json",
     '"$EDITOR" notes.md',
   ])
     for (const role of writeRoles)
@@ -530,44 +460,96 @@ test("managed roles cannot dispatch Paseo sessions outside the runner but keep r
       );
 });
 
-test("pure Paseo help and global version requests stay available, but never hide a dispatch", () => {
-  for (const command of [
-    "paseo --help",
-    "paseo -h",
-    "paseo run --help",
-    "paseo send -h",
-    "paseo agent run --help",
-    "paseo --host localhost:1 stop --help",
-    "paseo heartbeat --help",
-    "paseo --version",
-    "paseo -v",
-  ])
-    for (const role of writeRoles)
+test("herdr-core and the Herdr app are default-deny allow-lists for every managed role", () => {
+  const cwd = process.cwd();
+  const allowed = [
+    "hc ls --json",
+    "hc ls --all --label ax.workflow=w1",
+    "hc get --json t1",
+    "hc read --lines 40 t1",
+    "hc wait t1 --timeout 10",
+    "hc events",
+    "hc templates",
+    "hc schema",
+    "hc machine ls",
+    "hc file read t1 notes.md",
+    "hc server status",
+    "hc --help",
+    "hc --skill",
+    "hc -V",
+    "herdr-core get --json t1",
+    "~/.local/bin/hc ls",
+    '"$HOME/.local/bin/hc" get t1',
+    "env HC_SESSION=x hc ls",
+    "sh -c 'hc ls --json'",
+    "herdr-app ls",
+    "herdr-app status",
+    "herdr-app commands",
+    "herdr-app shot /tmp/frame.png",
+    "herdr-app --help",
+    "herdr-app --skill",
+    "herdr-app --version",
+    '"$EDITOR" notes.md',
+    '"$EDITOR" --wait notes.md',
+    "$H --session x ls",
+  ];
+  const denied = [
+    "hc",
+    "hc run --bg -- pi",
+    "hc send t1 hello",
+    "hc keys t1 Enter",
+    "hc interrupt t1",
+    "hc kill t1",
+    "hc rm t1",
+    "hc label t1 a=b",
+    "hc keep t1",
+    "hc put t1 x",
+    "hc exec t1 ls",
+    "hc attach t1",
+    "hc file write t1 notes.md",
+    "hc file edit t1 notes.md",
+    "hc server stop",
+    "hc server restart",
+    "hc update",
+    "hc machine add box",
+    "hc frobnicate",
+    "hc --session x ls",
+    "hc --help run",
+    "hc $SUB t1",
+    "herdr-core run -- pi",
+    "/Users/me/.local/bin/hc send t1 x",
+    '"$H" interrupt t1',
+    "$H kill t1",
+    "$H",
+    "$H --session x run --bg -- pi",
+    "$H --session=x run --bg -- pi",
+    "$H --session x --verbose -q send t1 hi",
+    '"$H" -q kill t1',
+    "$H --session x $SUB t1",
+    "env -S 'hc kill t1'",
+    "sh -c 'hc run -- pi'",
+    'sh -c "$PAYLOAD"',
+    "herdr-app",
+    "herdr-app do new-tab",
+    "herdr-app check mods/x",
+    "herdr-app feedback text",
+    "herdr-app --frob ls",
+    "herdr-app open",
+  ];
+  for (const role of writeRoles) {
+    for (const command of allowed)
       assert.equal(
-        toolDenial(role, "bash", { command }, process.cwd()),
+        toolDenial(role, "bash", { command }, cwd, "user"),
         undefined,
-        command,
+        `${role}: ${command}`,
       );
-  for (const command of [
-    "paseo run --version",
-    "paseo run -v",
-    "paseo -v run task",
-    "paseo --help run task",
-    "paseo run --help task",
-    "paseo run task --help",
-    "paseo run --prompt --help task",
-    "paseo send agent-1 -h follow-up",
-    "paseo run $HELP",
-    "paseo run --help && paseo run task",
-    "paseo run task; echo --help",
-    "sh -c 'paseo run task --help'",
-  ])
-    for (const role of writeRoles)
+    for (const command of denied)
       assert.match(
-        toolDenial(role, "bash", { command }, process.cwd()) ?? "",
-        /^Paseo policy/u,
-        command,
+        toolDenial(role, "bash", { command }, cwd, "user") ?? "",
+        /^herdr-core policy: .*the workflow runner is the only dispatcher/u,
+        `${role}: ${command}`,
       );
+  }
 });
 
 test("write roles are denied compound shell commands, including nested shell payloads", () => {
@@ -773,7 +755,7 @@ test("the orchestrator and its planner alias cannot change dependencies, but kee
     '"$PM" install left-pad',
     '"$PM" --filter app add left-pad',
     '"$PM" --prefix app install',
-    '"$PM" -r update',
+    '"$PM" -r up',
     "pnpm --unknown-option add left-pad",
     "npm --unknown value install",
     "pnpm --unknown=value run test",
@@ -811,7 +793,6 @@ test("the orchestrator and its planner alias cannot change dependencies, but kee
     "pnpm list",
     "npm view left-pad version",
     "echo 'pnpm add left-pad'",
-    '"$PM" exec vitest',
   ])
     for (const role of writeRoles)
       assert.equal(
@@ -819,13 +800,21 @@ test("the orchestrator and its planner alias cannot change dependencies, but kee
         undefined,
         command,
       );
-  // The Paseo policy separately denies a dynamic executable followed by `run`.
+  // The herdr-core policy separately denies a dynamic executable followed, even after options, by a herdr subcommand such as `run`, `exec`, or `update`.
   assert.equal(findDependencyChange('"$PM" run test'), undefined);
+  assert.equal(findDependencyChange('"$PM" exec vitest'), undefined);
+  for (const role of writeRoles)
+    for (const command of ['"$PM" exec vitest', '"$PM" -r update'])
+      assert.match(
+        toolDenial(role, "bash", { command }, cwd) ?? "",
+        /^herdr-core policy/u,
+        `${role}: ${command}`,
+      );
   for (const command of [
     ...denied.filter((command) => !command.includes("$")),
     '"$PM" --filter app add left-pad',
     '"$PM" --prefix app install',
-    '"$PM" -r update',
+    '"$PM" -r up',
   ])
     assert.equal(
       toolDenial("implementer", "bash", { command }, cwd),
@@ -852,7 +841,7 @@ test("compound denial applies to agent shell calls, not a person's own commands"
     process.env.AX_PI_CONTRACT = JSON.stringify(implementer);
     process.env.AX_PI_WORKFLOW_FILE = join(
       f.root,
-      "skills/paseo-orchestration/references/paseo-workflow.md",
+      "skills/herdr-orchestration/references/workflow.md",
     );
     const handlers = new Map<string, (...args: unknown[]) => unknown>();
     enforcement({
@@ -878,11 +867,11 @@ test("compound denial applies to agent shell calls, not a person's own commands"
     assert.equal(agent.block, true);
     assert.match(agent.reason, /^Shell discipline/u);
     const dispatch = handlers.get("user_bash")?.(
-      { command: "paseo run task" },
+      { command: "hc run task" },
       ctx,
     ) as { result: { output: string; exitCode: number } };
     assert.equal(dispatch.result.exitCode, 1);
-    assert.match(dispatch.result.output, /^Paseo policy/u);
+    assert.match(dispatch.result.output, /^herdr-core policy/u);
   } finally {
     if (savedContract === undefined) delete process.env.AX_PI_CONTRACT;
     else process.env.AX_PI_CONTRACT = savedContract;
@@ -895,10 +884,10 @@ test("compound denial applies to agent shell calls, not a person's own commands"
 function fixture(): { root: string; launcher: string; env: NodeJS.ProcessEnv } {
   const root = mkdtempSync(join(tmpdir(), "pi-enforcement-"));
   cpSync(resolve("hooks"), join(root, "hooks"), { recursive: true });
-  const references = join(root, "skills/paseo-orchestration/references");
+  const references = join(root, "skills/herdr-orchestration/references");
   mkdirSync(references, { recursive: true });
   writeFileSync(
-    join(references, "paseo-workflow.md"),
+    join(references, "workflow.md"),
     "One local review pass. Publish Ready. Never merge.",
   );
   mkdirSync(join(root, "bin"));
@@ -907,12 +896,11 @@ function fixture(): { root: string; launcher: string; env: NodeJS.ProcessEnv } {
     fake,
     `#!${process.execPath}
 const fs = require('node:fs');
-const readline = require('node:readline');
 if (process.env.FAKE_PI_MODE === 'no-handshake') { setTimeout(() => process.exit(0), 30); }
 else {
  const c = JSON.parse(process.env.AX_PI_CONTRACT);
  fs.writeSync(3, JSON.stringify({ready:true,nonce:c.nonce})+'\\n');
- readline.createInterface({input:process.stdin}).on('line', line => process.stdout.write(JSON.stringify({received:JSON.parse(line)})+'\\n'));
+ setTimeout(() => process.exit(0), 30);
 }
 `,
   );
@@ -929,44 +917,21 @@ else {
   };
 }
 
-test("subprocess RPC waits for adapter handshake and filters role mutations", () => {
+test("interactive launch waits for the adapter handshake and fails closed without it", () => {
   const f = fixture();
   try {
-    const commands = [
-      { id: "state", type: "get_state" },
-      {
-        id: "model",
-        type: "set_model",
-        provider: contract.provider,
-        modelId: "other",
-      },
-      { id: "effort", type: "set_thinking_level", level: "high" },
-      { id: "bash", type: "bash", command: "touch should-not-exist" },
-    ];
     const result = spawnSync(process.execPath, [f.launcher, ...baseArgs], {
       env: f.env,
-      input: `${commands.map((v) => JSON.stringify(v)).join("\n")}\n`,
       encoding: "utf8",
       timeout: 5000,
     });
     assert.equal(result.status, 0, result.stderr);
-    const output = result.stdout
-      .trim()
-      .split("\n")
-      .map((v) => JSON.parse(v));
-    assert.deepEqual(
-      output.filter((v) => v.received).map((v) => v.received.id),
-      ["state"],
-    );
-    assert.equal(output.filter((v) => v.success === false).length, 3);
     const missing = spawnSync(process.execPath, [f.launcher, ...baseArgs], {
       env: { ...f.env, FAKE_PI_MODE: "no-handshake" },
-      input: '{"type":"prompt","message":"must not run"}\n',
       encoding: "utf8",
       timeout: 5000,
     });
     assert.equal(missing.status, 78, missing.stderr);
-    assert.equal(missing.stdout, "");
     assert.match(missing.stderr, /without mandatory adapter/u);
     rmSync(join(f.root, "hooks/pi/enforcement.ts"));
     const absent = spawnSync(process.execPath, [f.launcher, ...baseArgs], {
@@ -980,49 +945,34 @@ test("subprocess RPC waits for adapter handshake and filters role mutations", ()
   }
 });
 
-test("Paseo MCP config reaches the pinned adapter only for nonreview roles", () => {
-  for (const role of ["planner", "implementer", "planner-astra"]) {
+test("MCP config reaches the pinned adapter only for nonreview roles", () => {
+  for (const fixed of [
+    ["planner", "openai-codex", "gpt-6-astra", "medium"],
+    ["implementer", "claude-bridge", "claude-opus-5-5", "medium"],
+    ["planner-astra", "openai-codex", "gpt-6-astra", "medium"],
+  ]) {
     for (const tail of [
-      ["--mcp-config", "/tmp/paseo mcp.json"],
-      ["--mcp-config=/tmp/paseo mcp.json"],
+      ["--mcp-config", "/tmp/caller mcp.json"],
+      ["--mcp-config=/tmp/caller mcp.json"],
     ]) {
-      const result = launchArguments([
-        role,
-        "openai-codex",
-        "gpt-6.1-sol",
-        "medium",
-        "--mode",
-        "rpc",
-        ...tail,
-      ]);
+      const result = launchArguments([...fixed, ...tail]);
       const index = result.args.indexOf("--mcp-config");
       assert.notEqual(index, -1);
-      assert.equal(result.args[index + 1], "/tmp/paseo mcp.json");
+      assert.equal(result.args[index + 1], "/tmp/caller mcp.json");
       assert.ok(result.args.includes("npm:pi-mcp-adapter@7.0.0"));
     }
     assert.throws(
-      () =>
-        launchArguments([
-          role,
-          "openai-codex",
-          "gpt-6.1-sol",
-          "medium",
-          "--mode",
-          "rpc",
-          "--mcp-config",
-        ]),
+      () => launchArguments([...fixed, "--mcp-config"]),
       /Missing value/,
     );
   }
   assert.throws(
     () =>
       launchArguments([
-        "review-astra",
+        "review-correctness",
         "openai-codex",
-        "gpt-6-astra",
-        "low",
-        "--mode",
-        "rpc",
+        "gpt-6.1-sol",
+        "medium",
         "--mcp-config",
         "/tmp/mcp.json",
       ]),
@@ -1038,7 +988,7 @@ test("adapter injects the canonical workflow section once and retains other prom
     process.env.AX_PI_CONTRACT = JSON.stringify(contract);
     process.env.AX_PI_WORKFLOW_FILE = join(
       f.root,
-      "skills/paseo-orchestration/references/paseo-workflow.md",
+      "skills/herdr-orchestration/references/workflow.md",
     );
     const handlers = new Map<string, (...args: unknown[]) => unknown>();
     enforcement({
@@ -1052,7 +1002,7 @@ test("adapter injects the canonical workflow section once and retains other prom
       cwd: f.root,
       model: { provider: contract.provider, id: contract.model },
     };
-    const sections: Record<string, string> = { paseo: "Paseo original" };
+    const sections: Record<string, string> = { host: "Host original" };
     handlers.get("before_agent_start")?.(
       { systemPromptOptions: { sections } },
       ctx,
@@ -1061,14 +1011,15 @@ test("adapter injects the canonical workflow section once and retains other prom
       { systemPromptOptions: { sections } },
       ctx,
     );
-    assert.equal(sections.paseo, "Paseo original");
+    assert.equal(sections.host, "Host original");
     assert.match(
-      sections["ax-paseo-workflow"],
-      /^Active fixed Pi\/Paseo role: review-astra\./u,
+      sections["ax-herdr-workflow"],
+      /^Active fixed Pi\/herdr-core role: review-astra\./u,
     );
-    assert.match(sections["ax-paseo-workflow"], /Publish Ready/u);
+    assert.match(sections["ax-herdr-workflow"], /Publish Ready/u);
     assert.equal(
-      sections["ax-paseo-workflow"].split("Active fixed Pi/Paseo role").length,
+      sections["ax-herdr-workflow"].split("Active fixed Pi/herdr-core role")
+        .length,
       2,
     );
     const blocked = handlers.get("tool_call")?.(
@@ -1081,102 +1032,6 @@ test("adapter injects the canonical workflow section once and retains other prom
     else process.env.AX_PI_CONTRACT = savedContract;
     if (savedWorkflow === undefined) delete process.env.AX_PI_WORKFLOW_FILE;
     else process.env.AX_PI_WORKFLOW_FILE = savedWorkflow;
-    rmSync(f.root, { recursive: true, force: true });
-  }
-});
-
-test("installed Pi RPC loads the adapter and rejects model changes", {
-  skip: process.env.AX_PI_LIVE_RPC_TEST !== "1",
-}, async () => {
-  const f = fixture();
-  const child = spawn(
-    process.execPath,
-    [
-      f.launcher,
-      ...baseArgs,
-      "--offline",
-      "--no-session",
-      "--no-context-files",
-      "--no-skills",
-      "--no-prompt-templates",
-    ],
-    {
-      env: { ...process.env, PI_CODING_AGENT_DIR: join(f.root, "agent") },
-      stdio: ["pipe", "pipe", "pipe"],
-    },
-  );
-  try {
-    const responses: Record<string, unknown>[] = [];
-    let buffer = "";
-    let stderr = "";
-    child.stderr.on("data", (v) => {
-      stderr += v.toString();
-    });
-    await new Promise<void>((resolvePromise, reject) => {
-      const timer = setTimeout(
-        () => reject(new Error(`Pi RPC timeout: ${stderr}`)),
-        20_000,
-      );
-      child.on("exit", (code) => {
-        clearTimeout(timer);
-        reject(new Error(`Pi exited ${code}: ${stderr}`));
-      });
-      child.stdout.on("data", (data) => {
-        buffer += data.toString();
-        while (buffer.includes("\n")) {
-          const newline = buffer.indexOf("\n");
-          const line = buffer.slice(0, newline);
-          buffer = buffer.slice(newline + 1);
-          const response = JSON.parse(line);
-          if (response.type === "response") responses.push(response);
-          if (responses.length === 2) {
-            clearTimeout(timer);
-            resolvePromise();
-          }
-        }
-      });
-      child.stdin.write(
-        '{"id":"state","type":"get_state"}\n{"id":"change","type":"set_model","provider":"openai-codex","modelId":"wrong"}\n',
-      );
-    });
-    assert.equal(responses.find((v) => v.id === "change")?.success, false);
-    const state = responses.find((v) => v.id === "state") as {
-      data: { model: { id: string }; thinkingLevel: string };
-    };
-    assert.equal(state.data.model.id, contract.model);
-    assert.equal(state.data.thinkingLevel, "low");
-    const driftExtension = join(f.root, "drift.ts");
-    writeFileSync(
-      driftExtension,
-      'export default function(pi) { pi.on("session_start", () => pi.setThinkingLevel("high")); }',
-    );
-    const drift = spawnSync(
-      process.execPath,
-      [
-        f.launcher,
-        ...baseArgs,
-        "--offline",
-        "--no-session",
-        "--no-context-files",
-        "--no-skills",
-        "--no-prompt-templates",
-        "-e",
-        driftExtension,
-      ],
-      {
-        env: {
-          ...process.env,
-          PI_CODING_AGENT_DIR: join(f.root, "drift-agent"),
-        },
-        input: '{"type":"prompt","message":"must not reach inference"}\n',
-        encoding: "utf8",
-        timeout: 20_000,
-      },
-    );
-    assert.equal(drift.status, 78, drift.stderr);
-    assert.match(drift.stderr, /does not match the fixed role/u);
-  } finally {
-    child.kill();
     rmSync(f.root, { recursive: true, force: true });
   }
 });

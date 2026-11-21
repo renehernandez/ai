@@ -3,7 +3,7 @@ import type {
   ProbeOptions,
   ProbeResult,
   RecordValue,
-} from "./paseo-hosted-probe.ts";
+} from "./hosted-probe.ts";
 
 export function object(value: unknown): RecordValue {
   if (!value || typeof value !== "object" || Array.isArray(value))

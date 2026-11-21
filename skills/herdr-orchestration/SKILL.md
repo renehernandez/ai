@@ -1,9 +1,9 @@
 ---
-name: paseo-orchestration
-description: Use when a managed Pi/Paseo orchestrator carries accepted work through runner-dispatched implementer and reviewer workers, ticks, triage, and publication.
+name: herdr-orchestration
+description: Use when a managed Pi/herdr-core orchestrator carries accepted work through runner-dispatched implementer and reviewer workers, ticks, triage, and publication.
 ---
 
-# Paseo Orchestration
+# Herdr Orchestration
 
 The managed orchestrator carries accepted work through the workflow runner. It
 owns the planning artifact, every worker dispatch, triage, gate decisions,
@@ -17,11 +17,11 @@ review round.
 This skill is a bounded specialist inside the five modes, not another mode.
 Plan, Execute, Review, and Finish keep their authority; the runner supplies the
 dispatch, state, and gate machinery. It grants no merge, deployment, or cleanup
-authority. After the user authorizes cleanup, remove the workflow's worktree,
-workspace, and scratch folder through the runner's `cleanup` action, never
+authority. After the user authorizes cleanup, remove the workflow's terminals,
+worktree, and scratch folder through the runner's `cleanup` action, never
 shell deletion.
 
-Follow [the Pi workflow contract](references/paseo-workflow.md). Pi launch
+Follow [the Pi workflow contract](references/workflow.md). Pi launch
 injects that contract into every managed role. Write every implementer brief,
 repair brief, and reviewer packet with `worker-handoff`. A brief that started
 this session is a `session-handoff`: it never becomes a standing order or a
@@ -30,14 +30,14 @@ delivery override.
 Drive the runner only from the orchestrator session:
 
 ```bash
-node <skill-dir>/scripts/paseo-workflow.ts STATE ACTION INPUT.json
+node <skill-dir>/scripts/workflow.ts STATE ACTION INPUT.json
 ```
 
 When you want a second opinion, or the user asks for one ("ask Fable",
 "consult Astra"), write a consult brief and run `consult`. The Astra and Fable
-planners advise without shell, edit, write, or Paseo tools and never gate
-progression. Paseo does not inject its tools for them, and their policy denies
-Paseo MCP calls; other MCP access is limited to research by instruction only. Only your own revision
+planners advise without shell, edit, or write tools, launch no workers, and
+never gate progression; their MCP access is limited to research by instruction
+only. Only your own revision
 changes the plan, and it still needs a fresh planning round.
 
 The contract's runner interface lists every action and its input. When a
