@@ -184,6 +184,54 @@ AX generates each from `hooks/pi/routes.json`, so a person can start
 an empty body, because herdr-core sends a nonempty body as a first prompt.
 Other templates in that folder are unowned.
 
+### Herdr app projects sidebar
+
+Two targets install a personal Herdr app sidebar that groups spaces into
+projects. `runtime.configs.herdrApp` owns, whole, each file under `herdr-app/`
+in this repository at the same path below `~/.config/herdr-app`:
+
+- `mods/projects/`: the sidebar. Each project lists its repos, and each repo
+  lists its worktree spaces. Every other space is under **Other**.
+- `mods/projects-edit/`: the Projects dialog and the sidebar's menus.
+- `layouts/projects.json`: a copy of Herdr's `main` layout with the `spaces`
+  block showing the `projects` mod instead.
+
+Status reports a changed or missing owned file as `content` drift, and sync
+replaces it, just as with `herdrTemplates`. AX never deletes: a file removed
+from `herdr-app/` stays in the Herdr home until you delete it by hand. Source
+may name only files in mod folders Herdr doesn't ship and layouts Herdr
+doesn't ship. Sync refuses anything else.
+
+`runtime.configs.herdrKeys` manages one JSON path in
+`~/.config/herdr-app/keys.json`: `global."cmd-k p"` =
+`"mod.open:projects-edit"`, which toggles the Projects dialog. Every other key
+stays as it is. Once `keys.json` is edited, Herdr stops upgrading its default
+shortcuts in it. When `keys.json` is missing, status and validate report drift
+and sync does not create the file. A file with only this key would replace
+Herdr's whole default key table, so start Herdr once to create it, then sync.
+
+These files are never AX targets:
+
+- Herdr's own data: `projects.json` (your projects, written by the sidebar and
+  the dialog), `settings.json`, `shared.json` and `layouts/.state/`.
+- Herdr's shipped mods and layouts, and the files Herdr writes into mod
+  folders (`jsconfig.json`, `gpui-kit.d.ts`, `herdr.d.ts`).
+
+After the first sync, show the sidebar once: run
+`layout.switch {name: "projects"}`, or pick the layout in Herdr. Herdr
+remembers the shown layout in `shared.json`, so sync never switches it.
+Rollback: `layout.switch {name: "main"}`, `cmd-shift-l`, or
+`ctrl-alt-shift-escape` brings back Herdr's own sidebar at once, and a later
+sync does not undo that.
+
+The `projects` mod is derived from Herdr 0.1.16's shipped `spaces` mod
+(Apache License 2.0; the license and a change notice are in the mod folder),
+and the layout copies that version's `main` layout. Neither follows Herdr
+upgrades. When an upgrade changes the `spaces` mod, the `main` layout or the mod
+API, re-derive both in a follow-up change. Until then, switch back to `main` if
+the sidebar misbehaves. Herdr keeps the last working copy of a mod running when
+a new one fails to load, and writes the error next to it.
+
 Role routes live in `hooks/pi/routes.json`, which the launcher reads and the
 templates derive from. Change a route there, in source. Credentials, sessions
 and Pi's `auth.json` are never AX targets. Top-level sync applies configs,

@@ -66,6 +66,18 @@
       ]
     },
     "configs": {
+      "herdrApp": {
+        "target": "~/.config/herdr-app"
+      },
+      "herdrKeys": {
+        "target": "~/.config/herdr-app/keys.json",
+        "managedPaths": [
+          {
+            "path": ["global", "cmd-k p"],
+            "value": "mod.open:projects-edit"
+          }
+        ]
+      },
       "herdrTemplates": {
         "target": "~/.config/herdr-core/templates"
       },

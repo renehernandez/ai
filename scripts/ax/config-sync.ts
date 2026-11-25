@@ -3,13 +3,14 @@ import {
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { userInfo } from "node:os";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, join, posix, relative, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import {
   HERDR_TEMPLATES_TARGET,
@@ -40,6 +41,81 @@ import {
   applyTransaction,
   type TransactionOperationInput,
 } from "./transaction-engine.ts";
+
+const HERDR_APP_TARGET = "~/.config/herdr-app";
+const HERDR_KEYS_TARGET = "~/.config/herdr-app/keys.json";
+// Shipped with Herdr 0.1.16; Herdr owns and upgrades these, so AX never does.
+const SHIPPED_HERDR_MODS = new Set([
+  "agents",
+  "changes",
+  "confirm",
+  "files",
+  "help",
+  "machine-add",
+  "menu",
+  "new-menu",
+  "pane",
+  "peek",
+  "picker",
+  "prompt",
+  "spaces",
+  "tabs",
+  "terminals-bar",
+  "terminals-pane",
+  "toast",
+  "win98",
+  "workspace-chrome",
+  "workspace-status",
+  "worktree",
+]);
+const SHIPPED_HERDR_LAYOUTS = new Set(["main", "terminals", "win98"]);
+// Herdr writes these into every mod folder.
+const HERDR_WRITTEN = new Set(["jsconfig.json", "gpui-kit.d.ts", "herdr.d.ts"]);
+
+// A path, relative to the Herdr app home, that AX may own: a file in a
+// non-shipped mod folder or a non-shipped layout. Never settings, keys,
+// shared state, project data, hidden files or Herdr-written mod files.
+export function herdrAppPathAllowed(file: string): boolean {
+  const parts = file.split("/");
+  if (
+    posix.normalize(file) !== file ||
+    parts.some((part) => !part || part.startsWith("."))
+  )
+    return false;
+  if (parts[0] === "layouts")
+    return (
+      parts.length === 2 &&
+      parts[1].endsWith(".json") &&
+      !SHIPPED_HERDR_LAYOUTS.has(parts[1].slice(0, -5))
+    );
+  return (
+    parts[0] === "mods" &&
+    parts.length >= 3 &&
+    !SHIPPED_HERDR_MODS.has(parts[1]) &&
+    !HERDR_WRITTEN.has(parts.at(-1) ?? "")
+  );
+}
+
+// Every file under herdr-app/ in source, relative to it, sorted.
+export function readHerdrAppFiles(
+  sourceRoot: string,
+): Array<{ file: string; content: string }> {
+  const root = join(sourceRoot, "herdr-app");
+  const files: Array<{ file: string; content: string }> = [];
+  const walk = (relativeDir: string): void => {
+    for (const name of readdirSync(join(root, relativeDir)).sort()) {
+      const file = relativeDir ? `${relativeDir}/${name}` : name;
+      const stats = lstatSync(join(root, file));
+      if (stats.isDirectory()) walk(file);
+      else if (stats.isFile() && herdrAppPathAllowed(file))
+        files.push({ file, content: readFileSync(join(root, file), "utf-8") });
+      else throw new Error(`herdr_app_source_invalid: herdr-app/${file}`);
+    }
+  };
+  walk("");
+  if (files.length === 0) throw new Error("herdr_app_source_empty");
+  return files;
+}
 
 export type ManagedConfigScalar = string | number | boolean;
 export type ManagedJsonValue =
@@ -115,7 +191,9 @@ type ResolvedToolConfig = {
     | "pi"
     | "piModels"
     | "piClaudeBridge"
-    | "herdrTemplates";
+    | "herdrTemplates"
+    | "herdrApp"
+    | "herdrKeys";
   // Report and asset key; a generated file target adds its file name.
   key: string;
   target: string;
@@ -123,6 +201,10 @@ type ResolvedToolConfig = {
   leaves: ManagedLeaf[];
   // A generated file AX owns whole, instead of managed leaves.
   content?: string;
+  // Where a whole-file target's content comes from, for drift reports.
+  source?: string;
+  // Sync leaves a missing target missing; status and validate report drift.
+  existingOnly?: boolean;
 };
 
 type PreparedCandidate = {
@@ -148,7 +230,10 @@ const CONFIG_TARGETS = {
   piModels: "~/.pi/agent/models.json",
   piClaudeBridge: "~/.pi/agent/claude-bridge.json",
   herdrTemplates: HERDR_TEMPLATES_TARGET,
+  herdrApp: HERDR_APP_TARGET,
+  herdrKeys: HERDR_KEYS_TARGET,
 } as const;
+const DIRECTORY_TARGETS: string[] = [HERDR_TEMPLATES_TARGET, HERDR_APP_TARGET];
 const TEMPLATE_FILE = /^ax-[a-z0-9.-]+\.md$/;
 
 export function inspectManagedConfigs(
@@ -269,14 +354,15 @@ function prepareCore(
     const observed = readObserved(tool);
     const drift = compareTool(observed.content, tool);
     let candidate = observed.content ?? "";
+    const leaveMissing = tool.existingOnly && observed.content === undefined;
     if (tool.content !== undefined) candidate = tool.content;
-    else if (drift.length > 0) {
+    else if (drift.length > 0 && !leaveMissing) {
       const parsed = parseDocument(candidate, tool);
       candidate = isToml(tool.name)
         ? updateTomlDocument(candidate, parsed, tool.leaves)
         : updateJsonDocument(parsed, tool.leaves);
     }
-    const candidateDrift = compareTool(candidate, tool);
+    const candidateDrift = leaveMissing ? [] : compareTool(candidate, tool);
     if (candidateDrift.length > 0) {
       throw new Error(
         `managed_config_candidate_drift: ${candidateDrift
@@ -354,6 +440,23 @@ function resolveToolConfigs(input: ManagedConfigOptions): ResolvedToolConfig[] {
           home,
           leaves: [],
           content: template.content,
+          source: "generated from hooks/pi/routes.json",
+        });
+      }
+      continue;
+    }
+    if (supportedName === "herdrApp") {
+      for (const file of readHerdrAppFiles(input.sourceRoot)) {
+        const target = join(home, expectedTarget.slice(2), file.file);
+        assertTargetSafe(target, home);
+        resolved.push({
+          name: supportedName,
+          key: `${name}/${file.file}`,
+          target,
+          home,
+          leaves: [],
+          content: file.content,
+          source: `copied from herdr-app/${file.file}`,
         });
       }
       continue;
@@ -366,7 +469,15 @@ function resolveToolConfigs(input: ManagedConfigOptions): ResolvedToolConfig[] {
     if (leaves.length === 0) {
       throw new Error(`managed_config_empty: ${name}`);
     }
-    resolved.push({ name: supportedName, key: name, target, home, leaves });
+    resolved.push({
+      name: supportedName,
+      key: name,
+      target,
+      home,
+      leaves,
+      // A minimal keys.json would replace Herdr's whole default key table.
+      existingOnly: supportedName === "herdrKeys",
+    });
   }
   return resolved;
 }
@@ -397,7 +508,7 @@ function compareTool(
   return [
     {
       path: "content",
-      expected: "generated from hooks/pi/routes.json",
+      expected: tool.source ?? "generated",
       reason: content === undefined ? "missing" : "different",
     },
   ];
@@ -475,11 +586,16 @@ function assertTargetSafe(target: string, home: string): void {
   const templates = join(absoluteHome, HERDR_TEMPLATES_TARGET.slice(2));
   const generatedTemplate =
     dirname(expected) === templates && TEMPLATE_FILE.test(basename(expected));
+  const herdrApp = relative(
+    join(absoluteHome, HERDR_APP_TARGET.slice(2)),
+    expected,
+  ).replaceAll("\\", "/");
   if (
     !generatedTemplate &&
+    !herdrAppPathAllowed(herdrApp) &&
     !Object.values(CONFIG_TARGETS).some(
       (path) =>
-        path !== HERDR_TEMPLATES_TARGET &&
+        !DIRECTORY_TARGETS.includes(path) &&
         expected === join(absoluteHome, path.slice(2)),
     )
   ) {

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   chmodSync,
   copyFileSync,
+  existsSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -13,13 +14,16 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import test, { type TestContext } from "node:test";
 import {
   applyPreparedManagedConfigs,
+  herdrAppPathAllowed,
   inspectManagedConfigs,
   prepareManagedConfigs,
+  readHerdrAppFiles,
   syncManagedConfigs,
+  validateManagedConfigs,
 } from "../../scripts/ax/config-sync.ts";
 
 function fixture(t: TestContext): ReturnType<typeof options> {
@@ -292,4 +296,244 @@ test("overlapping JSON ownership and unsafe object keys are rejected", (t) => {
   });
   assert.throws(() => syncManagedConfigs(input), /key_invalid|path_invalid/);
   assert.equal(({} as Record<string, unknown>).polluted, undefined);
+});
+
+const repoRoot = join(import.meta.dirname, "../..");
+const HERDR_KEYS = {
+  target: "~/.config/herdr-app/keys.json",
+  managedPaths: [
+    { path: ["global", "cmd-k p"], value: "mod.open:projects-edit" },
+  ],
+};
+
+function writeText(path: string, text: string): void {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, text);
+}
+
+function herdrAppFixture(t: TestContext, configs: Record<string, unknown>) {
+  const root = mkdtempSync(join(tmpdir(), "ax-herdr-app-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const sourceRoot = join(root, "source");
+  writeText(join(sourceRoot, "herdr-app/mods/projects/main.js"), "main\n");
+  writeText(join(sourceRoot, "herdr-app/mods/projects/model.js"), "model\n");
+  writeText(join(sourceRoot, "herdr-app/layouts/projects.json"), "{}\n");
+  return {
+    sourceRoot,
+    runtimeRoot: join(root, "runtime"),
+    home: join(root, "home"),
+    liveHome: join(root, "live"),
+    sourceVerified: false,
+    config: {
+      version: 1 as const,
+      runtime: {
+        canonicalSkillsDir: "~/.agents/skills",
+        skillSymlinkTargets: [],
+        configs,
+      },
+    },
+  };
+}
+
+test("GREEN pi-config: herdrApp owns only the herdr-app source files and repairs their drift", (t) => {
+  const input = herdrAppFixture(t, {
+    herdrApp: { target: "~/.config/herdr-app" },
+  });
+  const app = join(input.home, ".config/herdr-app");
+  writeText(join(app, "mods/projects/jsconfig.json"), "herdr-written\n");
+  writeText(join(app, "mods/projects/gpui-kit.d.ts"), "herdr-written\n");
+  writeText(join(app, "mods/spaces/main.js"), "shipped\n");
+  writeText(join(app, "settings.json"), "{}\n");
+  writeText(join(app, "projects.json"), '{"projects":[]}\n');
+
+  const main = join(app, "mods/projects/main.js");
+  assert.deepEqual(syncManagedConfigs(input).changedPaths.sort(), [
+    join(app, "layouts/projects.json"),
+    main,
+    join(app, "mods/projects/model.js"),
+  ]);
+  assert.equal(validateManagedConfigs(input).ok, true);
+  assert.deepEqual(syncManagedConfigs(input).changedPaths, []);
+  assert.deepEqual(readdirSync(join(app, "mods/projects")).sort(), [
+    "gpui-kit.d.ts",
+    "jsconfig.json",
+    "main.js",
+    "model.js",
+  ]);
+
+  writeFileSync(main, "edited\n");
+  assert.deepEqual(inspectManagedConfigs(input).findings, [
+    "managed_config_drift: herdrApp/mods/projects/main.js.content is different",
+  ]);
+  assert.deepEqual(syncManagedConfigs(input).changedPaths, [main]);
+  assert.equal(readFileSync(main, "utf8"), "main\n");
+  for (const [file, text] of [
+    ["mods/projects/jsconfig.json", "herdr-written\n"],
+    ["mods/projects/gpui-kit.d.ts", "herdr-written\n"],
+    ["mods/spaces/main.js", "shipped\n"],
+    ["settings.json", "{}\n"],
+    ["projects.json", '{"projects":[]}\n'],
+  ])
+    assert.equal(readFileSync(join(app, file), "utf8"), text);
+});
+
+test("GREEN pi-config: a herdr-app source file removed later stays in the Herdr home", (t) => {
+  const input = herdrAppFixture(t, {
+    herdrApp: { target: "~/.config/herdr-app" },
+  });
+  syncManagedConfigs(input);
+  rmSync(join(input.sourceRoot, "herdr-app/mods/projects/model.js"));
+  assert.deepEqual(syncManagedConfigs(input).changedPaths, []);
+  assert.equal(
+    existsSync(join(input.home, ".config/herdr-app/mods/projects/model.js")),
+    true,
+  );
+});
+
+test("RED pi-config: herdrApp refuses source that would own Herdr's files", (t) => {
+  for (const file of [
+    "settings.json",
+    "keys.json",
+    "projects.json",
+    "shared.json",
+    "mods/spaces/main.js",
+    "mods/projects/jsconfig.json",
+    "mods/projects/.hidden.js",
+    "layouts/main.json",
+    "layouts/.state/projects.json",
+  ]) {
+    const input = herdrAppFixture(t, {
+      herdrApp: { target: "~/.config/herdr-app" },
+    });
+    writeText(join(input.sourceRoot, "herdr-app", file), "x\n");
+    assert.throws(
+      () => syncManagedConfigs(input),
+      /herdr_app_source_invalid/,
+      file,
+    );
+    assert.equal(existsSync(join(input.home, ".config/herdr-app")), false);
+  }
+});
+
+test("GREEN pi-config: herdrKeys sets only global cmd-k p and keeps every other key", (t) => {
+  const input = herdrAppFixture(t, { herdrKeys: HERDR_KEYS });
+  const keys = join(input.home, ".config/herdr-app/keys.json");
+  const before = {
+    global: { "cmd-p": "mod.open:picker", "cmd-t": "tab.new" },
+    terminal: { "cmd-c": "terminal.copy" },
+    "mod:picker": { escape: "overlay.close" },
+  };
+  writeText(keys, `${JSON.stringify(before, null, 2)}\n`);
+  assert.deepEqual(syncManagedConfigs(input).changedPaths, [keys]);
+  assert.deepEqual(JSON.parse(readFileSync(keys, "utf8")), {
+    ...before,
+    global: { ...before.global, "cmd-k p": "mod.open:projects-edit" },
+  });
+  assert.equal(validateManagedConfigs(input).ok, true);
+  assert.deepEqual(syncManagedConfigs(input).changedPaths, []);
+});
+
+test("RED pi-config: herdrKeys reports a missing keys.json and does not create it", (t) => {
+  const input = herdrAppFixture(t, { herdrKeys: HERDR_KEYS });
+  const keys = join(input.home, ".config/herdr-app/keys.json");
+  assert.deepEqual(syncManagedConfigs(input).changedPaths, []);
+  assert.equal(existsSync(keys), false);
+  const report = validateManagedConfigs(input);
+  assert.equal(report.ok, false);
+  assert.deepEqual(report.findings, [
+    "managed_config_drift: herdrKeys.global.cmd-k p is missing",
+  ]);
+});
+
+test("GREEN pi-config: ax validate covers herdrApp and herdrKeys together", (t) => {
+  const input = herdrAppFixture(t, {
+    herdrApp: { target: "~/.config/herdr-app" },
+    herdrKeys: HERDR_KEYS,
+  });
+  writeText(join(input.home, ".config/herdr-app/keys.json"), "{}\n");
+  syncManagedConfigs(input);
+  const report = validateManagedConfigs(input);
+  assert.equal(report.ok, true);
+  assert.deepEqual(Object.keys(report.tools).sort(), [
+    "herdrApp/layouts/projects.json",
+    "herdrApp/mods/projects/main.js",
+    "herdrApp/mods/projects/model.js",
+    "herdrKeys",
+  ]);
+});
+
+test("RED pi-config: herdr-app targets must keep their declared paths", (t) => {
+  const input = herdrAppFixture(t, {
+    herdrApp: { target: "~/.config/herdr" },
+  });
+  assert.throws(
+    () => syncManagedConfigs(input),
+    /managed_config_target_invalid: herdrApp must target ~\/.config\/herdr-app/,
+  );
+});
+
+test("herdr-app paths AX may own", () => {
+  for (const file of [
+    "mods/projects/main.js",
+    "mods/projects-edit/LICENSE",
+    "layouts/projects.json",
+  ])
+    assert.equal(herdrAppPathAllowed(file), true, file);
+  for (const file of [
+    "keys.json",
+    "mods/spaces/main.js",
+    "mods/projects",
+    "mods/projects/herdr.d.ts",
+    "mods/projects/../spaces/main.js",
+    "layouts/terminals.json",
+    "layouts/projects.txt",
+    "layouts/x/projects.json",
+    "/abs/mods/projects/main.js",
+  ])
+    assert.equal(herdrAppPathAllowed(file), false, file);
+});
+
+test("GREEN pi-config: the repository ships the projects mods, layout and cmd-k p key", () => {
+  assert.deepEqual(
+    readHerdrAppFiles(repoRoot).map((f) => f.file),
+    [
+      "layouts/projects.json",
+      "mods/projects/LICENSE",
+      "mods/projects/main.js",
+      "mods/projects/mod.json",
+      "mods/projects/model.js",
+      "mods/projects-edit/LICENSE",
+      "mods/projects-edit/edit.js",
+      "mods/projects-edit/main.js",
+      "mods/projects-edit/mod.json",
+      "mods/projects-edit/model.js",
+    ],
+  );
+  const mod = (file: string) =>
+    readFileSync(join(repoRoot, "herdr-app/mods", file), "utf8");
+  assert.equal(mod("projects-edit/model.js"), mod("projects/model.js"));
+  assert.match(mod("projects/LICENSE"), /Apache License\s+Version 2\.0/u);
+
+  type Node = { id?: string; content?: { mod?: string }; children?: Node[] };
+  const mods: Record<string, string> = {};
+  const walk = (node: Node): void => {
+    if (node.id && node.content?.mod) mods[node.id] = node.content.mod;
+    for (const child of node.children ?? []) walk(child);
+  };
+  walk(
+    JSON.parse(
+      readFileSync(join(repoRoot, "herdr-app/layouts/projects.json"), "utf8"),
+    ),
+  );
+  assert.equal(mods.spaces, "projects");
+  assert.equal(Object.values(mods).includes("spaces"), false);
+  assert.equal(mods.tabs, "tabs");
+
+  const config = JSON.parse(
+    readFileSync(join(repoRoot, "ax.config.json"), "utf8"),
+  );
+  assert.deepEqual(config.runtime.configs.herdrApp, {
+    target: "~/.config/herdr-app",
+  });
+  assert.deepEqual(config.runtime.configs.herdrKeys, HERDR_KEYS);
 });

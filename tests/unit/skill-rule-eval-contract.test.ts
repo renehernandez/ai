@@ -131,6 +131,24 @@ test("GREEN skill-rule-evals: Show Me participates in managed skill coverage", (
   assert.ok(managedSkills.includes("show-me"));
 });
 
+test("RED skill-rule-evals: the Herdr projects sidebar is a config target, not a skill", () => {
+  assert.deepEqual(simulatedCoverageGap("herdr-projects-sidebar"), [
+    "herdr-projects-sidebar",
+  ]);
+  assert.equal(managedSkills.includes("herdr-projects-sidebar"), false);
+});
+
+test("GREEN skill-rule-evals: AX installs the Herdr projects sidebar and only its cmd-k p key", () => {
+  assert.deepEqual(currentManagedSkillCoverageGaps(managedSkills), []);
+  assert.equal(axConfig.runtime.configs.herdrApp.target, "~/.config/herdr-app");
+  assert.deepEqual(axConfig.runtime.configs.herdrKeys, {
+    target: "~/.config/herdr-app/keys.json",
+    managedPaths: [
+      { path: ["global", "cmd-k p"], value: "mod.open:projects-edit" },
+    ],
+  });
+});
+
 test("GREEN skill-rule-evals: Pi reuses the managed handoff and review skills", () => {
   const groups = assignReviewLenses("planning", [
     { id: "implementation-readiness", objective: "ready" },
