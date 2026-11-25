@@ -53,6 +53,15 @@ const DIALOG = {
   height: 0.7,
 };
 const configPath = () => `${appHome()}/${CONFIG_FILE}`;
+// Popup row heights, for a popup as tall as its rows (padding: p(5) twice).
+const ROW = {
+  item: 30,
+  heading: 24,
+  rule: 11,
+  note: 28,
+  folder: 20,
+  padding: 10,
+};
 
 // Where a space is now: its first terminal's live folder, else where it was made.
 function place(s, ps) {
@@ -318,64 +327,79 @@ export default class ProjectsEdit extends View {
     return div().h(1).mx(4).my(5).flex_none().bg(theme().border);
   }
 
-  menuItems(p) {
+  note(text, color = theme().dim) {
+    return div().px(9).py(6).flex_none().text_color(color).child(text);
+  }
+
+  // A popup's rows as [element, height]: head and foot stay put, and the list
+  // between them scrolls once the popup reaches its most height (props.height).
+  menuParts(p) {
     const names = (this.doc.projects ?? []).map((project) => project.name);
     const writes = menuWrites(p, names, (change, machines) =>
       this.write(change, machines),
     );
+    const item = (...args) => [this.item(...args), ROW.item];
+    const heading = (text) => [this.heading(text), ROW.heading];
+    const rule = () => [this.rule(), ROW.rule];
     switch (p.menu) {
       case "project": {
         const at = p.project,
           last = names.length - 1;
-        return [
-          this.item("rename", "Rename…", () =>
-            openOverlay({
-              ...DIALOG,
-              props: { form: { kind: "rename", project: at, name: p.name } },
+        return {
+          list: [
+            item("rename", "Rename…", () =>
+              openOverlay({
+                ...DIALOG,
+                props: { form: { kind: "rename", project: at, name: p.name } },
+              }),
+            ),
+            item("up", "Move up", writes.up, { enabled: at > 0 }),
+            item("down", "Move down", writes.down, { enabled: at < last }),
+            rule(),
+            item("remove", "Remove", writes.remove, {
+              hint: "spaces stay open",
             }),
-          ),
-          this.item("up", "Move up", writes.up, { enabled: at > 0 }),
-          this.item("down", "Move down", writes.down, { enabled: at < last }),
-          this.rule(),
-          this.item("remove", "Remove", writes.remove, {
-            hint: "spaces stay open",
-          }),
-        ];
+          ],
+        };
       }
       case "repo":
-        return [
-          this.item("remove", "Remove from project", writes.remove, {
-            hint: p.name,
-          }),
-        ];
+        return {
+          list: [
+            item("remove", "Remove from project", writes.remove, {
+              hint: p.name,
+            }),
+          ],
+        };
       case "other": {
         const repo = { path: p.path, machine: p.machine ?? null };
-        return [
-          this.heading(`Add ${p.path.split("/").pop()} to project`),
-          ...names.map((name, i) =>
-            this.item(`add-${i}`, name, writes[`add-${i}`]),
+        return {
+          head: [heading(`Add ${p.path.split("/").pop()} to project`)],
+          list: names.map((name, i) =>
+            item(`add-${i}`, name, writes[`add-${i}`]),
           ),
-          this.item("new", "New project…", () =>
-            openOverlay({
-              ...DIALOG,
-              props: { form: { kind: "new", addRepo: repo } },
-            }),
-          ),
-          this.rule(),
-          this.item(
-            "space",
-            "Space…",
-            () =>
+          foot: [
+            item("new", "New project…", () =>
               openOverlay({
-                mod: "menu",
-                kind: "popup",
-                width: 200,
-                height: 260,
-                props: { tab: "space", target: { id: p.space } },
+                ...DIALOG,
+                props: { form: { kind: "new", addRepo: repo } },
               }),
-            { hint: "rename, worktree, close" },
-          ),
-        ];
+            ),
+            rule(),
+            item(
+              "space",
+              "Space…",
+              () =>
+                openOverlay({
+                  mod: "menu",
+                  kind: "popup",
+                  width: 200,
+                  height: 260,
+                  props: { tab: "space", target: { id: p.space } },
+                }),
+              { hint: "rename, worktree, close" },
+            ),
+          ],
+        };
       }
       case "tab": {
         const t = theme();
@@ -385,77 +409,86 @@ export default class ProjectsEdit extends View {
             ...(p.folder ? { folder: p.folder } : {}),
             ...args,
           });
-        return [
-          this.item("terminal", "Terminal", () => start({}), {
-            icon: svg("icons/shell.svg").size(14),
-          }),
-          this.heading("Start an agent"),
-          ...this.agents.map((a) =>
-            this.item(
-              `agent-${a.key}`,
-              a.name,
-              () => start({ name: a.name, argv: a.run }),
-              {
-                icon: a.tint
-                  ? svg(a.icon).size(14).text_color(t.foreground)
-                  : image(a.icon).size(14),
-              },
-            ),
+        const agents = this.agents.map((a) =>
+          item(
+            `agent-${a.key}`,
+            a.name,
+            () => start({ name: a.name, argv: a.run }),
+            {
+              icon: a.tint
+                ? svg(a.icon).size(14).text_color(t.foreground)
+                : image(a.icon).size(14),
+            },
           ),
-          ...(this.agents.length
-            ? []
-            : [
-                div()
-                  .px(9)
-                  .py(6)
-                  .flex_none()
-                  .text_color(t.dim)
-                  .child(
-                    this.agentsFailed
-                      ? "Could not check installed agents"
-                      : "Checking installed agents…",
-                  ),
-              ]),
-          div()
-            .px(9)
-            .pt(5)
-            .flex_none()
-            .text_size(11)
-            .text_color(t.dim)
-            .truncate()
-            .child(p.folder ? `in ${p.folder}` : "not in a repo"),
-        ];
+        );
+        const checked = this.agentsFailed
+          ? "Could not check installed agents"
+          : "Checking installed agents…";
+        return {
+          head: [
+            item("terminal", "Terminal", () => start({}), {
+              icon: svg("icons/shell.svg").size(14),
+            }),
+            heading("Start an agent"),
+          ],
+          list: agents.length ? agents : [[this.note(checked), ROW.note]],
+          foot: [
+            [
+              div()
+                .px(9)
+                .pt(5)
+                .flex_none()
+                .text_size(11)
+                .text_color(t.dim)
+                .truncate()
+                .child(p.folder ? `in ${p.folder}` : "not in a repo"),
+              ROW.folder,
+            ],
+          ],
+        };
       }
       default:
-        return [];
+        return {};
     }
   }
 
+  // As tall as its rows up to props.height, like Herdr's new-menu: past that
+  // the list scrolls and the head and foot stay reachable.
   renderMenu(p) {
     const t = theme();
     const waiting = !this.loaded && p.menu !== "tab";
+    const {
+      head = [],
+      list = [],
+      foot = [],
+    } = waiting ? { list: [[this.note("…"), ROW.note]] } : this.menuParts(p);
+    if (this.error && p.menu !== "tab")
+      foot.push([this.note(this.error, t.blocked).text_size(11), ROW.note]);
+    const rows = [...head, ...list, ...foot];
+    const height = Math.min(
+      p.height ?? 260,
+      ROW.padding + rows.reduce((sum, [, h]) => sum + h, 0),
+    );
+    const elements = (part) => part.map(([el]) => el);
     return v_flex()
       .id("projects-menu")
       .track_focus(this.handle)
       .w_full()
+      .h(height)
       .min_h(0)
       .bg(t.popover)
       .p(5)
       .text_size(12.8)
-      .when(waiting, (el) =>
-        el.child(div().px(9).py(6).text_color(t.dim).child("…")),
+      .children(elements(head))
+      .child(
+        v_flex()
+          .id("projects-menu-list")
+          .flex_1()
+          .min_h(0)
+          .overflow_y_scrollbar()
+          .children(elements(list)),
       )
-      .when(!waiting, (el) => el.children(this.menuItems(p)))
-      .when(Boolean(this.error) && p.menu !== "tab", (el) =>
-        el.child(
-          div()
-            .px(9)
-            .py(6)
-            .text_size(11)
-            .text_color(t.blocked)
-            .child(this.error),
-        ),
-      );
+      .children(elements(foot));
   }
 
   // ---- the dialog ----

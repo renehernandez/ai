@@ -547,14 +547,15 @@ export default class Projects extends View {
     });
   }
 
-  // The Projects popups (menus, the tab menu) live in projects-edit.
+  // The Projects popups (menus, the tab menu) live in projects-edit; past
+  // `height` their lists scroll.
   popup(props, height = 260) {
     openOverlay({
       mod: "projects-edit",
       kind: "popup",
       width: 220,
       height,
-      props,
+      props: { ...props, height },
     });
   }
 

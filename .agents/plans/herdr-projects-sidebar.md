@@ -165,8 +165,8 @@ One atomic plan and one Ready GitHub PR to `main` on `origin`, carrying this
 plan and the whole change. Personal profile: no required hosted CI or hosted
 reviewer. Merge, live sync and cleanup need separate user authority.
 
-Measured size against `origin/main` after the first review repair: 18 files
-and about 4,720 changed lines, above this repository's 1,500-line target and
+Measured size against `origin/main` after the second review repair: 19 files
+and about 5,650 changed lines, above this repository's 1,500-line target and
 its 3,000-line return-to-Plan threshold. The user approved an exception for
 this one PR above 3,000 lines; the 50-file hard cap still applies.
 Rationale: the derived sidebar and the dialog are one user-visible feature
@@ -192,13 +192,24 @@ Before merge, automated and isolated only:
   `jsconfig.json`, `gpui-kit.d.ts` and other files; `herdrKeys` sets only
   `global."cmd-k p"`, preserves every other key, and refuses to create a
   missing `keys.json`; `ax validate` covers both targets.
-- `herdr-app check` passes for both mods from an isolated copy. Managed
-  agents may not run `herdr-app check`, so the user runs it (`!` command)
-  with the exact command the implementer reports; the result is recorded in
-  the PR.
-- The `cmd-k p` chord form is confirmed against Herdr's key parser (shipped
-  `keys()` consumers or an isolated `keys.error` check). If Herdr does not
-  accept a chord, stop and return to the user for another key.
+- A headless load test (`tests/unit/herdr-projects-load.test.ts`) imports
+  both mods' `main.js` with stub `herdr`, `gpui-kit` and `gpui-base`
+  modules, constructs each view, and runs `init` and `render` for the
+  sidebar (wide, narrow rail, broken `projects.json`) and for every
+  `projects-edit` overlay: the dialog, its forms, and the project, repo,
+  Other and tab menus, also in `checking()` mode. Every imported name and
+  every element or state method called must be in a reviewed list that the
+  test matches against `herdr.d.ts`, `gpui-kit.d.ts` and `gpui-base`'s
+  declarations. A 40-project Other menu and a 30-agent tab menu prove the
+  entries sit in the scrolling list while New project, Space and Terminal
+  stay outside it. It does not prove real rendering, layout or Herdr's mod
+  loader: managed agents may not run `herdr-app check`, so that stays
+  unverified until the mods run in Herdr after merge.
+- `cmd-k p` stays as accepted and is unverified until after merge. Herdr
+  documents chord sequences (`gpui-kit.d.ts:508`, `"ctrl-k ctrl-s"`). After
+  live sync the orchestrator confirms `~/.config/herdr-app/keys.error` is
+  absent; the keypress is confirmed in normal use, and a failure gets a
+  follow-up change with a new key.
 
 After merge and live `pnpm ax sync`, as user-authorized follow-through:
 
