@@ -165,12 +165,17 @@ One atomic plan and one Ready GitHub PR to `main` on `origin`, carrying this
 plan and the whole change. Personal profile: no required hosted CI or hosted
 reviewer. Merge, live sync and cleanup need separate user authority.
 
-Size forecast: about 14 files and 1,700 to 2,200 changed lines, above this
-repository's 1,500-line target. Rationale: the derived sidebar (about 650
-lines) and the dialog are one user-visible feature that is inert without its
-AX target and layout, and the AX target is untestable end to end without a
-mod to install. A split would merge either an uninstalled mod or a target
-with nothing to sync. Above 3,000 lines or 30 files returns to Plan.
+Measured size against `origin/main` after the first review repair: 18 files
+and about 4,720 changed lines, above this repository's 1,500-line target and
+its 3,000-line return-to-Plan threshold. The user approved an exception for
+this one PR above 3,000 lines; the 50-file hard cap still applies.
+Rationale: the derived sidebar and the dialog are one user-visible feature
+that is inert without its AX target and layout, and the AX target is
+untestable end to end without a mod to install. A split would merge either
+an uninstalled mod or a target with nothing to sync. Part of the size is
+forced: a mod imports only its own files, so each mod carries an identical
+`model.js`, and the Apache License 2.0 of the derived shipped mods puts a
+full LICENSE in each mod folder.
 
 ## Proof
 

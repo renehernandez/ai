@@ -31,20 +31,18 @@ import {
   theme,
   writeTextFile,
 } from "herdr";
+import { clickItem, menuWrites, saveConfig } from "./edit.js";
 import {
   addProject,
   addRepo,
   CONFIG_FILE,
   loadConfig,
-  machinesIn,
   mainCheckout,
   moveProject,
-  parseConfig,
   removeProject,
   removeRepo,
   renameProject,
   resolveProjects,
-  serialize,
   tildePath,
 } from "./model.js";
 
@@ -79,29 +77,28 @@ async function homesFor(names) {
 // Reads projects.json, applies change(doc, homes) and writes it if nothing
 // changed it meanwhile. Resolves true when written.
 async function update(change, extraMachines = []) {
-  try {
-    const text = await readTextFile(configPath());
-    const doc = parseConfig(text);
-    const homes = await homesFor([
-      ...new Set([...machinesIn(doc), ...extraMachines.filter(Boolean)]),
-    ]);
-    await writeTextFile(
-      configPath(),
-      serialize(change(doc, homes)),
-      text ?? null,
-    );
-    return true;
-  } catch (e) {
-    const stale = /stale|changed|match|exist/i.test(String(e?.message ?? e));
+  const result = await saveConfig(
+    {
+      read: () => readTextFile(configPath()),
+      write: (text, expected) => writeTextFile(configPath(), text, expected),
+      homesFor,
+    },
+    change,
+    extraMachines,
+  );
+  if (result.status === "conflict")
     notify({
-      title: stale ? "projects.json changed meanwhile" : "Projects not saved",
-      body: stale
-        ? "Nothing was overwritten. Try again."
-        : String(e?.message ?? e),
-      level: stale ? "warning" : "error",
+      title: "projects.json changed meanwhile",
+      body: "Nothing was overwritten. Try again.",
+      level: "warning",
     });
-    return false;
-  }
+  else if (result.status === "error")
+    notify({
+      title: "Projects not saved",
+      body: result.message,
+      level: "error",
+    });
+  return result.status === "written";
 }
 
 export default class ProjectsEdit extends View {
@@ -294,12 +291,13 @@ export default class ProjectsEdit extends View {
       .flex_none()
       .text_color(enabled ? t.foreground : t.dim)
       .when(enabled, (el) => el.hover((s) => s.bg(t.selected)))
-      .on_click((e, cx) => {
-        if (!enabled || this.busy) return;
-        if (action.writes) return action(e, cx);
-        this.close();
-        action();
-      })
+      .on_click((e, cx) =>
+        clickItem(action, e, cx, {
+          enabled,
+          busy: this.busy,
+          close: () => this.close(),
+        }),
+      )
       .when(Boolean(icon), (el) => el.child(icon))
       .child(div().flex_1().truncate().child(label))
       .child(div().text_size(11).text_color(t.dim).child(hint));
@@ -322,8 +320,9 @@ export default class ProjectsEdit extends View {
 
   menuItems(p) {
     const names = (this.doc.projects ?? []).map((project) => project.name);
-    const update = (change, machines) =>
-      Object.assign(this.write(change, machines), { writes: true });
+    const writes = menuWrites(p, names, (change, machines) =>
+      this.write(change, machines),
+    );
     switch (p.menu) {
       case "project": {
         const at = p.project,
@@ -335,58 +334,26 @@ export default class ProjectsEdit extends View {
               props: { form: { kind: "rename", project: at, name: p.name } },
             }),
           ),
-          this.item(
-            "up",
-            "Move up",
-            () => update((doc) => moveProject(doc, at, -1, p.name)),
-            { enabled: at > 0 },
-          ),
-          this.item(
-            "down",
-            "Move down",
-            () => update((doc) => moveProject(doc, at, 1, p.name)),
-            { enabled: at < last },
-          ),
+          this.item("up", "Move up", writes.up, { enabled: at > 0 }),
+          this.item("down", "Move down", writes.down, { enabled: at < last }),
           this.rule(),
-          this.item(
-            "remove",
-            "Remove",
-            () => update((doc) => removeProject(doc, at, p.name)),
-            { hint: "spaces stay open" },
-          ),
+          this.item("remove", "Remove", writes.remove, {
+            hint: "spaces stay open",
+          }),
         ];
       }
       case "repo":
         return [
-          this.item(
-            "remove",
-            "Remove from project",
-            () =>
-              update(
-                (doc, homes) =>
-                  removeRepo(
-                    doc,
-                    p.project,
-                    { path: p.path, machine: p.machine },
-                    homes,
-                    p.name,
-                  ),
-                [p.machine],
-              ),
-            { hint: p.name },
-          ),
+          this.item("remove", "Remove from project", writes.remove, {
+            hint: p.name,
+          }),
         ];
       case "other": {
         const repo = { path: p.path, machine: p.machine ?? null };
         return [
           this.heading(`Add ${p.path.split("/").pop()} to project`),
           ...names.map((name, i) =>
-            this.item(`add-${i}`, name, () =>
-              update(
-                (doc, homes) => addRepo(doc, i, repo, homes, name),
-                [repo.machine],
-              ),
-            ),
+            this.item(`add-${i}`, name, writes[`add-${i}`]),
           ),
           this.item("new", "New project…", () =>
             openOverlay({

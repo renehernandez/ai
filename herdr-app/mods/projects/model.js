@@ -7,6 +7,8 @@
 // A repo may be a bare path string; edits write the object form and keep unknown keys.
 
 export const CONFIG_FILE = "projects.json";
+// The `code` of the error an edit throws when its project moved or was renamed.
+export const CHANGED = "projects-changed";
 
 const isObject = (value) =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -189,7 +191,10 @@ function taken(projects, name, except = -1) {
 export function projectAt(doc, index, name) {
   const project = doc.projects?.[index];
   if (!project || (name !== undefined && project.name !== name))
-    throw new Error("projects.json changed meanwhile. Try again.");
+    throw Object.assign(
+      new Error("projects.json changed meanwhile. Try again."),
+      { code: CHANGED },
+    );
   return project;
 }
 

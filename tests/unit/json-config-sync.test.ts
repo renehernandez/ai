@@ -503,6 +503,7 @@ test("GREEN pi-config: the repository ships the projects mods, layout and cmd-k 
       "mods/projects/mod.json",
       "mods/projects/model.js",
       "mods/projects-edit/LICENSE",
+      "mods/projects-edit/edit.js",
       "mods/projects-edit/main.js",
       "mods/projects-edit/mod.json",
       "mods/projects-edit/model.js",
