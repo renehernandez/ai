@@ -73,7 +73,7 @@
         "target": "~/.config/herdr-app/keys.json",
         "managedPaths": [
           {
-            "path": ["global", "cmd-k p"],
+            "path": ["global", "cmd-k cmd-p"],
             "value": "mod.open:projects-edit"
           }
         ]

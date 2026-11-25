@@ -835,9 +835,13 @@ const haveTypes =
   existsSync(join(TYPES, "herdr.d.ts")) &&
   existsSync(join(TYPES, "gpui-kit.d.ts"));
 
-// Member names of one `interface Name {` block (2-space indented, members at 4).
+// Member names of one `interface Name {` block (2-space indented, members at
+// 4). An `extends ...` clause before the brace is allowed; inherited members
+// are not counted.
 function members(source: string, name: string) {
-  const start = source.indexOf(`  export interface ${name} {`);
+  const start = source.search(
+    new RegExp(`^  export interface ${name}(?: extends [^{\n]+)? \{$`, "m"),
+  );
   assert.ok(start >= 0, `interface ${name} is declared`);
   const end = source.indexOf("\n  }\n", start);
   const block = source.slice(start, end);

@@ -1,5 +1,6 @@
-// Projects editing for the `projects` sidebar: the Projects dialog (cmd-k p,
-// `mod.open {name: "projects-edit"}`) and the sidebar's popups, chosen by props:
+// Projects editing for the `projects` sidebar: the Projects dialog
+// (cmd-k cmd-p, `mod.open {name: "projects-edit"}`) and the sidebar's
+// popups, chosen by props:
 //   (none) or { form }                     the dialog; form: { kind: "new" | "rename", project?, name?, addRepo? }
 //   { menu: "project", project, name }     Rename…, Move up/down, Remove
 //   { menu: "repo", project, name, path, machine }   Remove from project

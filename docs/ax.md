@@ -203,9 +203,11 @@ may name only files in mod folders Herdr doesn't ship and layouts Herdr
 doesn't ship. Sync refuses anything else.
 
 `runtime.configs.herdrKeys` manages one JSON path in
-`~/.config/herdr-app/keys.json`: `global."cmd-k p"` =
-`"mod.open:projects-edit"`, which toggles the Projects dialog. Every other key
-stays as it is. Once `keys.json` is edited, Herdr stops upgrading its default
+`~/.config/herdr-app/keys.json`: `global."cmd-k cmd-p"` =
+`"mod.open:projects-edit"`, which toggles the Projects dialog. Keep cmd held
+for both keys. Every other key stays as it is. AX never removes a key it stops
+managing, so a `cmd-k p` left by an earlier sync stays until you delete it by
+hand. Once `keys.json` is edited, Herdr stops upgrading its default
 shortcuts in it. When `keys.json` is missing, status and validate report drift
 and sync does not create the file. A file with only this key would replace
 Herdr's whole default key table, so start Herdr once to create it, then sync.
