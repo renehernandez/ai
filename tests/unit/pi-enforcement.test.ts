@@ -138,7 +138,7 @@ test("the orchestrator launches on the listed route the caller selects, Opus by 
       "medium",
     ]);
     assert.equal(
-      result.args.includes("npm:pi-claude-bridge@0.9.3"),
+      result.args.includes("npm:pi-claude-bridge@0.13.0"),
       expected[1] === "claude-bridge",
     );
     assert.ok(result.args.includes("npm:pi-mcp-adapter@7.0.0"));
@@ -234,7 +234,7 @@ test("each focused reviewer is read-only without MCP and only Sonnet loads the C
     assert.equal(args.at(-1), "read,grep,find,ls", role);
     assert.ok(!args.some((v) => v.includes("pi-mcp-adapter")), role);
     assert.equal(
-      args.includes("npm:pi-claude-bridge@0.9.3"),
+      args.includes("npm:pi-claude-bridge@0.13.0"),
       provider === "claude-bridge",
       role,
     );
@@ -281,7 +281,7 @@ test("consult planners have read tools plus MCP and no shell, fixed to one route
     assert.equal(args.at(-1), "read,grep,find,ls,mcp", role);
     assert.ok(args.includes("npm:pi-mcp-adapter@7.0.0"), role);
     assert.equal(
-      args.includes("npm:pi-claude-bridge@0.9.3"),
+      args.includes("npm:pi-claude-bridge@0.13.0"),
       provider === "claude-bridge",
       role,
     );

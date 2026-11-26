@@ -100,7 +100,7 @@
           { "path": ["defaultThinkingLevel"], "value": "medium" },
           {
             "path": ["packages"],
-            "value": "npm:pi-claude-bridge@0.9.3",
+            "value": "npm:pi-claude-bridge@0.13.0",
             "merge": "append-unique"
           },
           { "path": ["retry", "enabled"], "value": false },
@@ -112,7 +112,6 @@
         "target": "~/.pi/agent/claude-bridge.json",
         "managedPaths": [
           { "path": ["askClaude", "enabled"], "value": false },
-          { "path": ["askClaude", "allowFullMode"], "value": false },
           { "path": ["provider", "plan"], "value": "pro" },
           {
             "path": ["provider", "longContextExtraUsage"],

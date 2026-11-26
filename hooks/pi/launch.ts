@@ -8,7 +8,7 @@ import { allowedTools, type Contract, parseContract, roles } from "./policy.ts";
 
 const directory = dirname(fileURLToPath(import.meta.url));
 const mcpPackage = "npm:pi-mcp-adapter@7.0.0";
-const claudeBridgePackage = "npm:pi-claude-bridge@0.9.3";
+const claudeBridgePackage = "npm:pi-claude-bridge@0.13.0";
 // Packages managed launches load explicitly; bootstrap pre-downloads them.
 export const launchPackages = [claudeBridgePackage, mcpPackage];
 const alternateBillingEnvironment = [

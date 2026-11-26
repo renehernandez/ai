@@ -246,7 +246,7 @@ app. Authenticate Pi's
 `cloudflare-ai-gateway` provider locally for your account and Gateway. This
 repository does not supply or synchronize credentials. The managed launcher
 targets Pi 1.6.1 with the pinned pi-mcp-adapter 7.0.0 and pi-claude-bridge
-0.9.3. Older adapter releases do not support Pi 1.x.
+0.13.0. Older adapter releases do not support Pi 1.x.
 
 Bootstrap pre-downloads both packages, so a cold download does not consume the
 wrapper's 60-second startup deadline. After changing a pin, run

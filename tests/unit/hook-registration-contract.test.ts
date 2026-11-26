@@ -45,20 +45,22 @@ test("RED hook-registration: MCP and Pi runtime configuration, including the her
           }),
         /hook_registration_target_invalid/u,
       );
-  for (const config of [
-    ".pi/agent/mcp-adapter.json",
-    ".pi/agent/claude-bridge.json",
-    ".config/mise/config.toml",
-  ])
-    assert.throws(
-      () =>
-        assertRegistrationTargetSafe({
-          path: `/tmp/isolated-home/${config}`,
-          target: "claude",
-          home: "/tmp/isolated-home",
-        }),
-      /hook_registration_target_invalid/u,
-    );
+  for (const target of ["claude", "codex"] as const)
+    for (const config of [
+      ".pi/agent/mcp-adapter.json",
+      ".pi/agent/claude-bridge.json",
+      ".pi/agent/settings.json",
+      ".config/mise/config.toml",
+    ])
+      assert.throws(
+        () =>
+          assertRegistrationTargetSafe({
+            path: `/tmp/isolated-home/${config}`,
+            target,
+            home: "/tmp/isolated-home",
+          }),
+        /hook_registration_target_invalid/u,
+      );
   assert.throws(
     () =>
       assertRegistrationTargetSafe({
