@@ -368,6 +368,46 @@ test("GREEN skill-rule-evals: consult planners advise without shell or edits, wi
   );
 });
 
+function managedBridge() {
+  const configs = JSON.parse(read("ax.config.json")).runtime.configs;
+  const leaves = (
+    managed: { path: string[]; value: unknown }[],
+  ): Map<string, unknown> =>
+    new Map(managed.map((entry) => [entry.path.join("."), entry.value]));
+  return {
+    settings: leaves(configs.piClaudeBridge.managedPaths),
+    piPackage: leaves(configs.pi.managedPaths).get("packages") as string,
+  };
+}
+
+test("RED skill-rule-evals: the managed Claude bridge config sets no leaf the pinned bridge ignores and never enables AskClaude", () => {
+  const { settings } = managedBridge();
+  assert.equal(
+    settings.has("askClaude.allowFullMode"),
+    false,
+    "pi-claude-bridge 0.13 no longer reads askClaude.allowFullMode",
+  );
+  assert.equal(settings.get("askClaude.enabled"), false);
+});
+
+test("GREEN skill-rule-evals: Pi settings, the launcher, and docs name one Claude bridge pin", () => {
+  const { piPackage } = managedBridge();
+  const [, version] =
+    /^npm:pi-claude-bridge@(\d+\.\d+\.\d+)$/.exec(piPackage) ?? [];
+  assert.ok(version, "Pi settings pin an exact bridge version");
+  assert.ok(
+    read("hooks/pi/launch.ts").includes(
+      `const claudeBridgePackage = "${piPackage}";`,
+    ),
+    "the launcher loads the same bridge pin",
+  );
+  assert.match(
+    read("docs/ax.md").replace(/\s+/g, " "),
+    new RegExp(`pi-claude-bridge ${version.replaceAll(".", "\\.")}\\.`),
+    "docs name the pinned bridge version",
+  );
+});
+
 test("RED skill-rule-evals: orchestrator binding rejects a terminal that is not live", async () => {
   assert.throws(
     () => requireCurrentReviewMode({ version: 1 } as never),
