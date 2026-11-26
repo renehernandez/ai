@@ -7,6 +7,14 @@ pnpm = "12.16.1"
 # Pin gh to the account named in this clone's local git config:
 #   git config --local credential.https://github.com.username <account>
 # Unset, or without gh, GH_TOKEN stays empty and gh uses its active account.
+# git sends that username to its credential helpers, and `gh auth
+# git-credential` returns nothing for an inactive account, so also replace the
+# helper or HTTPS pushes fail whenever another account is active:
+#   git config --local credential.https://github.com.helper ""
+#   git config --local --add credential.https://github.com.helper \
+#     '!f() { test "$1" = get || exit 0; u=$(sed -n "s/^username=//p");
+#     test -n "$u" || exit 0; t=$(gh auth token --user "$u") || exit 0;
+#     echo "username=$u"; echo "password=$t"; }; f'
 GH_TOKEN = "{{ exec(command='u=$(git config --get credential.https://github.com.username) && env -u GH_TOKEN -u GITHUB_TOKEN gh auth token --user \"$u\" 2>/dev/null || true') }}"
 
 [tasks.setup]
