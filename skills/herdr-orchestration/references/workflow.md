@@ -325,7 +325,7 @@ reviewed, degraded, waived, and repaired heads accurately.
 ## Consult planners
 
 Two planners give advice: Astra (`planner-astra`, GPT-6 Astra) and
-Fable (`planner-fable`, Fable 5.1 through the pinned Claude bridge). Both run at
+Fable (`planner-fable`, Fable 5.2 through the pinned Claude bridge). Both run at
 medium thinking. They read, search, and list files. They have no shell, no
 edits, and launch no workers; the generic agent-creation tool denial applies to
 them as to every managed role. MCP servers from the user's own MCP

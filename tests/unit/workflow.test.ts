@@ -4859,6 +4859,30 @@ test("GREEN pi-workflow: a state initialized before planner routes keeps working
   assert.ok(!JSON.stringify(await f.read()).includes('"kind"'));
 });
 
+test("GREEN pi-workflow: a consult planner launches on the route recorded at init, and a route change applies only to a new init", async () => {
+  const f = await fixture();
+  const routesPath = join(f.dir, "routes.json");
+  const changed = fakeRouteTable();
+  changed["planner-fable"].routes = ["claude-bridge/claude-fable-5-2:medium"];
+  await writeFile(routesPath, JSON.stringify(changed));
+  await dispatchConsult(
+    f.path,
+    { briefPath: await consultBrief(f), planners: ["planner-fable"] },
+    f.transport,
+  );
+  const state = await f.read();
+  assert.deepEqual(
+    f.sessions.get(plannerAgent(state, "planner-fable"))?.argv.slice(2, 6),
+    ["planner-fable", "openai-codex", "model-planner-fable", "low"],
+  );
+  const renewed = join(f.dir, "renewed.json");
+  await initialize(renewed, { cwd: f.dir, routesPath });
+  assert.equal(
+    JSON.parse(await readFile(renewed, "utf8")).routes["planner-fable"].model,
+    "claude-fable-5-2",
+  );
+});
+
 test("RED pi-workflow: init fails naming a missing planner route", async () => {
   const f = await fixture();
   const { "planner-fable": _, ...missing } = f.table;
