@@ -35,7 +35,11 @@ test("Opus is the subscription-backed default and four focused reviewers span So
   assert.deepEqual(
     bridge.find((entry) => entry.path.join(".") === "provider.forceTwoHundredK")
       ?.value,
-    ["claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-2"],
+    ["claude-opus-5-5", "claude-sonnet-5-5"],
+  );
+  assert.equal(
+    bridge.find((entry) => entry.path.join(".") === "provider.plan")?.value,
+    "max",
   );
   assert.deepEqual(
     Object.entries(routes)
