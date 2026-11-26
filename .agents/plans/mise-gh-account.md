@@ -39,7 +39,8 @@ would store the token in plaintext under `~/.cache/mise/exec`.
 ## Acceptance and proof
 
 - `tests/unit/toolchain-pins.test.ts` runs the extracted command in a fresh
-  git repository, with `GIT_*` variables removed and an inherited
+  git repository, with `GIT_*` variables removed from every git call so a
+  hook's `GIT_DIR` cannot redirect them to this repository, and an inherited
   `GH_TOKEN` set, and asserts empty output with the key unset and with an
   unknown account. The test fails on the base, which has no `[env]` entry,
   and without the inherited-token guard.
@@ -50,7 +51,13 @@ would store the token in plaintext under `~/.cache/mise/exec`.
 
 ## Delivery boundary and risk
 
-One atomic change: `mise.toml`, one test file, and this plan. Branch
+One atomic change: `mise.toml`, its test, and this plan, plus a separate
+commit that repairs `tests/unit/herdr-projects-load.test.ts`. The Herdr app
+now declares `ScrollHandle` with `extends ScrollPosition`, which the
+allow-list parser did not match, so the pre-commit suite failed on
+`origin/main` on any machine with current Herdr type files. The parser now
+accepts an `extends` clause and includes inherited members. The user chose
+to carry that fix in this PR rather than a separate one. Branch
 `mise-gh-account` from `origin/main`, draft PR targeting `main`. Agent shells
 that snapshot their environment at startup see the value only in sessions
 started after the change. Rollback: revert through a normal PR.
