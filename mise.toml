@@ -3,6 +3,12 @@ node = "26.3.0"
 pnpm = "12.16.1"
 "npm:lefthook" = "2.1.6"
 
+[env]
+# Pin gh to the account named in this clone's local git config:
+#   git config --local credential.https://github.com.username <account>
+# Unset, or without gh, GH_TOKEN stays empty and gh uses its active account.
+GH_TOKEN = "{{ exec(command='u=$(git config --get credential.https://github.com.username) && env -u GH_TOKEN -u GITHUB_TOKEN gh auth token --user \"$u\" 2>/dev/null || true') }}"
+
 [tasks.setup]
 description = "Install dependencies and configure git hooks"
 run = [
