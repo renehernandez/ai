@@ -835,17 +835,26 @@ const haveTypes =
   existsSync(join(TYPES, "herdr.d.ts")) &&
   existsSync(join(TYPES, "gpui-kit.d.ts"));
 
-// Member names of one `interface Name {` block (2-space indented, members at 4).
-function members(source: string, name: string) {
-  const start = source.indexOf(`  export interface ${name} {`);
-  assert.ok(start >= 0, `interface ${name} is declared`);
-  const end = source.indexOf("\n  }\n", start);
-  const block = source.slice(start, end);
-  return new Set(
+// Member names of one `interface Name [extends A, B] {` block (2-space
+// indented, members at 4), including members inherited from its parents.
+function members(source: string, name: string): Set<string> {
+  const header = new RegExp(
+    `^  export interface ${name}\\b(?:<[^>]*>)?(?: extends ([^{]+))? \\{$`,
+    "m",
+  ).exec(source);
+  assert.ok(header, `interface ${name} is declared`);
+  const end = source.indexOf("\n  }\n", header.index);
+  const block = source.slice(header.index, end);
+  const names = new Set(
     [...block.matchAll(/^ {4}(?:readonly )?([A-Za-z_]\w*)\??[(<:]/gm)].map(
       (m) => m[1],
     ),
   );
+  for (const parent of header[1]?.split(",") ?? []) {
+    const parentName = parent.trim().replace(/<.*$/, "");
+    for (const member of members(source, parentName)) names.add(member);
+  }
+  return names;
 }
 
 test("every allowed name is on Herdr's documented surface", {
