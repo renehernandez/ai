@@ -35,7 +35,7 @@ test("Opus is the subscription-backed default and four focused reviewers span So
   assert.deepEqual(
     bridge.find((entry) => entry.path.join(".") === "provider.forceTwoHundredK")
       ?.value,
-    ["claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1"],
+    ["claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-2"],
   );
   assert.deepEqual(
     Object.entries(routes)
@@ -94,7 +94,7 @@ test("Astra and Fable consult planners have fixed medium routes", () => {
   });
   assert.deepEqual(routes["planner-fable"], {
     label: "Fable · Consult Planner",
-    routes: ["claude-bridge/claude-fable-5-1:medium"],
+    routes: ["claude-bridge/claude-fable-5-2:medium"],
   });
 });
 

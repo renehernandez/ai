@@ -328,6 +328,44 @@ test("GREEN skill-rule-evals: consult planners advise without shell or edits, wi
     read("docs/ax.md"),
     /\*\*Astra · Consult Planner\*\*[\s\S]*\*\*Fable · Consult Planner\*\*/,
   );
+  const routes: Record<string, { routes: string[] }> = JSON.parse(
+    read("hooks/pi/routes.json"),
+  );
+  const [, major, minor] =
+    /^claude-bridge\/claude-fable-(\d+)-(\d+):/.exec(
+      routes["planner-fable"].routes[0],
+    ) ?? [];
+  const fable = `Fable ${major}.${minor}`;
+  assert.ok(
+    contract.includes(`(\`planner-fable\`, ${fable} through`),
+    "the workflow contract names the routed Fable version",
+  );
+  assert.ok(
+    read("docs/ax.md").includes(`(${fable} through the Claude bridge)`),
+    "docs name the routed Fable version",
+  );
+  const bridgeModels = [
+    ...new Set(
+      Object.values(routes)
+        .flatMap((role) => role.routes)
+        .filter((spec) => spec.startsWith("claude-bridge/"))
+        .map((spec) =>
+          spec.slice("claude-bridge/".length, spec.lastIndexOf(":")),
+        ),
+    ),
+  ].sort();
+  const bridge: { path: string[]; value: unknown }[] = JSON.parse(
+    read("ax.config.json"),
+  ).runtime.configs.piClaudeBridge.managedPaths;
+  assert.deepEqual(
+    [
+      ...((bridge.find(
+        (entry) => entry.path.join(".") === "provider.forceTwoHundredK",
+      )?.value ?? []) as string[]),
+    ].sort(),
+    bridgeModels,
+    "every Claude bridge route stays on the 200K context cap",
+  );
 });
 
 test("RED skill-rule-evals: orchestrator binding rejects a terminal that is not live", async () => {

@@ -273,7 +273,7 @@ test("each focused reviewer is read-only without MCP and only Sonnet loads the C
 test("consult planners have read tools plus MCP and no shell, fixed to one route, and only Fable loads the Claude bridge", () => {
   for (const [role, provider, model] of [
     ["planner-astra", "openai-codex", "gpt-6-astra"],
-    ["planner-fable", "claude-bridge", "claude-fable-5-1"],
+    ["planner-fable", "claude-bridge", "claude-fable-5-2"],
   ]) {
     const fixed = [role, provider, model, "medium"];
     const { contract, args } = launchArguments([...fixed]);

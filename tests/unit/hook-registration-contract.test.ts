@@ -19,6 +19,7 @@ test("RED hook-registration: MCP and Pi runtime configuration, including the her
       ".agents/skills/herdr-orchestration/scripts/watch.ts",
       ".pi/agent/extensions/herdr-core-policy.json",
       ".config/herdr-core/templates/ax-orchestrator.md",
+      ".config/herdr-core/templates/ax-planner-fable.md",
     ])
       assert.throws(
         () =>
