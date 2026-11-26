@@ -304,7 +304,8 @@ work; only mobile access is lost on that machine.
 
 Two consult planners, **Astra · Consult Planner** (GPT-6 Astra) and
 **Fable · Consult Planner** (Fable 5.2 through the Claude bridge), give advice
-at medium thinking. Ask the orchestrator to "ask Fable", "consult Astra", or
+at medium thinking. On the managed Max plan, Fable uses its 1M context; every
+other Claude bridge route stays capped at 200K. Ask the orchestrator to "ask Fable", "consult Astra", or
 "get both planners' take"; it runs the runner's `consult` action and folds the
 advice into its own plan revision. Consults never block progress. You can also
 start either planner as a standalone consultant with

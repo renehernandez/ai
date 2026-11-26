@@ -344,10 +344,15 @@ test("GREEN skill-rule-evals: consult planners advise without shell or edits, wi
     read("docs/ax.md").includes(`(${fable} through the Claude bridge)`),
     "docs name the routed Fable version",
   );
-  const bridgeModels = [
+  const fableModel = routes["planner-fable"].routes[0].slice(
+    "claude-bridge/".length,
+    routes["planner-fable"].routes[0].lastIndexOf(":"),
+  );
+  const cappedModels = [
     ...new Set(
-      Object.values(routes)
-        .flatMap((role) => role.routes)
+      Object.entries(routes)
+        .filter(([role]) => role !== "planner-fable")
+        .flatMap(([, role]) => role.routes)
         .filter((spec) => spec.startsWith("claude-bridge/"))
         .map((spec) =>
           spec.slice("claude-bridge/".length, spec.lastIndexOf(":")),
@@ -357,14 +362,25 @@ test("GREEN skill-rule-evals: consult planners advise without shell or edits, wi
   const bridge: { path: string[]; value: unknown }[] = JSON.parse(
     read("ax.config.json"),
   ).runtime.configs.piClaudeBridge.managedPaths;
+  const setting = (path: string) =>
+    bridge.find((entry) => entry.path.join(".") === path)?.value;
+  const capped = [
+    ...((setting("provider.forceTwoHundredK") ?? []) as string[]),
+  ].sort();
   assert.deepEqual(
-    [
-      ...((bridge.find(
-        (entry) => entry.path.join(".") === "provider.forceTwoHundredK",
-      )?.value ?? []) as string[]),
-    ].sort(),
-    bridgeModels,
-    "every Claude bridge route stays on the 200K context cap",
+    capped,
+    cappedModels,
+    "every Claude bridge route except the Fable consult planner stays on the 200K context cap",
+  );
+  assert.equal(capped.includes(fableModel), false);
+  assert.equal(
+    setting("provider.plan"),
+    "max",
+    "Fable's 1M context is measured on the Max plan",
+  );
+  assert.match(
+    read("docs/ax.md").replace(/\s+/g, " "),
+    /On the managed Max plan, Fable uses its 1M context; every other Claude bridge route stays capped at 200K\./,
   );
 });
 
@@ -380,7 +396,7 @@ function managedBridge() {
   };
 }
 
-test("RED skill-rule-evals: the managed Claude bridge config sets no leaf the pinned bridge ignores and never enables AskClaude", () => {
+test("RED skill-rule-evals: the managed Claude bridge config sets no leaf the pinned bridge ignores, never enables AskClaude, and never opts into paid long context", () => {
   const { settings } = managedBridge();
   assert.equal(
     settings.has("askClaude.allowFullMode"),
@@ -388,6 +404,11 @@ test("RED skill-rule-evals: the managed Claude bridge config sets no leaf the pi
     "pi-claude-bridge 0.13 no longer reads askClaude.allowFullMode",
   );
   assert.equal(settings.get("askClaude.enabled"), false);
+  assert.equal(
+    settings.get("provider.longContextExtraUsage"),
+    false,
+    "1M context comes only from plan-included models, never Extra Usage",
+  );
 });
 
 test("GREEN skill-rule-evals: Pi settings, the launcher, and docs name one Claude bridge pin", () => {

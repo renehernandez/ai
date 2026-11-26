@@ -112,18 +112,14 @@
         "target": "~/.pi/agent/claude-bridge.json",
         "managedPaths": [
           { "path": ["askClaude", "enabled"], "value": false },
-          { "path": ["provider", "plan"], "value": "pro" },
+          { "path": ["provider", "plan"], "value": "max" },
           {
             "path": ["provider", "longContextExtraUsage"],
             "value": false
           },
           {
             "path": ["provider", "forceTwoHundredK"],
-            "value": [
-              "claude-opus-5-5",
-              "claude-sonnet-5-5",
-              "claude-fable-5-2"
-            ]
+            "value": ["claude-opus-5-5", "claude-sonnet-5-5"]
           },
           { "path": ["provider", "strictMcpConfig"], "value": true },
           { "path": ["provider", "autoMemoryEnabled"], "value": false }
