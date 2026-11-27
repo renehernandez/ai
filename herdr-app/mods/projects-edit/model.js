@@ -162,6 +162,26 @@ export function groupSpaces(projects, items, keyOf, mains = {}) {
   };
 }
 
+// What tells apart unnamed spaces of one group that share a name: space id to
+// its active tab's name, when someone named that tab and no other such space
+// shows it, else "#" and its index. Named spaces and unique names get none.
+// spaces: [{ id, name, named, index, tab }], tab: the active tab's given name or null.
+export function duplicateLabels(spaces) {
+  const byName = new Map();
+  for (const s of spaces)
+    if (!s.named) byName.set(s.name, [...(byName.get(s.name) ?? []), s]);
+  const out = {};
+  for (const same of byName.values()) {
+    if (same.length < 2) continue;
+    for (const s of same)
+      out[s.id] =
+        s.tab && same.filter((o) => o.tab === s.tab).length === 1
+          ? s.tab
+          : `#${s.index}`;
+  }
+  return out;
+}
+
 // Edits: each returns a new document and keeps every key it doesn't change.
 // Repos come out in object form.
 function edit(doc, change) {
