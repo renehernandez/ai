@@ -224,6 +224,21 @@ test("startup rules perform shared mode preflight without a lifecycle skill", ()
   }
 });
 
+test("agents name their Herdr space after the current work", () => {
+  const startup = readFileSync("rules/session-startup.md", "utf-8");
+  const portableAgents = readFileSync("instructions/AGENTS.md", "utf-8");
+
+  assert.match(startup, /## Herdr space name/);
+  assert.match(startup, /HC_TERMINAL_ID/);
+  assert.match(startup, /`herdr\.space` label/);
+  assert.match(startup, /herdr-app do space\.rename --id/);
+  assert.match(startup, /work\s+changes direction/);
+  assert.match(startup, /never pass\s+an empty name/i);
+  assert.match(startup, /skip the step silently/i);
+  assert.match(portableAgents, /Herdr space name/);
+  assert.match(portableAgents, /session-startup\.md#herdr-space-name/);
+});
+
 test("implementation rules route semantically and enforce the full OpenSpec POC", () => {
   const text = readFileSync(
     "rules/investigation-and-implementation.md",

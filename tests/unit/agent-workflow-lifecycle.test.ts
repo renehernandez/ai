@@ -48,6 +48,29 @@ test("GREEN authority: the general size rule keeps its own cap outside this repo
   );
 });
 
+test("RED authority: naming the Herdr space grants read-only modes no repository, tracker, or provider write", () => {
+  const startup = read("rules/session-startup.md");
+  const naming = startup.slice(startup.indexOf("## Herdr space name"));
+  assert.doesNotMatch(
+    naming.slice(0, naming.indexOf("\n## ", 1)),
+    /\b(?:commit|push|publish|edit files|write files)\b/i,
+  );
+  assert.doesNotMatch(startup, /\| Explore \|[^\n]*Herdr/);
+});
+
+test("GREEN authority: the Herdr space rename is local UI state allowed in every mode", () => {
+  const startup = read("rules/session-startup.md");
+  assert.match(
+    startup,
+    /local Herdr UI state, not repository, tracker, or provider\s+state/,
+  );
+  assert.match(startup, /every mode, including Explore and Review/);
+  assert.match(
+    startup,
+    /\| Explore \| Confirm read-only authority; create no repository, tracker, or provider state\. \|/,
+  );
+});
+
 test("GREEN authority: the managed orchestrator works through runner ticks and workers stop at their report", () => {
   const workflow = read("skills/herdr-orchestration/references/workflow.md");
   assert.match(

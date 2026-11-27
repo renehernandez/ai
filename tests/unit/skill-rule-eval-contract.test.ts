@@ -800,6 +800,28 @@ test("GREEN skill-rule-evals: both profiles install the shared communication rul
   }
 });
 
+test("RED skill-rule-evals: naming the Herdr space is a startup rule, not a skill", () => {
+  assert.deepEqual(simulatedCoverageGap("herdr-space-naming"), [
+    "herdr-space-naming",
+  ]);
+  assert.equal(managedSkills.includes("herdr-space-naming"), false);
+});
+
+test("GREEN skill-rule-evals: both profiles install the startup rule that names the Herdr space, and workers leave it alone", () => {
+  assert.deepEqual(currentManagedSkillCoverageGaps(managedSkills), []);
+  const startup = read("rules/session-startup.md");
+  assert.match(startup, /herdr-app do space\.rename/);
+  // Managed workers carry the orchestrator's herdr.space label (workflow.ts runArgs).
+  assert.match(startup, /has a `parent`, it is a sub-agent or worker/);
+  const stagedConfig = JSON.parse(read("ax.config.json")) as typeof axConfig;
+  for (const profile of ["personal", "work"] as const) {
+    assert.ok(
+      stagedConfig.profiles[profile].paths.includes("rules/session-startup.md"),
+      `${profile} must install the startup rule`,
+    );
+  }
+});
+
 test("RED skill-rule-evals: shared workflow surfaces expose no agent force-push route", () => {
   const git = read("rules/git-and-review.md");
   const implementation = read("rules/investigation-and-implementation.md");
