@@ -20,7 +20,7 @@ test("Opus is the subscription-backed default and four focused reviewers span So
   assert.equal(pi.defaultProvider, "claude-bridge");
   assert.equal(pi.defaultModel, "claude-opus-5-5");
   assert.equal(pi.defaultThinkingLevel, "medium");
-  assert.equal(pi.packages, "npm:pi-claude-bridge@0.9.3");
+  assert.equal(pi.packages, "npm:pi-claude-bridge@0.13.0");
   const bridge = config.runtime.configs.piClaudeBridge.managedPaths;
   assert.equal(
     bridge.find((entry) => entry.path.join(".") === "askClaude.enabled")?.value,
@@ -35,7 +35,11 @@ test("Opus is the subscription-backed default and four focused reviewers span So
   assert.deepEqual(
     bridge.find((entry) => entry.path.join(".") === "provider.forceTwoHundredK")
       ?.value,
-    ["claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1"],
+    ["claude-opus-5-5", "claude-sonnet-5-5"],
+  );
+  assert.equal(
+    bridge.find((entry) => entry.path.join(".") === "provider.plan")?.value,
+    "max",
   );
   assert.deepEqual(
     Object.entries(routes)
@@ -73,7 +77,7 @@ test("Opus is the subscription-backed default and four focused reviewers span So
     "claude-opus-5-5",
     "medium",
   ]);
-  assert.ok(launch.args.includes("npm:pi-claude-bridge@0.9.3"));
+  assert.ok(launch.args.includes("npm:pi-claude-bridge@0.13.0"));
   assert.ok(launch.args.includes("--no-extensions"));
   const env = launchEnvironment("claude-bridge", {
     ANTHROPIC_API_KEY: "secret",
@@ -94,7 +98,7 @@ test("Astra and Fable consult planners have fixed medium routes", () => {
   });
   assert.deepEqual(routes["planner-fable"], {
     label: "Fable · Consult Planner",
-    routes: ["claude-bridge/claude-fable-5-1:medium"],
+    routes: ["claude-bridge/claude-fable-5-2:medium"],
   });
 });
 

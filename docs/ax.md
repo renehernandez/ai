@@ -247,8 +247,8 @@ app. Authenticate Pi's
 `openai-codex` provider with your ChatGPT account, and configure the
 `cloudflare-ai-gateway` provider locally for your account and Gateway. This
 repository does not supply or synchronize credentials. The managed launcher
-targets Pi 1.5.0 with the pinned pi-mcp-adapter 7.0.0 and pi-claude-bridge
-0.9.3. Older adapter releases do not support Pi 1.x.
+targets Pi 1.6.1 with the pinned pi-mcp-adapter 7.0.0 and pi-claude-bridge
+0.13.0. Older adapter releases do not support Pi 1.x.
 
 Bootstrap pre-downloads both packages, so a cold download does not consume the
 wrapper's 60-second startup deadline. After changing a pin, run
@@ -305,8 +305,9 @@ If a work-machine policy forbids Remote Login, desktop and orchestration still
 work; only mobile access is lost on that machine.
 
 Two consult planners, **Astra · Consult Planner** (GPT-6 Astra) and
-**Fable · Consult Planner** (Fable 5.1 through the Claude bridge), give advice
-at medium thinking. Ask the orchestrator to "ask Fable", "consult Astra", or
+**Fable · Consult Planner** (Fable 5.2 through the Claude bridge), give advice
+at medium thinking. On the managed Max plan, Fable uses its 1M context; every
+other Claude bridge route stays capped at 200K. Ask the orchestrator to "ask Fable", "consult Astra", or
 "get both planners' take"; it runs the runner's `consult` action and folds the
 advice into its own plan revision. Consults never block progress. You can also
 start either planner as a standalone consultant with

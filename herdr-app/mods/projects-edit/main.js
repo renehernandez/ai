@@ -1,8 +1,10 @@
 // Projects editing for the `projects` sidebar: the Projects dialog
 // (cmd-k cmd-p, `mod.open {name: "projects-edit"}`) and the sidebar's
 // popups, chosen by props:
-//   (none) or { form }                     the dialog; form: { kind: "new" | "rename", project?, name?, addRepo? }
-//   { menu: "project", project, name }     Rename…, Move up/down, Remove
+//   (none), { form } or { adding }        the dialog; form: { kind: "new" | "rename", project?, name?, addRepo? },
+//                                          adding: { project, name } opens that project's Add repo panel
+//   { menu: "new" }                        New space, New project… (the sidebar header's +)
+//   { menu: "project", project, name }     Rename…, the moves that apply, Add repo…, New project…, Remove
 //   { menu: "repo", project, name, path, machine }   Remove from project
 //   { menu: "other", space, machine, path }          Add to project ▸, New project…, space menu
 //   { menu: "tab", space, machine, folder }          Terminal and agents, started at folder
@@ -32,7 +34,7 @@ import {
   theme,
   writeTextFile,
 } from "herdr";
-import { clickItem, menuWrites, saveConfig } from "./edit.js";
+import { clickItem, menuWrites, projectMenuRows, saveConfig } from "./edit.js";
 import {
   addProject,
   addRepo,
@@ -122,7 +124,10 @@ export default class ProjectsEdit extends View {
     this.adding = null; // dialog: the project index whose Add repo panel is open
     this.handle = cx.focus_handle();
     this.handle.focus();
-    this.load(cx);
+    cx.spawn(async (cx) => {
+      await this.read(cx);
+      if (!p.menu && p.adding) this.openAdding(p.adding, cx);
+    });
     if (p.menu === "tab" && !checking())
       cx.spawn(async (cx) => {
         try {
@@ -137,8 +142,13 @@ export default class ProjectsEdit extends View {
     if (!p.menu) this.startForm(p.form ?? null, cx);
   }
 
-  load(cx) {
-    cx.spawn((cx) => this.read(cx));
+  // The dialog opened on one project's Add repo panel, while it is still
+  // the project the sidebar showed.
+  openAdding({ project, name }, cx) {
+    if (this.doc.projects?.[project]?.name !== name) return;
+    this.adding = project;
+    this.lookForOpenRepos(cx);
+    cx.notify();
   }
 
   async read(cx) {
@@ -342,25 +352,37 @@ export default class ProjectsEdit extends View {
     const item = (...args) => [this.item(...args), ROW.item];
     const heading = (text) => [this.heading(text), ROW.heading];
     const rule = () => [this.rule(), ROW.rule];
+    const dialog = (props) => () => openOverlay({ ...DIALOG, props });
+    const newProject = dialog({ form: { kind: "new" } });
     switch (p.menu) {
-      case "project": {
-        const at = p.project,
-          last = names.length - 1;
+      case "new":
         return {
           list: [
-            item("rename", "Rename…", () =>
-              openOverlay({
-                ...DIALOG,
-                props: { form: { kind: "rename", project: at, name: p.name } },
-              }),
-            ),
-            item("up", "Move up", writes.up, { enabled: at > 0 }),
-            item("down", "Move down", writes.down, { enabled: at < last }),
-            rule(),
-            item("remove", "Remove", writes.remove, {
-              hint: "spaces stay open",
-            }),
+            item("space", "New space", () => run("space.new")),
+            item("project", "New project…", newProject),
           ],
+        };
+      case "project": {
+        const at = p.project;
+        const rows = {
+          rename: [
+            "Rename…",
+            dialog({ form: { kind: "rename", project: at, name: p.name } }),
+          ],
+          up: ["Move up", writes.up],
+          down: ["Move down", writes.down],
+          "add-repo": [
+            "Add repo…",
+            dialog({ adding: { project: at, name: p.name } }),
+          ],
+          new: ["New project…", newProject],
+          remove: ["Remove", writes.remove, { hint: "spaces stay open" }],
+        };
+        return {
+          list: projectMenuRows(at, names.length).flatMap((id) => [
+            ...(id === "remove" ? [rule()] : []),
+            item(id, ...rows[id]),
+          ]),
         };
       }
       case "repo":
@@ -379,11 +401,10 @@ export default class ProjectsEdit extends View {
             item(`add-${i}`, name, writes[`add-${i}`]),
           ),
           foot: [
-            item("new", "New project…", () =>
-              openOverlay({
-                ...DIALOG,
-                props: { form: { kind: "new", addRepo: repo } },
-              }),
+            item(
+              "new",
+              "New project…",
+              dialog({ form: { kind: "new", addRepo: repo } }),
             ),
             rule(),
             item(
@@ -457,13 +478,14 @@ export default class ProjectsEdit extends View {
   // the list scrolls and the head and foot stay reachable.
   renderMenu(p) {
     const t = theme();
-    const waiting = !this.loaded && p.menu !== "tab";
+    const usesDoc = p.menu !== "tab" && p.menu !== "new";
+    const waiting = !this.loaded && usesDoc;
     const {
       head = [],
       list = [],
       foot = [],
     } = waiting ? { list: [[this.note("…"), ROW.note]] } : this.menuParts(p);
-    if (this.error && p.menu !== "tab")
+    if (this.error && usesDoc)
       foot.push([this.note(this.error, t.blocked).text_size(11), ROW.note]);
     const rows = [...head, ...list, ...foot];
     const height = Math.min(

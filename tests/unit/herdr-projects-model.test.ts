@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   addProject,
   addRepo,
+  duplicateLabels,
   expandPath,
   groupSpaces,
   loadConfig,
@@ -239,6 +240,33 @@ test("adding a repo listed in another project moves it with its keys", () => {
     { path: "~/x", machine: "vps" },
   ]);
   assert.throws(() => addRepo(doc, 0, { path: " " }, HOMES), /needs a folder/);
+});
+
+test("unnamed spaces sharing a name get a tab name or their index", () => {
+  const space = (
+    id: string,
+    name: string,
+    index: number,
+    tab: string | null = null,
+    named = false,
+  ) => ({ id, name, named, index, tab });
+  assert.deepEqual(
+    duplicateLabels([
+      space("a", "app", 1, "review"),
+      space("b", "app", 2),
+      space("c", "app", 3, "π - app"),
+      space("d", "app", 4, "π - app"),
+      space("e", "app", 5, null, true),
+      space("f", "api", 6),
+    ]),
+    { a: "review", b: "#2", c: "#3", d: "#4" },
+    "a shared tab name falls back to the index; named and unique spaces get none",
+  );
+  assert.deepEqual(
+    duplicateLabels([space("a", "app", 1), space("b", "app", 2, null, true)]),
+    {},
+    "one unnamed space beside a named one needs no label",
+  );
 });
 
 test("removing a repo matches its listing or its expanded folder", () => {

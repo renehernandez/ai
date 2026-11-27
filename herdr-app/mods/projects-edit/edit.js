@@ -25,6 +25,19 @@ export function clickItem(action, e, cx, { enabled, busy, close }) {
   action();
 }
 
+// The project menu's row ids, in order, for the project at `at` of `count`:
+// only the moves that apply.
+export function projectMenuRows(at, count) {
+  return [
+    "rename",
+    ...(at > 0 ? ["up"] : []),
+    ...(at < count - 1 ? ["down"] : []),
+    "add-repo",
+    "new",
+    "remove",
+  ];
+}
+
 // A sidebar popup's writes by row id. write(change, machines) makes the
 // row's click handler for an edit of projects.json.
 export function menuWrites(p, names, write) {

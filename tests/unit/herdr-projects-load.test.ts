@@ -315,7 +315,9 @@ type Space = {
   machine: string | null;
   folder: string;
   status: string;
-  tabs: { id: string }[];
+  index: number;
+  named: boolean;
+  tabs: { id: string; name?: string; named?: boolean; active?: boolean }[];
 };
 
 const HOME = "/Users/me";
@@ -359,6 +361,8 @@ function host() {
     machine: machine as string | null,
     folder: folder as string,
     status: i === 1 ? "blocked" : "idle",
+    index: i + 1,
+    named: false,
     tabs: [{ id: `t${i}` }],
   }));
   return {
@@ -667,6 +671,65 @@ test("projects sidebar loads and renders projects, repos and Other", async () =>
     assert.ok(drawn.includes(id), `${id} is drawn`);
 });
 
+test("a project with no repos offers Add a repo, opening the dialog on its panel", async () => {
+  start();
+  const { cx, render } = await mount("projects");
+  const root = render();
+  assert.ok(!ids(root).includes("project-add-0"), "AI has repos");
+  click(root, "project-add-1", cx);
+  const spec = H.overlays.at(-1) as Record<string, unknown>;
+  assert.equal(spec.mod, "projects-edit");
+  assert.equal(spec.kind, "dialog");
+  assert.deepEqual(spec.props, { adding: { project: 1, name: "Empty" } });
+});
+
+test("the header + opens New space and New project", async () => {
+  start();
+  let { cx, render } = await mount("projects");
+  click(render(), "space-new", cx);
+  const spec = H.overlays.at(-1) as {
+    mod: string;
+    props: Record<string, unknown>;
+  };
+  assert.equal(spec.mod, "projects-edit");
+  assert.equal(spec.props.menu, "new");
+
+  start(spec.props);
+  ({ cx, render } = await mount("projects-edit"));
+  click(render(), "space", cx);
+  assert.deepEqual(H.runs.at(-1), ["space.new", undefined]);
+  click(render(), "project", cx);
+  assert.deepEqual((H.overlays.at(-1) as { props: unknown }).props, {
+    form: { kind: "new" },
+  });
+});
+
+test("unnamed spaces sharing a name show what tells them apart", async () => {
+  start();
+  const loose = H.spaces[2];
+  loose.tabs = [{ id: "t2", name: "review", named: true, active: true }];
+  H.spaces.push(
+    { ...loose, id: "s6", active: false, index: 6, tabs: [{ id: "t5" }] },
+    {
+      ...loose,
+      id: "s7",
+      active: false,
+      index: 7,
+      named: true,
+      tabs: [{ id: "t6" }],
+    },
+  );
+  const { render } = await mount("projects");
+  const label = (id: string) => {
+    const row = find(render(), id);
+    assert.ok(row, `${id} is drawn`);
+    return texts(row);
+  };
+  assert.ok(label("space-s3").includes("review"));
+  assert.ok(label("space-s6").includes("#6"));
+  assert.ok(!label("space-s7").includes("#7"), "a named space keeps its row");
+});
+
 test("projects sidebar renders its narrow rail and a broken projects.json", async () => {
   start();
   H.sidebarWidth = 100;
@@ -699,6 +762,8 @@ test("both mods render in herdr-app check's dry run", async () => {
     ["projects", {}],
     ["projects-edit", {}],
     ["projects-edit", { menu: "tab", space: "s1", folder: null, height: 320 }],
+    ["projects-edit", { menu: "new", height: 80 }],
+    ["projects-edit", { adding: { project: 0, name: "AI" } }],
   ] as const) {
     start(props);
     H.checking = true;
@@ -725,6 +790,42 @@ test("projects-edit dialog renders, opens Add repo and the machine form", async 
   assert.equal(view.form && (view.form as { kind: string }).kind, "remote");
 });
 
+test("projects-edit opens on a project's Add repo panel while it is still that project", async () => {
+  start({ adding: { project: 0, name: "AI" } });
+  let { render } = await mount("projects-edit");
+  let root = render();
+  assert.ok(ids(root).includes("folder-0"), "the Add repo panel is open");
+  assert.ok(texts(root).includes("~/src/loose"), "an open repo is offered");
+
+  start({ adding: { project: 0, name: "Renamed meanwhile" } });
+  ({ render } = await mount("projects-edit"));
+  root = render();
+  assert.ok(ids(root).includes("p-0"), "the dialog still opens");
+  assert.ok(!ids(root).includes("folder-0"), "with no panel open");
+});
+
+test("the project menu shows only the moves that apply and opens Add repo", async () => {
+  start(MENUS.project);
+  H.files[CONFIG] = projectsDoc(2);
+  let { cx, render } = await mount("projects-edit");
+  let root = render();
+  const rows = ["rename", "up", "down", "add-repo", "new", "remove"];
+  assert.deepEqual(
+    ids(root).filter((id) => rows.includes(id)),
+    ["rename", "down", "add-repo", "new", "remove"],
+  );
+  click(root, "add-repo", cx);
+  assert.deepEqual((H.overlays.at(-1) as { props: unknown }).props, {
+    adding: { project: 0, name: "AI" },
+  });
+
+  start(MENUS.project);
+  H.files[CONFIG] = `${JSON.stringify({ projects: [{ name: "AI" }] })}\n`;
+  ({ cx, render } = await mount("projects-edit"));
+  root = render();
+  assert.ok(!ids(root).includes("up") && !ids(root).includes("down"));
+});
+
 for (const form of [
   { kind: "new", addRepo: { path: "~/src/loose", machine: null } },
   { kind: "rename", project: 0, name: "AI" },
@@ -741,6 +842,7 @@ for (const form of [
   });
 
 const MENUS: Record<string, Record<string, unknown>> = {
+  new: { menu: "new", height: 80 },
   project: { menu: "project", project: 0, name: "AI", height: 260 },
   repo: {
     menu: "repo",
@@ -835,21 +937,26 @@ const haveTypes =
   existsSync(join(TYPES, "herdr.d.ts")) &&
   existsSync(join(TYPES, "gpui-kit.d.ts"));
 
-// Member names of one `interface Name {` block (2-space indented, members at
-// 4). An `extends ...` clause before the brace is allowed; inherited members
-// are not counted.
-function members(source: string, name: string) {
-  const start = source.search(
-    new RegExp(`^  export interface ${name}(?: extends [^{\n]+)? \{$`, "m"),
-  );
-  assert.ok(start >= 0, `interface ${name} is declared`);
-  const end = source.indexOf("\n  }\n", start);
-  const block = source.slice(start, end);
-  return new Set(
+// Member names of one `interface Name [extends A, B] {` block (2-space
+// indented, members at 4), including members inherited from its parents.
+function members(source: string, name: string): Set<string> {
+  const header = new RegExp(
+    `^  export interface ${name}\\b(?:<[^>]*>)?(?: extends ([^{]+))? \\{$`,
+    "m",
+  ).exec(source);
+  assert.ok(header, `interface ${name} is declared`);
+  const end = source.indexOf("\n  }\n", header.index);
+  const block = source.slice(header.index, end);
+  const names = new Set(
     [...block.matchAll(/^ {4}(?:readonly )?([A-Za-z_]\w*)\??[(<:]/gm)].map(
       (m) => m[1],
     ),
   );
+  for (const parent of header[1]?.split(",") ?? []) {
+    const parentName = parent.trim().replace(/<.*$/, "");
+    for (const member of members(source, parentName)) names.add(member);
+  }
+  return names;
 }
 
 test("every allowed name is on Herdr's documented surface", {

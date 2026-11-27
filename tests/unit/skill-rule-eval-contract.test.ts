@@ -328,6 +328,105 @@ test("GREEN skill-rule-evals: consult planners advise without shell or edits, wi
     read("docs/ax.md"),
     /\*\*Astra · Consult Planner\*\*[\s\S]*\*\*Fable · Consult Planner\*\*/,
   );
+  const routes: Record<string, { routes: string[] }> = JSON.parse(
+    read("hooks/pi/routes.json"),
+  );
+  const [, major, minor] =
+    /^claude-bridge\/claude-fable-(\d+)-(\d+):/.exec(
+      routes["planner-fable"].routes[0],
+    ) ?? [];
+  const fable = `Fable ${major}.${minor}`;
+  assert.ok(
+    contract.includes(`(\`planner-fable\`, ${fable} through`),
+    "the workflow contract names the routed Fable version",
+  );
+  assert.ok(
+    read("docs/ax.md").includes(`(${fable} through the Claude bridge)`),
+    "docs name the routed Fable version",
+  );
+  const fableModel = routes["planner-fable"].routes[0].slice(
+    "claude-bridge/".length,
+    routes["planner-fable"].routes[0].lastIndexOf(":"),
+  );
+  const cappedModels = [
+    ...new Set(
+      Object.entries(routes)
+        .filter(([role]) => role !== "planner-fable")
+        .flatMap(([, role]) => role.routes)
+        .filter((spec) => spec.startsWith("claude-bridge/"))
+        .map((spec) =>
+          spec.slice("claude-bridge/".length, spec.lastIndexOf(":")),
+        ),
+    ),
+  ].sort();
+  const bridge: { path: string[]; value: unknown }[] = JSON.parse(
+    read("ax.config.json"),
+  ).runtime.configs.piClaudeBridge.managedPaths;
+  const setting = (path: string) =>
+    bridge.find((entry) => entry.path.join(".") === path)?.value;
+  const capped = [
+    ...((setting("provider.forceTwoHundredK") ?? []) as string[]),
+  ].sort();
+  assert.deepEqual(
+    capped,
+    cappedModels,
+    "every Claude bridge route except the Fable consult planner stays on the 200K context cap",
+  );
+  assert.equal(capped.includes(fableModel), false);
+  assert.equal(
+    setting("provider.plan"),
+    "max",
+    "Fable's 1M context is measured on the Max plan",
+  );
+  assert.match(
+    read("docs/ax.md").replace(/\s+/g, " "),
+    /On the managed Max plan, Fable uses its 1M context; every other Claude bridge route stays capped at 200K\./,
+  );
+});
+
+function managedBridge() {
+  const configs = JSON.parse(read("ax.config.json")).runtime.configs;
+  const leaves = (
+    managed: { path: string[]; value: unknown }[],
+  ): Map<string, unknown> =>
+    new Map(managed.map((entry) => [entry.path.join("."), entry.value]));
+  return {
+    settings: leaves(configs.piClaudeBridge.managedPaths),
+    piPackage: leaves(configs.pi.managedPaths).get("packages") as string,
+  };
+}
+
+test("RED skill-rule-evals: the managed Claude bridge config sets no leaf the pinned bridge ignores, never enables AskClaude, and never opts into paid long context", () => {
+  const { settings } = managedBridge();
+  assert.equal(
+    settings.has("askClaude.allowFullMode"),
+    false,
+    "pi-claude-bridge 0.13 no longer reads askClaude.allowFullMode",
+  );
+  assert.equal(settings.get("askClaude.enabled"), false);
+  assert.equal(
+    settings.get("provider.longContextExtraUsage"),
+    false,
+    "1M context comes only from plan-included models, never Extra Usage",
+  );
+});
+
+test("GREEN skill-rule-evals: Pi settings, the launcher, and docs name one Claude bridge pin", () => {
+  const { piPackage } = managedBridge();
+  const [, version] =
+    /^npm:pi-claude-bridge@(\d+\.\d+\.\d+)$/.exec(piPackage) ?? [];
+  assert.ok(version, "Pi settings pin an exact bridge version");
+  assert.ok(
+    read("hooks/pi/launch.ts").includes(
+      `const claudeBridgePackage = "${piPackage}";`,
+    ),
+    "the launcher loads the same bridge pin",
+  );
+  assert.match(
+    read("docs/ax.md").replace(/\s+/g, " "),
+    new RegExp(`pi-claude-bridge ${version.replaceAll(".", "\\.")}\\.`),
+    "docs name the pinned bridge version",
+  );
 });
 
 test("RED skill-rule-evals: orchestrator binding rejects a terminal that is not live", async () => {

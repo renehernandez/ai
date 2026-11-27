@@ -32,7 +32,7 @@
   },
   "planner-fable": {
     "label": "Fable · Consult Planner",
-    "routes": ["claude-bridge/claude-fable-5-1:medium"]
+    "routes": ["claude-bridge/claude-fable-5-2:medium"]
   },
   "review-deepseek": {
     "label": "DeepSeek · Available",
