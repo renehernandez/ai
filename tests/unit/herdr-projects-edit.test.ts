@@ -127,10 +127,10 @@ test("each sidebar menu write reaches projects.json", async () => {
 
 test("the project menu offers only the moves that apply", () => {
   const rest = ["add-repo", "new", "remove"];
-  assert.deepEqual(projectMenuRows(0, 1), ["rename", ...rest]);
-  assert.deepEqual(projectMenuRows(0, 3), ["rename", "down", ...rest]);
-  assert.deepEqual(projectMenuRows(1, 3), ["rename", "up", "down", ...rest]);
-  assert.deepEqual(projectMenuRows(2, 3), ["rename", "up", ...rest]);
+  assert.deepEqual(projectMenuRows(0, 1), rest);
+  assert.deepEqual(projectMenuRows(0, 3), ["down", ...rest]);
+  assert.deepEqual(projectMenuRows(1, 3), ["up", "down", ...rest]);
+  assert.deepEqual(projectMenuRows(2, 3), ["up", ...rest]);
 });
 
 test("a popup row does nothing while disabled or busy, and other actions close first", () => {

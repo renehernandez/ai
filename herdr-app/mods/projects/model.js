@@ -7,7 +7,7 @@
 // A repo may be a bare path string; edits write the object form and keep unknown keys.
 
 export const CONFIG_FILE = "projects.json";
-// The `code` of the error an edit throws when its project moved or was renamed.
+// The `code` of the error an edit throws when its project moved or changed name.
 export const CHANGED = "projects-changed";
 
 const isObject = (value) =>
@@ -202,8 +202,8 @@ function cleanName(name) {
   return out;
 }
 
-function taken(projects, name, except = -1) {
-  if (projects.some((project, i) => i !== except && project.name === name))
+function taken(projects, name) {
+  if (projects.some((project) => project.name === name))
     throw new Error(`There is already a project named ${name}.`);
 }
 
@@ -223,15 +223,6 @@ export function addProject(doc, name) {
   return edit(doc, (projects) => {
     taken(projects, clean);
     projects.push({ name: clean, repos: [] });
-  });
-}
-
-export function renameProject(doc, index, name, expected) {
-  const clean = cleanName(name);
-  projectAt(doc, index, expected);
-  return edit(doc, (projects) => {
-    taken(projects, clean, index);
-    projects[index].name = clean;
   });
 }
 

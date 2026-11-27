@@ -745,7 +745,7 @@ export default class Projects extends View {
     );
   }
 
-  // Under a project with no repos: opens the dialog on its Add repo panel.
+  // Under a project with no repos: opens the dialog to pick a repo folder for it.
   addRepoRow(project, t) {
     return h_flex()
       .id(`project-add-${project.index}`)
