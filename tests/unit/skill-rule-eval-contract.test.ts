@@ -138,13 +138,13 @@ test("RED skill-rule-evals: the Herdr projects sidebar is a config target, not a
   assert.equal(managedSkills.includes("herdr-projects-sidebar"), false);
 });
 
-test("GREEN skill-rule-evals: AX installs the Herdr projects sidebar and only its cmd-k p key", () => {
+test("GREEN skill-rule-evals: AX installs the Herdr projects sidebar and only its cmd-k cmd-p key", () => {
   assert.deepEqual(currentManagedSkillCoverageGaps(managedSkills), []);
   assert.equal(axConfig.runtime.configs.herdrApp.target, "~/.config/herdr-app");
   assert.deepEqual(axConfig.runtime.configs.herdrKeys, {
     target: "~/.config/herdr-app/keys.json",
     managedPaths: [
-      { path: ["global", "cmd-k p"], value: "mod.open:projects-edit" },
+      { path: ["global", "cmd-k cmd-p"], value: "mod.open:projects-edit" },
     ],
   });
 });

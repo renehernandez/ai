@@ -3,7 +3,7 @@
 // spaces whose first terminal is in one of its checkouts, and shows even with
 // none open. Every other space is under Other, grouped by machine as the
 // shipped sidebar does. Right-click a project, repo or Other space to manage
-// projects, or use the header +; cmd-k p opens the Projects dialog (the
+// projects, or use the header +; cmd-k cmd-p opens the Projects dialog (the
 // projects-edit mod). A project with no repos offers Add a repo… under it.
 //
 // Derived from Herdr 0.1.16's shipped `spaces` mod, Copyright Herdr's

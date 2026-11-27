@@ -1,5 +1,6 @@
-// Projects editing for the `projects` sidebar: the Projects dialog (cmd-k p,
-// `mod.open {name: "projects-edit"}`) and the sidebar's popups, chosen by props:
+// Projects editing for the `projects` sidebar: the Projects dialog
+// (cmd-k cmd-p, `mod.open {name: "projects-edit"}`) and the sidebar's
+// popups, chosen by props:
 //   (none), { form } or { adding }        the dialog; form: { kind: "new" | "rename", project?, name?, addRepo? },
 //                                          adding: { project, name } opens that project's Add repo panel
 //   { menu: "new" }                        New space, New project… (the sidebar header's +)
