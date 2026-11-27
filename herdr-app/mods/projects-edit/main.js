@@ -593,7 +593,17 @@ export default class ProjectsEdit extends View {
           .text_color(t.dim)
           .child(
             error
-              ? "esc close"
+              ? // A window keeps no host close: this works without focus.
+                div()
+                  .id("new-space-close")
+                  .cursor_pointer()
+                  .hover((s) => s.text_color(t.foreground))
+                  .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+                  .on_click((_e, cx) => {
+                    cx.stop_propagation();
+                    this.dismiss();
+                  })
+                  .child("Close · esc")
               : cancellable
                 ? "A fresh worktree from origin · esc cancel"
                 : "Can't cancel while the worktree is added",

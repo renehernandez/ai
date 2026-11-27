@@ -20,7 +20,9 @@ away.
   if Herdr's task cancellation is late.
 - **Esc during the add** does nothing. The footer says the add can't be
   cancelled. The window closes on its own when the space opens.
-- **After an error,** Esc closes the window.
+- **After an error,** Esc or the footer's Close control closes the window.
+  A window has no Herdr-level close, and Close still works after the window
+  has lost focus.
 - The view's own closing method is renamed from `close()` to `dismiss()`.
   Herdr's cleanup hook no longer runs it a second time on an overlay that
   is already closed. Nothing changes that a user can see.

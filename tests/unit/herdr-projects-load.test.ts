@@ -966,6 +966,8 @@ test("New space shows git's error and opens no space", async () => {
   assert.deepEqual(H.runs, []);
   pressEsc(root, cx);
   assert.deepEqual(H.closed, ["overlay-0"], "Esc closes it after an error");
+  click(render(), "new-space-close", cx);
+  assert.deepEqual(H.closed, ["overlay-0", "overlay-0"], "so does Close");
 });
 
 test("projects with the same folder name show their parent in the dialog", async () => {
