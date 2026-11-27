@@ -98,6 +98,9 @@ limits, and require separately scoped acceptance for terminal actions.
   another language.
 - Troubleshooting stays read-only through diagnosis and report. Enter Execute
   only when the user requests a fix.
+- In a Herdr terminal, keep the Herdr space name a short summary of the
+  current work, as
+  [session-startup.md](../rules/session-startup.md#herdr-space-name) describes.
 - Use confidence scores from [rules/confidence.md](../rules/confidence.md).
 - Follow [rules/communication.md](../rules/communication.md) for concise agent
   conversation and durable prose. Keep required evidence and confidence scores.

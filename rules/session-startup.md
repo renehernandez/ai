@@ -41,6 +41,22 @@ If the worktree is dirty, shared, divergent from its handoff, changed by an
 uncoordinated process, or has unknown ownership, Plan and Execute block or move
 to a new isolated worktree. Review may inspect the state but does not repair it.
 
+## Herdr space name
+
+In a Herdr terminal, name the space after the work so the person can scan the
+sidebar. Do it when a substantive task starts and again whenever the work
+changes direction. Use a short summary of about 40 characters or less, such as
+`Sidebar Esc fix`.
+
+1. Read the `herdr.space` label from `hc get "$HC_TERMINAL_ID" --json`.
+2. Run `herdr-app do space.rename --id <space> --name "<summary>"`.
+
+The rename is local Herdr UI state, not repository, tracker, or provider
+state, so it is allowed in every mode, including Explore and Review. Never pass
+an empty name: it resets the space to Herdr's automatic name. Replace the
+current name even if the person set it. If `HC_TERMINAL_ID` or the label is
+missing, or a command fails, skip the step silently and continue the task.
+
 ## Starting from a handoff
 
 A session that starts from a handoff brief follows `session-handoff`: verify
