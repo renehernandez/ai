@@ -13,8 +13,8 @@ import {
   serialize,
 } from "../../herdr-app/mods/projects-edit/model.js";
 
-const HOMES: Record<string, string> = { "": "/Users/me", vps: "/home/me" };
-type Change = (doc: unknown, homes: Record<string, string>) => unknown;
+const HOME = "/Users/me";
+type Change = (doc: unknown) => unknown;
 type Popup = Record<string, unknown> & { menu: string };
 
 // projects.json in memory; write behaves like writeTextFile's stale check.
@@ -28,20 +28,13 @@ function config(doc: unknown, { failWrite = null as Error | null } = {}) {
       file.text = text;
       file.writes += 1;
     },
-    homesFor: async (machines: string[]) => ({
-      "": HOMES[""],
-      ...Object.fromEntries(machines.map((m) => [m, HOMES[m]])),
-    }),
   };
   return { file, io, doc: () => parseConfig(file.text) };
 }
 
-const TWO = {
-  projects: [
-    { name: "A", repos: [{ path: "~/x" }, { path: "~/y", machine: "vps" }] },
-    { name: "B", repos: [] },
-  ],
-};
+const TWO = { projects: [{ path: "~/a" }, { path: "~/b" }] };
+const paths = (c: ReturnType<typeof config>) =>
+  (c.doc().projects as { path: string }[]).map((p) => p.path);
 
 // Clicks a popup row the way the mod's item() does, with write handlers
 // shaped like the mod's: (_e, cx) => cx.spawn(...).
@@ -55,9 +48,9 @@ async function click(
   let closed = false;
   const writes = menuWrites(
     p,
-    ["A", "B"],
-    (change: Change, machines?: string[]) => (_e: unknown, cx: typeof cx) =>
-      cx.spawn(() => saveConfig(io, change, machines)),
+    HOME,
+    (change: Change) => (_e: unknown, cx: typeof cx) =>
+      cx.spawn(() => saveConfig(io, change)),
   );
   const action = writes[id];
   assert.ok(action, `${p.menu} has a ${id} write`);
@@ -70,63 +63,57 @@ async function click(
     },
   });
   assert.equal(spawned.length, 1, `${id} starts its write`);
-  assert.deepEqual(await spawned[0], { status: "written" });
+  const result = await spawned[0];
   assert.equal(closed, false, "a write closes the popup once written");
+  return result;
 }
 
 test("each sidebar menu write reaches projects.json", async () => {
-  const names = (c: ReturnType<typeof config>) =>
-    (c.doc().projects as { name: string }[]).map((p) => p.name);
-  const project = (at: number, name: string) => ({
+  const project = (at: number, path: string) => ({
     menu: "project",
     project: at,
-    name,
+    path,
   });
 
   let c = config(TWO);
-  await click(project(1, "B"), "up", c.io);
-  assert.deepEqual(names(c), ["B", "A"]);
+  assert.deepEqual(await click(project(1, "~/b"), "up", c.io), {
+    status: "written",
+  });
+  assert.deepEqual(paths(c), ["~/b", "~/a"]);
 
   c = config(TWO);
-  await click(project(0, "A"), "down", c.io);
-  assert.deepEqual(names(c), ["B", "A"]);
+  await click(project(0, "~/a"), "down", c.io);
+  assert.deepEqual(paths(c), ["~/b", "~/a"]);
 
   c = config(TWO);
-  await click(project(0, "A"), "remove", c.io);
-  assert.deepEqual(names(c), ["B"]);
+  await click(project(0, "~/a"), "remove", c.io);
+  assert.deepEqual(paths(c), ["~/b"]);
 
   c = config(TWO);
-  await click(
-    { menu: "repo", project: 0, name: "A", path: "~/y", machine: "vps" },
-    "remove",
+  await click({ menu: "other", space: "s1", path: "~/z" }, "new-project", c.io);
+  assert.deepEqual(paths(c), ["~/a", "~/b", "~/z"]);
+
+  c = config(TWO);
+  const again = await click(
+    { menu: "other", space: "s1", path: "/Users/me/a" },
+    "new-project",
     c.io,
   );
-  assert.deepEqual(c.doc().projects[0].repos, [{ path: "~/x" }]);
+  assert.deepEqual(again, {
+    status: "error",
+    message: "a is already a project.",
+  });
+  assert.equal(c.file.writes, 0);
 
-  c = config(TWO);
-  await click(
-    { menu: "other", space: "s1", machine: "vps", path: "~/z" },
-    "add-1",
-    c.io,
-  );
-  assert.deepEqual(c.doc().projects[1].repos, [
-    { path: "~/z", machine: "vps" },
-  ]);
-  c = config(TWO);
-  await click(
-    { menu: "other", space: "s1", machine: null, path: "~/x" },
-    "add-1",
-    c.io,
-  );
   assert.deepEqual(
-    c.doc().projects.map((p: { repos: unknown[] }) => p.repos),
-    [[{ path: "~/y", machine: "vps" }], [{ path: "~/x" }]],
-    "a repo listed in another project moves",
+    menuWrites({ menu: "other", space: "s1" }, HOME, () => () => {}),
+    {},
+    "a space outside a repo has no project to make",
   );
 });
 
 test("the project menu offers only the moves that apply", () => {
-  const rest = ["add-repo", "new", "remove"];
+  const rest = ["new", "remove"];
   assert.deepEqual(projectMenuRows(0, 1), rest);
   assert.deepEqual(projectMenuRows(0, 3), ["down", ...rest]);
   assert.deepEqual(projectMenuRows(1, 3), ["up", "down", ...rest]);
@@ -152,7 +139,7 @@ test("a popup row does nothing while disabled or busy, and other actions close f
   );
   assert.deepEqual(calls, ["close", "open"]);
   assert.deepEqual(
-    menuWrites({ menu: "tab" }, ["A"], () => () => {}),
+    menuWrites({ menu: "tab" }, HOME, () => () => {}),
     {},
   );
 });
@@ -161,11 +148,11 @@ test("an edit of a project that moved meanwhile is a conflict and writes nothing
   const c = config(TWO);
   const before = c.file.text;
   assert.throws(
-    () => removeProject(parseConfig(before), 0, "Renamed"),
+    () => removeProject(parseConfig(before), 0, "~/b"),
     (error: { code?: string }) => error.code === CHANGED,
   );
   const result = await saveConfig(c.io, (doc: unknown) =>
-    removeProject(doc, 0, "Renamed"),
+    removeProject(doc, 0, "~/b"),
   );
   assert.deepEqual(result, { status: "conflict" });
   assert.equal(c.file.text, before);
@@ -175,17 +162,14 @@ test("an edit of a project that moved meanwhile is a conflict and writes nothing
 test("a rejected write is a conflict only when projects.json changed", async () => {
   // Changed meanwhile: the other edit stays.
   const c = config(TWO);
-  const other = serialize({ projects: [{ name: "Theirs", repos: [] }] });
-  const raced = {
-    ...c.io,
-    homesFor: async (machines: string[]) => {
+  const other = serialize({ projects: [{ path: "~/theirs" }] });
+  assert.deepEqual(
+    await saveConfig(c.io, (doc: unknown) => {
       c.file.text = other;
-      return c.io.homesFor(machines);
-    },
-  };
-  assert.deepEqual(await saveConfig(raced, (doc: unknown) => doc), {
-    status: "conflict",
-  });
+      return doc;
+    }),
+    { status: "conflict" },
+  );
   assert.equal(c.file.text, other);
 
   // Unchanged: the real error, whatever its wording.
@@ -221,6 +205,13 @@ test("other save failures show their own error", async () => {
   assert.equal(result.status, "error");
   assert.match(result.message, /not valid JSON/);
   assert.equal(bad.file.text, "{");
+
+  const old = config(TWO);
+  old.file.text = serialize({ projects: [{ name: "ai", repos: [] }] });
+  const blocked = await saveConfig(old.io, (doc: unknown) => doc);
+  assert.equal(blocked.status, "error");
+  assert.match(blocked.message, /Delete it to start over/);
+  assert.equal(old.file.writes, 0, "an old-shape file blocks every save");
 
   const missing = config(TWO);
   missing.file.text = null;

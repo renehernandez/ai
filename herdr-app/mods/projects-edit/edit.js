@@ -2,13 +2,11 @@
 // repository's unit tests run them under Node.
 
 import {
-  addRepo,
+  addProject,
   CHANGED,
-  machinesIn,
   moveProject,
   parseConfig,
   removeProject,
-  removeRepo,
   serialize,
 } from "./model.js";
 
@@ -31,60 +29,41 @@ export function projectMenuRows(at, count) {
   return [
     ...(at > 0 ? ["up"] : []),
     ...(at < count - 1 ? ["down"] : []),
-    "add-repo",
     "new",
     "remove",
   ];
 }
 
-// A sidebar popup's writes by row id. write(change, machines) makes the
-// row's click handler for an edit of projects.json.
-export function menuWrites(p, names, write) {
-  const w = (change, machines) => writeAction(write(change, machines));
+// A sidebar popup's writes by row id. write(change) makes the row's click
+// handler for an edit of projects.json; home expands "~".
+export function menuWrites(p, home, write) {
+  const w = (change) => writeAction(write(change));
   switch (p.menu) {
     case "project":
       return {
-        up: w((doc) => moveProject(doc, p.project, -1, p.name)),
-        down: w((doc) => moveProject(doc, p.project, 1, p.name)),
-        remove: w((doc) => removeProject(doc, p.project, p.name)),
+        up: w((doc) => moveProject(doc, p.project, -1, p.path)),
+        down: w((doc) => moveProject(doc, p.project, 1, p.path)),
+        remove: w((doc) => removeProject(doc, p.project, p.path)),
       };
-    case "repo": {
-      const repo = { path: p.path, machine: p.machine };
-      return {
-        remove: w(
-          (doc, homes) => removeRepo(doc, p.project, repo, homes, p.name),
-          [p.machine],
-        ),
-      };
-    }
-    case "other": {
-      const repo = { path: p.path, machine: p.machine ?? null };
-      return Object.fromEntries(
-        names.map((name, i) => [
-          `add-${i}`,
-          w((doc, homes) => addRepo(doc, i, repo, homes, name), [repo.machine]),
-        ]),
-      );
-    }
+    case "other":
+      return p.path
+        ? { "new-project": w((doc) => addProject(doc, p.path, home)) }
+        : {};
     default:
       return {};
   }
 }
 
-// Reads projects.json, applies change(doc, homes) and writes it only over the
-// text it read. io: { read(), write(text, expected), homesFor(machines) }.
+// Reads projects.json, applies change(doc) and writes it only over the text
+// it read. io: { read(), write(text, expected) }.
 // Resolves { status: "written" }, { status: "conflict" } when projects.json
 // changed meanwhile (nothing is overwritten), or { status: "error", message }.
-export async function saveConfig(io, change, extraMachines = []) {
+export async function saveConfig(io, change) {
   const failed = (e) => ({ status: "error", message: String(e?.message ?? e) });
   let text, next;
   try {
     text = (await io.read()) ?? null;
-    const doc = parseConfig(text);
-    const homes = await io.homesFor([
-      ...new Set([...machinesIn(doc), ...extraMachines.filter(Boolean)]),
-    ]);
-    next = serialize(change(doc, homes));
+    next = serialize(change(parseConfig(text)));
   } catch (e) {
     return e?.code === CHANGED ? { status: "conflict" } : failed(e);
   }

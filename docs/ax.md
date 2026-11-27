@@ -190,8 +190,9 @@ Two targets install a personal Herdr app sidebar that groups spaces into
 projects. `runtime.configs.herdrApp` owns, whole, each file under `herdr-app/`
 in this repository at the same path below `~/.config/herdr-app`:
 
-- `mods/projects/`: the sidebar. Each project lists its repos, and each repo
-  lists its worktree spaces. Every other space is under **Other**.
+- `mods/projects/`: the sidebar. A project is one local git repo, named after
+  its folder, and lists the spaces open in its main checkout or its linked
+  worktrees. Every other space is under **Other**.
 - `mods/projects-edit/`: the Projects dialog and the sidebar's menus.
 - `layouts/projects.json`: a copy of Herdr's `main` layout with the `spaces`
   block showing the `projects` mod instead.
@@ -215,7 +216,10 @@ Herdr's whole default key table, so start Herdr once to create it, then sync.
 These files are never AX targets:
 
 - Herdr's own data: `projects.json` (your projects, written by the sidebar and
-  the dialog), `settings.json`, `shared.json` and `layouts/.state/`.
+  the dialog, shaped `{ "projects": [{ "path": "~/x" }] }`), `settings.json`,
+  `shared.json` and `layouts/.state/`. A `projects.json` from before
+  single-folder projects (with `name` and `repos`) is invalid and blocks saves:
+  delete it and add each repo again with New project….
 - Herdr's shipped mods and layouts, and the files Herdr writes into mod
   folders (`jsconfig.json`, `gpui-kit.d.ts`, `herdr.d.ts`).
 

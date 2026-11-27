@@ -1,20 +1,20 @@
 // Projects editing for the `projects` sidebar: the Projects dialog
 // (cmd-k cmd-p, `mod.open {name: "projects-edit"}`) and the sidebar's
 // popups, chosen by props:
-//   (none), { form } or { adding }        the dialog; form: { kind: "new", addRepo? },
-//                                          adding: { project, name } picks a folder to add to that project
+//   (none) or { picking: true }            the dialog; picking: starts with New project's folder picker
 //   { menu: "new" }                        New space, New project… (the sidebar header's +)
-//   { menu: "project", project, name }     the moves that apply, Add repo…, New project…, Remove
-//   { menu: "repo", project, name, path, machine }   Remove from project
-//   { menu: "other", space, machine, path }          Add to project ▸, New project…, space menu
+//   { menu: "project", project, path }     the moves that apply, New project…, Remove
+//   { menu: "other", space, path }         New project from this repo, space menu
 //   { menu: "tab", space, machine, folder }          Terminal and agents, started at folder
 //
+// A project is a local git repo's main checkout, picked with the system folder
+// picker (a popup closes on click, so the dialog hosts the picker).
 // Every write is writeTextFile(path, text, last read): an edit made meanwhile
 // is never overwritten; the edit is dropped with a notification to retry.
-// Popup rows and the name field follow Herdr 0.1.16's shipped `new-menu` and
-// `prompt` mods (Apache License 2.0, LICENSE in this folder).
+// Popup rows follow Herdr 0.1.16's shipped `new-menu` mod (Apache License
+// 2.0, LICENSE in this folder).
 
-import { h_flex, Input, InputState, v_flex } from "gpui-base";
+import { h_flex, v_flex } from "gpui-base";
 import { div, image, svg, View } from "gpui-kit";
 import {
   appHome,
@@ -35,13 +35,11 @@ import {
 import { clickItem, menuWrites, projectMenuRows, saveConfig } from "./edit.js";
 import {
   addProject,
-  addRepo,
   CONFIG_FILE,
   loadConfig,
   mainCheckout,
   moveProject,
   removeProject,
-  removeRepo,
   resolveProjects,
   tildePath,
 } from "./model.js";
@@ -63,31 +61,15 @@ const ROW = {
   padding: 10,
 };
 
-// Each machine's home, for "~" in projects.json: unknown ones are left out.
-async function homesFor(names) {
-  const homes = { "": home() };
-  await Promise.all(
-    names.map(async (m) => {
-      try {
-        const r = await exec("sh", ["-c", 'printf %s "$HOME"'], { on: m });
-        if (r.code === 0 && r.stdout.trim()) homes[m] = r.stdout.trim();
-      } catch {}
-    }),
-  );
-  return homes;
-}
-
-// Reads projects.json, applies change(doc, homes) and writes it if nothing
-// changed it meanwhile. Resolves true when written.
-async function update(change, extraMachines = []) {
+// Reads projects.json, applies change(doc) and writes it if nothing changed
+// it meanwhile. Resolves true when written.
+async function update(change) {
   const result = await saveConfig(
     {
       read: () => readTextFile(configPath()),
       write: (text, expected) => writeTextFile(configPath(), text, expected),
-      homesFor,
     },
     change,
-    extraMachines,
   );
   if (result.status === "conflict")
     notify({
@@ -115,7 +97,7 @@ export default class ProjectsEdit extends View {
     this.handle.focus();
     cx.spawn(async (cx) => {
       await this.read(cx);
-      if (!p.menu && p.adding) this.openAdding(p.adding, cx);
+      if (!p.menu && p.picking) this.newProject(cx);
     });
     if (p.menu === "tab" && !checking())
       cx.spawn(async (cx) => {
@@ -128,36 +110,28 @@ export default class ProjectsEdit extends View {
         }
         cx.notify();
       });
-    if (!p.menu) this.startForm(p.form ?? null, cx);
   }
 
-  // The dialog opened to add a repo to one project: the folder picker, while
-  // it is still the project the sidebar showed.
-  openAdding({ project, name }, cx) {
-    if (this.doc.projects?.[project]?.name !== name) return;
-    this.addFolder(project, name, cx);
-  }
-
-  // Adds a picked folder, as its repo's main checkout, to the project at index.
-  addFolder(index, name, cx) {
+  // Adds a picked folder's repo, as its main checkout, as a new project.
+  newProject(cx) {
     cx.spawn(async (cx) => {
       const folder = await pickFolder({ prompt: "Add" });
       if (!folder) return;
-      let path = folder;
+      let common = null;
       try {
         const r = await exec(
           "git",
           ["rev-parse", "--path-format=absolute", "--git-common-dir"],
           { cwd: folder },
         );
-        if (r.code === 0) path = mainCheckout(r.stdout);
+        if (r.code === 0) common = r.stdout;
       } catch {}
-      const repo = { path: tildePath(path, home()), machine: null };
-      await this.persist(
-        (doc, homes) => addRepo(doc, index, repo, homes, name),
-        cx,
-        [],
-      );
+      if (common === null) {
+        notify({ title: "Not a git repo", body: folder, level: "error" });
+        return;
+      }
+      const path = tildePath(mainCheckout(common), home());
+      await this.persist((doc) => addProject(doc, path, home()), cx);
     });
   }
 
@@ -177,58 +151,27 @@ export default class ProjectsEdit extends View {
   }
 
   // Runs an edit, then reloads what the dialog shows.
-  save(change, cx, machines) {
-    cx.spawn((cx) => this.persist(change, cx, machines));
+  save(change, cx) {
+    cx.spawn((cx) => this.persist(change, cx));
   }
 
-  async persist(change, cx, machines) {
-    await update(change, machines);
+  async persist(change, cx) {
+    await update(change);
     await this.read(cx);
   }
 
   // A popup's edit: the popup closes once it is written (or refused).
-  write(change, machines) {
+  write(change) {
     return (_e, cx) =>
       cx.spawn(async () => {
         this.busy = true;
-        await update(change, machines);
+        await update(change);
         this.close();
       });
   }
 
   close() {
     closeOverlay(props().overlay);
-  }
-
-  // The new project's name field.
-  startForm(form, cx) {
-    this.form = form;
-    if (!form) return;
-    this.nameInput = InputState.new({ value: "" });
-    this.nameInput.on("change", (_e, cx) => cx.notify());
-    this.nameInput.on("submit", (_e, cx) => this.submitForm(cx));
-    this.nameInput.focus();
-    cx.timer.after(600, () => this.nameInput.focus());
-  }
-
-  submitForm(cx) {
-    const form = this.form;
-    if (!form) return;
-    const name = this.nameInput.value().trim();
-    const repo = form.addRepo;
-    const machines = [repo?.machine];
-    const change = (doc, homes) => {
-      const next = addProject(doc, name);
-      return repo ? addRepo(next, next.projects.length - 1, repo, homes) : next;
-    };
-    // Opened for this form alone (from the sidebar): it closes once written.
-    const alone = Boolean(props()?.form);
-    if (!alone) this.form = null;
-    cx.spawn(async (cx) => {
-      await this.persist(change, cx, machines);
-      if (alone) this.close();
-    });
-    cx.notify();
   }
 
   // ---- popups ----
@@ -279,15 +222,12 @@ export default class ProjectsEdit extends View {
   // A popup's rows as [element, height]: head and foot stay put, and the list
   // between them scrolls once the popup reaches its most height (props.height).
   menuParts(p) {
-    const names = (this.doc.projects ?? []).map((project) => project.name);
-    const writes = menuWrites(p, names, (change, machines) =>
-      this.write(change, machines),
-    );
+    const writes = menuWrites(p, home(), (change) => this.write(change));
     const item = (...args) => [this.item(...args), ROW.item];
     const heading = (text) => [this.heading(text), ROW.heading];
     const rule = () => [this.rule(), ROW.rule];
-    const dialog = (props) => () => openOverlay({ ...DIALOG, props });
-    const newProject = dialog({ form: { kind: "new" } });
+    const newProject = () =>
+      openOverlay({ ...DIALOG, props: { picking: true } });
     switch (p.menu) {
       case "new":
         return {
@@ -297,46 +237,36 @@ export default class ProjectsEdit extends View {
           ],
         };
       case "project": {
-        const at = p.project;
         const rows = {
           up: ["Move up", writes.up],
           down: ["Move down", writes.down],
-          "add-repo": [
-            "Add repo…",
-            dialog({ adding: { project: at, name: p.name } }),
-          ],
           new: ["New project…", newProject],
           remove: ["Remove", writes.remove, { hint: "spaces stay open" }],
         };
         return {
-          list: projectMenuRows(at, names.length).flatMap((id) => [
+          list: projectMenuRows(
+            p.project,
+            this.doc.projects?.length ?? 0,
+          ).flatMap((id) => [
             ...(id === "remove" ? [rule()] : []),
             item(id, ...rows[id]),
           ]),
         };
       }
-      case "repo":
+      case "other":
         return {
           list: [
-            item("remove", "Remove from project", writes.remove, {
-              hint: p.name,
-            }),
-          ],
-        };
-      case "other": {
-        const repo = { path: p.path, machine: p.machine ?? null };
-        return {
-          head: [heading(`Add ${p.path.split("/").pop()} to project`)],
-          list: names.map((name, i) =>
-            item(`add-${i}`, name, writes[`add-${i}`]),
-          ),
-          foot: [
-            item(
-              "new",
-              "New project…",
-              dialog({ form: { kind: "new", addRepo: repo } }),
-            ),
-            rule(),
+            ...(writes["new-project"]
+              ? [
+                  item(
+                    "new-project",
+                    "New project from this repo",
+                    writes["new-project"],
+                    { hint: p.path.split("/").pop() },
+                  ),
+                  rule(),
+                ]
+              : []),
             item(
               "space",
               "Space…",
@@ -352,7 +282,6 @@ export default class ProjectsEdit extends View {
             ),
           ],
         };
-      }
       case "tab": {
         const t = theme();
         const start = (args) =>
@@ -408,7 +337,7 @@ export default class ProjectsEdit extends View {
   // the list scrolls and the head and foot stay reachable.
   renderMenu(p) {
     const t = theme();
-    const usesDoc = p.menu !== "tab" && p.menu !== "new";
+    const usesDoc = p.menu === "project" || p.menu === "other";
     const waiting = !this.loaded && usesDoc;
     const {
       head = [],
@@ -446,7 +375,7 @@ export default class ProjectsEdit extends View {
 
   // ---- the dialog ----
 
-  button(id, text, action, { primary = false, enabled = true } = {}) {
+  button(id, text, action) {
     const t = theme();
     return h_flex()
       .id(id)
@@ -456,76 +385,20 @@ export default class ProjectsEdit extends View {
       .items_center()
       .rounded(7)
       .border_1()
-      .border_color(primary ? t.solid : t.input)
-      .bg(primary ? t.solid : t.raised)
-      .text_color(primary ? t.solid_foreground : enabled ? t.foreground : t.dim)
-      .text_size(12)
-      .when(enabled, (el) =>
-        el
-          .cursor_pointer()
-          .hover((s) => s.opacity(0.88))
-          .on_click(action),
-      )
-      .child(text);
-  }
-
-  field(state) {
-    const t = theme();
-    return Input.new(state)
-      .h(32)
-      .px(10)
-      .rounded(8)
-      .border_1()
       .border_color(t.input)
-      .bg(t.background)
-      .text_size(12.8)
-      .text_color(t.foreground);
-  }
-
-  renderForm() {
-    const t = theme();
-    const f = this.form;
-    const label = (text) =>
-      div().pt(12).pb(6).text_size(11.5).text_color(t.dim).child(text);
-    const cancel = (_e, cx) => {
-      this.form = null;
-      if (props()?.form) this.close();
-      else cx.notify();
-    };
-    return v_flex()
-      .gap(0)
-      .child(div().text_size(15).font_semibold().child("New project"))
-      .child(label("Name"))
-      .child(this.field(this.nameInput))
-      .when(Boolean(f.addRepo), (el) =>
-        el.child(
-          div()
-            .pt(6)
-            .text_size(11.5)
-            .text_color(t.dim)
-            .child(
-              `with ${f.addRepo.path}${f.addRepo.machine ? ` on ${f.addRepo.machine}` : ""}`,
-            ),
-        ),
-      )
-      .child(
-        h_flex()
-          .pt(18)
-          .gap(8)
-          .justify_end()
-          .child(this.button("form-cancel", "Cancel", cancel))
-          .child(
-            this.button("form-save", "Save", (_e, cx) => this.submitForm(cx), {
-              primary: true,
-            }),
-          ),
-      );
+      .bg(t.raised)
+      .text_color(t.foreground)
+      .text_size(12)
+      .cursor_pointer()
+      .hover((s) => s.opacity(0.88))
+      .on_click(action)
+      .child(text);
   }
 
   renderDialog() {
     const t = theme();
-    const { projects, errors } = resolveProjects(this.doc, { "": home() });
-    const last = projects.length - 1;
+    const { projects, errors } = resolveProjects(this.doc, home());
+    const last = (this.doc.projects?.length ?? 0) - 1;
     const icon = (id, glyph, tip, action, enabled = true) =>
       div()
         .id(id)
@@ -547,10 +420,8 @@ export default class ProjectsEdit extends View {
       .overflow_y_scrollbar()
       .gap(2)
       .children(
-        projects.flatMap((project) => {
-          const i = project.index,
-            name = project.name;
-          const head = h_flex()
+        projects.map(({ index: i, path, name, parent }) =>
+          h_flex()
             .id(`p-${i}`)
             .h(30)
             .px(6)
@@ -558,15 +429,24 @@ export default class ProjectsEdit extends View {
             .items_center()
             .rounded(7)
             .hover((s) => s.bg(t.hover))
+            .tooltip(path)
             .child(svg("mods/workspace-chrome/layers.svg").size(13).flex_none())
-            .child(div().flex_1().truncate().font_semibold().child(name))
+            .child(div().flex_none().font_semibold().child(name))
+            .child(
+              div()
+                .flex_1()
+                .truncate()
+                .text_size(11.5)
+                .text_color(t.dim)
+                .child(parent ?? ""),
+            )
             .child(
               icon(
                 `p-up-${i}`,
                 "↑",
                 "Move up",
                 (_e, cx) =>
-                  this.save((doc) => moveProject(doc, i, -1, name), cx),
+                  this.save((doc) => moveProject(doc, i, -1, path), cx),
                 i > 0,
               ),
             )
@@ -576,13 +456,8 @@ export default class ProjectsEdit extends View {
                 "↓",
                 "Move down",
                 (_e, cx) =>
-                  this.save((doc) => moveProject(doc, i, 1, name), cx),
+                  this.save((doc) => moveProject(doc, i, 1, path), cx),
                 i < last,
-              ),
-            )
-            .child(
-              icon(`p-add-${i}`, "Add repo", "Add a repo folder", (_e, cx) =>
-                this.addFolder(i, name, cx),
               ),
             )
             .child(
@@ -590,67 +465,10 @@ export default class ProjectsEdit extends View {
                 `p-remove-${i}`,
                 "Remove",
                 "Remove (its spaces stay open)",
-                (_e, cx) => this.save((doc) => removeProject(doc, i, name), cx),
+                (_e, cx) => this.save((doc) => removeProject(doc, i, path), cx),
               ),
-            );
-          const repos = project.repos.map((repo, n) =>
-            h_flex()
-              .id(`r-${i}-${n}`)
-              .h(26)
-              .pl(26)
-              .pr(6)
-              .gap(6)
-              .items_center()
-              .rounded(7)
-              .hover((s) => s.bg(t.hover))
-              .child(
-                svg("mods/workspace-chrome/folder.svg").size(12).flex_none(),
-              )
-              .child(
-                div().flex_1().truncate().text_color(t.muted).child(repo.path),
-              )
-              .when(Boolean(repo.machine), (el) =>
-                el.child(
-                  div()
-                    .flex_none()
-                    .text_size(11)
-                    .text_color(t.dim)
-                    .child(repo.machine),
-                ),
-              )
-              .child(
-                icon(
-                  `r-remove-${i}-${n}`,
-                  "×",
-                  "Remove from project",
-                  (_e, cx) =>
-                    this.save(
-                      (doc, homes) =>
-                        removeRepo(
-                          doc,
-                          i,
-                          { path: repo.path, machine: repo.machine },
-                          homes,
-                          name,
-                        ),
-                      cx,
-                      [repo.machine],
-                    ),
-                ),
-              ),
-          );
-          const empty = project.repos.length
-            ? []
-            : [
-                div()
-                  .pl(26)
-                  .py(3)
-                  .text_size(12)
-                  .text_color(t.dim)
-                  .child("No repos yet."),
-              ];
-          return [head, ...repos, ...empty];
-        }),
+            ),
+        ),
       )
       .when(this.loaded && !projects.length, (el) =>
         el.child(div().py(8).text_color(t.dim).child("No projects yet.")),
@@ -664,10 +482,9 @@ export default class ProjectsEdit extends View {
           .items_center()
           .child(div().flex_1().text_size(15).font_semibold().child("Projects"))
           .child(
-            this.button("new-project", "New project", (_e, cx) => {
-              this.startForm({ kind: "new" }, cx);
-              cx.notify();
-            }),
+            this.button("new-project", "New project…", (_e, cx) =>
+              this.newProject(cx),
+            ),
           )
           .child(div().pl(10).text_size(11).text_color(t.dim).child("Esc")),
       )
@@ -687,10 +504,7 @@ export default class ProjectsEdit extends View {
   key(e, cx) {
     if (e.key !== "escape") return;
     cx.stop_propagation();
-    if (this.form && !props()?.form) {
-      this.form = null;
-      cx.notify();
-    } else this.close();
+    this.close();
   }
 
   render() {
@@ -707,6 +521,6 @@ export default class ProjectsEdit extends View {
       .bg(t.popover)
       .text_color(t.foreground)
       .text_size(12.8)
-      .child(this.form ? this.renderForm() : this.renderDialog());
+      .child(this.renderDialog());
   }
 }
