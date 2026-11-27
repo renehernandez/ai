@@ -369,15 +369,9 @@ function host() {
     notes: [] as { title: string }[], // notify()'s
     // A test's own answer to an exec (null: the REPOS answer).
     exec: null as
-      | ((
-          cmd: string,
-          argv: string[],
-        ) => {
-          code: number;
-          stdout: string;
-          stderr: string;
-        } | null)
+      | ((cmd: string, argv: string[]) => Answer | Promise<Answer> | null)
       | null,
+    closed: [] as string[], // closeOverlay()'s ids
     agents: [] as Record<string, unknown>[],
     runs: [] as unknown[],
     overlays: [] as Record<string, unknown>[],
@@ -385,6 +379,7 @@ function host() {
     timers: [] as ((cx: unknown) => unknown)[],
   };
 }
+type Answer = { code: number; stdout: string; stderr: string };
 let H = host();
 
 const ok = (stdout: string) => ({ code: 0, stdout, stderr: "" });
@@ -476,7 +471,10 @@ const herdr: Record<string, unknown> = {
     H.overlays.push(spec);
     return `overlay-${H.overlays.length}`;
   },
-  closeOverlay: () => null,
+  closeOverlay: (id: string) => {
+    H.closed.push(id);
+    return null;
+  },
   notify: (note: { title: string }) => {
     H.notes.push(note);
     return null;
@@ -696,14 +694,13 @@ test("unnamed spaces in a project show their branch; named ones keep their name"
 
 const NEW_SPACE = {
   mod: "projects-edit",
-  kind: "dialog",
-  modal: true,
+  kind: "window",
   width: 420,
   height: 150,
   props: { newSpace: "~/src/ai" },
 };
 
-test("a project's + opens the modal New space dialog for it", async () => {
+test("a project's + opens the New space window for it", async () => {
   start();
   const { cx, render } = await mount("projects");
   click(render(), "project-new-0", cx);
@@ -885,12 +882,20 @@ test("projects-edit opened with picking starts the folder picker once loaded", a
 });
 
 // git for New space in ~/src/ai: origin/main exists, nothing else does;
-// `fail` makes that subcommand fail.
-function newSpaceGit(fail: string | null = null) {
+// `fail` makes that subcommand fail; `hold` keeps it running until release().
+function newSpaceGit({
+  fail = null as string | null,
+  hold = null as string | null,
+} = {}) {
   const calls: string[][] = [];
+  let release = () => {};
+  const held = new Promise<Answer>((resolve) => {
+    release = () => resolve({ code: 0, stdout: "", stderr: "" });
+  });
   H.exec = (cmd, argv) => {
     calls.push([cmd, ...argv]);
     if (cmd === "test") return { code: 1, stdout: "", stderr: "" };
+    if (argv[0] === hold) return held;
     if (argv[0] === fail)
       return { code: 128, stdout: "", stderr: `fatal: ${fail} failed` };
     if (argv[0] === "symbolic-ref")
@@ -901,29 +906,66 @@ function newSpaceGit(fail: string | null = null) {
     }
     return { code: 0, stdout: "", stderr: "" };
   };
-  return calls;
+  return { calls, release: () => release() };
 }
+
+// Presses Esc in the projects-edit view.
+function pressEsc(root: Node, cx: unknown) {
+  const [[handler]] = args(root, "on_key_down");
+  (handler as (e: unknown, cx: unknown) => unknown)({ key: "escape" }, cx);
+}
+const added = (calls: string[][]) => calls.some((c) => c[1] === "worktree");
 
 test("New space makes a fresh worktree of the project and opens a space in it", async () => {
   start({ newSpace: "~/src/ai" });
-  const calls = newSpaceGit();
+  const { calls } = newSpaceGit();
   await mount("projects-edit");
   const add = calls.find((c) => c[1] === "worktree");
   assert.ok(add, "git worktree add ran");
   const folder = add[6];
   assert.match(folder, /^\/Users\/me\/\.herdr\/worktrees\/ai\/[a-z]+-[a-z]+$/);
   assert.deepEqual(H.runs.at(-1), ["space.new", { folder }]);
+  assert.deepEqual(H.closed, ["overlay-0"]);
+});
+
+test("Esc can't stop New space once the worktree add starts", async () => {
+  start({ newSpace: "~/src/ai" });
+  const git = newSpaceGit({ hold: "worktree" });
+  const { cx, render } = await mount("projects-edit");
+  assert.ok(added(git.calls), "the add is running");
+  const root = render();
+  assert.ok(texts(root).includes("Can't cancel while the worktree is added"));
+  pressEsc(root, cx);
+  assert.deepEqual(H.closed, [], "Esc is ignored");
+  git.release();
+  await settle();
+  assert.equal((H.runs.at(-1) as unknown[])[0], "space.new");
+  assert.deepEqual(H.closed, ["overlay-0"]);
+});
+
+test("Esc during the fetch closes New space and adds nothing", async () => {
+  start({ newSpace: "~/src/ai" });
+  const git = newSpaceGit({ hold: "fetch" });
+  const { cx, render } = await mount("projects-edit");
+  pressEsc(render(), cx);
+  assert.deepEqual(H.closed, ["overlay-0"]);
+  git.release();
+  await settle();
+  assert.ok(!added(git.calls), "no worktree add");
+  assert.deepEqual(H.runs, []);
 });
 
 test("New space shows git's error and opens no space", async () => {
   start({ newSpace: "~/src/ai" });
-  newSpaceGit("fetch");
-  const { render } = await mount("projects-edit");
+  newSpaceGit({ fail: "fetch" });
+  const { cx, render } = await mount("projects-edit");
   const root = render();
   assert.ok(texts(root).includes("New space in ai"));
   const error = find(root, "new-space-error");
   assert.ok(error && texts(error).includes("fatal: fetch failed"));
   assert.deepEqual(H.runs, []);
+  pressEsc(root, cx);
+  assert.deepEqual(H.closed, ["overlay-0"], "Esc closes it after an error");
 });
 
 test("projects with the same folder name show their parent in the dialog", async () => {

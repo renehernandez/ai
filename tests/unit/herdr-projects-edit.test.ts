@@ -166,7 +166,8 @@ function repo({
     home: HOME,
     settings: async () => settings,
     random,
-    step: (text: string) => steps.push(text),
+    step: (text: string, cancellable: boolean) =>
+      steps.push(`${text}${cancellable ? "" : " (can't cancel)"}`),
   });
   return { calls, steps, io, randoms };
 }
@@ -195,7 +196,7 @@ test("a new worktree fetches origin, then branches from its default branch", asy
   });
   assert.deepEqual(r.steps, [
     "Fetching origin…",
-    `Adding ${first} from origin/main…`,
+    `Adding ${first} from origin/main… (can't cancel)`,
   ]);
 });
 
@@ -252,13 +253,22 @@ test("a branch name taken locally, on origin or by a folder is drawn again", asy
   assert.ok(!r.calls.some((c) => c.args[0] === "worktree"));
 });
 
-test("a failed fetch or add reports git's error", async () => {
+test("a failed fetch or add reports git's error; a cancelled run adds nothing", async () => {
   let r = repo({ fail: { fetch: "fatal: could not read from remote" } });
   await assert.rejects(
     newWorktree(r.io(), "/src/ai", "ai"),
     /could not read from remote/,
   );
   assert.equal(r.calls.length, 1, "nothing after the fetch");
+  r = repo();
+  await assert.rejects(
+    newWorktree({ ...r.io(), cancelled: () => true }, "/src/ai", "ai"),
+    /Cancelled/,
+  );
+  assert.ok(
+    !r.calls.some((c) => c.args[0] === "worktree"),
+    "a cancelled run stops before the add",
+  );
   r = repo({ fail: { worktree: "fatal: already exists" } });
   await assert.rejects(newWorktree(r.io(), "/src/ai", "ai"), /already exists/);
 });

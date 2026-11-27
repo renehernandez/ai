@@ -699,7 +699,7 @@ export default class Projects extends View {
 
   // A project's row: its folder's name (and parent folder when another
   // project shares the name), git's error for its folder, and + for a new
-  // space in a fresh worktree (projects-edit's New space dialog).
+  // space in a fresh worktree (projects-edit's New space window).
   projectHead(project, t, collapsed) {
     if (collapsed)
       return railCell(
@@ -769,8 +769,7 @@ export default class Projects extends View {
               cx.stop_propagation();
               openOverlay({
                 mod: "projects-edit",
-                kind: "dialog",
-                modal: true,
+                kind: "window",
                 width: 420,
                 height: 150,
                 props: { newSpace: project.path },

@@ -10,7 +10,8 @@
 //
 // A project is a local git repo's main checkout, picked with the system folder
 // picker (a popup closes on click, so the dialog hosts the picker). A new
-// space in a project runs in a modal dialog for the same reason.
+// space in a project runs in a window: Herdr closes a dialog on Esc itself,
+// a window leaves Esc to the mod, which ignores it once the add starts.
 // Every write is writeTextFile(path, text, last read): an edit made meanwhile
 // is never overwritten; the edit is dropped with a notification to retry.
 // Popup rows follow Herdr 0.1.16's shipped `new-menu` mod (Apache License
@@ -63,8 +64,7 @@ const DIALOG = {
 const newSpace = (path) =>
   openOverlay({
     mod: "projects-edit",
-    kind: "dialog",
-    modal: true,
+    kind: "window",
     width: 420,
     height: 150,
     props: { newSpace: path },
@@ -160,7 +160,12 @@ export default class ProjectsEdit extends View {
   // git's error if one fails.
   newSpace(path, cx) {
     const dir = expandPath(path, home());
-    this.creating = { name: dir.split("/").pop(), step: "…", error: null };
+    this.creating = {
+      name: dir.split("/").pop(),
+      step: "…",
+      cancellable: true,
+      error: null,
+    };
     if (checking()) return;
     cx.spawn(async (cx) => {
       try {
@@ -169,16 +174,18 @@ export default class ProjectsEdit extends View {
             exec,
             home: home(),
             settings: () => readTextFile(`${appHome()}/settings.json`),
-            step: (text) => {
+            step: (text, cancellable) => {
               this.creating.step = text;
+              this.creating.cancellable = cancellable;
               cx.notify();
             },
+            cancelled: () => this.creating.cancelled,
           },
           dir,
           this.creating.name,
         );
         run("space.new", { folder });
-        this.close();
+        this.dismiss();
       } catch (e) {
         this.creating.error = String(e?.message ?? e);
         cx.notify();
@@ -217,11 +224,12 @@ export default class ProjectsEdit extends View {
       cx.spawn(async () => {
         this.busy = true;
         await update(change);
-        this.close();
+        this.dismiss();
       });
   }
 
-  close() {
+  // Not close(): Herdr calls a view's close(cx) when its overlay goes.
+  dismiss() {
     closeOverlay(props().overlay);
   }
 
@@ -243,7 +251,7 @@ export default class ProjectsEdit extends View {
         clickItem(action, e, cx, {
           enabled,
           busy: this.busy,
-          close: () => this.close(),
+          close: () => this.dismiss(),
         }),
       )
       .when(Boolean(icon), (el) => el.child(icon))
@@ -566,7 +574,7 @@ export default class ProjectsEdit extends View {
 
   renderNewSpace() {
     const t = theme();
-    const { name, step, error } = this.creating;
+    const { name, step, cancellable, error } = this.creating;
     return v_flex()
       .size_full()
       .gap(10)
@@ -583,14 +591,23 @@ export default class ProjectsEdit extends View {
           .justify_end()
           .text_size(11)
           .text_color(t.dim)
-          .child(error ? "esc close" : "A fresh worktree from origin · esc"),
+          .child(
+            error
+              ? "esc close"
+              : cancellable
+                ? "A fresh worktree from origin · esc cancel"
+                : "Can't cancel while the worktree is added",
+          ),
       );
   }
 
   key(e, cx) {
     if (e.key !== "escape") return;
     cx.stop_propagation();
-    this.close();
+    const c = this.creating;
+    if (c && !c.error && !c.cancellable) return;
+    if (c) c.cancelled = true;
+    this.dismiss();
   }
 
   render() {
