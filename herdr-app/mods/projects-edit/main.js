@@ -1,10 +1,10 @@
 // Projects editing for the `projects` sidebar: the Projects dialog
 // (cmd-k cmd-p, `mod.open {name: "projects-edit"}`) and the sidebar's
 // popups, chosen by props:
-//   (none), { form } or { adding }        the dialog; form: { kind: "new" | "rename", project?, name?, addRepo? },
-//                                          adding: { project, name } opens that project's Add repo panel
+//   (none), { form } or { adding }        the dialog; form: { kind: "new", addRepo? },
+//                                          adding: { project, name } picks a folder to add to that project
 //   { menu: "new" }                        New space, New project… (the sidebar header's +)
-//   { menu: "project", project, name }     Rename…, the moves that apply, Add repo…, New project…, Remove
+//   { menu: "project", project, name }     the moves that apply, Add repo…, New project…, Remove
 //   { menu: "repo", project, name, path, machine }   Remove from project
 //   { menu: "other", space, machine, path }          Add to project ▸, New project…, space menu
 //   { menu: "tab", space, machine, folder }          Terminal and agents, started at folder
@@ -25,12 +25,10 @@ import {
   knownAgents,
   notify,
   openOverlay,
-  panes,
   pickFolder,
   props,
   readTextFile,
   run,
-  spaces,
   theme,
   writeTextFile,
 } from "herdr";
@@ -44,7 +42,6 @@ import {
   moveProject,
   removeProject,
   removeRepo,
-  renameProject,
   resolveProjects,
   tildePath,
 } from "./model.js";
@@ -65,12 +62,6 @@ const ROW = {
   folder: 20,
   padding: 10,
 };
-
-// Where a space is now: its first terminal's live folder, else where it was made.
-function place(s, ps) {
-  const tabs = new Set((s.tabs ?? []).map((c) => c.id));
-  return ps.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder;
-}
 
 // Each machine's home, for "~" in projects.json: unknown ones are left out.
 async function homesFor(names) {
@@ -120,8 +111,6 @@ export default class ProjectsEdit extends View {
     this.error = null;
     this.loaded = false;
     this.agents = [];
-    this.openRepos = null; // repos of open spaces: [{ path, machine }], null while looking
-    this.adding = null; // dialog: the project index whose Add repo panel is open
     this.handle = cx.focus_handle();
     this.handle.focus();
     cx.spawn(async (cx) => {
@@ -142,13 +131,34 @@ export default class ProjectsEdit extends View {
     if (!p.menu) this.startForm(p.form ?? null, cx);
   }
 
-  // The dialog opened on one project's Add repo panel, while it is still
-  // the project the sidebar showed.
+  // The dialog opened to add a repo to one project: the folder picker, while
+  // it is still the project the sidebar showed.
   openAdding({ project, name }, cx) {
     if (this.doc.projects?.[project]?.name !== name) return;
-    this.adding = project;
-    this.lookForOpenRepos(cx);
-    cx.notify();
+    this.addFolder(project, name, cx);
+  }
+
+  // Adds a picked folder, as its repo's main checkout, to the project at index.
+  addFolder(index, name, cx) {
+    cx.spawn(async (cx) => {
+      const folder = await pickFolder({ prompt: "Add" });
+      if (!folder) return;
+      let path = folder;
+      try {
+        const r = await exec(
+          "git",
+          ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+          { cwd: folder },
+        );
+        if (r.code === 0) path = mainCheckout(r.stdout);
+      } catch {}
+      const repo = { path: tildePath(path, home()), machine: null };
+      await this.persist(
+        (doc, homes) => addRepo(doc, index, repo, homes, name),
+        cx,
+        [],
+      );
+    });
   }
 
   async read(cx) {
@@ -190,56 +200,27 @@ export default class ProjectsEdit extends View {
     closeOverlay(props().overlay);
   }
 
-  // A name field (new project, rename) or a machine and path (a repo elsewhere).
+  // The new project's name field.
   startForm(form, cx) {
     this.form = form;
     if (!form) return;
-    const field = (value) => {
-      const input = InputState.new({ value });
-      if (value) input.set_selected_range({ start: 0, end: value.length });
-      input.on("change", (_e, cx) => cx.notify());
-      input.on("submit", (_e, cx) => this.submitForm(cx));
-      return input;
-    };
-    this.nameInput = field(form.name ?? "");
-    this.machineInput =
-      form.kind === "remote" ? field(form.machine ?? "") : null;
-    this.pathInput = form.kind === "remote" ? field("") : null;
-    (this.machineInput ?? this.nameInput).focus();
-    cx.timer.after(600, () => (this.machineInput ?? this.nameInput).focus());
+    this.nameInput = InputState.new({ value: "" });
+    this.nameInput.on("change", (_e, cx) => cx.notify());
+    this.nameInput.on("submit", (_e, cx) => this.submitForm(cx));
+    this.nameInput.focus();
+    cx.timer.after(600, () => this.nameInput.focus());
   }
 
   submitForm(cx) {
     const form = this.form;
     if (!form) return;
     const name = this.nameInput.value().trim();
-    let change,
-      machines = [];
-    if (form.kind === "new") {
-      const repo = form.addRepo;
-      machines = [repo?.machine];
-      change = (doc, homes) => {
-        const next = addProject(doc, name);
-        return repo
-          ? addRepo(next, next.projects.length - 1, repo, homes)
-          : next;
-      };
-    } else if (form.kind === "rename") {
-      change = (doc) => renameProject(doc, form.project, name, form.name);
-    } else {
-      const machine = this.machineInput.value().trim();
-      const path = this.pathInput.value().trim();
-      if (!path) return;
-      machines = [machine];
-      change = (doc, homes) =>
-        addRepo(
-          doc,
-          form.project,
-          { path, machine: machine || null },
-          homes,
-          form.projectName,
-        );
-    }
+    const repo = form.addRepo;
+    const machines = [repo?.machine];
+    const change = (doc, homes) => {
+      const next = addProject(doc, name);
+      return repo ? addRepo(next, next.projects.length - 1, repo, homes) : next;
+    };
     // Opened for this form alone (from the sidebar): it closes once written.
     const alone = Boolean(props()?.form);
     if (!alone) this.form = null;
@@ -248,53 +229,6 @@ export default class ProjectsEdit extends View {
       if (alone) this.close();
     });
     cx.notify();
-  }
-
-  // The repos open spaces are in, once, for the dialog's Add repo panel.
-  lookForOpenRepos(cx) {
-    if (this.openRepos || this.looking || checking()) return;
-    this.looking = true;
-    cx.spawn(async (cx) => {
-      const ps = panes();
-      const places = [
-        ...new Map(
-          spaces().map((s) => [
-            JSON.stringify([s.machine ?? null, place(s, ps)]),
-            s,
-          ]),
-        ).keys(),
-      ];
-      const homes = await homesFor([
-        ...new Set(
-          spaces()
-            .map((s) => s.machine)
-            .filter(Boolean),
-        ),
-      ]);
-      const found = new Map();
-      await Promise.all(
-        places.map(async (k) => {
-          const [on, cwd] = JSON.parse(k);
-          if (!cwd) return;
-          try {
-            const r = await exec(
-              "git",
-              ["rev-parse", "--path-format=absolute", "--git-common-dir"],
-              { cwd, on },
-            );
-            if (r.code !== 0) return;
-            const path = tildePath(mainCheckout(r.stdout), homes[on ?? ""]);
-            found.set(JSON.stringify([on, path]), { path, machine: on });
-          } catch {}
-        }),
-      );
-      this.openRepos = [...found.values()].sort(
-        (a, b) =>
-          (a.machine ?? "").localeCompare(b.machine ?? "") ||
-          a.path.localeCompare(b.path),
-      );
-      cx.notify();
-    });
   }
 
   // ---- popups ----
@@ -365,10 +299,6 @@ export default class ProjectsEdit extends View {
       case "project": {
         const at = p.project;
         const rows = {
-          rename: [
-            "Rename…",
-            dialog({ form: { kind: "rename", project: at, name: p.name } }),
-          ],
           up: ["Move up", writes.up],
           down: ["Move down", writes.down],
           "add-repo": [
@@ -555,12 +485,6 @@ export default class ProjectsEdit extends View {
   renderForm() {
     const t = theme();
     const f = this.form;
-    const title =
-      f.kind === "new"
-        ? "New project"
-        : f.kind === "rename"
-          ? `Rename ${f.name}`
-          : `Add a repo on a machine to ${f.projectName}`;
     const label = (text) =>
       div().pt(12).pb(6).text_size(11.5).text_color(t.dim).child(text);
     const cancel = (_e, cx) => {
@@ -570,17 +494,9 @@ export default class ProjectsEdit extends View {
     };
     return v_flex()
       .gap(0)
-      .child(div().text_size(15).font_semibold().child(title))
-      .when(f.kind === "remote", (el) =>
-        el
-          .child(label("Machine (empty: this computer)"))
-          .child(this.field(this.machineInput))
-          .child(label("Main checkout folder on it, like ~/src/app"))
-          .child(this.field(this.pathInput)),
-      )
-      .when(f.kind !== "remote", (el) =>
-        el.child(label("Name")).child(this.field(this.nameInput)),
-      )
+      .child(div().text_size(15).font_semibold().child("New project"))
+      .child(label("Name"))
+      .child(this.field(this.nameInput))
       .when(Boolean(f.addRepo), (el) =>
         el.child(
           div()
@@ -599,107 +515,8 @@ export default class ProjectsEdit extends View {
           .justify_end()
           .child(this.button("form-cancel", "Cancel", cancel))
           .child(
-            this.button(
-              "form-save",
-              f.kind === "remote" ? "Add" : "Save",
-              (_e, cx) => this.submitForm(cx),
-              { primary: true },
-            ),
-          ),
-      );
-  }
-
-  renderAdd(index, project) {
-    const t = theme();
-    const listed = new Set(
-      (project.repos ?? []).map((r) => JSON.stringify([r.machine, r.path])),
-    );
-    const choices = (this.openRepos ?? []).filter(
-      (r) => !listed.has(JSON.stringify([r.machine, r.path])),
-    );
-    const add = (repo) => (_e, cx) => {
-      this.adding = null;
-      this.save(
-        (doc, homes) => addRepo(doc, index, repo, homes, project.name),
-        cx,
-        [repo.machine],
-      );
-    };
-    return v_flex()
-      .ml(18)
-      .mt(4)
-      .mb(6)
-      .p(8)
-      .gap(4)
-      .rounded(8)
-      .bg(t.raised)
-      .child(div().text_size(11).text_color(t.dim).child("From an open space"))
-      .when(this.openRepos === null, (el) =>
-        el.child(div().text_size(12).text_color(t.dim).child("Looking…")),
-      )
-      .when(this.openRepos !== null && !choices.length, (el) =>
-        el.child(
-          div()
-            .text_size(12)
-            .text_color(t.dim)
-            .child("No other repos are open."),
-        ),
-      )
-      .children(
-        choices.map((r, i) =>
-          h_flex()
-            .id(`open-${index}-${i}`)
-            .h(24)
-            .px(6)
-            .gap(6)
-            .items_center()
-            .rounded(6)
-            .cursor_pointer()
-            .hover((s) => s.bg(t.hover))
-            .on_click(add(r))
-            .child(div().flex_1().truncate().child(r.path))
-            .when(Boolean(r.machine), (el) =>
-              el.child(div().text_size(11).text_color(t.dim).child(r.machine)),
-            ),
-        ),
-      )
-      .child(
-        h_flex()
-          .pt(4)
-          .gap(6)
-          .child(
-            this.button(`folder-${index}`, "Choose a folder…", (_e, cx) =>
-              cx.spawn(async (cx) => {
-                const folder = await pickFolder({ prompt: "Add" });
-                if (!folder) return;
-                let path = folder;
-                try {
-                  const r = await exec(
-                    "git",
-                    ["rev-parse", "--path-format=absolute", "--git-common-dir"],
-                    { cwd: folder },
-                  );
-                  if (r.code === 0) path = mainCheckout(r.stdout);
-                } catch {}
-                this.adding = null;
-                const repo = { path: tildePath(path, home()), machine: null };
-                await this.persist(
-                  (doc, homes) =>
-                    addRepo(doc, index, repo, homes, project.name),
-                  cx,
-                  [],
-                );
-              }),
-            ),
-          )
-          .child(
-            this.button(`remote-${index}`, "On a machine…", (_e, cx) => {
-              this.adding = null;
-              this.startForm(
-                { kind: "remote", project: index, projectName: project.name },
-                cx,
-              );
-              cx.notify();
+            this.button("form-save", "Save", (_e, cx) => this.submitForm(cx), {
+              primary: true,
             }),
           ),
       );
@@ -764,21 +581,8 @@ export default class ProjectsEdit extends View {
               ),
             )
             .child(
-              icon(`p-rename-${i}`, "Rename", "Rename", (_e, cx) => {
-                this.startForm({ kind: "rename", project: i, name }, cx);
-                cx.notify();
-              }),
-            )
-            .child(
-              icon(
-                `p-add-${i}`,
-                this.adding === i ? "Done" : "Add repo",
-                "Add a repo",
-                (_e, cx) => {
-                  this.adding = this.adding === i ? null : i;
-                  if (this.adding !== null) this.lookForOpenRepos(cx);
-                  cx.notify();
-                },
+              icon(`p-add-${i}`, "Add repo", "Add a repo folder", (_e, cx) =>
+                this.addFolder(i, name, cx),
               ),
             )
             .child(
@@ -845,14 +649,7 @@ export default class ProjectsEdit extends View {
                   .text_color(t.dim)
                   .child("No repos yet."),
               ];
-          return [
-            head,
-            ...repos,
-            ...empty,
-            ...(this.adding === i
-              ? [this.renderAdd(i, this.doc.projects[i])]
-              : []),
-          ];
+          return [head, ...repos, ...empty];
         }),
       )
       .when(this.loaded && !projects.length, (el) =>

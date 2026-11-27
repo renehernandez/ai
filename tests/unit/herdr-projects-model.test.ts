@@ -12,7 +12,6 @@ import {
   parseConfig,
   removeProject,
   removeRepo,
-  renameProject,
   repoKey,
   resolveProjects,
   serialize,
@@ -175,12 +174,12 @@ test("project edits keep unknown keys and write object repos", () => {
       ],
     }),
   );
-  const renamed = renameProject(doc, 0, " Alpha ", "A");
-  assert.deepEqual(renamed, {
+  const kept = moveProject(doc, 0, 0, "A");
+  assert.deepEqual(kept, {
     version: 2,
     projects: [
       {
-        name: "Alpha",
+        name: "A",
         color: "red",
         repos: [{ path: "~/x" }, { path: "~/y", pinned: true }],
       },
@@ -189,33 +188,23 @@ test("project edits keep unknown keys and write object repos", () => {
   });
   assert.deepEqual(doc.projects[0].repos[0], "~/x", "the input is not changed");
   assert.deepEqual(
-    moveProject(renamed, 0, 1, "Alpha").projects.map(
-      (p: { name: string }) => p.name,
-    ),
-    ["B", "Alpha"],
+    moveProject(kept, 0, 1, "A").projects.map((p: { name: string }) => p.name),
+    ["B", "A"],
   );
   assert.deepEqual(
-    moveProject(renamed, 0, -1, "Alpha").projects.map(
-      (p: { name: string }) => p.name,
-    ),
-    ["Alpha", "B"],
+    moveProject(kept, 0, -1, "A").projects.map((p: { name: string }) => p.name),
+    ["A", "B"],
   );
-  const added = addProject(renamed, "C");
+  const added = addProject(kept, " C ");
   assert.deepEqual(added.projects.at(-1), { name: "C", repos: [] });
   assert.equal(added.version, 2);
   assert.deepEqual(
-    removeProject(added, 0, "Alpha").projects.map(
-      (p: { name: string }) => p.name,
-    ),
+    removeProject(added, 0, "A").projects.map((p: { name: string }) => p.name),
     ["B", "C"],
   );
-  assert.throws(() => addProject(renamed, "B"), /already a project named B/);
-  assert.throws(() => addProject(renamed, "  "), /needs a name/);
-  assert.throws(
-    () => renameProject(renamed, 1, "Alpha", "B"),
-    /already a project/,
-  );
-  assert.throws(() => removeProject(renamed, 0, "A"), /changed meanwhile/);
+  assert.throws(() => addProject(kept, "B"), /already a project named B/);
+  assert.throws(() => addProject(kept, "  "), /needs a name/);
+  assert.throws(() => removeProject(kept, 0, "B"), /changed meanwhile/);
   assert.equal(serialize({ projects: [] }), '{\n  "projects": []\n}\n');
 });
 

@@ -371,6 +371,8 @@ function host() {
     files: {} as Record<string, string | null>,
     sidebarWidth: 260,
     checking: false, // herdr-app check's dry run
+    picked: null as string | null, // pickFolder's answer
+    picks: 0,
     agents: [] as Record<string, unknown>[],
     runs: [] as unknown[],
     overlays: [] as Record<string, unknown>[],
@@ -428,7 +430,10 @@ const herdr: Record<string, unknown> = {
     return null;
   },
   knownAgents: async () => H.agents,
-  pickFolder: async () => null,
+  pickFolder: async () => {
+    H.picks++;
+    return H.picked;
+  },
   run: (name: string, a?: unknown) => {
     H.runs.push([name, a]);
     return null;
@@ -671,7 +676,7 @@ test("projects sidebar loads and renders projects, repos and Other", async () =>
     assert.ok(drawn.includes(id), `${id} is drawn`);
 });
 
-test("a project with no repos offers Add a repo, opening the dialog on its panel", async () => {
+test("a project with no repos offers Add a repo, opening the dialog to pick one", async () => {
   start();
   const { cx, render } = await mount("projects");
   const root = render();
@@ -774,34 +779,41 @@ test("both mods render in herdr-app check's dry run", async () => {
 
 // ---- projects-edit ----
 
-test("projects-edit dialog renders, opens Add repo and the machine form", async () => {
+const reposOf = (at: number) =>
+  JSON.parse(H.files[CONFIG] ?? "{}").projects[at].repos;
+
+test("projects-edit dialog's Add repo adds a picked folder's main checkout", async () => {
   start();
-  const { view, cx, render } = await mount("projects-edit");
-  let root = render();
+  const { cx, render } = await mount("projects-edit");
+  const root = render();
   for (const id of ["new-project", "p-0", "p-1", "r-0-0", "r-0-1"])
     assert.ok(ids(root).includes(id), `${id} is drawn`);
-  click(root, "p-add-0", cx);
+  assert.ok(!ids(root).includes("p-rename-0"), "no rename");
+  H.picked = "/Users/me/src/ai-wt/feature";
+  click(root, "p-add-1", cx);
   await settle();
-  root = render();
-  assert.ok(texts(root).includes("~/src/loose"), "an open repo is offered");
-  click(root, "remote-0", cx);
-  root = render();
-  assert.ok(texts(root).includes("Add a repo on a machine to AI"));
-  assert.equal(view.form && (view.form as { kind: string }).kind, "remote");
+  assert.deepEqual(reposOf(1), [{ path: "~/src/ai" }]);
+  assert.ok(ids(render()).includes("r-1-0"), "the dialog shows it");
 });
 
-test("projects-edit opens on a project's Add repo panel while it is still that project", async () => {
-  start({ adding: { project: 0, name: "AI" } });
-  let { render } = await mount("projects-edit");
-  let root = render();
-  assert.ok(ids(root).includes("folder-0"), "the Add repo panel is open");
-  assert.ok(texts(root).includes("~/src/loose"), "an open repo is offered");
+test("projects-edit opened with adding picks a folder while it is still that project", async () => {
+  start({ adding: { project: 1, name: "Empty" } });
+  H.picked = "/Users/me/src/loose";
+  await mount("projects-edit");
+  assert.equal(H.picks, 1);
+  assert.deepEqual(reposOf(1), [{ path: "~/src/loose" }]);
 
-  start({ adding: { project: 0, name: "Renamed meanwhile" } });
-  ({ render } = await mount("projects-edit"));
-  root = render();
-  assert.ok(ids(root).includes("p-0"), "the dialog still opens");
-  assert.ok(!ids(root).includes("folder-0"), "with no panel open");
+  start({ adding: { project: 1, name: "Renamed meanwhile" } });
+  H.picked = "/Users/me/src/loose";
+  const { render } = await mount("projects-edit");
+  assert.equal(H.picks, 0, "no picker for a project that changed");
+  assert.ok(ids(render()).includes("p-0"), "the dialog still opens");
+
+  start({ adding: { project: 1, name: "Empty" } });
+  const before = H.files[CONFIG];
+  await mount("projects-edit");
+  assert.equal(H.picks, 1);
+  assert.equal(H.files[CONFIG], before, "a cancelled pick writes nothing");
 });
 
 test("the project menu shows only the moves that apply and opens Add repo", async () => {
@@ -812,7 +824,7 @@ test("the project menu shows only the moves that apply and opens Add repo", asyn
   const rows = ["rename", "up", "down", "add-repo", "new", "remove"];
   assert.deepEqual(
     ids(root).filter((id) => rows.includes(id)),
-    ["rename", "down", "add-repo", "new", "remove"],
+    ["down", "add-repo", "new", "remove"],
   );
   click(root, "add-repo", cx);
   assert.deepEqual((H.overlays.at(-1) as { props: unknown }).props, {
@@ -826,20 +838,18 @@ test("the project menu shows only the moves that apply and opens Add repo", asyn
   assert.ok(!ids(root).includes("up") && !ids(root).includes("down"));
 });
 
-for (const form of [
-  { kind: "new", addRepo: { path: "~/src/loose", machine: null } },
-  { kind: "rename", project: 0, name: "AI" },
-])
-  test(`projects-edit ${form.kind} form renders and saves`, async () => {
-    start({ form });
-    const { view, cx, render } = await mount("projects-edit");
-    const root = render();
-    assert.ok(ids(root).includes("form-save"));
-    (view.nameInput as { type(v: string): void }).type("Renamed");
-    click(root, "form-save", cx);
-    await settle();
-    assert.match(H.files[CONFIG] ?? "", /"Renamed"/);
+test("projects-edit new project form renders and saves with its repo", async () => {
+  start({
+    form: { kind: "new", addRepo: { path: "~/src/loose", machine: null } },
   });
+  const { view, cx, render } = await mount("projects-edit");
+  const root = render();
+  assert.ok(ids(root).includes("form-save"));
+  (view.nameInput as { type(v: string): void }).type("Loose");
+  click(root, "form-save", cx);
+  await settle();
+  assert.deepEqual(reposOf(2), [{ path: "~/src/loose" }]);
+});
 
 const MENUS: Record<string, Record<string, unknown>> = {
   new: { menu: "new", height: 80 },

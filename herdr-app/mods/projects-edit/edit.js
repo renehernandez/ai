@@ -29,7 +29,6 @@ export function clickItem(action, e, cx, { enabled, busy, close }) {
 // only the moves that apply.
 export function projectMenuRows(at, count) {
   return [
-    "rename",
     ...(at > 0 ? ["up"] : []),
     ...(at < count - 1 ? ["down"] : []),
     "add-repo",
