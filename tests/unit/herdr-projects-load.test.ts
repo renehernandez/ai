@@ -367,6 +367,17 @@ function host() {
     picked: null as string | null, // pickFolder's answer
     picks: 0,
     notes: [] as { title: string }[], // notify()'s
+    // A test's own answer to an exec (null: the REPOS answer).
+    exec: null as
+      | ((
+          cmd: string,
+          argv: string[],
+        ) => {
+          code: number;
+          stdout: string;
+          stderr: string;
+        } | null)
+      | null,
     agents: [] as Record<string, unknown>[],
     runs: [] as unknown[],
     overlays: [] as Record<string, unknown>[],
@@ -389,6 +400,8 @@ async function exec(
   options: { cwd?: string; on?: string | null } = {},
 ) {
   const on = options.on ?? "";
+  const own = H.exec?.(command, argv);
+  if (own) return own;
   if (command === "sh") return ok(on ? "/home/me" : HOME);
   assert.equal(command, "git");
   const repo = REPOS[`${on}:${options.cwd}`];
@@ -681,17 +694,20 @@ test("unnamed spaces in a project show their branch; named ones keep their name"
   assert.ok(label("space-s3").includes("loose"), "Other keeps space names");
 });
 
-test("a project's + opens the shipped New worktree dialog on its folder", async () => {
+const NEW_SPACE = {
+  mod: "projects-edit",
+  kind: "dialog",
+  modal: true,
+  width: 420,
+  height: 150,
+  props: { newSpace: "~/src/ai" },
+};
+
+test("a project's + opens the modal New space dialog for it", async () => {
   start();
   const { cx, render } = await mount("projects");
   click(render(), "project-new-0", cx);
-  assert.deepEqual(doneWithOverlay(), {
-    mod: "worktree",
-    kind: "dialog",
-    width: 460,
-    height: 280,
-    props: { folder: "/Users/me/src/ai", machine: null, action: "new" },
-  });
+  assert.deepEqual(doneWithOverlay(), NEW_SPACE);
 });
 
 test("right-clicking a project or Other space opens its menu", async () => {
@@ -717,7 +733,7 @@ test("right-clicking a project or Other space opens its menu", async () => {
   assert.equal(doneWithOverlay().mod, "menu", "outside a repo: the space menu");
 });
 
-test("the header + opens New space and New project", async () => {
+test("the header + offers a new space in each project, a plain space and New project", async () => {
   start();
   let { cx, render } = await mount("projects");
   click(render(), "space-new", cx);
@@ -730,6 +746,11 @@ test("the header + opens New space and New project", async () => {
 
   start(spec.props);
   ({ cx, render } = await mount("projects-edit"));
+  const root = render();
+  assert.ok(texts(root).includes("New space in ai"));
+  assert.ok(texts(root).includes("New space in gone"));
+  click(root, "space-0", cx);
+  assert.deepEqual(doneWithOverlay(), NEW_SPACE);
   click(render(), "space", cx);
   assert.deepEqual(H.runs.at(-1), ["space.new", undefined]);
   click(render(), "project", cx);
@@ -799,8 +820,9 @@ test("both mods render in herdr-app check's dry run", async () => {
     ["projects", {}],
     ["projects-edit", {}],
     ["projects-edit", { menu: "tab", space: "s1", folder: null, height: 320 }],
-    ["projects-edit", { menu: "new", height: 80 }],
+    ["projects-edit", { menu: "new", height: 260 }],
     ["projects-edit", { picking: true }],
+    ["projects-edit", { newSpace: "~/src/ai" }],
   ] as const) {
     start(props);
     H.checking = true;
@@ -862,6 +884,48 @@ test("projects-edit opened with picking starts the folder picker once loaded", a
   assert.ok(ids(render()).includes("p-2"), "the dialog stays open on its list");
 });
 
+// git for New space in ~/src/ai: origin/main exists, nothing else does;
+// `fail` makes that subcommand fail.
+function newSpaceGit(fail: string | null = null) {
+  const calls: string[][] = [];
+  H.exec = (cmd, argv) => {
+    calls.push([cmd, ...argv]);
+    if (cmd === "test") return { code: 1, stdout: "", stderr: "" };
+    if (argv[0] === fail)
+      return { code: 128, stdout: "", stderr: `fatal: ${fail} failed` };
+    if (argv[0] === "symbolic-ref")
+      return { code: 0, stdout: "origin/main\n", stderr: "" };
+    if (argv[0] === "rev-parse") {
+      const found = argv.at(-1) === "refs/remotes/origin/main";
+      return { code: found ? 0 : 1, stdout: "", stderr: "" };
+    }
+    return { code: 0, stdout: "", stderr: "" };
+  };
+  return calls;
+}
+
+test("New space makes a fresh worktree of the project and opens a space in it", async () => {
+  start({ newSpace: "~/src/ai" });
+  const calls = newSpaceGit();
+  await mount("projects-edit");
+  const add = calls.find((c) => c[1] === "worktree");
+  assert.ok(add, "git worktree add ran");
+  const folder = add[6];
+  assert.match(folder, /^\/Users\/me\/\.herdr\/worktrees\/ai\/[a-z]+-[a-z]+$/);
+  assert.deepEqual(H.runs.at(-1), ["space.new", { folder }]);
+});
+
+test("New space shows git's error and opens no space", async () => {
+  start({ newSpace: "~/src/ai" });
+  newSpaceGit("fetch");
+  const { render } = await mount("projects-edit");
+  const root = render();
+  assert.ok(texts(root).includes("New space in ai"));
+  const error = find(root, "new-space-error");
+  assert.ok(error && texts(error).includes("fatal: fetch failed"));
+  assert.deepEqual(H.runs, []);
+});
+
 test("projects with the same folder name show their parent in the dialog", async () => {
   start();
   H.files[CONFIG] = `${JSON.stringify({
@@ -872,17 +936,19 @@ test("projects with the same folder name show their parent in the dialog", async
   assert.ok(shown.includes("~/a") && shown.includes("/srv"));
 });
 
-test("the project menu shows only the moves that apply and opens New project", async () => {
+test("the project menu offers New space, only the moves that apply and New project", async () => {
   start(MENUS.project);
   let { cx, render } = await mount("projects-edit");
   let root = render();
-  const rows = ["rename", "up", "down", "add-repo", "new", "remove"];
+  const rows = ["space", "rename", "up", "down", "add-repo", "new", "remove"];
   assert.deepEqual(
     ids(root).filter((id) => rows.includes(id)),
-    ["down", "new", "remove"],
+    ["space", "down", "new", "remove"],
   );
   click(root, "new", cx);
   assert.deepEqual(doneWithOverlay().props, { picking: true });
+  click(render(), "space", cx);
+  assert.deepEqual(doneWithOverlay(), NEW_SPACE);
 
   start(MENUS.project);
   H.files[CONFIG] = `${JSON.stringify({ projects: [{ path: "~/src/ai" }] })}\n`;
@@ -902,7 +968,7 @@ test("the Other menu makes a space's repo a project", async () => {
 });
 
 const MENUS: Record<string, Record<string, unknown>> = {
-  new: { menu: "new", height: 80 },
+  new: { menu: "new", height: 260 },
   project: { menu: "project", project: 0, path: "~/src/ai", height: 260 },
   other: { menu: "other", space: "s3", path: "~/src/loose", height: 120 },
   tab: {

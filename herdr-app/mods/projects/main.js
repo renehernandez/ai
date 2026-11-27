@@ -699,7 +699,7 @@ export default class Projects extends View {
 
   // A project's row: its folder's name (and parent folder when another
   // project shares the name), git's error for its folder, and + for a new
-  // worktree there.
+  // space in a fresh worktree (projects-edit's New space dialog).
   projectHead(project, t, collapsed) {
     if (collapsed)
       return railCell(
@@ -764,19 +764,16 @@ export default class Projects extends View {
             .rounded(4)
             .text_color(t.dim)
             .hover((s) => s.bg(t.hover).text_color(t.foreground))
-            .tooltip("New worktree")
+            .tooltip("New space")
             .on_click((_e, cx) => {
               cx.stop_propagation();
               openOverlay({
-                mod: "worktree",
+                mod: "projects-edit",
                 kind: "dialog",
-                width: 460,
-                height: 280,
-                props: {
-                  folder: state?.main ?? project.dir,
-                  machine: null,
-                  action: "new",
-                },
+                modal: true,
+                width: 420,
+                height: 150,
+                props: { newSpace: project.path },
               });
             })
             .child("+"),
@@ -1378,7 +1375,7 @@ export default class Projects extends View {
               .rounded(6)
               .hover((s) => s.bg(t.hover).text_color(t.foreground))
               .tooltip("New space or project")
-              .on_click(() => this.popup({ menu: "new" }, 80))
+              .on_click(() => this.popup({ menu: "new" }))
               .child(svg("mods/workspace-chrome/plus.svg").size(14)),
           ),
       )
