@@ -17,6 +17,9 @@ should name the space they run in after the work as it progresses.
   `HC_TERMINAL_ID`, then the terminal's `herdr.space` label from
   `hc get <terminal> --json`, and renames that space with Herdr's
   `space.rename` command through `herdr-app do`.
+- Only an agent without a `parent` names the space. Sub-agents and managed
+  workers inherit their starter's `herdr.space` label, so they leave the
+  name to the agent that started them.
 - Outside Herdr, where `HC_TERMINAL_ID` or the label is missing, the agent
   skips the step without telling the person. If a command fails, for
   example on another machine without `herdr-app`, it skips the step and

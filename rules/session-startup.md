@@ -48,7 +48,9 @@ sidebar. Do it when a substantive task starts and again whenever the work
 changes direction. Use a short summary of about 40 characters or less, such as
 `Sidebar Esc fix`.
 
-1. Read the `herdr.space` label from `hc get "$HC_TERMINAL_ID" --json`.
+1. Read the `herdr.space` label from `hc get "$HC_TERMINAL_ID" --json`. If
+   that terminal has a `parent`, it is a sub-agent or worker: leave the name
+   to the agent that started it.
 2. Run `herdr-app do space.rename --id <space> --name "<summary>"`.
 
 The rename is local Herdr UI state, not repository, tracker, or provider

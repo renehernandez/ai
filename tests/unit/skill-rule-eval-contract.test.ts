@@ -807,9 +807,12 @@ test("RED skill-rule-evals: naming the Herdr space is a startup rule, not a skil
   assert.equal(managedSkills.includes("herdr-space-naming"), false);
 });
 
-test("GREEN skill-rule-evals: both profiles install the startup rule that names the Herdr space", () => {
+test("GREEN skill-rule-evals: both profiles install the startup rule that names the Herdr space, and workers leave it alone", () => {
   assert.deepEqual(currentManagedSkillCoverageGaps(managedSkills), []);
-  assert.match(read("rules/session-startup.md"), /herdr-app do space\.rename/);
+  const startup = read("rules/session-startup.md");
+  assert.match(startup, /herdr-app do space\.rename/);
+  // Managed workers carry the orchestrator's herdr.space label (workflow.ts runArgs).
+  assert.match(startup, /has a `parent`, it is a sub-agent or worker/);
   const stagedConfig = JSON.parse(read("ax.config.json")) as typeof axConfig;
   for (const profile of ["personal", "work"] as const) {
     assert.ok(
