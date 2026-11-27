@@ -1,16 +1,17 @@
 // Projects sidebar: spaces grouped into the projects in projects.json (in
-// ~/.config/herdr-app). Each project lists its repos; each repo lists the
-// spaces whose first terminal is in one of its checkouts, and shows even with
-// none open. Every other space is under Other, grouped by machine as the
-// shipped sidebar does. Right-click a project, repo or Other space to manage
-// projects, or use the header +; cmd-k cmd-p opens the Projects dialog (the
-// projects-edit mod). A project with no repos offers Add a repo… under it.
+// ~/.config/herdr-app). A project is one local git repo, named after its
+// folder; it lists the spaces whose first terminal is in one of its checkouts
+// (main or linked worktree), and shows even with none open. Every other space
+// is under Other, grouped by machine as the shipped sidebar does. Right-click
+// a project or Other space to manage projects, or use the header +; cmd-k
+// cmd-p opens the Projects dialog (the projects-edit mod).
 //
 // Derived from Herdr 0.1.16's shipped `spaces` mod, Copyright Herdr's
 // authors, licensed under the Apache License 2.0 (LICENSE in this folder).
-// Changed: the project, repo and Other grouping, repo header and space row
-// "+" buttons, the header "+" menu, project menus, labels for unnamed spaces
-// sharing a name, and the tab folder each space's git look keeps.
+// Changed: the project and Other grouping, project header and space row "+"
+// buttons, the header "+" menu, project menus, branch labels for unnamed
+// spaces in a project and for those sharing a name, and the tab folder each
+// space's git look keeps.
 // Space rows, machine headers, git looks, drag and the narrow rail are the
 // shipped mod's. Re-derive when Herdr's `spaces` mod or mod API changes.
 
@@ -41,7 +42,6 @@ import {
   groupSpaces,
   loadConfig,
   mainCheckout,
-  repoKey,
   resolveProjects,
   tabFolder,
   tildePath,
@@ -66,12 +66,6 @@ function place(s, ps) {
   return ps.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder;
 }
 const rowHeight = ({ tree }) => (tree ? 28 : 30);
-const DIALOG = {
-  mod: "projects-edit",
-  kind: "dialog",
-  width: 560,
-  height: 0.7,
-};
 const RAIL_CELL = 32;
 // A space's name and its git tail never shrink below this, so a short one ("api")
 // stays readable instead of turning into an ellipsis next to a long branch.
@@ -115,11 +109,11 @@ export function tone(t, status) {
   return t[status] ?? t.unknown;
 }
 
-// The repoKey of a git look's main checkout, null outside a repo.
-const mainKey = (g) => {
+// The main checkout of a git look's local repo, null outside one or remote.
+const mainDir = (g) => {
   if (!g) return null;
   const [on, common] = JSON.parse(g.repo);
-  return repoKey(on, mainCheckout(common));
+  return on ? null : mainCheckout(common);
 };
 
 export default class Projects extends View {
@@ -144,9 +138,7 @@ export default class Projects extends View {
     this.doc = { projects: [] }; // the last good projects.json
     this.configError = null; // why the file on disk isn't the one shown
     this.loads = 0; // the latest read of projects.json wins
-    this.homes = { "": home() }; // machine ("" here) -> its home, for "~" in projects.json
-    this.homeErrors = {}; // machine -> why its home is unknown
-    this.repos = {}; // configured repo key -> { main } (its main checkout's key) or { error }, and when
+    this.repos = {}; // project folder -> { main } (its main checkout) or { error }, or { busy }
     try {
       this.reconnecting = JSON.parse(
         localStorage.getItem("machines.reconnecting") ?? "{}",
@@ -221,67 +213,33 @@ export default class Projects extends View {
     });
   }
 
-  // Each configured repo's main checkout, from git on its machine: a repo
-  // header's error says why one can't be found. `again`: errors are retried.
+  // Each project folder's main checkout, from git: a project header's error
+  // says why one can't be found. `again`: errors are retried.
   resolveRepos(cx, again) {
-    const machinesNeeded = new Set();
-    for (const project of this.doc.projects ?? [])
-      for (const entry of project.repos ?? []) {
-        const machine = typeof entry === "object" ? entry.machine : null;
-        if (machine) machinesNeeded.add(machine);
-      }
-    for (const m of machinesNeeded) {
-      if (
-        m in this.homes ||
-        (this.homeErrors[m] && !again) ||
-        this.homeErrors[m] === "…"
-      )
-        continue;
-      this.homeErrors[m] = "…";
+    const { projects } = resolveProjects(this.doc, home());
+    for (const { dir } of projects) {
+      const known = this.repos[dir];
+      if (known && (known.main || known.busy || !again)) continue;
+      this.repos[dir] = { busy: true };
       cx.spawn(async (cx) => {
+        let state;
         try {
-          const r = await exec("sh", ["-c", 'printf %s "$HOME"'], { on: m });
-          if (r.code !== 0 || !r.stdout.trim()) throw new Error();
-          this.homes[m] = r.stdout.trim().replace(/\\/g, "/");
-          delete this.homeErrors[m];
+          const common = await exec(
+            "git",
+            ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+            { cwd: dir },
+          );
+          state =
+            common.code === 0
+              ? { main: mainCheckout(common.stdout) }
+              : { error: "Not a git checkout." };
         } catch {
-          this.homeErrors[m] = `Can't reach ${m}.`;
+          state = { error: "No such folder." };
         }
-        this.resolveRepos(cx, false);
+        this.repos[dir] = state;
         cx.notify();
       });
     }
-    const { projects } = resolveProjects(this.doc, this.homes);
-    for (const project of projects)
-      for (const r of project.repos) {
-        const known = this.repos[r.key];
-        if (known && (known.main || known.busy || !again)) continue;
-        if (r.machine && !(r.machine in this.homes) && r.dir.startsWith("~"))
-          continue;
-        this.repos[r.key] = { busy: true };
-        cx.spawn(async (cx) => {
-          let state;
-          try {
-            const common = await exec(
-              "git",
-              ["rev-parse", "--path-format=absolute", "--git-common-dir"],
-              { cwd: r.dir, on: r.machine },
-            );
-            state =
-              common.code === 0
-                ? { main: repoKey(r.machine, mainCheckout(common.stdout)) }
-                : { error: "Not a git checkout." };
-          } catch {
-            state = {
-              error: r.machine
-                ? `Can't reach ${r.machine}, or no folder there.`
-                : "No such folder.",
-            };
-          }
-          this.repos[r.key] = state;
-          cx.notify();
-        });
-      }
   }
 
   checkNew(cx) {
@@ -568,19 +526,14 @@ export default class Projects extends View {
     });
   }
 
-  // A space under Other that is in a repo can add that repo to a project;
-  // its menu offers the shipped space menu too.
+  // A local space under Other that is in a repo can make that repo a
+  // project; its menu offers the shipped space menu too.
   menu(w, g, other) {
-    if (other && g) {
-      const [on, common] = JSON.parse(g.repo);
+    const main = other ? mainDir(g) : null;
+    if (main) {
       this.popup(
-        {
-          menu: "other",
-          space: w.id,
-          machine: on,
-          path: tildePath(mainCheckout(common), this.homes[on ?? ""]),
-        },
-        300,
+        { menu: "other", space: w.id, path: tildePath(main, home()) },
+        120,
       );
       return;
     }
@@ -658,14 +611,19 @@ export default class Projects extends View {
     return out.filter((r) => this.shown.has(r.w.id));
   }
 
-  // Projects, their repos and spaces, then Other. Sets activeAt.
+  // Projects and their spaces, then Other. Sets activeAt.
   sections(t, collapsed) {
     const rows = this.ordered();
-    const { projects, errors } = resolveProjects(this.doc, this.homes);
+    const { projects, errors } = resolveProjects(this.doc, home());
     const mains = {};
-    for (const [key, state] of Object.entries(this.repos))
-      if (state.main) mains[key] = state.main;
-    const grouped = groupSpaces(projects, rows, (r) => mainKey(r.g), mains);
+    for (const [dir, state] of Object.entries(this.repos))
+      if (state.main) mains[dir] = state.main;
+    const grouped = groupSpaces(projects, rows, (r) => mainDir(r.g), mains);
+    // In a project, an unnamed space shows its branch, not the repo's name.
+    this.names = {};
+    for (const project of grouped.projects)
+      for (const { w, g } of project.spaces)
+        if (!w.named && g) this.names[w.id] = g.branch;
     this.labels = this.labelsFor(grouped);
     this.activeAt = -1;
     const out = [];
@@ -685,19 +643,13 @@ export default class Projects extends View {
         out.push(note(`projects-error-${i}`, e));
     for (const project of grouped.projects) {
       out.push(this.projectHead(project, t, collapsed));
-      if (!collapsed && !project.repos.length)
-        out.push(this.addRepoRow(project, t));
-      for (const [n, repo] of project.repos.entries()) {
-        if (!collapsed)
-          out.push(this.repoHead(repo, `${project.index}-${n}`, project, t));
-        for (const r of repo.spaces) {
-          if (r.w.active) this.activeAt = out.length;
-          out.push(
-            collapsed
-              ? this.compact(r, t)
-              : this.row({ ...r, tree: null }, t, { inRepo: true }),
-          );
-        }
+      for (const r of project.spaces) {
+        if (r.w.active) this.activeAt = out.length;
+        out.push(
+          collapsed
+            ? this.compact(r, t)
+            : this.row({ ...r, tree: null }, t, { inProject: true }),
+        );
       }
     }
     if (!projects.length && !collapsed)
@@ -710,14 +662,14 @@ export default class Projects extends View {
           .text_size(11)
           .text_color(t.dim)
           .child(
-            "Right-click a space in a repo to add it to a project, or press ⌘K P.",
+            "Right-click a space in a repo to make it a project, or press ⌘K ⌘P.",
           ),
       );
     if (projects.length) out.push(this.otherHead(t, collapsed));
     return [...out, ...this.grouped(t, collapsed, grouped.other, out.length)];
   }
 
-  // Labels for unnamed spaces sharing a name within one repo, or one
+  // Labels for unnamed spaces sharing a name within one project, or one
   // machine under Other.
   labelsFor(grouped) {
     const byMachine = new Map();
@@ -726,7 +678,7 @@ export default class Projects extends View {
       byMachine.set(m, [...(byMachine.get(m) ?? []), r]);
     }
     const groups = [
-      ...grouped.projects.flatMap((p) => p.repos.map((repo) => repo.spaces)),
+      ...grouped.projects.map((p) => p.spaces),
       ...byMachine.values(),
     ];
     return Object.assign(
@@ -735,7 +687,7 @@ export default class Projects extends View {
         duplicateLabels(
           rows.map(({ w }) => ({
             id: w.id,
-            name: w.name,
+            name: this.names[w.id] ?? w.name,
             named: w.named,
             index: w.index,
             tab: w.tabs?.find((c) => c.active && c.named)?.name ?? null,
@@ -745,31 +697,9 @@ export default class Projects extends View {
     );
   }
 
-  // Under a project with no repos: opens the dialog to pick a repo folder for it.
-  addRepoRow(project, t) {
-    return h_flex()
-      .id(`project-add-${project.index}`)
-      .h(26)
-      .flex_none()
-      .pl(14)
-      .pr(8)
-      .gap(7)
-      .items_center()
-      .rounded(7)
-      .text_size(12)
-      .text_color(t.dim)
-      .cursor_pointer()
-      .hover((s) => s.bg(t.hover).text_color(t.foreground))
-      .on_click(() =>
-        openOverlay({
-          ...DIALOG,
-          props: { adding: { project: project.index, name: project.name } },
-        }),
-      )
-      .child(svg("mods/workspace-chrome/plus.svg").size(12).flex_none())
-      .child("Add a repo…");
-  }
-
+  // A project's row: its folder's name (and parent folder when another
+  // project shares the name), git's error for its folder, and + for a new
+  // worktree there.
   projectHead(project, t, collapsed) {
     if (collapsed)
       return railCell(
@@ -781,8 +711,11 @@ export default class Projects extends View {
           .mb(4)
           .bg(t.border),
       );
+    const id = project.index;
+    const state = this.repos[project.dir];
+    const error = state?.error ?? null;
     return h_flex()
-      .id(`project-${project.index}`)
+      .id(`project-${id}`)
       .h(28)
       .mt(6)
       .flex_none()
@@ -795,64 +728,26 @@ export default class Projects extends View {
       .text_color(t.muted)
       .hover((s) => s.bg(t.hover))
       .on_mouse_down("right", () =>
-        this.popup({
-          menu: "project",
-          project: project.index,
-          name: project.name,
-        }),
+        this.popup({ menu: "project", project: id, path: project.path }),
       )
       .child(svg("mods/workspace-chrome/layers.svg").size(13).flex_none())
-      .child(div().flex_1().truncate().child(project.name));
-  }
-
-  repoHead(repo, id, project, t) {
-    const state = this.repos[repo.key];
-    const error =
-      state?.error ??
-      (repo.machine && this.homeErrors[repo.machine] !== "…"
-        ? this.homeErrors[repo.machine]
-        : null);
-    const folder = state?.main ? JSON.parse(state.main)[1] : repo.dir;
-    return h_flex()
-      .id(`repo-${id}`)
-      .h(26)
-      .flex_none()
-      .pl(14)
-      .pr(8)
-      .gap(7)
-      .items_center()
-      .rounded(7)
-      .text_size(12)
-      .text_color(t.dim)
-      .hover((s) => s.bg(t.hover))
-      .on_mouse_down("right", () =>
-        this.popup(
-          {
-            menu: "repo",
-            project: project.index,
-            name: project.name,
-            key: repo.key,
-            path: repo.path,
-            machine: repo.machine,
-          },
-          120,
+      .child(
+        div().flex_initial().min_w(SIDE_MIN).truncate().child(project.name),
+      )
+      .when(Boolean(project.parent), (el) =>
+        el.child(
+          div()
+            .flex_initial()
+            .min_w(0)
+            .truncate()
+            .text_size(11)
+            .text_color(t.dim)
+            .child(project.parent),
         ),
       )
-      .child(svg("mods/workspace-chrome/folder.svg").size(12).flex_none())
       .child(
         div()
-          .flex_initial()
-          .min_w(SIDE_MIN)
-          .truncate()
-          .text_color(t.muted)
-          .child(base(repo.dir) || repo.path),
-      )
-      .when(Boolean(repo.machine), (el) =>
-        el.child(div().flex_none().text_size(11).child(repo.machine)),
-      )
-      .child(
-        div()
-          .id(`repo-error-${id}`)
+          .id(`project-error-${id}`)
           .flex_1()
           .min_w(0)
           .truncate()
@@ -863,10 +758,11 @@ export default class Projects extends View {
       .when(!error, (el) =>
         el.child(
           div()
-            .id(`repo-new-${id}`)
+            .id(`project-new-${id}`)
             .flex_none()
             .px(4)
             .rounded(4)
+            .text_color(t.dim)
             .hover((s) => s.bg(t.hover).text_color(t.foreground))
             .tooltip("New worktree")
             .on_click((_e, cx) => {
@@ -876,7 +772,11 @@ export default class Projects extends View {
                 kind: "dialog",
                 width: 460,
                 height: 280,
-                props: { folder, machine: repo.machine, action: "new" },
+                props: {
+                  folder: state?.main ?? project.dir,
+                  machine: null,
+                  action: "new",
+                },
               });
             })
             .child("+"),
@@ -1216,7 +1116,7 @@ export default class Projects extends View {
   // branch goes when the name already says it (a worktree is named after its branch),
   // and master/main go: nearly every space is on one. When the row is full, it
   // and the name both start from their text's width and give way in proportion.
-  // Under a repo header the repo goes too.
+  // Under a project header the repo goes too.
   gitTail(g, tree, name, t) {
     const raw = g.branch ?? "detached";
     const same = (a) => a.toLowerCase() === name.toLowerCase();
@@ -1246,8 +1146,8 @@ export default class Projects extends View {
       );
   }
 
-  // `inRepo`: drawn under its repo's header; `other`: drawn under Other.
-  row({ w, i, g, tree }, t, { inRepo = false, other = false } = {}) {
+  // `inProject`: drawn under its project's header; `other`: drawn under Other.
+  row({ w, i, g, tree }, t, { inProject = false, other = false } = {}) {
     const on = w.active;
     const fromIndex =
       this.pressed === null
@@ -1257,11 +1157,12 @@ export default class Projects extends View {
     const color = colors[w.id] ?? "ansi6";
     const fill = color.startsWith("#") ? color : (MARK[color] ?? t[color]);
     const label = this.labels?.[w.id];
+    const name = this.names?.[w.id] ?? w.name;
     return v_flex()
       .relative()
       .id(`space-${w.id}`)
       .px(8)
-      .when(inRepo, (el) => el.pl(22))
+      .when(inProject, (el) => el.pl(14))
       .h(rowHeight({ tree }))
       .flex_none()
       .justify_center()
@@ -1338,7 +1239,7 @@ export default class Projects extends View {
                 .text_size(10.5)
                 .font_bold()
                 .text_color("#ffffff")
-                .child([...w.name][0]?.toUpperCase() ?? "?"),
+                .child([...name][0]?.toUpperCase() ?? "?"),
             ),
           )
           .child(
@@ -1347,7 +1248,7 @@ export default class Projects extends View {
               .min_w(SIDE_MIN)
               .truncate()
               .text_color(t.foreground)
-              .child(w.name),
+              .child(name),
           )
           .when(Boolean(label), (el) =>
             el.child(
@@ -1361,7 +1262,7 @@ export default class Projects extends View {
             ),
           )
           .child(
-            g ? this.gitTail(g, tree || inRepo, w.name, t) : div().flex_1(),
+            g ? this.gitTail(g, tree || inProject, name, t) : div().flex_1(),
           )
           // New tabs and agents start at the space's checkout top, wherever its focused pane is.
           .child(

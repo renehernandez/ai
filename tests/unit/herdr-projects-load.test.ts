@@ -72,13 +72,7 @@ const HERDR_EXPORTS = [
 ];
 // The gpui-kit.d.ts exports the stubs provide; a mod importing another fails to link.
 const GPUI_KIT_EXPORTS = ["View", "div", "svg", "image"];
-const GPUI_BASE_EXPORTS = [
-  "h_flex",
-  "v_flex",
-  "Input",
-  "InputState",
-  "ScrollHandle",
-];
+const GPUI_BASE_EXPORTS = ["h_flex", "v_flex", "ScrollHandle"];
 // NativeElement methods (gpui-kit.d.ts) the mods may call.
 const ELEMENT_METHODS = [
   "absolute",
@@ -160,7 +154,6 @@ const MEMBERS: Record<string, string[]> = {
   Task: ["cancel", "is_done"],
   FocusHandle: ["focus", "is_focused", "release"],
   ScrollHandle: ["scroll_to_item", "release"],
-  InputState: ["on", "focus", "value", "set_selected_range", "release"],
   Storage: ["getItem", "setItem", "removeItem"],
 };
 // theme() names in Herdr's AGENTS.md.
@@ -373,6 +366,7 @@ function host() {
     checking: false, // herdr-app check's dry run
     picked: null as string | null, // pickFolder's answer
     picks: 0,
+    notes: [] as { title: string }[], // notify()'s
     agents: [] as Record<string, unknown>[],
     runs: [] as unknown[],
     overlays: [] as Record<string, unknown>[],
@@ -470,7 +464,10 @@ const herdr: Record<string, unknown> = {
     return `overlay-${H.overlays.length}`;
   },
   closeOverlay: () => null,
-  notify: () => null,
+  notify: (note: { title: string }) => {
+    H.notes.push(note);
+    return null;
+  },
   props: () => H.props,
   shared: () => undefined,
   setShared: () => null,
@@ -511,26 +508,6 @@ function context() {
   return cx;
 }
 
-function inputState({ value = "" }: { value?: string } = {}) {
-  let text = value;
-  return strict(
-    "InputState",
-    {
-      on() {
-        return true;
-      },
-      focus() {},
-      value: () => text,
-      set_selected_range() {},
-      release: () => true,
-      type(next: string) {
-        text = next;
-      },
-    },
-    ["type"],
-  );
-}
-
 class View {}
 const gpuiKit: Record<string, unknown> = {
   View,
@@ -541,8 +518,6 @@ const gpuiKit: Record<string, unknown> = {
 const gpuiBase: Record<string, unknown> = {
   h_flex: () => element("h_flex"),
   v_flex: () => element("v_flex"),
-  Input: { new: (_state: unknown) => element("input") },
-  InputState: { new: inputState },
   ScrollHandle: {
     new: () =>
       strict("ScrollHandle", { scroll_to_item() {}, release: () => true }),
@@ -608,16 +583,13 @@ const settle = async () => {
   for (let i = 0; i < 30; i++) await new Promise((r) => setImmediate(r));
 };
 
+// ~/src/ai is a repo; ~/src/gone is not.
 function projectsDoc(count = 2) {
   const projects = [
-    {
-      name: "AI",
-      repos: [{ path: "~/src/ai" }, { path: "~/src/api", machine: "vps" }],
-    },
-    { name: "Empty", repos: [] },
+    { path: "~/src/ai" },
+    { path: "~/src/gone" },
     ...Array.from({ length: Math.max(0, count - 2) }, (_, i) => ({
-      name: `Project ${i + 3}`,
-      repos: [],
+      path: `~/src/p${i + 3}`,
     })),
   ];
   return `${JSON.stringify({ projects }, null, 2)}\n`;
@@ -651,41 +623,98 @@ function click(root: Node, id: string, cx: unknown) {
   (handler as (e: unknown, cx: unknown) => unknown)({}, cx);
 }
 
+function rightClick(root: Node, id: string) {
+  const node = find(root, id);
+  assert.ok(node, `${id} is drawn`);
+  const right = args(node, "on_mouse_down").find(([b]) => b === "right");
+  assert.ok(right, `${id} has a right-click`);
+  (right[1] as () => unknown)();
+}
+const doneWithOverlay = () => H.overlays.at(-1) as Record<string, unknown>;
+
 // ---- the sidebar ----
 
-test("projects sidebar loads and renders projects, repos and Other", async () => {
+test("projects sidebar draws each project's spaces under it and the rest under Other", async () => {
   start();
   const { render } = await mount("projects");
   const root = render();
   const shown = texts(root);
-  for (const text of ["Projects", "AI", "Empty", "Other", "ai", "loose"])
+  for (const text of ["Projects", "ai", "gone", "Other", "loose"])
     assert.ok(shown.includes(text), `${text} is shown`);
   const drawn = ids(root);
-  for (const id of [
-    "project-0",
-    "project-1",
-    "repo-0-0",
-    "repo-0-1",
-    "projects-other",
-    "space-s1",
-    "space-s2",
-    "space-s3",
-    "space-s4",
-    "space-s5",
-  ])
-    assert.ok(drawn.includes(id), `${id} is drawn`);
+  assert.deepEqual(
+    drawn.filter((id) => /^(project-\d+|projects-other|space-s\d)$/.test(id)),
+    [
+      "project-0",
+      "space-s1",
+      "space-s2",
+      "project-1",
+      "projects-other",
+      "space-s3",
+      "space-s4",
+      "space-s5",
+    ],
+    "the main checkout and its worktree sit under ai; no repo rows",
+  );
+  assert.ok(!drawn.some((id) => id.startsWith("repo-")), "no repo rows");
+  assert.ok(!drawn.includes("project-add-1"), "no Add a repo row");
+  const error = find(root, "project-error-1");
+  assert.ok(error && texts(error).includes("Not a git checkout."));
+  assert.ok(
+    drawn.includes("project-new-0") && !drawn.includes("project-new-1"),
+  );
 });
 
-test("a project with no repos offers Add a repo, opening the dialog to pick one", async () => {
+test("unnamed spaces in a project show their branch; named ones keep their name", async () => {
+  start();
+  H.spaces[1].named = true;
+  H.spaces[1].name = "mine";
+  const { render } = await mount("projects");
+  const label = (id: string) => {
+    const row = find(render(), id);
+    assert.ok(row, `${id} is drawn`);
+    return texts(row);
+  };
+  assert.ok(label("space-s1").includes("main"), "unnamed: its branch");
+  assert.ok(!label("space-s1").includes("ai"), "not the repeated repo name");
+  assert.ok(label("space-s2").includes("mine"));
+  assert.ok(label("space-s3").includes("loose"), "Other keeps space names");
+});
+
+test("a project's + opens the shipped New worktree dialog on its folder", async () => {
   start();
   const { cx, render } = await mount("projects");
-  const root = render();
-  assert.ok(!ids(root).includes("project-add-0"), "AI has repos");
-  click(root, "project-add-1", cx);
-  const spec = H.overlays.at(-1) as Record<string, unknown>;
-  assert.equal(spec.mod, "projects-edit");
-  assert.equal(spec.kind, "dialog");
-  assert.deepEqual(spec.props, { adding: { project: 1, name: "Empty" } });
+  click(render(), "project-new-0", cx);
+  assert.deepEqual(doneWithOverlay(), {
+    mod: "worktree",
+    kind: "dialog",
+    width: 460,
+    height: 280,
+    props: { folder: "/Users/me/src/ai", machine: null, action: "new" },
+  });
+});
+
+test("right-clicking a project or Other space opens its menu", async () => {
+  start();
+  const { render } = await mount("projects");
+  rightClick(render(), "project-0");
+  assert.deepEqual(doneWithOverlay().props, {
+    menu: "project",
+    project: 0,
+    path: "~/src/ai",
+    height: 260,
+  });
+  rightClick(render(), "space-s3");
+  assert.deepEqual(doneWithOverlay().props, {
+    menu: "other",
+    space: "s3",
+    path: "~/src/loose",
+    height: 120,
+  });
+  rightClick(render(), "space-s5");
+  assert.equal(doneWithOverlay().mod, "menu", "a remote space: the space menu");
+  rightClick(render(), "space-s4");
+  assert.equal(doneWithOverlay().mod, "menu", "outside a repo: the space menu");
 });
 
 test("the header + opens New space and New project", async () => {
@@ -704,9 +733,7 @@ test("the header + opens New space and New project", async () => {
   click(render(), "space", cx);
   assert.deepEqual(H.runs.at(-1), ["space.new", undefined]);
   click(render(), "project", cx);
-  assert.deepEqual((H.overlays.at(-1) as { props: unknown }).props, {
-    form: { kind: "new" },
-  });
+  assert.deepEqual(doneWithOverlay().props, { picking: true });
 });
 
 test("unnamed spaces sharing a name show what tells them apart", async () => {
@@ -735,13 +762,18 @@ test("unnamed spaces sharing a name show what tells them apart", async () => {
   assert.ok(!label("space-s7").includes("#7"), "a named space keeps its row");
 });
 
-test("projects sidebar renders its narrow rail and a broken projects.json", async () => {
+test("projects sidebar renders its narrow rail, a broken and an old-shape projects.json", async () => {
   start();
   H.sidebarWidth = 100;
   H.files[CONFIG] = "{ not json";
-  const { render } = await mount("projects");
-  const root = render();
-  assert.ok(ids(root).includes("space-s1"));
+  let { render } = await mount("projects");
+  assert.ok(ids(render()).includes("space-s1"));
+
+  start();
+  H.files[CONFIG] = '{"projects":[{"name":"ai","repos":[]}]}\n';
+  ({ render } = await mount("projects"));
+  const error = find(render(), "projects-error-0");
+  assert.ok(error && texts(error).join("").includes("Delete it to start over"));
 });
 
 test("sidebar popups pass their most height to projects-edit", async () => {
@@ -768,7 +800,7 @@ test("both mods render in herdr-app check's dry run", async () => {
     ["projects-edit", {}],
     ["projects-edit", { menu: "tab", space: "s1", folder: null, height: 320 }],
     ["projects-edit", { menu: "new", height: 80 }],
-    ["projects-edit", { adding: { project: 0, name: "AI" } }],
+    ["projects-edit", { picking: true }],
   ] as const) {
     start(props);
     H.checking = true;
@@ -779,96 +811,100 @@ test("both mods render in herdr-app check's dry run", async () => {
 
 // ---- projects-edit ----
 
-const reposOf = (at: number) =>
-  JSON.parse(H.files[CONFIG] ?? "{}").projects[at].repos;
+const pathsIn = () =>
+  JSON.parse(H.files[CONFIG] ?? "{}").projects.map(
+    (p: { path: string }) => p.path,
+  );
 
-test("projects-edit dialog's Add repo adds a picked folder's main checkout", async () => {
+test("projects-edit dialog's New project adds a picked repo's main checkout", async () => {
   start();
   const { cx, render } = await mount("projects-edit");
-  const root = render();
-  for (const id of ["new-project", "p-0", "p-1", "r-0-0", "r-0-1"])
+  let root = render();
+  for (const id of ["new-project", "p-0", "p-1"])
     assert.ok(ids(root).includes(id), `${id} is drawn`);
-  assert.ok(!ids(root).includes("p-rename-0"), "no rename");
-  H.picked = "/Users/me/src/ai-wt/feature";
-  click(root, "p-add-1", cx);
+  assert.ok(!ids(root).some((id) => /^(p-add|p-rename|r)-/.test(id)));
+  H.picked = "/Users/me/src/loose";
+  click(root, "new-project", cx);
   await settle();
-  assert.deepEqual(reposOf(1), [{ path: "~/src/ai" }]);
-  assert.ok(ids(render()).includes("r-1-0"), "the dialog shows it");
+  assert.deepEqual(pathsIn(), ["~/src/ai", "~/src/gone", "~/src/loose"]);
+  root = render();
+  assert.ok(ids(root).includes("p-2"), "the dialog shows it");
+  assert.ok(texts(root).includes("loose"));
 });
 
-test("projects-edit opened with adding picks a folder while it is still that project", async () => {
-  start({ adding: { project: 1, name: "Empty" } });
-  H.picked = "/Users/me/src/loose";
-  await mount("projects-edit");
-  assert.equal(H.picks, 1);
-  assert.deepEqual(reposOf(1), [{ path: "~/src/loose" }]);
+test("projects-edit refuses a folder outside a repo, an existing project and a cancelled pick", async () => {
+  for (const [picked, note] of [
+    ["/tmp/scratch", "Not a git repo"],
+    ["/Users/me/src/ai-wt/feature", "Projects not saved"],
+    [null, null],
+  ] as const) {
+    start();
+    const before = H.files[CONFIG];
+    const { cx, render } = await mount("projects-edit");
+    H.picked = picked;
+    click(render(), "new-project", cx);
+    await settle();
+    assert.equal(H.picks, 1);
+    assert.equal(H.files[CONFIG], before, `${picked}: nothing is written`);
+    assert.deepEqual(
+      H.notes.map((n) => n.title),
+      note ? [note] : [],
+    );
+  }
+});
 
-  start({ adding: { project: 1, name: "Renamed meanwhile" } });
+test("projects-edit opened with picking starts the folder picker once loaded", async () => {
+  start({ picking: true });
   H.picked = "/Users/me/src/loose";
   const { render } = await mount("projects-edit");
-  assert.equal(H.picks, 0, "no picker for a project that changed");
-  assert.ok(ids(render()).includes("p-0"), "the dialog still opens");
-
-  start({ adding: { project: 1, name: "Empty" } });
-  const before = H.files[CONFIG];
-  await mount("projects-edit");
   assert.equal(H.picks, 1);
-  assert.equal(H.files[CONFIG], before, "a cancelled pick writes nothing");
+  assert.deepEqual(pathsIn(), ["~/src/ai", "~/src/gone", "~/src/loose"]);
+  assert.ok(ids(render()).includes("p-2"), "the dialog stays open on its list");
 });
 
-test("the project menu shows only the moves that apply and opens Add repo", async () => {
+test("projects with the same folder name show their parent in the dialog", async () => {
+  start();
+  H.files[CONFIG] = `${JSON.stringify({
+    projects: [{ path: "~/a/app" }, { path: "/srv/app" }],
+  })}\n`;
+  const { render } = await mount("projects-edit");
+  const shown = texts(render());
+  assert.ok(shown.includes("~/a") && shown.includes("/srv"));
+});
+
+test("the project menu shows only the moves that apply and opens New project", async () => {
   start(MENUS.project);
-  H.files[CONFIG] = projectsDoc(2);
   let { cx, render } = await mount("projects-edit");
   let root = render();
   const rows = ["rename", "up", "down", "add-repo", "new", "remove"];
   assert.deepEqual(
     ids(root).filter((id) => rows.includes(id)),
-    ["down", "add-repo", "new", "remove"],
+    ["down", "new", "remove"],
   );
-  click(root, "add-repo", cx);
-  assert.deepEqual((H.overlays.at(-1) as { props: unknown }).props, {
-    adding: { project: 0, name: "AI" },
-  });
+  click(root, "new", cx);
+  assert.deepEqual(doneWithOverlay().props, { picking: true });
 
   start(MENUS.project);
-  H.files[CONFIG] = `${JSON.stringify({ projects: [{ name: "AI" }] })}\n`;
+  H.files[CONFIG] = `${JSON.stringify({ projects: [{ path: "~/src/ai" }] })}\n`;
   ({ cx, render } = await mount("projects-edit"));
   root = render();
   assert.ok(!ids(root).includes("up") && !ids(root).includes("down"));
 });
 
-test("projects-edit new project form renders and saves with its repo", async () => {
-  start({
-    form: { kind: "new", addRepo: { path: "~/src/loose", machine: null } },
-  });
-  const { view, cx, render } = await mount("projects-edit");
+test("the Other menu makes a space's repo a project", async () => {
+  start(MENUS.other);
+  const { cx, render } = await mount("projects-edit");
   const root = render();
-  assert.ok(ids(root).includes("form-save"));
-  (view.nameInput as { type(v: string): void }).type("Loose");
-  click(root, "form-save", cx);
+  assert.ok(ids(root).includes("space"));
+  click(root, "new-project", cx);
   await settle();
-  assert.deepEqual(reposOf(2), [{ path: "~/src/loose" }]);
+  assert.deepEqual(pathsIn(), ["~/src/ai", "~/src/gone", "~/src/loose"]);
 });
 
 const MENUS: Record<string, Record<string, unknown>> = {
   new: { menu: "new", height: 80 },
-  project: { menu: "project", project: 0, name: "AI", height: 260 },
-  repo: {
-    menu: "repo",
-    project: 0,
-    name: "AI",
-    path: "~/src/ai",
-    machine: null,
-    height: 120,
-  },
-  other: {
-    menu: "other",
-    space: "s3",
-    machine: null,
-    path: "~/src/loose",
-    height: 300,
-  },
+  project: { menu: "project", project: 0, path: "~/src/ai", height: 260 },
+  other: { menu: "other", space: "s3", path: "~/src/loose", height: 120 },
   tab: {
     menu: "tab",
     space: "s1",
@@ -905,21 +941,6 @@ for (const [kind, props] of Object.entries(MENUS))
     const { height } = menuParts(render());
     assert.ok(height > 0 && height <= (props.height as number));
   });
-
-test("a long Other menu scrolls its projects and keeps New project and Space reachable", async () => {
-  start(MENUS.other);
-  H.files[CONFIG] = projectsDoc(40);
-  const { render } = await mount("projects-edit");
-  const root = render();
-  const { height, inList } = menuParts(root);
-  assert.equal(height, 300, "capped at the sidebar's most height");
-  for (let i = 0; i < 40; i++)
-    assert.ok(inList.has(`add-${i}`), `add-${i} scrolls`);
-  for (const id of ["new", "space"]) {
-    assert.ok(ids(root).includes(id), `${id} is drawn`);
-    assert.ok(!inList.has(id), `${id} stays outside the scrolling list`);
-  }
-});
 
 test("a long agent menu scrolls its agents and keeps Terminal reachable", async () => {
   start(MENUS.tab);
