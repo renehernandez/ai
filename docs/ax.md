@@ -193,7 +193,12 @@ in this repository at the same path below `~/.config/herdr-app`:
 - `mods/projects/`: the sidebar. A project is one local git repo, named after
   its folder, and lists the spaces open in its main checkout or its linked
   worktrees. Every other space is under **Other**.
-- `mods/projects-edit/`: the Projects dialog and the sidebar's menus.
+- `mods/projects-edit/`: the Projects dialog, the sidebar's menus and New
+  space. New space in a project (its `+`, its menu or the header `+`) fetches
+  `origin` and adds a worktree on a random adjective-animal branch cut from
+  the default branch, under `worktrees.directory` from Herdr's `settings.json`
+  (default `~/.herdr/worktrees`), then opens a space there. Closing a space
+  never deletes its worktree.
 - `layouts/projects.json`: a copy of Herdr's `main` layout with the `spaces`
   block showing the `projects` mod instead.
 

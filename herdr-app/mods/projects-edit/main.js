@@ -2,13 +2,15 @@
 // (cmd-k cmd-p, `mod.open {name: "projects-edit"}`) and the sidebar's
 // popups, chosen by props:
 //   (none) or { picking: true }            the dialog; picking: starts with New project's folder picker
-//   { menu: "new" }                        New space, New project… (the sidebar header's +)
-//   { menu: "project", project, path }     the moves that apply, New project…, Remove
+//   { newSpace: path }                     New space in the project at path: a fresh worktree, then a space
+//   { menu: "new" }                        New space in <project>, New space, New project… (the sidebar header's +)
+//   { menu: "project", project, path }     New space, the moves that apply, New project…, Remove
 //   { menu: "other", space, path }         New project from this repo, space menu
 //   { menu: "tab", space, machine, folder }          Terminal and agents, started at folder
 //
 // A project is a local git repo's main checkout, picked with the system folder
-// picker (a popup closes on click, so the dialog hosts the picker).
+// picker (a popup closes on click, so the dialog hosts the picker). A new
+// space in a project runs in a modal dialog for the same reason.
 // Every write is writeTextFile(path, text, last read): an edit made meanwhile
 // is never overwritten; the edit is dropped with a notification to retry.
 // Popup rows follow Herdr 0.1.16's shipped `new-menu` mod (Apache License
@@ -32,10 +34,17 @@ import {
   theme,
   writeTextFile,
 } from "herdr";
-import { clickItem, menuWrites, projectMenuRows, saveConfig } from "./edit.js";
+import {
+  clickItem,
+  menuWrites,
+  newWorktree,
+  projectMenuRows,
+  saveConfig,
+} from "./edit.js";
 import {
   addProject,
   CONFIG_FILE,
+  expandPath,
   loadConfig,
   mainCheckout,
   moveProject,
@@ -50,6 +59,16 @@ const DIALOG = {
   width: 560,
   height: 0.7,
 };
+// New space in the project at path.
+const newSpace = (path) =>
+  openOverlay({
+    mod: "projects-edit",
+    kind: "dialog",
+    modal: true,
+    width: 420,
+    height: 150,
+    props: { newSpace: path },
+  });
 const configPath = () => `${appHome()}/${CONFIG_FILE}`;
 // Popup row heights, for a popup as tall as its rows (padding: p(5) twice).
 const ROW = {
@@ -99,6 +118,7 @@ export default class ProjectsEdit extends View {
       await this.read(cx);
       if (!p.menu && p.picking) this.newProject(cx);
     });
+    if (p.newSpace) this.newSpace(p.newSpace, cx);
     if (p.menu === "tab" && !checking())
       cx.spawn(async (cx) => {
         try {
@@ -132,6 +152,37 @@ export default class ProjectsEdit extends View {
       }
       const path = tildePath(mainCheckout(common), home());
       await this.persist((doc) => addProject(doc, path, home()), cx);
+    });
+  }
+
+  // A fresh worktree of the project at path, then an unnamed space in it
+  // (the sidebar labels it by its branch). The dialog shows each step, and
+  // git's error if one fails.
+  newSpace(path, cx) {
+    const dir = expandPath(path, home());
+    this.creating = { name: dir.split("/").pop(), step: "…", error: null };
+    if (checking()) return;
+    cx.spawn(async (cx) => {
+      try {
+        const { path: folder } = await newWorktree(
+          {
+            exec,
+            home: home(),
+            settings: () => readTextFile(`${appHome()}/settings.json`),
+            step: (text) => {
+              this.creating.step = text;
+              cx.notify();
+            },
+          },
+          dir,
+          this.creating.name,
+        );
+        run("space.new", { folder });
+        this.close();
+      } catch (e) {
+        this.creating.error = String(e?.message ?? e);
+        cx.notify();
+      }
     });
   }
 
@@ -229,15 +280,27 @@ export default class ProjectsEdit extends View {
     const newProject = () =>
       openOverlay({ ...DIALOG, props: { picking: true } });
     switch (p.menu) {
-      case "new":
+      case "new": {
+        const { projects } = resolveProjects(this.doc, home());
         return {
           list: [
+            ...projects.map((project) =>
+              item(
+                `space-${project.index}`,
+                `New space in ${project.name}`,
+                () => newSpace(project.path),
+                { hint: project.parent ?? "" },
+              ),
+            ),
+            ...(projects.length ? [rule()] : []),
             item("space", "New space", () => run("space.new")),
             item("project", "New project…", newProject),
           ],
         };
+      }
       case "project": {
         const rows = {
+          space: ["New space", () => newSpace(p.path)],
           up: ["Move up", writes.up],
           down: ["Move down", writes.down],
           new: ["New project…", newProject],
@@ -337,7 +400,7 @@ export default class ProjectsEdit extends View {
   // the list scrolls and the head and foot stay reachable.
   renderMenu(p) {
     const t = theme();
-    const usesDoc = p.menu === "project" || p.menu === "other";
+    const usesDoc = p.menu !== "tab";
     const waiting = !this.loaded && usesDoc;
     const {
       head = [],
@@ -501,6 +564,29 @@ export default class ProjectsEdit extends View {
       );
   }
 
+  renderNewSpace() {
+    const t = theme();
+    const { name, step, error } = this.creating;
+    return v_flex()
+      .size_full()
+      .gap(10)
+      .child(div().text_size(15).font_semibold().child(`New space in ${name}`))
+      .child(
+        div()
+          .id(error ? "new-space-error" : "new-space-step")
+          .text_color(error ? t.blocked : t.muted)
+          .child(error ?? step),
+      )
+      .child(div().flex_1())
+      .child(
+        h_flex()
+          .justify_end()
+          .text_size(11)
+          .text_color(t.dim)
+          .child(error ? "esc close" : "A fresh worktree from origin · esc"),
+      );
+  }
+
   key(e, cx) {
     if (e.key !== "escape") return;
     cx.stop_propagation();
@@ -521,6 +607,6 @@ export default class ProjectsEdit extends View {
       .bg(t.popover)
       .text_color(t.foreground)
       .text_size(12.8)
-      .child(this.renderDialog());
+      .child(this.creating ? this.renderNewSpace() : this.renderDialog());
   }
 }
