@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   clickItem,
   menuWrites,
+  projectMenuRows,
   saveConfig,
 } from "../../herdr-app/mods/projects-edit/edit.js";
 import {
@@ -122,6 +123,14 @@ test("each sidebar menu write reaches projects.json", async () => {
     [[{ path: "~/y", machine: "vps" }], [{ path: "~/x" }]],
     "a repo listed in another project moves",
   );
+});
+
+test("the project menu offers only the moves that apply", () => {
+  const rest = ["add-repo", "new", "remove"];
+  assert.deepEqual(projectMenuRows(0, 1), ["rename", ...rest]);
+  assert.deepEqual(projectMenuRows(0, 3), ["rename", "down", ...rest]);
+  assert.deepEqual(projectMenuRows(1, 3), ["rename", "up", "down", ...rest]);
+  assert.deepEqual(projectMenuRows(2, 3), ["rename", "up", ...rest]);
 });
 
 test("a popup row does nothing while disabled or busy, and other actions close first", () => {

@@ -3,12 +3,14 @@
 // spaces whose first terminal is in one of its checkouts, and shows even with
 // none open. Every other space is under Other, grouped by machine as the
 // shipped sidebar does. Right-click a project, repo or Other space to manage
-// projects; cmd-k p opens the Projects dialog (the projects-edit mod).
+// projects, or use the header +; cmd-k p opens the Projects dialog (the
+// projects-edit mod). A project with no repos offers Add a repo… under it.
 //
 // Derived from Herdr 0.1.16's shipped `spaces` mod, Copyright Herdr's
 // authors, licensed under the Apache License 2.0 (LICENSE in this folder).
 // Changed: the project, repo and Other grouping, repo header and space row
-// "+" buttons, project menus, and the tab folder each space's git look keeps.
+// "+" buttons, the header "+" menu, project menus, labels for unnamed spaces
+// sharing a name, and the tab folder each space's git look keeps.
 // Space rows, machine headers, git looks, drag and the narrow rail are the
 // shipped mod's. Re-derive when Herdr's `spaces` mod or mod API changes.
 
@@ -35,6 +37,7 @@ import {
 } from "herdr";
 import {
   CONFIG_FILE,
+  duplicateLabels,
   groupSpaces,
   loadConfig,
   mainCheckout,
@@ -63,6 +66,12 @@ function place(s, ps) {
   return ps.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder;
 }
 const rowHeight = ({ tree }) => (tree ? 28 : 30);
+const DIALOG = {
+  mod: "projects-edit",
+  kind: "dialog",
+  width: 560,
+  height: 0.7,
+};
 const RAIL_CELL = 32;
 // A space's name and its git tail never shrink below this, so a short one ("api")
 // stays readable instead of turning into an ellipsis next to a long branch.
@@ -657,6 +666,7 @@ export default class Projects extends View {
     for (const [key, state] of Object.entries(this.repos))
       if (state.main) mains[key] = state.main;
     const grouped = groupSpaces(projects, rows, (r) => mainKey(r.g), mains);
+    this.labels = this.labelsFor(grouped);
     this.activeAt = -1;
     const out = [];
     const note = (id, text) =>
@@ -675,6 +685,8 @@ export default class Projects extends View {
         out.push(note(`projects-error-${i}`, e));
     for (const project of grouped.projects) {
       out.push(this.projectHead(project, t, collapsed));
+      if (!collapsed && !project.repos.length)
+        out.push(this.addRepoRow(project, t));
       for (const [n, repo] of project.repos.entries()) {
         if (!collapsed)
           out.push(this.repoHead(repo, `${project.index}-${n}`, project, t));
@@ -703,6 +715,59 @@ export default class Projects extends View {
       );
     if (projects.length) out.push(this.otherHead(t, collapsed));
     return [...out, ...this.grouped(t, collapsed, grouped.other, out.length)];
+  }
+
+  // Labels for unnamed spaces sharing a name within one repo, or one
+  // machine under Other.
+  labelsFor(grouped) {
+    const byMachine = new Map();
+    for (const r of grouped.other) {
+      const m = r.w.machine ?? null;
+      byMachine.set(m, [...(byMachine.get(m) ?? []), r]);
+    }
+    const groups = [
+      ...grouped.projects.flatMap((p) => p.repos.map((repo) => repo.spaces)),
+      ...byMachine.values(),
+    ];
+    return Object.assign(
+      {},
+      ...groups.map((rows) =>
+        duplicateLabels(
+          rows.map(({ w }) => ({
+            id: w.id,
+            name: w.name,
+            named: w.named,
+            index: w.index,
+            tab: w.tabs?.find((c) => c.active && c.named)?.name ?? null,
+          })),
+        ),
+      ),
+    );
+  }
+
+  // Under a project with no repos: opens the dialog on its Add repo panel.
+  addRepoRow(project, t) {
+    return h_flex()
+      .id(`project-add-${project.index}`)
+      .h(26)
+      .flex_none()
+      .pl(14)
+      .pr(8)
+      .gap(7)
+      .items_center()
+      .rounded(7)
+      .text_size(12)
+      .text_color(t.dim)
+      .cursor_pointer()
+      .hover((s) => s.bg(t.hover).text_color(t.foreground))
+      .on_click(() =>
+        openOverlay({
+          ...DIALOG,
+          props: { adding: { project: project.index, name: project.name } },
+        }),
+      )
+      .child(svg("mods/workspace-chrome/plus.svg").size(12).flex_none())
+      .child("Add a repo…");
   }
 
   projectHead(project, t, collapsed) {
@@ -1191,6 +1256,7 @@ export default class Projects extends View {
     const colors = shared("space.colors") ?? {};
     const color = colors[w.id] ?? "ansi6";
     const fill = color.startsWith("#") ? color : (MARK[color] ?? t[color]);
+    const label = this.labels?.[w.id];
     return v_flex()
       .relative()
       .id(`space-${w.id}`)
@@ -1282,6 +1348,17 @@ export default class Projects extends View {
               .truncate()
               .text_color(t.foreground)
               .child(w.name),
+          )
+          .when(Boolean(label), (el) =>
+            el.child(
+              div()
+                .flex_initial()
+                .min_w(0)
+                .truncate()
+                .text_size(11.5)
+                .text_color(t.dim)
+                .child(label),
+            ),
           )
           .child(
             g ? this.gitTail(g, tree || inRepo, w.name, t) : div().flex_1(),
@@ -1399,7 +1476,8 @@ export default class Projects extends View {
               .justify_center()
               .rounded(6)
               .hover((s) => s.bg(t.hover).text_color(t.foreground))
-              .on_click(() => run("space.new"))
+              .tooltip("New space or project")
+              .on_click(() => this.popup({ menu: "new" }, 80))
               .child(svg("mods/workspace-chrome/plus.svg").size(14)),
           ),
       )
