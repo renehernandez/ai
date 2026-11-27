@@ -124,7 +124,10 @@ export function worktreeRoot(settingsText, home) {
 
 // A new worktree of the repo whose main checkout is dir (named name), on a
 // free random branch cut from the freshly fetched origin default branch.
-// io: { exec, settings() (settings.json text or null), home, random?, step?(text) }.
+// io: { exec, settings() (settings.json text or null), home, random?,
+// step?(text, cancellable), cancelled?() }. A step is cancellable until the
+// add starts: stopping later would leave a worktree with no space. A run
+// cancelled meanwhile stops before the add.
 // Resolves { branch, path }; throws with git's error, having created nothing
 // past the step that failed.
 export async function newWorktree(io, dir, name) {
@@ -142,7 +145,7 @@ export async function newWorktree(io, dir, name) {
   const has = async (ref) =>
     (await git(["rev-parse", "--verify", "--quiet", ref])).ok;
   const root = worktreeRoot(await io.settings(), io.home);
-  io.step?.("Fetching origin…");
+  io.step?.("Fetching origin…", true);
   const fetched = await git(["fetch", "origin"], LONG);
   if (!fetched.ok) throw new Error(fetched.err || "git fetch origin failed.");
   const head = await git([
@@ -177,7 +180,8 @@ export async function newWorktree(io, dir, name) {
     branch = b;
   }
   if (!branch) throw new Error("No free branch name found. Try again.");
-  io.step?.(`Adding ${branch} from origin/${base}…`);
+  if (io.cancelled?.()) throw new Error("Cancelled.");
+  io.step?.(`Adding ${branch} from origin/${base}…`, false);
   const added = await git(
     ["worktree", "add", "--no-track", "-b", branch, path, `origin/${base}`],
     LONG,
