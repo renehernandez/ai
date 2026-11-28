@@ -303,7 +303,18 @@ const HERDR_KEYS = {
   target: "~/.config/herdr-app/keys.json",
   managedPaths: [
     { path: ["global", "cmd-k cmd-p"], value: "mod.open:projects-edit" },
+    { path: ["global", "cmd-k cmd-s"], value: "projects.new_space" },
+    {
+      path: ["global", "cmd-n"],
+      value: { command: "space.new", args: { argv: ["pi"] } },
+    },
   ],
+};
+// The global keys HERDR_KEYS sets.
+const MANAGED_KEYS = {
+  "cmd-k cmd-p": "mod.open:projects-edit",
+  "cmd-k cmd-s": "projects.new_space",
+  "cmd-n": { command: "space.new", args: { argv: ["pi"] } },
 };
 
 function writeText(path: string, text: string): void {
@@ -415,11 +426,15 @@ test("RED pi-config: herdrApp refuses source that would own Herdr's files", (t) 
   }
 });
 
-test("GREEN pi-config: herdrKeys sets only global cmd-k cmd-p and keeps every other key", (t) => {
+test("GREEN pi-config: herdrKeys sets only its global keys and keeps every other key", (t) => {
   const input = herdrAppFixture(t, { herdrKeys: HERDR_KEYS });
   const keys = join(input.home, ".config/herdr-app/keys.json");
   const before = {
-    global: { "cmd-p": "mod.open:picker", "cmd-t": "tab.new" },
+    global: {
+      "cmd-n": "space.new",
+      "cmd-p": "mod.open:picker",
+      "cmd-t": "tab.new",
+    },
     terminal: { "cmd-c": "terminal.copy" },
     "mod:picker": { escape: "overlay.close" },
   };
@@ -427,13 +442,13 @@ test("GREEN pi-config: herdrKeys sets only global cmd-k cmd-p and keeps every ot
   assert.deepEqual(syncManagedConfigs(input).changedPaths, [keys]);
   assert.deepEqual(JSON.parse(readFileSync(keys, "utf8")), {
     ...before,
-    global: { ...before.global, "cmd-k cmd-p": "mod.open:projects-edit" },
+    global: { ...before.global, ...MANAGED_KEYS },
   });
   assert.equal(validateManagedConfigs(input).ok, true);
   assert.deepEqual(syncManagedConfigs(input).changedPaths, []);
 });
 
-test("GREEN pi-config: herdrKeys adds cmd-k cmd-p and keeps a cmd-k p left by an earlier sync", (t) => {
+test("GREEN pi-config: herdrKeys adds its keys and keeps a cmd-k p left by an earlier sync", (t) => {
   const input = herdrAppFixture(t, { herdrKeys: HERDR_KEYS });
   const keys = join(input.home, ".config/herdr-app/keys.json");
   const before = {
@@ -448,7 +463,7 @@ test("GREEN pi-config: herdrKeys adds cmd-k cmd-p and keeps a cmd-k p left by an
   assert.deepEqual(syncManagedConfigs(input).changedPaths, [keys]);
   assert.deepEqual(JSON.parse(readFileSync(keys, "utf8")), {
     ...before,
-    global: { ...before.global, "cmd-k cmd-p": "mod.open:projects-edit" },
+    global: { ...before.global, ...MANAGED_KEYS },
   });
   assert.equal(validateManagedConfigs(input).ok, true);
 });
@@ -462,6 +477,8 @@ test("RED pi-config: herdrKeys reports a missing keys.json and does not create i
   assert.equal(report.ok, false);
   assert.deepEqual(report.findings, [
     "managed_config_drift: herdrKeys.global.cmd-k cmd-p is missing",
+    "managed_config_drift: herdrKeys.global.cmd-k cmd-s is missing",
+    "managed_config_drift: herdrKeys.global.cmd-n is missing",
   ]);
 });
 
@@ -513,7 +530,7 @@ test("herdr-app paths AX may own", () => {
     assert.equal(herdrAppPathAllowed(file), false, file);
 });
 
-test("GREEN pi-config: the repository ships the projects mods, layout and cmd-k cmd-p key", () => {
+test("GREEN pi-config: the repository ships the projects mods, layout and keys", () => {
   assert.deepEqual(
     readHerdrAppFiles(repoRoot).map((f) => f.file),
     [

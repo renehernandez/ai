@@ -198,7 +198,10 @@ in this repository at the same path below `~/.config/herdr-app`:
   `origin` and adds a worktree on a random adjective-animal branch cut from
   the default branch, under `worktrees.directory` from Herdr's `settings.json`
   (default `~/.herdr/worktrees`), then opens a space there. Closing a space
-  never deletes its worktree.
+  never deletes its worktree. `cmd-k cmd-s` opens the New space chooser:
+  press `1`–`9`, or move with the up and down arrows and press Enter, to
+  pick the project. Every space these mods create starts Pi in its shell. The
+  tab menu's Terminal row still opens a plain shell.
 - `layouts/projects.json`: a copy of Herdr's `main` layout with the `spaces`
   block showing the `projects` mod instead.
 
@@ -208,14 +211,22 @@ from `herdr-app/` stays in the Herdr home until you delete it by hand. Source
 may name only files in mod folders Herdr doesn't ship and layouts Herdr
 doesn't ship. Sync refuses anything else.
 
-`runtime.configs.herdrKeys` manages one JSON path in
-`~/.config/herdr-app/keys.json`: `global."cmd-k cmd-p"` =
-`"mod.open:projects-edit"`, which toggles the Projects dialog. Keep cmd held
-for both keys. Every other key stays as it is. AX never removes a key it stops
+`runtime.configs.herdrKeys` manages three JSON paths in
+`~/.config/herdr-app/keys.json`. Keep cmd held for both keys of a sequence.
+
+- `global."cmd-k cmd-p"` = `"mod.open:projects-edit"`: toggles the Projects
+  dialog.
+- `global."cmd-k cmd-s"` = `"projects.new_space"`: opens the New space
+  chooser. Herdr delivers the command to the shown `projects` sidebar, so the
+  key works only while the `projects` layout shows.
+- `global."cmd-n"` = `{"command": "space.new", "args": {"argv": ["pi"]}}`:
+  a plain new space, in the focused terminal's folder, that starts Pi.
+
+Every other key stays as it is. AX never removes a key it stops
 managing, so a `cmd-k p` left by an earlier sync stays until you delete it by
 hand. Once `keys.json` is edited, Herdr stops upgrading its default
 shortcuts in it. When `keys.json` is missing, status and validate report drift
-and sync does not create the file. A file with only this key would replace
+and sync does not create the file. A file with only these keys would replace
 Herdr's whole default key table, so start Herdr once to create it, then sync.
 
 These files are never AX targets:

@@ -374,6 +374,7 @@ function host() {
     closed: [] as string[], // closeOverlay()'s ids
     agents: [] as Record<string, unknown>[],
     runs: [] as unknown[],
+    listeners: [] as ((command: string) => void)[], // nextCommand()'s waiters
     overlays: [] as Record<string, unknown>[],
     errors: [] as unknown[],
     timers: [] as ((cx: unknown) => unknown)[],
@@ -482,6 +483,10 @@ const herdr: Record<string, unknown> = {
   props: () => H.props,
   shared: () => undefined,
   setShared: () => null,
+  nextCommand: () =>
+    new Promise<string>((resolve) => {
+      H.listeners.push(resolve);
+    }),
   watchFolder: () => Object.assign(new Promise(() => {}), { cancel() {} }),
 };
 
@@ -749,9 +754,33 @@ test("the header + offers a new space in each project, a plain space and New pro
   click(root, "space-0", cx);
   assert.deepEqual(doneWithOverlay(), NEW_SPACE);
   click(render(), "space", cx);
-  assert.deepEqual(H.runs.at(-1), ["space.new", undefined]);
+  assert.deepEqual(H.runs.at(-1), ["space.new", { argv: ["pi"] }]);
   click(render(), "project", cx);
   assert.deepEqual(doneWithOverlay().props, { picking: true });
+});
+
+test("the new_space key command opens the New space chooser; other commands do nothing", async () => {
+  start();
+  await mount("projects");
+  const send = async (command: string) => {
+    const listener = H.listeners.shift();
+    assert.ok(listener, "the sidebar waits for a command");
+    listener(command);
+    await settle();
+  };
+  await send("focus");
+  assert.deepEqual(H.overlays, []);
+  await send("new_space");
+  assert.deepEqual(H.overlays, [
+    {
+      mod: "projects-edit",
+      kind: "dialog",
+      width: 420,
+      height: 0.5,
+      props: { choosing: true },
+    },
+  ]);
+  assert.equal(H.listeners.length, 1, "it keeps listening");
 });
 
 test("unnamed spaces sharing a name show what tells them apart", async () => {
@@ -820,6 +849,7 @@ test("both mods render in herdr-app check's dry run", async () => {
     ["projects-edit", { menu: "new", height: 260 }],
     ["projects-edit", { picking: true }],
     ["projects-edit", { newSpace: "~/src/ai" }],
+    ["projects-edit", { choosing: true }],
   ] as const) {
     start(props);
     H.checking = true;
@@ -909,11 +939,15 @@ function newSpaceGit({
   return { calls, release: () => release() };
 }
 
-// Presses Esc in the projects-edit view.
-function pressEsc(root: Node, cx: unknown) {
+// Presses a key in the projects-edit view.
+function press(root: Node, cx: unknown, key: string) {
   const [[handler]] = args(root, "on_key_down");
-  (handler as (e: unknown, cx: unknown) => unknown)({ key: "escape" }, cx);
+  (handler as (e: unknown, cx: unknown) => unknown)(
+    { key, keystroke: key, modifiers: {} },
+    cx,
+  );
 }
+const pressEsc = (root: Node, cx: unknown) => press(root, cx, "escape");
 const added = (calls: string[][]) => calls.some((c) => c[1] === "worktree");
 
 test("New space makes a fresh worktree of the project and opens a space in it", async () => {
@@ -924,7 +958,7 @@ test("New space makes a fresh worktree of the project and opens a space in it", 
   assert.ok(add, "git worktree add ran");
   const folder = add[6];
   assert.match(folder, /^\/Users\/me\/\.herdr\/worktrees\/ai\/[a-z]+-[a-z]+$/);
-  assert.deepEqual(H.runs.at(-1), ["space.new", { folder }]);
+  assert.deepEqual(H.runs.at(-1), ["space.new", { folder, argv: ["pi"] }]);
   assert.deepEqual(H.closed, ["overlay-0"]);
 });
 
@@ -968,6 +1002,69 @@ test("New space shows git's error and opens no space", async () => {
   assert.deepEqual(H.closed, ["overlay-0"], "Esc closes it after an error");
   click(render(), "new-space-close", cx);
   assert.deepEqual(H.closed, ["overlay-0", "overlay-0"], "so does Close");
+});
+
+const NEW_SPACE_GONE = {
+  ...NEW_SPACE,
+  props: { newSpace: "~/src/gone" },
+};
+
+test("the chooser lists each project with its number and picks by digit", async () => {
+  start({ choosing: true });
+  const { cx, render } = await mount("projects-edit");
+  const root = render();
+  assert.ok(texts(root).includes("New space in…"));
+  assert.deepEqual(
+    ids(root).filter((id) => id.startsWith("choose-")),
+    ["choose-list", "choose-0", "choose-1"],
+  );
+  const first = find(root, "choose-0");
+  assert.ok(first && texts(first).includes("1"));
+  press(root, cx, "x");
+  press(root, cx, "3");
+  assert.deepEqual(H.overlays, [], "no key and no project 3: nothing");
+  press(root, cx, "2");
+  assert.deepEqual(H.closed, ["overlay-0"]);
+  assert.deepEqual(H.overlays, [NEW_SPACE_GONE]);
+});
+
+test("the chooser moves with up and down, picks with Enter or a click, and closes on Esc", async () => {
+  start({ choosing: true });
+  let { cx, render } = await mount("projects-edit");
+  const highlighted = (root: Node) =>
+    ["choose-0", "choose-1"].filter(
+      (id) => args(find(root, id) as Node, "bg").length,
+    );
+  assert.deepEqual(highlighted(render()), ["choose-0"]);
+  press(render(), cx, "down");
+  assert.deepEqual(highlighted(render()), ["choose-1"]);
+  press(render(), cx, "down");
+  assert.deepEqual(highlighted(render()), ["choose-0"], "it wraps");
+  press(render(), cx, "up");
+  press(render(), cx, "enter");
+  assert.deepEqual(H.overlays, [NEW_SPACE_GONE]);
+
+  start({ choosing: true });
+  ({ cx, render } = await mount("projects-edit"));
+  click(render(), "choose-0", cx);
+  assert.deepEqual(H.overlays, [NEW_SPACE]);
+
+  start({ choosing: true });
+  ({ cx, render } = await mount("projects-edit"));
+  pressEsc(render(), cx);
+  assert.deepEqual(H.closed, ["overlay-0"]);
+  assert.deepEqual(H.overlays, []);
+});
+
+test("the chooser with no projects says so and picks nothing", async () => {
+  start({ choosing: true });
+  H.files[CONFIG] = '{"projects":[]}\n';
+  const { cx, render } = await mount("projects-edit");
+  const root = render();
+  assert.ok(texts(root).includes("No projects yet."));
+  for (const key of ["down", "enter", "1"]) press(render(), cx, key);
+  assert.deepEqual(H.overlays, []);
+  assert.deepEqual(H.closed, []);
 });
 
 test("projects with the same folder name show their parent in the dialog", async () => {
