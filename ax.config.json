@@ -75,6 +75,14 @@
           {
             "path": ["global", "cmd-k cmd-p"],
             "value": "mod.open:projects-edit"
+          },
+          {
+            "path": ["global", "cmd-k cmd-s"],
+            "value": "projects.new_space"
+          },
+          {
+            "path": ["global", "cmd-n"],
+            "value": { "command": "space.new", "args": { "argv": ["pi"] } }
           }
         ]
       },

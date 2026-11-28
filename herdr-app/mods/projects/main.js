@@ -4,14 +4,15 @@
 // (main or linked worktree), and shows even with none open. Every other space
 // is under Other, grouped by machine as the shipped sidebar does. Right-click
 // a project or Other space to manage projects, or use the header +; cmd-k
-// cmd-p opens the Projects dialog (the projects-edit mod).
+// cmd-p opens the Projects dialog (the projects-edit mod), and cmd-k cmd-s
+// (keys.json `projects.new_space`) its New space chooser.
 //
 // Derived from Herdr 0.1.16's shipped `spaces` mod, Copyright Herdr's
 // authors, licensed under the Apache License 2.0 (LICENSE in this folder).
 // Changed: the project and Other grouping, project header and space row "+"
-// buttons, the header "+" menu, project menus, branch labels for unnamed
-// spaces in a project and for those sharing a name, and the tab folder each
-// space's git look keeps.
+// buttons, the header "+" menu, project menus, the new_space key command,
+// branch labels for unnamed spaces in a project and for those sharing a
+// name, and the tab folder each space's git look keeps.
 // Space rows, machine headers, git looks, drag and the narrow rail are the
 // shipped mod's. Re-derive when Herdr's `spaces` mod or mod API changes.
 
@@ -25,6 +26,7 @@ import {
   home,
   layout,
   machines,
+  nextCommand,
   openOverlay,
   panes,
   readTextFile,
@@ -165,8 +167,25 @@ export default class Projects extends View {
     // Refresh only when the refs could have changed (see `due`).
     cx.timer.every(250, (cx) => this.checkNew(cx));
     if (checking()) return;
+    this.listen(cx);
     this.watchConfig(cx);
     cx.timer.every(FALLBACK, (cx) => this.resolveRepos(cx, true));
+  }
+
+  // Key commands (keys.json `projects.<command>`): new_space opens the
+  // New space chooser, a dialog because a key has no pointer for a popup.
+  listen(cx) {
+    cx.spawn(async () => {
+      for (;;)
+        if ((await nextCommand()) === "new_space")
+          openOverlay({
+            mod: "projects-edit",
+            kind: "dialog",
+            width: 420,
+            height: 0.5,
+            props: { choosing: true },
+          });
+    });
   }
 
   // projects.json, now and on every change (hand edits included).

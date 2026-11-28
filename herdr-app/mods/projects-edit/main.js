@@ -7,6 +7,10 @@
 //   { menu: "project", project, path }     New space, the moves that apply, New project…, Remove
 //   { menu: "other", space, path }         New project from this repo, space menu
 //   { menu: "tab", space, machine, folder }          Terminal and agents, started at folder
+//   { choosing: true }                     New space in…: pick a project by key (cmd-k cmd-s, sent by the sidebar)
+//
+// Every space made here starts Pi (PI) in its shell; the tab menu's Terminal
+// is the plain shell.
 //
 // A project is a local git repo's main checkout, picked with the system folder
 // picker (a popup closes on click, so the dialog hosts the picker). A new
@@ -69,6 +73,7 @@ const newSpace = (path) =>
     height: 150,
     props: { newSpace: path },
   });
+const PI = ["pi"];
 const configPath = () => `${appHome()}/${CONFIG_FILE}`;
 // Popup row heights, for a popup as tall as its rows (padding: p(5) twice).
 const ROW = {
@@ -112,6 +117,7 @@ export default class ProjectsEdit extends View {
     this.error = null;
     this.loaded = false;
     this.agents = [];
+    this.chosen = 0; // the chooser's highlighted project
     this.handle = cx.focus_handle();
     this.handle.focus();
     cx.spawn(async (cx) => {
@@ -184,7 +190,7 @@ export default class ProjectsEdit extends View {
           dir,
           this.creating.name,
         );
-        run("space.new", { folder });
+        run("space.new", { folder, argv: PI });
         this.dismiss();
       } catch (e) {
         this.creating.error = String(e?.message ?? e);
@@ -301,7 +307,7 @@ export default class ProjectsEdit extends View {
               ),
             ),
             ...(projects.length ? [rule()] : []),
-            item("space", "New space", () => run("space.new")),
+            item("space", "New space", () => run("space.new", { argv: PI })),
             item("project", "New project…", newProject),
           ],
         };
@@ -572,6 +578,74 @@ export default class ProjectsEdit extends View {
       );
   }
 
+  // New space in…: each project as a row, 1-9 by its place.
+  renderChooser() {
+    const t = theme();
+    const { projects } = resolveProjects(this.doc, home());
+    this.chosen = Math.min(this.chosen, Math.max(0, projects.length - 1));
+    const rows = projects.map((project, n) =>
+      this.item(
+        `choose-${project.index}`,
+        project.name,
+        () => newSpace(project.path),
+        {
+          hint: [project.parent, n < 9 ? n + 1 : null]
+            .filter(Boolean)
+            .join("  "),
+        },
+      ).when(n === this.chosen, (el) => el.bg(t.selected)),
+    );
+    return v_flex()
+      .size_full()
+      .min_h(0)
+      .gap(8)
+      .child(
+        h_flex()
+          .items_center()
+          .child(
+            div().flex_1().text_size(15).font_semibold().child("New space in…"),
+          )
+          .child(
+            div().text_size(11).text_color(t.dim).child("1–9 · ↑↓ enter · esc"),
+          ),
+      )
+      .child(
+        v_flex()
+          .id("choose-list")
+          .flex_1()
+          .min_h(0)
+          .overflow_y_scrollbar()
+          .gap(2)
+          .children(rows)
+          .when(!projects.length, (el) =>
+            el.child(
+              div()
+                .py(8)
+                .text_color(t.dim)
+                .child(this.loaded ? "No projects yet." : "…"),
+            ),
+          ),
+      );
+  }
+
+  // The chooser's keys: a digit or Enter picks; up and down move.
+  chooseKey(e, cx) {
+    const { projects } = resolveProjects(this.doc, home());
+    const digit = /^[1-9]$/.test(e.keystroke) ? Number(e.keystroke) - 1 : -1;
+    if (e.keystroke === "down" || e.keystroke === "up") {
+      if (!projects.length) return;
+      const by = e.keystroke === "down" ? 1 : projects.length - 1;
+      this.chosen = (this.chosen + by) % projects.length;
+      cx.notify();
+    } else if (e.keystroke === "enter" || digit >= 0) {
+      const project = projects[digit >= 0 ? digit : this.chosen];
+      if (!project) return;
+      this.dismiss();
+      newSpace(project.path);
+    } else return;
+    cx.stop_propagation();
+  }
+
   renderNewSpace() {
     const t = theme();
     const { name, step, cancellable, error } = this.creating;
@@ -612,6 +686,7 @@ export default class ProjectsEdit extends View {
   }
 
   key(e, cx) {
+    if (props()?.choosing && e.key !== "escape") return this.chooseKey(e, cx);
     if (e.key !== "escape") return;
     cx.stop_propagation();
     const c = this.creating;
@@ -634,6 +709,12 @@ export default class ProjectsEdit extends View {
       .bg(t.popover)
       .text_color(t.foreground)
       .text_size(12.8)
-      .child(this.creating ? this.renderNewSpace() : this.renderDialog());
+      .child(
+        this.creating
+          ? this.renderNewSpace()
+          : p.choosing
+            ? this.renderChooser()
+            : this.renderDialog(),
+      );
   }
 }
